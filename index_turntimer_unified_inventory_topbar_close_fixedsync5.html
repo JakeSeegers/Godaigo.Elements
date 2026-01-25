@@ -933,7 +933,8 @@
             water: { color: '#5894f4', symbol: '◯' },
             fire: { color: '#ed1b43', symbol: '♦' },
             wind: { color: '#ffce00', symbol: '≋' },
-            void: { color: '#9458f4', symbol: '✺' }
+            void: { color: '#9458f4', symbol: '✺' },
+            catacomb: { color: '#8b4513', symbol: '☠' }
         };
 
         // Spell System for pattern-based stone generation
@@ -1176,7 +1177,8 @@
 
                 const title = document.createElement('h2');
                 title.textContent = '📜 New Scroll Discovered!';
-                title.style.color = STONE_TYPES[elementType].color;
+                const stoneType = STONE_TYPES[elementType];
+                title.style.color = stoneType ? stoneType.color : '#9458f4'; // Default to void purple
                 title.style.margin = '0 0 20px 0';
                 notification.appendChild(title);
 
@@ -2811,7 +2813,7 @@
             if (shrineType === 'player') {
                 isPlayerTile = true;
 
-                // (removed duplicate playerIndex declaration)
+                const playerIndex = playerPositions.length;
                 let assignedColor;
 
                 // In multiplayer, use the pre-assigned playerColor
@@ -3223,10 +3225,22 @@ function clearPlayerPath() {
             if (color) {
                 // Creating a NEW player pawn with this color
                 console.log(`🎨 Creating new player ${playerPositions.length + 1} at (${x.toFixed(1)}, ${y.toFixed(1)}) with color ${color}`);
-                
+
                 const playerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 playerGroup.setAttribute('class', 'player');
                 playerGroup.setAttribute('transform', `translate(${x}, ${y})`);
+                playerGroup.style.pointerEvents = 'all';
+                playerGroup.style.touchAction = 'none';
+
+                // Invisible larger hit area for easier touch targeting
+                const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                hitArea.setAttribute('cx', 0);
+                hitArea.setAttribute('cy', 0);
+                hitArea.setAttribute('r', TILE_SIZE * 0.8); // Much larger touch target
+                hitArea.setAttribute('fill', 'transparent');
+                hitArea.setAttribute('stroke', 'none');
+                hitArea.style.pointerEvents = 'all';
+                playerGroup.appendChild(hitArea);
 
                 const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 circle.setAttribute('cx', 0);
@@ -3236,12 +3250,12 @@ function clearPlayerPath() {
                 circle.setAttribute('fill', color);
                 circle.setAttribute('stroke', '#000');
                 circle.setAttribute('stroke-width', '2');
-                
+
                 playerGroup.appendChild(circle);
-                
+
                 // Store the player index for this group
-                // (removed duplicate playerIndex declaration)
-                
+                const playerIndex = playerPositions.length;
+
                 // Add drag handler
                 playerGroup.addEventListener('mousedown', (e) => {
                     // Only draggable if this is the active player (check dynamically)
@@ -3255,12 +3269,16 @@ function clearPlayerPath() {
 
             // Touch support: start player drag on tap/drag
 	            playerGroup.addEventListener('touchstart', (e) => {
+	                console.log('🎯 Player pawn touchstart detected!', {touches: e.touches?.length, target: e.target});
 	                if (!(e.touches && e.touches.length === 1)) return;
 	                // Mirror mousedown behavior: only the active player pawn can be dragged
-	                if (activePlayerIndex === playerIndex) {
+	                const thisPlayerIndex = playerPositions.findIndex(p => p.element === playerGroup);
+	                console.log(`   thisPlayerIndex=${thisPlayerIndex}, activePlayerIndex=${activePlayerIndex}`);
+	                if (thisPlayerIndex === activePlayerIndex) {
                     e.stopPropagation();
                     e.preventDefault();
                     const t = e.touches[0];
+                    console.log('   ✅ Starting player drag from touch');
                     startPlayerDrag({
                         clientX: t.clientX,
                         clientY: t.clientY,
@@ -3268,6 +3286,8 @@ function clearPlayerPath() {
                         preventDefault: () => {},
                         stopPropagation: () => {}
                     });
+                } else {
+                    console.log('   ❌ Not active player, ignoring touch');
                 }
             }, { passive: false });
 
@@ -3291,10 +3311,22 @@ function clearPlayerPath() {
                 }
                 
                 activePlayer.element.remove();
-                
+
                 const playerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 playerGroup.setAttribute('class', 'player');
                 playerGroup.setAttribute('transform', `translate(${x}, ${y})`);
+                playerGroup.style.pointerEvents = 'all';
+                playerGroup.style.touchAction = 'none';
+
+                // Invisible larger hit area for easier touch targeting
+                const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                hitArea.setAttribute('cx', 0);
+                hitArea.setAttribute('cy', 0);
+                hitArea.setAttribute('r', TILE_SIZE * 0.8);
+                hitArea.setAttribute('fill', 'transparent');
+                hitArea.setAttribute('stroke', 'none');
+                hitArea.style.pointerEvents = 'all';
+                playerGroup.appendChild(hitArea);
 
                 const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 circle.setAttribute('cx', 0);
@@ -3306,10 +3338,14 @@ function clearPlayerPath() {
                 circle.setAttribute('stroke-width', '2');
 
                 playerGroup.appendChild(circle);
-                
+
+                // Store the player index for event handlers
+                const thisPlayerIdx = activePlayerIndex;
+
                 playerGroup.addEventListener('mousedown', (e) => {
                     // Only draggable if this is the active player
-                    if (activePlayerIndex === playerIndex) {
+                    const currentIdx = playerPositions.findIndex(p => p.element === playerGroup);
+                    if (currentIdx === activePlayerIndex) {
                         e.stopPropagation();
                         e.preventDefault();
                         startPlayerDrag(e);
@@ -3318,12 +3354,16 @@ function clearPlayerPath() {
 
 	            // Touch support: start player drag on tap/drag
 	            playerGroup.addEventListener('touchstart', (e) => {
+	                console.log('🎯 Player pawn touchstart (path2) detected!', {touches: e.touches?.length});
 	                if (!(e.touches && e.touches.length === 1)) return;
 	                // Mirror mousedown behavior: only active player can be dragged
-	                if (activePlayerIndex === playerIndex) {
+	                const currentIdx = playerPositions.findIndex(p => p.element === playerGroup);
+	                console.log(`   currentIdx=${currentIdx}, activePlayerIndex=${activePlayerIndex}`);
+	                if (currentIdx === activePlayerIndex) {
                     e.stopPropagation();
                     e.preventDefault();
                     const t = e.touches[0];
+                    console.log('   ✅ Starting player drag from touch (path2)');
                     startPlayerDrag({
                         clientX: t.clientX,
                         clientY: t.clientY,
@@ -3331,6 +3371,8 @@ function clearPlayerPath() {
                         preventDefault: () => {},
                         stopPropagation: () => {}
                     });
+                } else {
+                    console.log('   ❌ Not active player, ignoring touch (path2)');
                 }
             }, { passive: false });
 
@@ -3385,6 +3427,18 @@ function clearPlayerPath() {
             const playerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             playerGroup.setAttribute('class', 'player');
             playerGroup.setAttribute('transform', `translate(${x}, ${y})`);
+            playerGroup.style.pointerEvents = 'all';
+            playerGroup.style.touchAction = 'none';
+
+            // Invisible larger hit area for easier touch targeting
+            const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            hitArea.setAttribute('cx', 0);
+            hitArea.setAttribute('cy', 0);
+            hitArea.setAttribute('r', TILE_SIZE * 0.8);
+            hitArea.setAttribute('fill', 'transparent');
+            hitArea.setAttribute('stroke', 'none');
+            hitArea.style.pointerEvents = 'all';
+            playerGroup.appendChild(hitArea);
 
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             circle.setAttribute('cx', 0);
@@ -3407,12 +3461,15 @@ function clearPlayerPath() {
 
 	            // Touch support: start player drag on tap/drag
 	            playerGroup.addEventListener('touchstart', (e) => {
+	                console.log('🎯 Player pawn touchstart (path3) detected!', {touches: e.touches?.length, playerIndex});
 	                if (!(e.touches && e.touches.length === 1)) return;
 	                // Mirror mousedown behavior: only active player can be dragged
+	                console.log(`   playerIndex=${playerIndex}, activePlayerIndex=${activePlayerIndex}`);
 	                if (activePlayerIndex === playerIndex) {
                     e.stopPropagation();
                     e.preventDefault();
                     const t = e.touches[0];
+                    console.log('   ✅ Starting player drag from touch (path3)');
                     startPlayerDrag({
                         clientX: t.clientX,
                         clientY: t.clientY,
@@ -3420,6 +3477,8 @@ function clearPlayerPath() {
                         preventDefault: () => {},
                         stopPropagation: () => {}
                     });
+                } else {
+                    console.log('   ❌ Not active player, ignoring touch (path3)');
                 }
             }, { passive: false });
 
@@ -5272,7 +5331,8 @@ function clearPlayerPath() {
                             
                             // Find flipped tiles that contribute to this hex position
                             const flippedTiles = playerHex.tiles.filter(t => t.flipped && !t.isPlayerTile);
-                            
+                            console.log(`   Flipped tiles at this hex:`, flippedTiles.map(t => ({id: t.id, x: t.x, y: t.y, flipped: t.flipped})));
+
                             if (flippedTiles.length > 0) {
                                 // If multiple flipped tiles share this hex, choose the one whose center is closest to player
                                 let tileToReveal = flippedTiles[0];
@@ -5280,7 +5340,7 @@ function clearPlayerPath() {
                                     let minTileDist = Infinity;
                                     flippedTiles.forEach(tile => {
                                         const tileDist = Math.sqrt(Math.pow(tile.x - actualPlayerPos.x, 2) + Math.pow(tile.y - actualPlayerPos.y, 2));
-                                        console.log(`     Flipped tile at (${tile.x.toFixed(1)}, ${tile.y.toFixed(1)}): dist to center=${tileDist.toFixed(1)}`);
+                                        console.log(`     Flipped tile id=${tile.id} at (${tile.x.toFixed(1)}, ${tile.y.toFixed(1)}): dist to center=${tileDist.toFixed(1)}`);
                                         if (tileDist < minTileDist) {
                                             minTileDist = tileDist;
                                             tileToReveal = tile;
@@ -5288,7 +5348,7 @@ function clearPlayerPath() {
                                     });
                                     console.log(`   Multiple flipped tiles - choosing closest at (${tileToReveal.x.toFixed(1)}, ${tileToReveal.y.toFixed(1)})`);
                                 }
-                                console.log(`✨ Revealing tile at (${tileToReveal.x.toFixed(1)}, ${tileToReveal.y.toFixed(1)})`);
+                                console.log(`✨ Revealing tile id=${tileToReveal.id} at (${tileToReveal.x.toFixed(1)}, ${tileToReveal.y.toFixed(1)})`);
                                 revealTile(tileToReveal.id);
                             } else {
                                 console.log(`   No flipped tiles at this hex position`);
@@ -5605,22 +5665,74 @@ function clearPlayerPath() {
                     snapIndicator.classList.remove('active');
                 } else if (isDraggingPlayer && ghostPlayer) {
                     const playerPos = findNearestHexPosition(world.x, world.y);
+                    const startPos = playerPath[0];
+                    let movementSuccessful = false;
 
                     if (playerPath.length > 1 && playerPos.valid) {
                         const totalCost = calculatePathCost();
-                        const moveCheck = canPlayerMoveToHex(playerPos.x, playerPos.y);
+                        const finalPos = playerPath[playerPath.length - 1];
+                        const moveCheck = canPlayerMoveToHex(finalPos.x, finalPos.y, true);
 
-                        if (!moveCheck.canMove) {
+                        // Check if there's a stone at the final position that you CAN'T end turn on
+                        const stoneAtFinal = placedStones.find(s => {
+                            const dist = Math.sqrt(Math.pow(s.x - finalPos.x, 2) + Math.pow(s.y - finalPos.y, 2));
+                            return dist < 5;
+                        });
+                        const cannotEndTurnHere = stoneAtFinal && stoneAtFinal.type !== 'void';
+
+                        if (cannotEndTurnHere) {
+                            updateStatus('Cannot end movement on a ' + stoneAtFinal.type + ' stone!');
+                        } else if (!moveCheck.canMove) {
                             updateStatus(moveCheck.reason || 'Cannot move to this position');
                         } else if (totalCost > getTotalAP()) {
                             updateStatus(`Not enough AP (need ${totalCost}, have ${getTotalAP()})`);
                         } else {
-                            movePlayerAlongPath();
+                            // Store the last move for undo
+                            lastMove = {
+                                prevPos: { x: startPos.x, y: startPos.y },
+                                newPos: { x: finalPos.x, y: finalPos.y },
+                                apCost: totalCost
+                            };
+                            placePlayer(finalPos.x, finalPos.y);
+                            spendAP(totalCost);
+                            movementSuccessful = true;
 
+                            // Broadcast player movement to other players
                             if (isMultiplayer) {
-                                broadcastPlayerMovement(playerPositions[activePlayerIndex].x, playerPositions[activePlayerIndex].y);
+                                broadcastGameAction('player-move', {
+                                    playerIndex: activePlayerIndex,
+                                    x: finalPos.x,
+                                    y: finalPos.y,
+                                    apSpent: totalCost
+                                });
+                            }
+
+                            // Check if player stepped on a hidden tile - reveal it!
+                            const actualPlayerPos = { x: playerPosition.x, y: playerPosition.y };
+                            const allHexes = getAllHexagonPositions();
+
+                            let playerHex = null;
+                            let minDist = Infinity;
+                            allHexes.forEach(hexPos => {
+                                const dist = Math.sqrt(Math.pow(hexPos.x - actualPlayerPos.x, 2) + Math.pow(hexPos.y - actualPlayerPos.y, 2));
+                                if (dist < minDist) {
+                                    minDist = dist;
+                                    playerHex = hexPos;
+                                }
+                            });
+
+                            if (playerHex && minDist < 5 && playerHex.tiles) {
+                                const flippedTiles = playerHex.tiles.filter(t => t.flipped && !t.isPlayerTile);
+                                flippedTiles.forEach(tileInfo => {
+                                    revealTile(tileInfo.id);
+                                });
                             }
                         }
+                    }
+
+                    // If movement failed or was cancelled, restore player to start position
+                    if (!movementSuccessful && startPos) {
+                        placePlayer(startPos.x, startPos.y);
                     }
 
                     if (ghostPlayer) {
