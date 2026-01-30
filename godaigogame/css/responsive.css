@@ -1,0 +1,122 @@
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+/* Tablet Landscape (1024px - 1199px) */
+@media (max-width: 1199px) {
+    :root {
+        --panel-width: 200px;
+    }
+}
+
+/* Tablet Portrait / Large Phone (768px - 1023px) */
+@media (max-width: 1023px) {
+    :root {
+        --panel-width: 180px;
+        --hud-height: 48px;
+        --action-bar-height: 52px;
+    }
+
+    .hud-bar {
+        padding: 0 var(--space-md);
+    }
+
+    .hud-badge {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+
+    .hud-ap {
+        padding: 4px 10px;
+    }
+
+    .hud-ap-value {
+        font-size: 16px;
+    }
+
+    button {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    .action-group {
+        gap: var(--space-xs);
+    }
+}
+
+/* Phone (< 768px) */
+@media (max-width: 767px) {
+    :root {
+        --hud-height: 44px;
+        --action-bar-height: 48px;
+    }
+
+    .game-layout {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "hud"
+            "board"
+            "actions";
+    }
+
+    .left-panel, .right-panel {
+        position: fixed;
+        top: var(--hud-height);
+        bottom: var(--action-bar-height);
+        width: 260px;
+        z-index: var(--z-overlay);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+
+    .left-panel.mobile-open {
+        transform: translateX(0);
+    }
+
+    .right-panel {
+        right: 0;
+        left: auto;
+        transform: translateX(100%);
+    }
+
+    .right-panel.mobile-open {
+        transform: translateX(0);
+    }
+
+    .hud-section.middle {
+        display: none;
+    }
+
+    .hud-badges {
+        gap: 4px;
+    }
+
+    .hud-badge {
+        padding: 2px 6px;
+        font-size: 10px;
+    }
+
+    .action-bar {
+        gap: var(--space-sm);
+        overflow-x: auto;
+        justify-content: flex-start;
+        padding: 0 var(--space-sm);
+    }
+
+    .action-divider {
+        display: none;
+    }
+
+    button {
+        padding: 6px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    #status {
+        bottom: calc(var(--action-bar-height) + var(--space-sm));
+        max-width: calc(100vw - 32px);
+        font-size: 11px;
+        padding: var(--space-xs) var(--space-md);
+    }
+}
