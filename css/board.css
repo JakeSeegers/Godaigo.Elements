@@ -1,0 +1,151 @@
+/* ============================================
+   GAME ELEMENTS (Tiles, Stones, Player)
+   ============================================ */
+svg {
+    display: block;
+}
+
+.hex-tile {
+    fill: #d4a574;
+    stroke: #2c3e50;
+    stroke-width: 2;
+}
+
+.hex-tile.flipped {
+    fill: #8b7355;
+}
+
+.hex-tile.empty-center {
+    fill: none;
+}
+
+.placed-tile.player-tile .hex-tile {
+    fill: #8b7355;
+}
+
+.placed-tile.player-tile .hex-tile.empty-center {
+    fill: none;
+}
+
+.placed-tile {
+    cursor: grab;
+}
+
+.placed-tile.has-stones {
+    cursor: not-allowed;
+}
+
+.placed-tile:hover .hex-tile {
+    stroke: #3498db;
+    stroke-width: 4;
+}
+
+.ghost-tile {
+    opacity: 0.4;
+}
+
+.shrine-marker {
+    pointer-events: none;
+}
+
+.shrine-marker circle {
+    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.5));
+}
+
+.snap-indicator {
+    fill: none;
+    stroke: #2ecc71;
+    stroke-width: 4;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.snap-indicator.active {
+    opacity: 0.8;
+}
+
+/* ============================================
+   STONES
+   ============================================ */
+.stone {
+    cursor: grab;
+    pointer-events: all;
+    z-index: 100;
+}
+
+.stone:hover:not(.stone-ghost) .stone-piece {
+    stroke-width: 3;
+}
+
+.stone:active {
+    cursor: grabbing;
+}
+
+.stone-piece {
+    stroke: #000;
+    stroke-width: 2;
+}
+
+.stone-ghost {
+    opacity: 0.5;
+    transition: none;
+    pointer-events: none;
+}
+
+/* ============================================
+   PLAYER
+   ============================================ */
+.player {
+    cursor: grab;
+    pointer-events: all;
+    z-index: 150;
+}
+
+.player:hover .player-marker {
+    stroke-width: 3;
+}
+
+.player:active {
+    cursor: grabbing;
+}
+
+.player-marker {
+    stroke: #000;
+    stroke-width: 2;
+}
+
+.teleport-indicator {
+    cursor: pointer;
+    pointer-events: all;
+}
+
+.teleport-indicator:hover {
+    opacity: 0.8 !important;
+}
+
+/* ============================================
+   LEGACY SUPPORT (for existing functionality)
+   ============================================ */
+/* Hide old elements */
+#tile-deck-header, #tile-deck-container {
+    display: none !important;
+}
+
+.mobile-deck-container {
+    display: none !important;
+}
+
+/* Old inventory toggle support */
+.inventory-header, .inventory-title, .inventory-close-btn {
+    display: none;
+}
+
+/* Old deck-panel mapping to left-panel */
+.deck-panel {
+    display: none;
+}
+
+/* Keep old game-container hidden */
+.game-container {
+    display: none !important;
+}
