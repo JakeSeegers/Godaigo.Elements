@@ -1,0 +1,49 @@
+/* ============================================
+   DESIGN TOKENS (CSS Custom Properties)
+   ============================================ */
+:root {
+    --bg-dark: #0d0d0d;
+    --bg-panel: #1a1a1a;
+    --bg-card: #252525;
+    --bg-elevated: #2a2a2a;
+    --accent-gold: #d9b08c;
+    --accent-orange: #b75000;
+    --accent-orange-hover: #d96800;
+    --text-primary: #eee;
+    --text-secondary: #aaa;
+    --text-muted: #666;
+    --border-subtle: #333;
+    --border-accent: rgba(217,176,140,0.3);
+
+    /* Element colors */
+    --earth-color: #69d83a;
+    --water-color: #5894f4;
+    --fire-color: #ed1b43;
+    --wind-color: #ffce00;
+    --void-color: #9458f4;
+    --catacomb-color: #9b59b6;
+
+    /* Layout dimensions */
+    --panel-width: 240px;
+    --hud-height: 52px;
+    --action-bar-height: 56px;
+
+    /* Spacing */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 12px;
+    --space-lg: 16px;
+    --space-xl: 24px;
+
+    /* Border radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    /* Z-index layers */
+    --z-panel: 10;
+    --z-hud: 50;
+    --z-overlay: 100;
+    --z-modal: 1000;
+    --z-tooltip: 10000;
+}
