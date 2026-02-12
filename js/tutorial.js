@@ -24,8 +24,8 @@ const tutorialSystem = (function() {
         },
         {
             id: 'placement',
-            title: 'Tile Placement',
-            content: `Each player places tiles to build the board. <strong>Click a highlighted hex</strong> to place your tile.
+            title: 'Place Your Player Tile',
+            content: `Each player places their Player Tiles to build the board. <strong>Drag these hexagonal tile from the menu to the left</strong> and place your tile next to the edge of two tiles on the board.
                 <div style="margin-top: 8px; color: #aaa; font-size: 13px;">Each tile hides a shrine that will be revealed when a player lands on it.</div>`
         },
         {
@@ -39,7 +39,7 @@ const tutorialSystem = (function() {
             title: 'Shrines & Stones',
             content: `When you <strong>end your turn</strong> on a shrine, you gather <strong>elemental stones</strong> of that type and draw a <strong>scroll</strong>.
                 <div style="margin-top: 8px;">Check the <strong>Scrolls</strong> menu to see what you found and interact with it.</div>
-                <div style="margin-top: 8px; color: #aaa; font-size: 13px;">Drag stones from your pool onto the board to form patterns that match your scrolls.</div>`
+                <div style="margin-top: 8px; color: #aaa; font-size: 13px;">Drag stones from your pool onto the board to form patterns that match your scrolls. Each type of stone has special abilities!</div>`
         },
         {
             id: 'scrolls',
@@ -52,7 +52,7 @@ const tutorialSystem = (function() {
             id: 'casting',
             title: 'Casting & Responses',
             content: `After casting a spell, opponents get a brief window to <strong>respond</strong> with counter or reaction scrolls.
-                <div style="margin-top: 8px; color: #aaa; font-size: 13px;">Once the response window closes, your scroll's effect activates! Some scrolls can block or counter enemy spells.</div>`
+                <div style="margin-top: 8px; color: #aaa; font-size: 13px;">Once the response window closes, your scroll's effect activates! Some scrolls can block or counter enemy spells. Every scroll costs 2 action points to cast, and you can cast as many times as you want.</div>`
         },
         {
             id: 'endturn',
