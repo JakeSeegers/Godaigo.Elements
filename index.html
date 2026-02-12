@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Godaigo - Hexagon Tile Game</title>
     <!-- Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
@@ -106,7 +106,6 @@
             1 player = 6 tiles (1 of each type)<br>
             Each additional player adds 6 more tiles in a spiral pattern
         </p>
-    </div>
     </div><!-- End lobby-wrapper -->
 
     <!-- ============================================
@@ -368,9 +367,9 @@
 
         <div style="display: flex; flex-direction: column;">
             <div class="board-container">
-                <svg id="boardSvg" width="1000" height="800">
-                    <g id="viewport">
-                        <circle class="snap-indicator" id="snapIndicator" r="10" cx="0" cy="0"/>
+                <svg id="legacy-boardSvg" width="1000" height="800">
+                    <g id="legacy-viewport">
+                        <circle class="snap-indicator" id="legacy-snapIndicator" r="10" cx="0" cy="0"/>
                     </g>
                 </svg>
             </div>
@@ -383,14 +382,14 @@
                         <span id="inactivity-timer" style="display: none; margin-left: 15px; padding: 5px 10px; border-radius: 5px; font-weight: bold;"></span>
                     </div>
                     <button id="inventory-toggle" title="Show/hide inventory">🎒 Inventory</button>
-                    <button id="end-turn" style="display: none;">End Turn</button>
-                    <button id="undo-move">Undo Move</button>
-                    <button id="scroll-inventory">📜 Scrolls (<span id="scroll-count">0</span>)</button>
-                    <button id="cast-spell">✨ Cast Spell (2 AP)</button>
-                                        <button id="leave-game" style="display: none; background: #f44336;">Leave Game</button>
+                    <button id="legacy-end-turn" style="display: none;">End Turn</button>
+                    <button id="legacy-undo-move">Undo Move</button>
+                    <button id="legacy-scroll-inventory">📜 Scrolls (<span id="legacy-scroll-count">0</span>)</button>
+                    <button id="legacy-cast-spell">✨ Cast Spell (2 AP)</button>
+                    <button id="legacy-leave-game" style="display: none; background: #f44336;">Leave Game</button>
                 </div>
 
-                <div id="status">Drag tiles from the deck to build your board. Drag stones onto hexes.<br>
+                <div id="legacy-status">Drag tiles from the deck to build your board. Drag stones onto hexes.<br>
                 <small style="color: #999;">All stones: 1 AP baseline | 🔥 Fire destroys adjacent non-void | 💧 Water (2 AP) chains abilities | 🌪️ Wind free movement | 🗻 Earth blocks | ✨ Void nullifies</small></div>
             </div>
         </div>
@@ -431,14 +430,14 @@
     </div>
 
     <!-- JavaScript -->
-    <script src="js/tutorial.js" charset="UTF-8"></script>
+    <script src="js/tutorial.js"></script>
     <!-- Scroll System (load before main.js) -->
-    <script src="js/scrolls/scroll-definitions.js" charset="UTF-8"></script>
-    <script src="js/scrolls/effects/scroll-effects.js" charset="UTF-8"></script>
-    <script src="js/scrolls/response-window.js" charset="UTF-8"></script>
-    <script src="js/multiplayer-state.js" charset="UTF-8"></script>
-    <script src="js/game-core.js" charset="UTF-8"></script>
-    <script src="js/game-ui.js" charset="UTF-8"></script>
-    <script src="js/lobby.js" charset="UTF-8"></script>
+    <script src="js/scrolls/scroll-definitions.js"></script>
+    <script src="js/scrolls/effects/scroll-effects.js"></script>
+    <script src="js/scrolls/response-window.js"></script>
+    <script src="js/multiplayer-state.js"></script>
+    <script src="js/game-core.js"></script>
+    <script src="js/game-ui.js"></script>
+    <script src="js/lobby.js"></script>
 </body>
 </html>
