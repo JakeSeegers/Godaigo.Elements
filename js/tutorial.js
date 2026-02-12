@@ -24,8 +24,8 @@ const tutorialSystem = (function() {
         },
         {
             id: 'placement',
-            title: 'Tile Placement',
-            content: `Each player places tiles to build the board. <strong>Click a highlighted hex</strong> to place your tile.
+            title: 'Player Tile Placement',
+            content: `Each player places their Player Tile to start the game.<strong>Drag your Player Tile (which appears as a hexagon) from the menu on the left </strong> and place it next to the edges of two hexagons on the board.
                 <div style="margin-top: 8px; color: #aaa; font-size: 13px;">Each tile hides a shrine that will be revealed when a player lands on it.</div>`
         },
         {
