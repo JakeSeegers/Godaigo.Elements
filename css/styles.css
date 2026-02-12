@@ -93,8 +93,7 @@ body {
 .site-logo img {
     display: block;
     margin: 0 auto;
-    max-height: 120px;   /* keeps it reasonable on large screens */
-    height: auto;
+    height: 100px;   /* 👈 This controls the size */
     width: auto;
 }
 
