@@ -44,8 +44,8 @@ const tutorialSystem = (function() {
         {
             id: 'scrolls',
             title: 'Scrolls',
-            content: `Scrolls go to your <strong>hand</strong> (max 3).
-                <div style="margin-top: 8px;">Move a scroll to your <strong>Active area</strong> to prepare it. Match its stone pattern on the board, then press <strong>Cast Spell</strong> to activate it.</div>
+            content: `Scrolls go to your <strong>hand</strong> (max 2).
+                <div style="margin-top: 8px;">Move a scroll to your <strong>Active area (max 2)</strong> to prepare it. Match its stone pattern on the board, then press <strong>Cast Spell</strong> to activate it.</div>
                 <div style="margin-top: 8px; color: #aaa; font-size: 13px;">Click the Scrolls button to view and manage your scrolls.</div>`
         },
         {
