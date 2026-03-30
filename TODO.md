@@ -1,4 +1,4 @@
-# Godaigo – Project TODO
+# Godaigo – Project TODO - This TODO is innacurate and needs to be corrected. Many of these things are already fixed
 
 High-level task list for the Godaigo game project. Update this as you complete or add work.
 
