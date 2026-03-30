@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Godaigo - Hexagon Tile Game</title>
+    <!-- Supabase -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- ============================================
+         LOBBY WRAPPER (shown before game starts)
+         ============================================ -->
+    <div class="lobby-wrapper" id="lobby-wrapper">
+        <h1 class="site-logo">
+            <img src="GodaigoLogoText.svg" alt="Godaigo">
+        </h1>
+
+    <!-- Auth Screen (shown before lobby) -->
+    <div id="auth-screen" style="background:#222; padding:30px; border-radius:10px; max-width:400px; margin:0 auto 20px;">
+        <h2 style="color:#d9b08c; margin-top:0; text-align:center;">Sign In</h2>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <input type="text" id="auth-username" placeholder="Username"
+                   style="padding:10px; font-size:16px; background:#333; color:#eee; border:2px solid #666; border-radius:5px;">
+            <input type="password" id="auth-password" placeholder="Password"
+                   style="padding:10px; font-size:16px; background:#333; color:#eee; border:2px solid #666; border-radius:5px;">
+            <div style="display:flex; gap:10px;">
+                <button id="auth-login-btn" onclick="authLogin()"
+                        style="flex:1; padding:12px; font-size:16px; background:#d9b08c; color:#1a1a1a; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">
+                    Log In
+                </button>
+                <button id="auth-register-btn" onclick="authRegister()"
+                        style="flex:1; padding:12px; font-size:16px; background:#444; color:#eee; border:2px solid #666; border-radius:5px; cursor:pointer;">
+                    Register
+                </button>
+            </div>
+            <div id="auth-error" style="color:#ff6b6b; font-size:14px; text-align:center; display:none;"></div>
+            <div id="auth-loading" style="display:none; text-align:center; color:#d9b08c;">Signing in...</div>
+        </div>
+    </div>
+
+    <!-- Multiplayer Lobby (hidden until auth succeeds) -->
+    <div id="multiplayer-lobby" style="display:none; background: #222; padding: 30px; border-radius: 10px; margin-bottom: 20px; max-width: 860px;">
+
+        <!-- Auth bar: shows signed-in username + sign-out button -->
+        <div id="auth-bar" style="display:none; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 12px; background:#333; border-radius:5px;">
+            <span id="auth-bar-name" style="color:#d9b08c; font-size:14px;"></span>
+            <div style="display:flex; gap:8px;">
+                <button onclick="gami_openPanel()" style="padding:4px 12px; font-size:13px; background:#555; color:#d9b08c; border:1px solid #888; border-radius:4px; cursor:pointer;">👤 Profile</button>
+                <button onclick="authSignOut()" style="padding:4px 12px; font-size:13px; background:#555; color:#eee; border:1px solid #888; border-radius:4px; cursor:pointer;">Sign Out</button>
+            </div>
+        </div>
+
+        <!-- Header row: title + hidden reset button -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h2 style="color: #d9b08c; margin: 0;">Multiplayer Lobby</h2>
+            <button id="reset-lobby-btn" onclick="resetLobby()"
+                    style="display: none; padding: 8px 15px; font-size: 14px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                🔄 Reset Lobby
+            </button>
+        </div>
+
+        <!-- Username is derived from auth and stored in lobbyUsername (lobby.js).
+             The input is kept hidden so existing code that reads it still works. -->
+        <input type="hidden" id="username-input">
+
+        <!-- ── Panel A: Game Browser (shown by default after login) ── -->
+        <div id="game-browser-panel" style="display: none;">
+            <div style="display: flex; gap: 16px; align-items: flex-start;">
+
+                <!-- Left column: inputs & room browser -->
+                <div style="flex: 1; min-width: 0;">
+
+                    <!-- Room Name input -->
+                    <div id="room-name-row" style="margin-bottom: 12px;">
+                        <label style="color: #999; font-size: 12px; display: block; margin-bottom: 4px;">Room Name <span style="color:#666;">(optional — used when hosting)</span></label>
+                        <input type="text" id="room-name-input" placeholder="e.g. Fire Nation Showdown" maxlength="30"
+                               style="padding: 10px; font-size: 15px; width: 100%; box-sizing: border-box; background: #333; color: #eee; border: 2px solid #666; border-radius: 5px;">
+                    </div>
+
+                    <!-- Host / create buttons -->
+                    <div id="room-action-buttons" style="display: flex; gap: 10px; margin-bottom: 12px;">
+                        <button id="host-public-btn" onclick="hostPublicGame()"
+                                style="flex:1; padding: 10px; font-size: 15px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            🌐 Host Public Game
+                        </button>
+                        <button id="create-private-btn" onclick="createPrivateRoom()"
+                                style="flex:1; padding: 10px; font-size: 15px; background: #7B5EA7; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            🔒 Create Private Room
+                        </button>
+                    </div>
+
+                    <!-- Join by code -->
+                    <div id="join-code-row" style="display: flex; gap: 8px; margin-bottom: 16px;">
+                        <input type="text" id="join-code-input" placeholder="Room code (e.g. ABCDEF)" maxlength="6"
+                               oninput="this.value = this.value.toUpperCase()"
+                               style="flex:1; padding: 10px; font-size: 16px; font-family: monospace; letter-spacing: 3px; text-transform: uppercase; background: #333; color: #eee; border: 2px solid #666; border-radius: 5px;">
+                        <button id="join-code-btn" onclick="joinByCode()"
+                                style="padding: 10px 18px; font-size: 15px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            Join
+                        </button>
+                    </div>
+
+                    <!-- Public game list -->
+                    <div id="public-games-section" style="margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <h3 style="margin: 0; color: #d9b08c; font-size: 15px;">Open Public Games</h3>
+                            <button id="refresh-browser-btn" onclick="refreshGameBrowser()"
+                                    style="padding: 4px 12px; font-size: 12px; background: #444; color: #eee; border: 1px solid #666; border-radius: 4px; cursor: pointer;">
+                                Refresh
+                            </button>
+                        </div>
+                        <div id="public-games-list"
+                             style="background: #1a1a1a; border-radius: 5px; min-height: 80px; max-height: 220px; overflow-y: auto; padding: 4px;">
+                            <p style="color: #666; font-style: italic; text-align: center; padding: 20px 0; margin: 0;">Loading...</p>
+                        </div>
+                    </div>
+
+                    <!-- Browser status / error line -->
+                    <div id="browser-status" style="color: #ff6b6b; font-size: 13px; min-height: 18px; margin-top: 4px;"></div>
+
+                </div><!-- end left column -->
+
+                <!-- Right column: leaderboard -->
+                <div style="width: 260px; flex-shrink: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h3 style="margin: 0; color: #d9b08c; font-size: 15px;">🏆 Leaderboard</h3>
+                        <button onclick="window.loadMainLeaderboard()"
+                                style="padding: 4px 10px; font-size: 12px; background: #444; color: #eee; border: 1px solid #666; border-radius: 4px; cursor: pointer;">
+                            ↻
+                        </button>
+                    </div>
+                    <div id="main-leaderboard-body"
+                         style="background: #1a1a1a; border-radius: 5px; overflow-y: auto; max-height: 360px; padding: 4px;">
+                        <div class="gami-loading" style="padding: 12px;">Sign in to view rankings.</div>
+                    </div>
+                </div><!-- end right column -->
+
+            </div>
+        </div>
+
+        <!-- ── Panel B: Waiting Room (shown after joining a room) ── -->
+        <div id="waiting-room-panel" style="display: none;">
+
+            <!-- Room name header (static once set) -->
+            <div id="room-name-display" style="margin-bottom: 10px; padding: 6px 0;">
+                <span style="color: #999; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Room</span>
+                <span id="room-name-value" style="color: #d9b08c; font-size: 20px; font-weight: bold; margin-left: 10px;"></span>
+            </div>
+
+            <!-- Room info bar -->
+            <div id="room-info-bar" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #333; padding: 10px 14px; border-radius: 5px; margin-bottom: 14px;">
+                <!-- Private room code (hidden for public games) -->
+                <div id="room-code-display" style="display: none; flex-shrink: 0;">
+                    <span style="color: #999; font-size: 12px; display: block; margin-bottom: 2px;">Room Code</span>
+                    <span id="room-code-value" onclick="copyRoomCode()"
+                          style="font-family: monospace; font-size: 22px; font-weight: bold; color: #d9b08c; letter-spacing: 4px; cursor: pointer;" title="Click to copy">
+                        ——————
+                    </span>
+                </div>
+                <div style="flex:1; min-width: 60px;">
+                    <span style="color: #999; font-size: 12px; display: block;">Players</span>
+                    <span id="room-player-count" style="color: #eee; font-size: 18px; font-weight: bold;">0 / 5</span>
+                </div>
+                <span id="room-type-badge"
+                      style="padding: 3px 10px; font-size: 11px; font-weight: bold; border-radius: 20px; background: #444; color: #aaa; letter-spacing: 1px;">
+                    PUBLIC
+                </span>
+                <button id="leave-room-btn" onclick="leaveRoom()"
+                        style="padding: 6px 14px; font-size: 13px; background: #c0392b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Leave Room
+                </button>
+            </div>
+
+            <!-- Player List -->
+            <div id="player-list" style="background: #333; padding: 20px; border-radius: 5px; margin-bottom: 16px; min-height: 80px;">
+                <h3 style="margin-top: 0; color: #d9b08c;">Players in Room:</h3>
+                <div id="players-container" style="color: #eee;"></div>
+            </div>
+
+            <!-- Ready Button (hidden until joined; shown by joinRoomAsPlayer) -->
+            <div id="ready-controls" style="display: none; text-align: center;">
+                <button id="ready-button" onclick="toggleReady()"
+                        style="padding: 15px 40px; font-size: 18px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    I'm Ready!
+                </button>
+
+                <!-- Host-only Settings & Start Game -->
+                <div id="host-settings" style="display: none; margin-top: 20px; background: #333; padding: 15px; border-radius: 5px;">
+                    <h4 style="color: #d9b08c; margin-top: 0;">Host Settings</h4>
+
+                    <div style="margin-bottom: 10px;">
+                        <label style="color: #eee; display: block; margin-bottom: 5px;">Turn Time Limit:</label>
+                        <select id="timeout-setting" style="padding: 8px; background: #444; color: #eee; border: 1px solid #666; border-radius: 5px;">
+                            <option value="0">Disabled</option>
+                            <option value="30">30 seconds</option>
+                            <option value="60">1 minute</option>
+                            <option value="120" selected>2 minutes</option>
+                            <option value="180">3 minutes</option>
+                            <option value="300">5 minutes</option>
+                        </select>
+                        <label style="color: #eee; display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                            <input type="checkbox" id="kick-on-timeout" checked>
+                            Kick active player when turn timer expires
+                        </label>
+                        <div style="color: #999; font-size: 12px; margin-top: 6px;">
+                            If disabled, expired turns will auto-pass to the next player.
+                        </div>
+                    </div>
+
+                    <button id="host-start-button" onclick="hostStartGame()"
+                            style="padding: 15px 40px; font-size: 18px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
+                        Start Game (Host)
+                    </button>
+                </div>
+
+                <p id="lobby-instruction" style="color: #999; margin-top: 10px; font-size: 14px;">
+                    The host can start the game when 2–5 players have joined
+                </p>
+            </div>
+        </div>
+
+        <!-- Status line (always visible) -->
+        <div id="lobby-status" style="text-align: center; color: #999; margin-top: 15px;"></div>
+    </div>
+
+    <!-- Old player selection (hidden, for fallback/testing) -->
+    <div id="player-selection" style="display: none; background: #222; padding: 30px; border-radius: 10px; margin-bottom: 20px; text-align: center;">
+        <h2 style="color: #d9b08c; margin-top: 0;">Select Number of Players (Local)</h2>
+        <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+            <button onclick="startGame(1)" style="padding: 15px 30px; font-size: 18px;">1 Player</button>
+            <button onclick="startGame(2)" style="padding: 15px 30px; font-size: 18px;">2 Players</button>
+            <button onclick="startGame(3)" style="padding: 15px 30px; font-size: 18px;">3 Players</button>
+            <button onclick="startGame(4)" style="padding: 15px 30px; font-size: 18px;">4 Players</button>
+            <button onclick="startGame(5)" style="padding: 15px 30px; font-size: 18px;">5 Players</button>
+        </div>
+        <p style="color: #999; margin-top: 15px; font-size: 14px;">
+            1 player = 6 tiles (1 of each type)<br>
+            Each additional player adds 6 more tiles in a spiral pattern
+        </p>
+    </div>
+</div><!-- End lobby-wrapper -->
+
+    <!-- ============================================
+         NEW GAME LAYOUT (CSS Grid based)
+         ============================================ -->
+    <div class="game-layout" id="game-layout">
+        <!-- TOP HUD BAR -->
+        <div class="hud-bar">
+            <div class="hud-section left">
+                <button class="hud-toggle-btn" id="toggle-left-panel" title="Toggle resources panel">◀</button>
+                <div class="hud-player">
+                    <span class="player-dot" id="hud-player-dot"></span>
+                    <span class="hud-player-name" id="hud-player-name">Your Turn</span>
+                    <button class="hud-stone-info-btn" onclick="showStoneInfoPopup()" title="Stone types &amp; abilities">Elemental Reference Sheet</button>
+                </div>
+            </div>
+
+<div class="hud-section right">
+                <div class="hud-ap" title="Action Points">
+                    <span class="hud-ap-value" id="hud-ap-value">5</span>
+                    <span class="hud-ap-label">AP</span>
+                    <span id="hud-void-ap" style="color: #9458f4; margin-left: 4px;"></span>
+                </div>
+                <div class="hud-timer" id="hud-timer" style="display: none;">
+                    <span>⏱</span>
+                    <span id="hud-timer-value">2:00</span>
+                </div>
+                <button id="emoji-panel-btn" onclick="window.emojiSystem?.togglePanel()" title="Emojis">😊</button>
+                <button id="cosmetics-panel-btn" onclick="window.cosmeticsSystem?.togglePanel()" title="Cosmetics">🎨</button>
+                <button class="hud-toggle-btn" id="toggle-right-panel" title="Toggle opponents panel">▶</button>
+            </div>
+        </div>
+
+        <!-- LEFT PANEL (Resources) -->
+        <div class="left-panel" id="left-panel">
+            <div class="panel-header">
+                <span class="panel-title">Resources</span>
+            </div>
+            <div class="panel-content">
+                <!-- Stone Grid -->
+                <div class="stone-grid" id="stone-grid">
+                    <div class="stone-card" id="new-earth-deck" data-element="earth">
+                        <svg width="36" height="36">
+                            <circle cx="18" cy="18" r="14" fill="#69d83a" class="stone-piece"/>
+                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">▲</text>
+                        </svg>
+                        <div class="count" id="new-earth-count">0/5</div>
+                        <div class="source" id="new-earth-source">20</div>
+                    </div>
+                    <div class="stone-card" id="new-water-deck" data-element="water">
+                        <svg width="36" height="36">
+                            <circle cx="18" cy="18" r="14" fill="#5894f4" class="stone-piece"/>
+                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">◯</text>
+                        </svg>
+                        <div class="count" id="new-water-count">0/5</div>
+                        <div class="source" id="new-water-source">20</div>
+                    </div>
+                    <div class="stone-card" id="new-fire-deck" data-element="fire">
+                        <svg width="36" height="36">
+                            <circle cx="18" cy="18" r="14" fill="#ed1b43" class="stone-piece"/>
+                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">♦</text>
+                        </svg>
+                        <div class="count" id="new-fire-count">0/5</div>
+                        <div class="source" id="new-fire-source">20</div>
+                    </div>
+                    <div class="stone-card" id="new-wind-deck" data-element="wind">
+                        <svg width="36" height="36">
+                            <circle cx="18" cy="18" r="14" fill="#ffce00" class="stone-piece"/>
+                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">≋</text>
+                        </svg>
+                        <div class="count" id="new-wind-count">0/5</div>
+                        <div class="source" id="new-wind-source">20</div>
+                    </div>
+                    <div class="stone-card" id="new-void-deck" data-element="void">
+                        <svg width="36" height="36">
+                            <circle cx="18" cy="18" r="14" fill="#9458f4" class="stone-piece"/>
+                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">✺</text>
+                        </svg>
+                        <div class="count" id="new-void-count">0/5</div>
+                        <div class="source" id="new-void-source">20</div>
+                    </div>
+                </div>
+
+                <!-- Scroll Decks Section -->
+                <div class="scroll-decks-section">
+                    <div class="section-label">Scroll Decks</div>
+                    <div class="scroll-decks-container" id="scroll-decks-container">
+                        <div class="scroll-deck-card" id="earth-scroll-deck" data-element="earth" title="Right-click to browse Earth scrolls">
+                            <div class="deck-icon" style="background: linear-gradient(135deg, #69d83a, #4a9e28);">
+                                <span>E</span>
+                            </div>
+                            <div class="deck-count" id="earth-deck-count">5</div>
+                        </div>
+                        <div class="scroll-deck-card" id="water-scroll-deck" data-element="water" title="Right-click to browse Water scrolls">
+                            <div class="deck-icon" style="background: linear-gradient(135deg, #5894f4, #3a6bc2);">
+                                <span>W</span>
+                            </div>
+                            <div class="deck-count" id="water-deck-count">5</div>
+                        </div>
+                        <div class="scroll-deck-card" id="fire-scroll-deck" data-element="fire" title="Right-click to browse Fire scrolls">
+                            <div class="deck-icon" style="background: linear-gradient(135deg, #ed1b43, #b51232);">
+                                <span>F</span>
+                            </div>
+                            <div class="deck-count" id="fire-deck-count">5</div>
+                        </div>
+                        <div class="scroll-deck-card" id="wind-scroll-deck" data-element="wind" title="Right-click to browse Wind scrolls">
+                            <div class="deck-icon" style="background: linear-gradient(135deg, #ffce00, #c9a200);">
+                                <span>A</span>
+                            </div>
+                            <div class="deck-count" id="wind-deck-count">5</div>
+                        </div>
+                        <div class="scroll-deck-card" id="void-scroll-deck" data-element="void" title="Right-click to browse Void scrolls">
+                            <div class="deck-icon" style="background: linear-gradient(135deg, #9458f4, #6b3ab8);">
+                                <span>V</span>
+                            </div>
+                            <div class="deck-count" id="void-deck-count">5</div>
+                        </div>
+                        <div class="scroll-deck-card" id="catacomb-scroll-deck" data-element="catacomb" title="Right-click to browse Catacomb scrolls">
+                            <div class="deck-icon" style="background: linear-gradient(135deg, #444, #222);">
+                                <span>C</span>
+                            </div>
+                            <div class="deck-count" id="catacomb-deck-count">10</div>
+                        </div>
+                    </div>
+
+                    <!-- Common Area Section -->
+                    <div class="common-area-header" style="margin-top: 12px; display: flex; align-items: center; gap: 8px;">
+                        <span class="section-label" style="margin: 0;">Common Area</span>
+                        <button class="hud-toggle-btn" id="toggle-common-area" title="Toggle common area (show/hide stone patterns)">&#9654;</button>
+                    </div>
+                    <div class="common-area-container" id="common-area-container">
+                        <!-- Common area scrolls will be shown here dynamically -->
+                        <div class="common-area-empty">No scrolls in common area</div>
+                    </div>
+                </div>
+
+                <!-- Player Tiles Section -->
+                <div class="tiles-section">
+                    <div id="new-player-tile-deck" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+                        <!-- Player tiles will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOARD AREA (Center) -->
+        <div class="board-area">
+            <div class="board-container" id="new-board-container">
+                <svg id="boardSvg" width="1000" height="800">
+                    <g id="viewport">
+                        <circle class="snap-indicator" id="snapIndicator" r="10" cx="0" cy="0"/>
+                    </g>
+                </svg>
+            </div>
+            <div id="status">Ready to play</div>
+        </div>
+
+        <!-- RIGHT PANEL (Opponents/Players) -->
+        <div class="right-panel" id="right-panel">
+            <div class="panel-header" style="display: flex; align-items: center; gap: 8px;">
+                <span class="panel-title">Players</span>
+                <button class="hud-toggle-btn" id="toggle-opponent-patterns" title="Toggle opponent active scroll patterns">&#9654;</button>
+            </div>
+            <div class="panel-content" id="new-opponent-cards">
+                <!-- Player cards will be populated dynamically -->
+            </div>
+        </div>
+
+        <!-- BOTTOM ACTION BAR -->
+        <div class="action-bar">
+            <div class="action-group">
+                <button id="scroll-inventory"> Scrolls (<span id="scroll-count">0</span>)</button>
+                <button id="cast-spell" class="primary">Cast Spell</button>
+            </div>
+
+            <div class="action-divider"></div>
+
+            <div class="action-group">
+                <button id="undo-move">⟲ Undo Step</button>
+            </div>
+
+            <div class="action-divider"></div>
+
+            <div class="action-group">
+                <button id="end-turn" class="primary" style="display: none;">End Turn</button>
+                <button id="leave-game" class="danger" style="display: none;">Leave</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OLD GAME CONTAINER (hidden, kept for JS compatibility) -->
+    <div class="game-container inventory-collapsed" style="display: none !important;">
+        <div class="deck-panel">
+            <div class="inventory-header">
+                <div class="inventory-title">Inventory</div>
+                <button id="inventory-close" class="inventory-close-btn" aria-label="Close inventory">✕</button>
+            </div>
+
+            <h3 id="tile-deck-header">Tile Deck (<span id="deck-count">0/24</span>)</h3>
+            <div class="tile-deck" id="tile-deck-container">
+                <svg width="150" height="150" class="deck-tile" id="deckTile"></svg>
+            </div>
+
+            <h3 id="player-tiles-header" style="margin-top: 30px;">Player Tiles (<span id="player-tile-count">0</span>)</h3>
+            <div class="tile-deck" id="player-tile-deck">
+                <!-- Player tiles will be added here dynamically -->
+            </div>
+
+            <h3 style="margin-top: 30px;">Player Pool</h3>
+            <div class="stone-deck">
+                <div class="stone-deck-item" id="earth-deck">
+                    <svg width="40" height="40">
+                        <circle cx="20" cy="20" r="12" fill="#69d83a" class="stone-piece"/>
+                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">▲</text>
+                    </svg>
+                    <div class="stone-count" id="earth-count">0/5</div>
+                    <div class="source-count" id="earth-source">20/25</div>
+                </div>
+                <div class="stone-deck-item" id="water-deck">
+                    <svg width="40" height="40">
+                        <circle cx="20" cy="20" r="12" fill="#5894f4" class="stone-piece"/>
+                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">◯</text>
+                    </svg>
+                    <div class="stone-count" id="water-count">0/5</div>
+                    <div class="source-count" id="water-source">20/25</div>
+                </div>
+                <div class="stone-deck-item" id="fire-deck">
+                    <svg width="40" height="40">
+                        <circle cx="20" cy="20" r="12" fill="#ed1b43" class="stone-piece"/>
+                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">♦</text>
+                    </svg>
+                    <div class="stone-count" id="fire-count">0/5</div>
+                    <div class="source-count" id="fire-source">20/25</div>
+                </div>
+                <div class="stone-deck-item" id="wind-deck">
+                    <svg width="40" height="40">
+                        <circle cx="20" cy="20" r="12" fill="#ffce00" class="stone-piece"/>
+                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">≋</text>
+                    </svg>
+                    <div class="stone-count" id="wind-count">0/5</div>
+                    <div class="source-count" id="wind-source">20/25</div>
+                </div>
+                <div class="stone-deck-item" id="void-deck">
+                    <svg width="40" height="40">
+                        <circle cx="20" cy="20" r="12" fill="#9458f4" class="stone-piece"/>
+                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">✺</text>
+                    </svg>
+                    <div class="stone-count" id="void-count">0/5</div>
+                    <div class="source-count" id="void-source">20/25</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column;">
+            <div class="board-container">
+                <svg id="boardSvg" width="1000" height="800">
+                    <g id="viewport">
+                        <circle class="snap-indicator" id="snapIndicator" r="10" cx="0" cy="0"/>
+                    </g>
+                </svg>
+            </div>
+
+            <div class="controls">
+                <div class="player-info">
+                    <div class="action-points">
+                        AP: <span id="ap-count">5</span>/5
+                        <span id="void-ap-display" style="color: #9458f4; margin-left: 10px;"></span>
+                        <span id="inactivity-timer" style="display: none; margin-left: 15px; padding: 5px 10px; border-radius: 5px; font-weight: bold;"></span>
+                    </div>
+                    <button id="inventory-toggle" title="Show/hide inventory">Inventory</button>
+                    <button id="end-turn" style="display: none;">End Turn</button>
+                    <button id="undo-move">Undo Step</button>
+                    <button id="scroll-inventory">Scrolls (<span id="scroll-count">0</span>)</button>
+                    <button id="cast-spell">Cast Spell (2 AP)</button>
+                                        <button id="leave-game" style="display: none; background: #f44336;">Leave Game</button>
+                </div>
+
+                <div id="status">Drag tiles from the deck to build your board. Drag stones onto hexes.<br>
+                <small style="color: #999;">All stones: 1 AP baseline | 🔥 Fire destroys adjacent non-void | 💧 Water (2 AP) chains abilities | 🌪️ Wind free movement | 🗻 Earth blocks | ✨ Void nullifies</small></div>
+            </div>
+        </div>
+
+        <!-- Opponent Panel (visible in multiplayer) -->
+        <div class="opponent-panel" id="opponent-panel">
+            <h3>👥 Opponents</h3>
+            <div id="opponent-cards">
+                <!-- Opponent cards will be populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Deck UI (hidden on desktop) -->
+    <div class="mobile-deck-container">
+        <div class="mobile-tab-buttons">
+            <button class="mobile-tab-btn active" data-tab="tiles">
+                Tiles
+            </button>
+            <button class="mobile-tab-btn" data-tab="stones">
+                Stones
+            </button>
+        </div>
+
+        <div class="mobile-deck-panel" id="mobile-tiles-panel">
+            <h3>Tiles (<span id="mobile-tile-count">0</span>)</h3>
+            <div class="mobile-tile-grid" id="mobile-tile-grid">
+                <!-- Tiles will be added here dynamically -->
+            </div>
+        </div>
+
+        <div class="mobile-deck-panel" id="mobile-stones-panel">
+            <h3>Stones</h3>
+            <div class="mobile-stone-grid" id="mobile-stone-grid">
+                <!-- Stones will be added here dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="js/tutorial.js" charset="UTF-8"></script>
+    <!-- Scroll System (load before main.js) -->
+    <script src="js/scrolls/scroll-definitions.js" charset="UTF-8"></script>
+    <script src="js/scrolls/effects/scroll-effects.js" charset="UTF-8"></script>
+    <script src="js/scrolls/response-window.js" charset="UTF-8"></script>
+    <script src="js/multiplayer-state.js" charset="UTF-8"></script>
+    <script src="js/game-core.js" charset="UTF-8"></script>
+    <script src="js/game-ui.js" charset="UTF-8"></script>
+    <script src="js/gamification.js" charset="UTF-8"></script>
+    <script src="js/gamification-ui.js" charset="UTF-8"></script>
+    <script src="js/lobby.js" charset="UTF-8"></script>
+    <script src="js/emoji-system.js" charset="UTF-8"></script>
+    <script src="js/cosmetics-system.js" charset="UTF-8"></script>
+
+    <script>
+    function showStoneInfoPopup() {
+        if (document.getElementById('stone-info-overlay')) return;
+        const stones = [
+            {
+                name: 'Earth', symbol: '▲', color: '#69d83a',
+                cost: 5,
+                desc: 'Cant be moved through.'
+            },
+            {
+                name: 'Water', symbol: '◯', color: '#5894f4',
+                cost: 4,
+                desc: 'Mimics the abilities of Earth and Wind Stones.'
+            },
+            {
+                name: 'Fire', symbol: '♦', color: '#ed1b43',
+                cost: 3,
+                desc: 'Stones adjacent to Fire Stones are destroyed. Void Stones are not effected by this.'
+            },
+            {
+                name: 'Wind', symbol: '≋', color: '#ffce00',
+                cost: 2,
+                desc: 'Costs Zero AP to move through Wind Stones.'
+            },
+            {
+                name: 'Void', symbol: '✺', color: '#9458f4',
+                cost: 1,
+                desc: 'Nullifies the abilities of adjacent stones and increases AP total when held in inventory'
+            }
+        ];
+
+        const rows = stones.map(s => `
+            <div class="stone-row">
+                <div class="stone-icon" style="background:${s.color};color:#111;">${s.symbol}</div>
+                <div class="stone-row-info">
+                    <div class="stone-row-name" style="color:${s.color};">${s.name}</div>
+                    <div class="stone-row-desc">${s.desc}</div>
+                    <div class="stone-row-cost">Break cost and draw quantity: ${s.cost} AP</div>
+                </div>
+            </div>`).join('');
+
+        const overlay = document.createElement('div');
+        overlay.id = 'stone-info-overlay';
+        overlay.className = 'stone-info-overlay';
+        overlay.innerHTML = `
+            <div class="stone-info-modal" role="dialog" aria-label="Stone types">
+                <button class="stone-info-close" onclick="document.getElementById('stone-info-overlay').remove()" aria-label="Close">×</button>
+                <h3>Stone Types &amp; Abilities</h3>
+                ${rows}
+            </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+    </script>
+</body>
+</html>
