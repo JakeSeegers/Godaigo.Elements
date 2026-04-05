@@ -60,13 +60,12 @@ body::after {
     position: fixed;
     inset: 0;
     z-index: 9999;
-
     background: repeating-linear-gradient(
         to bottom,
-        rgba(0,0,0,0.08),
-        rgba(0,0,0,0.15) 1px,
-        transparent 2px,
-        transparent 4px
+        rgba(0,0,0,0.4),
+        rgba(0,0,0,0.4) 3px,
+        transparent 3px,
+        transparent 6px
     );
 }
 body::before {
