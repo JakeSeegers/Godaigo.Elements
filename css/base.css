@@ -60,11 +60,13 @@ body::after {
     position: fixed;
     inset: 0;
     z-index: 9999;
+
     background: repeating-linear-gradient(
         to bottom,
-        rgba(0,0,0,0.15),
-        rgba(0,0,0,0.15) 1px,
+        rgba(0,0,0,0.12),
+        rgba(0,0,0,0.12) 1px,
         transparent 1px,
-        transparent 2px
+        transparent 3px
     );
+}
 }
