@@ -2374,9 +2374,9 @@ body::after {
     background:
         repeating-linear-gradient(
             to bottom,
-            rgba(0,0,0,0.12),
-            rgba(0,0,0,0.12) 1px,
-            transparent 1px,
-            transparent 2px
+            rgba(0,0,0,0.4),
+            rgba(0,0,0,0.4) 3px,
+            transparent 3px,
+            transparent 6px
         );
 }
