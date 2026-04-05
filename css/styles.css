@@ -64,6 +64,8 @@ body {
     color: var(--text-primary);
     user-select: none;
     overflow: hidden;
+
+    filter: contrast(1.2) brightness(1.1);
 }
 
 /* Hide scrollbars but allow scrolling */
