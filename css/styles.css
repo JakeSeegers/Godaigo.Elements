@@ -2365,6 +2365,11 @@ svg {
     0%   { background-position: 0%   50%; }
     100% { background-position: 200% 50%; }
 }
+@keyframes flicker {
+    0% { opacity: 0.97; }
+    50% { opacity: 1; }
+    100% { opacity: 0.98; }
+}
 body::after {
     content: "";
     pointer-events: none;
@@ -2379,4 +2384,6 @@ body::after {
             transparent 2px,
             transparent 4px
         );
+    animation: flicker 0.15s infinite;
+}
 }
