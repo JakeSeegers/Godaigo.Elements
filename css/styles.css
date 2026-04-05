@@ -2379,11 +2379,4 @@ body::after {
             transparent 1px,
             transparent 2px
         ),
-        repeating-linear-gradient(
-            to right,
-            rgba(0,0,0,0.05),
-            rgba(0,0,0,0.05) 1px,
-            transparent 1px,
-            transparent 2px
-        );
 }
