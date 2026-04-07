@@ -250,7 +250,7 @@
                         <!-- Scrolls will be added here -->
                     </div>
                     <div class="scroll-browse-footer">
-                        <button class="btn-shuffle">📜 Shuffle Deck</button>
+                        <button class="btn-shuffle">Shuffle Deck</button>
                         <button class="btn-close">Close</button>
                     </div>
                 </div>
@@ -293,7 +293,7 @@
             modal.querySelector('.btn-shuffle').addEventListener('click', () => {
                 if (spellSystem.shuffleDeck && spellSystem.scrollDecks[element]) {
                     spellSystem.shuffleDeck(spellSystem.scrollDecks[element]);
-                    updateStatus(`📜 ${element.charAt(0).toUpperCase() + element.slice(1)} scroll deck shuffled!`);
+                    updateStatus(`${element.charAt(0).toUpperCase() + element.slice(1)} scroll deck shuffled!`);
                     modal.remove();
                     // Reopen to show new order
                     showScrollDeckBrowser(element);
@@ -328,7 +328,7 @@
             updateHUD();
 
             const scrollInfo = spellSystem.patterns?.[scrollName] || SCROLL_DEFINITIONS?.[scrollName];
-            updateStatus(`📜 Drew ${scrollInfo?.name || scrollName} from the ${element} deck!`);
+            updateStatus(`Drew ${scrollInfo?.name || scrollName} from the ${element} deck!`);
 
             // Shuffle the deck after drawing (as requested)
             if (spellSystem.shuffleDeck) {
@@ -385,9 +385,12 @@
             // Update player name/turn indicator
             try {
                 const hudPlayerName = document.getElementById('hud-player-name');
-                const hudPlayerDot = document.getElementById('hud-player-dot');
+                const hudPlayerDot  = document.getElementById('hud-player-dot');
+                const hudPlayer     = hudPlayerName?.closest('.hud-player');
                 if (hudPlayerName && typeof activePlayerIndex !== 'undefined') {
-                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && myPlayerIndex === activePlayerIndex) {
+                    const isMyTurnNow = typeof isMultiplayer !== 'undefined' && isMultiplayer
+                        && myPlayerIndex === activePlayerIndex;
+                    if (isMyTurnNow) {
                         hudPlayerName.textContent = 'Your Turn';
                     } else {
                         const name = typeof getPlayerColorName === 'function'
@@ -395,6 +398,7 @@
                             : `Player ${activePlayerIndex + 1}`;
                         hudPlayerName.textContent = `${name}'s Turn`;
                     }
+                    if (hudPlayer) hudPlayer.classList.toggle('your-turn', isMyTurnNow);
                 }
 
                 // Update player dot color — must reflect the ACTIVE player, not the local player
@@ -501,10 +505,17 @@
         }
 
         let lastStatusMessage = null;
+        let _statusFlashTimer = null;
         function updateStatus(msg) {
             if (msg === lastStatusMessage) return;
             lastStatusMessage = msg;
-            document.getElementById('status').textContent = msg;
+            const el = document.getElementById('status');
+            if (!el) return;
+            el.textContent = msg;
+            // Brief gold flash to draw attention to new messages
+            el.style.color = '#d9b08c';
+            clearTimeout(_statusFlashTimer);
+            _statusFlashTimer = setTimeout(() => { el.style.color = ''; }, 1800);
         }
 
         let endTurnPromptShown = false;
@@ -524,71 +535,33 @@
 
             const overlay = document.createElement('div');
             overlay.id = 'end-turn-empty-ap-modal';
-            Object.assign(overlay.style, {
-                position: 'fixed',
-                top: '0', left: '0', right: '0', bottom: '0',
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                zIndex: '3000',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            });
+            overlay.className = 'retro-dlg-overlay';
 
             const modal = document.createElement('div');
-            Object.assign(modal.style, {
-                backgroundColor: '#1a1a2e',
-                border: '2px solid #f39c12',
-                borderRadius: '10px',
-                padding: '20px',
-                color: 'white',
-                minWidth: '260px',
-                maxWidth: '360px',
-                textAlign: 'center'
-            });
+            modal.className = 'retro-dlg-box';
 
-            const title = document.createElement('h3');
+            const title = document.createElement('div');
             title.textContent = 'Out of AP';
-            title.style.marginTop = '0';
+            title.className = 'retro-dlg-title';
             modal.appendChild(title);
 
             const message = document.createElement('div');
             message.textContent = "You're out of AP. Do you want to end your turn?";
-            message.style.margin = '10px 0 16px';
+            message.className = 'retro-dlg-line';
             modal.appendChild(message);
 
             const btnRow = document.createElement('div');
-            btnRow.style.display = 'flex';
-            btnRow.style.gap = '8px';
-            btnRow.style.justifyContent = 'center';
+            btnRow.className = 'retro-dlg-btns';
 
             const cancelBtn = document.createElement('button');
             cancelBtn.textContent = 'Keep Playing';
-            Object.assign(cancelBtn.style, {
-                padding: '8px 12px',
-                backgroundColor: '#2d2d44',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            });
-            cancelBtn.onclick = () => {
-                overlay.remove();
-            };
+            cancelBtn.className = 'retro-dlg-btn cancel';
+            cancelBtn.onclick = () => overlay.remove();
 
             const confirmBtn = document.createElement('button');
             confirmBtn.textContent = 'End Turn';
-            Object.assign(confirmBtn.style, {
-                padding: '8px 12px',
-                backgroundColor: '#e67e22',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            });
-            confirmBtn.onclick = () => {
-                overlay.remove();
-                endTurnBtn.click();
-            };
+            confirmBtn.className = 'retro-dlg-btn ok';
+            confirmBtn.onclick = () => { overlay.remove(); endTurnBtn.click(); };
 
             btnRow.appendChild(cancelBtn);
             btnRow.appendChild(confirmBtn);
@@ -671,7 +644,7 @@
 
                 const scrollsSummary = document.createElement('div');
                 scrollsSummary.className = 'opponent-scrolls-summary';
-                scrollsSummary.textContent = `📜 Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''} (hidden)`;
+                scrollsSummary.textContent = `Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''} (hidden)`;
                 card.appendChild(scrollsSummary);
 
                 // Active scrolls (visible to opponents)
@@ -681,7 +654,7 @@
 
                     const activeTitle = document.createElement('div');
                     activeTitle.className = 'opponent-active-scrolls-title';
-                    activeTitle.textContent = `⚡ Active Area (${activeSize}):`;
+                    activeTitle.textContent = `Active Area (${activeSize}):`;
                     activeScrollsDiv.appendChild(activeTitle);
 
                     scrollData.active.forEach(scrollName => {
@@ -1049,7 +1022,7 @@
                     placeTile(draggedTileOriginalPos.x, draggedTileOriginalPos.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
                 } else if (isPlayerTile) {
                     // Player tile couldn't be placed - show why
-                    updateStatus('⚠️ Player tiles must touch at least 2 unrevealed tiles!');
+                    updateStatus('Player tiles must touch at least 2 unrevealed tiles!');
                 }
 
                 ghostTile.remove();
@@ -1390,8 +1363,8 @@
                 let newScale = pinchStartScale * (dist / pinchStartDist);
                 newScale = Math.max(0.25, Math.min(3.0, newScale));
 
-                const centerX = boardSvg.width.baseVal.value / 2;
-                const centerY = boardSvg.height.baseVal.value / 2;
+                const centerX = boardSvg.clientWidth / 2;
+                const centerY = boardSvg.clientHeight / 2;
 
                 // Keep pinch midpoint roughly stable during zoom
                 const k = (1 / viewportScale) - (1 / newScale);
@@ -1673,7 +1646,7 @@
                         } else if (draggedTileId !== null) {
                             // Moving already-placed non-player tiles is not synced in multiplayer; revert to avoid desync.
                             if (isMultiplayer && draggedTileOriginalPos) {
-                                updateStatus('⚠️ Tiles cannot be moved in multiplayer.');
+                                updateStatus('Tiles cannot be moved in multiplayer.');
                                 placeTile(draggedTileOriginalPos.x, draggedTileOriginalPos.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
                             }
                         }
@@ -2120,7 +2093,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             // They must choose where to place the overflowing scroll before ending.
             const turnPlayerIdx = isMultiplayer ? myPlayerIndex : activePlayerIndex;
             if (spellSystem && spellSystem.hasPendingCascade(turnPlayerIdx)) {
-                updateStatus('⚠️ Resolve your pending scroll cascade before ending your turn!');
+                updateStatus('Resolve your pending scroll cascade before ending your turn!');
                 spellSystem.showPendingCascadePrompt(turnPlayerIdx);
                 return;
             }
@@ -2532,7 +2505,7 @@ document.getElementById('undo-move').onclick = function() {
             const currentShrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
             const freedomActive = spellSystem && spellSystem.scrollEffects
                 && typeof spellSystem.scrollEffects.hasFreedomActive === 'function'
-                && spellSystem.scrollEffects.hasFreedomActive();
+                && spellSystem.scrollEffects.hasFreedomActive(myPlayerIndex);
             const elementalTypes = ['earth', 'water', 'fire', 'wind', 'void'];
             const isCatacombLike = (tile) => {
                 if (!tile) return false;
@@ -2755,10 +2728,10 @@ document.getElementById('undo-move').onclick = function() {
                     return btn;
                 }
 
-                panel.appendChild(makeBtn('🪨 Fill Stones', () => {
+                panel.appendChild(makeBtn('Fill Stones', () => {
                     if (typeof window.fillstones === 'function') window.fillstones();
                 }));
-                panel.appendChild(makeBtn('📜 Toggle Deck Browser', () => {
+                panel.appendChild(makeBtn('Toggle Deck Browser', () => {
                     if (typeof window.showdeck === 'function') window.showdeck();
                 }));
                 panel.appendChild(makeBtn('✕ Close', () => panel.remove()));

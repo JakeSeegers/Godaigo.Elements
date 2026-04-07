@@ -203,11 +203,11 @@
             const roomNameRaw = document.getElementById('room-name-input')?.value.trim();
             const roomName = roomNameRaw || (username + "'s Game");
 
-            // --- One room at a time: check if this username is already in a waiting room ---
-            setBrowserStatus('Checking for existing rooms…');
+            // --- Auto-clean stale player entries for this username ---
+            const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
             const { data: existingPlayers } = await supabase
                 .from('players')
-                .select('game_id')
+                .select('id, game_id, created_at')
                 .eq('username', username);
             if (existingPlayers?.length) {
                 const gameIds = existingPlayers.map(p => p.game_id).filter(Boolean);
@@ -218,8 +218,17 @@
                         .in('id', gameIds)
                         .eq('status', 'waiting');
                     if (waitingRooms?.length) {
-                        setBrowserStatus('You\'re already in a waiting room. Leave it first before creating a new one.');
-                        return;
+                        // Only auto-clean entries older than 2 minutes (stale sessions)
+                        const staleIds = existingPlayers
+                            .filter(p => p.created_at < twoMinutesAgo)
+                            .map(p => p.id);
+                        if (staleIds.length) {
+                            await supabase.from('players').delete().in('id', staleIds);
+                            console.log('🧹 Auto-cleaned stale player entries:', staleIds);
+                        } else {
+                            setBrowserStatus('You\'re already in a waiting room. Leave it first before creating a new one.');
+                            return;
+                        }
                     }
                 }
             }
@@ -287,14 +296,22 @@
         // --- Shared join helper ---
 
         async function joinRoomAsPlayer(gameId, username) {
-            // Check username uniqueness within this room
+            // Auto-clean stale entries for this username; block if entry is recent (active session)
+            const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
             const { data: existing } = await supabase
                 .from('players')
-                .select('username')
+                .select('id, username, created_at')
                 .eq('game_id', gameId);
-            if (existing?.some(p => p.username === username)) {
-                setBrowserStatus('That username is already taken in this room');
-                return false;
+            const match = existing?.filter(p => p.username === username) || [];
+            if (match.length) {
+                const stale = match.filter(p => p.created_at < twoMinutesAgo);
+                if (stale.length) {
+                    await supabase.from('players').delete().in('id', stale.map(p => p.id));
+                    console.log('🧹 Auto-cleaned stale entry for', username);
+                } else {
+                    setBrowserStatus('That username is already in this room');
+                    return false;
+                }
             }
             const { data, error } = await supabase
                 .from('players')
@@ -326,6 +343,13 @@
         async function leaveRoom() {
             const leavingRoomId = currentGameId; // capture before we null it out
             const leavingAsHost = isHost;
+
+            // If we're mid-game, reset game state first before returning to lobby
+            const gameContainer = document.querySelector('.game-container');
+            const inGame = gameContainer && gameContainer.style.display !== 'none';
+            if (inGame && typeof resetToLobby === 'function') {
+                resetToLobby();
+            }
 
             if (myPlayerId) {
                 await supabase.from('players').delete().eq('id', myPlayerId);
@@ -367,6 +391,18 @@
             const refreshBtn = document.getElementById('refresh-browser-btn');
             if (refreshBtn) refreshBtn.textContent = '…';
 
+            // Sweep stale players from waiting rooms (disconnected without clean logout)
+            const staleTime = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+            const { data: waitingRooms } = await supabase
+                .from('game_room').select('id').eq('status', 'waiting');
+            if (waitingRooms?.length) {
+                await supabase
+                    .from('players')
+                    .delete()
+                    .in('game_id', waitingRooms.map(r => r.id))
+                    .lt('last_seen', staleTime);
+            }
+
             const { data: rooms } = await supabase
                 .from('game_room')
                 .select('id,host_name,created_at')
@@ -393,10 +429,25 @@
             const counts = {};
             (players || []).forEach(p => { counts[p.game_id] = (counts[p.game_id] || 0) + 1; });
 
-            list.innerHTML = rooms.map(r => `
+            // Auto-delete ghost rooms (exist in game_room but have no players)
+            const ghostIds = ids.filter(id => !counts[id]);
+            if (ghostIds.length) {
+                supabase.from('game_room').delete().in('id', ghostIds).then(() => {
+                    console.log('🗑️ Cleaned up', ghostIds.length, 'empty ghost room(s):', ghostIds);
+                });
+            }
+
+            // Only show rooms that actually have players in them
+            const liveRooms = rooms.filter(r => (counts[r.id] || 0) > 0);
+            if (!liveRooms.length) {
+                list.innerHTML = '<p style="color:#666;font-style:italic;text-align:center;padding:20px 0;margin:0;">No public games open. Host one!</p>';
+                return;
+            }
+
+            list.innerHTML = liveRooms.map(r => `
                 <div class="game-room-card" onclick="joinPublicGame(${r.id})">
                     <div class="game-room-host">${_esc(r.host_name || 'Unnamed Game')}</div>
-                    <div class="game-room-count">${counts[r.id] || 0} / 5</div>
+                    <div class="game-room-count">${counts[r.id]} / 5</div>
                     <button class="game-room-join-btn">Join</button>
                 </div>`).join('');
         }
@@ -417,6 +468,38 @@
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+        }
+
+        // ── Retro dialog helpers ──────────────────────────────────
+        /**
+         * Show a retro-styled confirm dialog.
+         * onOk is called if the player clicks OK; nothing happens on Cancel.
+         */
+        function showRetroConfirm(title, lines, onOk) {
+            const id = 'retro-confirm-overlay';
+            if (document.getElementById(id)) return; // prevent duplicates
+
+            const bodyLines = lines.map(l => `<div class="retro-dlg-line">${l}</div>`).join('');
+            const el = document.createElement('div');
+            el.id        = id;
+            el.className = 'retro-dlg-overlay';
+            el.innerHTML = `
+                <div class="retro-dlg-box">
+                    <div class="retro-dlg-title">${title}</div>
+                    <div class="retro-dlg-body">${bodyLines}</div>
+                    <div class="retro-dlg-btns">
+                        <button class="retro-dlg-btn ok"     id="retro-confirm-ok">OK</button>
+                        <button class="retro-dlg-btn cancel" id="retro-confirm-cancel">Cancel</button>
+                    </div>
+                </div>`;
+
+            document.body.appendChild(el);
+
+            document.getElementById('retro-confirm-ok').onclick = () => {
+                el.remove();
+                onOk();
+            };
+            document.getElementById('retro-confirm-cancel').onclick = () => el.remove();
         }
 
         // ========================================
@@ -484,7 +567,7 @@
 
                     if (activePlayers && activePlayers.length > 0) {
                         // Game is in progress with real players — don't nuke it
-                        alert('⚠️ A game is currently in progress with other players.\n\nPlease wait for it to finish, or use "Reset Lobby" to force-clear.');
+                        alert('A game is currently in progress with other players.\n\nPlease wait for it to finish, or use "Reset Lobby" to force-clear.');
                         isJoining = false;
                         joinButton.disabled = false;
                         usernameInput.disabled = false;
@@ -563,12 +646,17 @@
         }
 
         // Leave the current game
-        async function leaveGame() {
+        function leaveGame() {
             if (!myPlayerId) return;
 
-            const confirmed = confirm('⚠️ Leave Game?\n\nYou will be removed from this game and cannot rejoin.\n\nAre you sure?');
-            if (!confirmed) return;
+            showRetroConfirm(
+                'Leave Game?',
+                ['You will be removed from this game', 'and cannot rejoin.'],
+                _doLeaveGame
+            );
+        }
 
+        async function _doLeaveGame() {
             try {
                 console.log('👋 Leaving game...');
 
@@ -586,8 +674,7 @@
                 isHost = false;
                 isMultiplayer = false;
 
-                // Stop activity monitoring
-                stopTurnTimerMonitoring();
+                // Stop polling and subscriptions
                 stopLobbyPoll();
 
                 // Unsubscribe from channels
@@ -604,37 +691,37 @@
                     gameChannel = null;
                 }
 
-                // Reset UI
-                document.getElementById('ready-controls').style.display = 'none';
-                document.getElementById('leave-game').style.display = 'none';
+                // Reset UI state
+                const readyCtrl = document.getElementById('ready-controls');
+                if (readyCtrl) readyCtrl.style.display = 'none';
                 currentGameId = null;
                 currentJoinCode = null;
 
-                // Hide game, show lobby
-                document.querySelector('.game-container').style.display = 'none';
-                document.getElementById('multiplayer-lobby').style.display = 'block';
+                // resetToLobby handles: clearBoard, stopTurnTimerMonitoring,
+                // hiding game-layout, showing lobby-wrapper, hiding leave/end-turn buttons
+                resetToLobby();
 
-                // Clear the board
-                clearBoard(true);
-
-                // Return to game browser
+                // Return to game browser panel
                 showGameBrowser();
 
                 console.log('✅ Left game successfully');
-                alert('You have left the game.');
 
             } catch (error) {
                 console.error('Error leaving game:', error);
-                alert('Failed to leave game: ' + error.message);
+                showRetroConfirm('Leave Failed', [error.message], () => {});
             }
         }
 
         // Reset the entire lobby (clear all players and reset game room)
-        async function resetLobby() {
-            const confirmed = confirm('⚠️ Reset Lobby?\n\nThis will:\n- Remove all players from the lobby\n- Reset the game room to waiting state\n- Clear the board if game has started\n\nAre you sure?');
+        function resetLobby() {
+            showRetroConfirm(
+                'Reset Lobby?',
+                ['Remove all players', 'Reset room to waiting state', 'Clear the board'],
+                _doResetLobby
+            );
+        }
 
-            if (!confirmed) return;
-
+        async function _doResetLobby() {
             try {
                 console.log('📄 Resetting lobby...');
 
@@ -696,7 +783,7 @@
                 showGameBrowser();
 
                 console.log('✅ Lobby reset complete!');
-                alert('✅ Lobby has been reset! You can now host or join again.');
+                alert('Lobby has been reset! You can now host or join again.');
 
             } catch (error) {
                 console.error('Error resetting lobby:', error);
@@ -747,76 +834,49 @@
                 return; // Don't show duplicate
             }
 
-            const notification = document.createElement('div');
-            notification.id = 'game-over-notification';
-            Object.assign(notification.style, {
-                position: 'fixed', left: '50%', top: '50%',
-                transform: 'translate(-50%, -50%)',
-                backgroundColor: '#2c3e50', padding: '40px',
-                borderRadius: '15px', boxShadow: '0 0 30px rgba(0,0,0,0.8)',
-                zIndex: '1000', color: 'white', textAlign: 'center', minWidth: '500px',
-                border: '3px solid gold'
-            });
+            const overlay = document.createElement('div');
+            overlay.id = 'game-over-notification';
+            overlay.className = 'game-over-overlay';
 
-            const title = document.createElement('h1');
+            const box = document.createElement('div');
+            box.className = 'game-over-box';
+
+            const title = document.createElement('div');
             title.textContent = 'GAME OVER';
-            title.style.marginTop = '0';
-            title.style.color = 'gold';
-            title.style.fontSize = '42px';
-            title.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
-            notification.appendChild(title);
+            title.className = 'game-over-title';
+            box.appendChild(title);
 
-            // Show which player won using the new getPlayerColorName function
             const winnerName = getPlayerColorName(winnerPlayerIndex);
-
             const playerName = document.createElement('div');
             playerName.textContent = `${winnerName} wins!`;
-            playerName.style.fontSize = '28px';
-            playerName.style.fontWeight = 'bold';
-            playerName.style.color = 'gold';
-            playerName.style.marginBottom = '10px';
-            notification.appendChild(playerName);
+            playerName.className = 'game-over-winner';
+            playerName.style.color = '#d9b08c';
+            box.appendChild(playerName);
 
             const msg = document.createElement('div');
-            if (winType === 'last_standing') {
-                msg.textContent = 'Every other player left. You win!';
-            } else {
-                msg.textContent = 'All five elements have been mastered!';
-            }
-            msg.style.fontSize = '24px';
-            msg.style.marginBottom = '10px';
-            notification.appendChild(msg);
+            msg.textContent = winType === 'last_standing'
+                ? 'Every other player left. You win!'
+                : 'All five elements have been mastered!';
+            msg.className = 'game-over-msg';
+            box.appendChild(msg);
 
-            // Only show elements if won by collecting scrolls
             if (winType === 'scrolls') {
                 const elements = document.createElement('div');
-                elements.style.fontSize = '32px';
-                elements.style.margin = '20px 0';
+                elements.className = 'game-over-elements';
                 elements.innerHTML = '▲ ◯ ♦ ≋ ✺';
-                notification.appendChild(elements);
+                box.appendChild(elements);
             }
 
             const subtitle = document.createElement('div');
             subtitle.textContent = 'The path of balance is complete.';
-            subtitle.style.fontSize = '16px';
-            subtitle.style.fontStyle = 'italic';
-            subtitle.style.color = '#bdc3c7';
-            subtitle.style.marginBottom = '20px';
-            notification.appendChild(subtitle);
+            subtitle.className = 'game-over-subtitle';
+            box.appendChild(subtitle);
 
             const lobbyBtn = document.createElement('button');
             lobbyBtn.textContent = 'Return to Lobby';
-            lobbyBtn.style.padding = '12px 24px';
-            lobbyBtn.style.fontSize = '16px';
-            lobbyBtn.style.backgroundColor = 'gold';
-            lobbyBtn.style.color = '#2c3e50';
-            lobbyBtn.style.border = 'none';
-            lobbyBtn.style.borderRadius = '5px';
-            lobbyBtn.style.cursor = 'pointer';
-            lobbyBtn.style.fontWeight = 'bold';
+            lobbyBtn.className = 'retro-dlg-btn ok';
             lobbyBtn.onclick = async () => {
                 try {
-                    // Clean up: delete all players in this room and reset this game room
                     const roomId = currentGameId;
                     if (roomId) {
                         const { data: allP } = await supabase.from('players').select('id').eq('game_id', roomId);
@@ -830,9 +890,10 @@
                 }
                 window.location.reload();
             };
-            notification.appendChild(lobbyBtn);
+            box.appendChild(lobbyBtn);
 
-            document.body.appendChild(notification);
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
         }
 
         // Toggle ready status
@@ -928,7 +989,7 @@
                             }
 
                             // Show alert and reload the page to fully reset
-                            alert('⚠️ You were kicked from the game (timeout). The page will refresh.');
+                            alert('You were kicked from the game (timeout). The page will refresh.');
 
                             // Reload the page to return to a clean state
                             setTimeout(() => {
@@ -952,7 +1013,7 @@
                             if (room && room.status === 'playing') {
                                 const leftPlayer = allPlayersData.find(p => p.id === payload.old.id);
                                 const playerName = leftPlayer ? getPlayerColorName(leftPlayer.player_index) : 'A player';
-                                updateStatus(`👋 ${playerName} left the game`);
+                                updateStatus(`${playerName} left the game`);
 
                                 // Check if I'm the only player left (scoped to this room)
                             const { data: remainingPlayers } = await supabase
@@ -1089,7 +1150,7 @@
                     const readyColor = p.is_ready ? '#4CAF50' : '#999';
                     const meLabel = isMe ? ' <span style="color: #ffd700;">(You)</span>' : '';
                     // First player in the list (index 0) is the host
-                    const hostLabel = index === 0 ? ' <span style="color: #FF9800;">👑 Host</span>' : '';
+                    const hostLabel = index === 0 ? ' <span style="color: #FF9800;">Host</span>' : '';
                     // Apply local player's equipped name colour; other players keep default
                     const nameStyle = isMe
                         ? (window.cosmeticsSystem?.getNameColorStyle() || '')
@@ -1433,27 +1494,22 @@
             }
         }
 
-        // Update heartbeat (keep player active)
+        // Update heartbeat (keep player active while in waiting room only)
+        let _heartbeatInterval = null;
         function updateHeartbeat() {
             if (!myPlayerId) return;
-
-            // REMOVED: Automatic heartbeat was preventing timeout kicks
-            // Players' last_seen is updated only when they make moves via recordActivity()
-            // This allows the inactivity timeout to properly detect and kick inactive players
-
-            // setInterval(async () => {
-            //     // Don't update if we're no longer in the lobby
-            //     if (!myPlayerId) return;
-
-            //     try {
-            //         await supabase
-            //             .from('players')
-            //             .update({ last_seen: new Date().toISOString() })
-            //             .eq('id', myPlayerId);
-            //     } catch (error) {
-            //         console.error('Heartbeat error:', error);
-            //     }
-            // }, 30000); // Every 30 seconds
+            if (_heartbeatInterval) clearInterval(_heartbeatInterval);
+            _heartbeatInterval = setInterval(async () => {
+                if (!myPlayerId) { clearInterval(_heartbeatInterval); return; }
+                // Skip heartbeat during active game — in-game inactivity timeout uses last_seen
+                if (document.getElementById('game-layout')?.classList.contains('active')) return;
+                try {
+                    await supabase
+                        .from('players')
+                        .update({ last_seen: new Date().toISOString() })
+                        .eq('id', myPlayerId);
+                } catch (e) { /* ignore */ }
+            }, 30000); // Every 30 seconds
         }
 
         // Clean up on page unload (synchronous to ensure it completes)
@@ -1756,7 +1812,7 @@
                     if (payload.turnNumber > expectedTurn) {
                         // We missed some turns! Log warning
                         console.warn(`⚠️ DESYNC DETECTED: Expected turn ${expectedTurn}, received turn ${payload.turnNumber}. Missed ${payload.turnNumber - expectedTurn} turn(s).`);
-                        updateStatus(`⚠️ Turn sync issue detected - auto-correcting...`);
+                        updateStatus(`Turn sync issue detected - auto-correcting...`);
                     } else if (payload.turnNumber < lastReceivedTurnNumber) {
                         // Received an old turn? Ignore it
                         console.warn(`⚠️ Received outdated turn ${payload.turnNumber} (current: ${lastReceivedTurnNumber}). Ignoring.`);
@@ -1859,10 +1915,10 @@
                 }
 
                 if (isMyTurn()) {
-                    updateStatus(`✅ All tiles placed! It's your turn!`);
+                    updateStatus(`All tiles placed! It's your turn!`);
                 } else {
                     const firstPlayerColorName = getPlayerColorName(activePlayerIndex);
-                    updateStatus(`✅ All tiles placed! Waiting for ${firstPlayerColorName}'s turn...`);
+                    updateStatus(`All tiles placed! Waiting for ${firstPlayerColorName}'s turn...`);
                 }
 
                 // Ensure standard turn UI becomes visible after placement phase
@@ -1896,9 +1952,9 @@
                 // Show notification
                 const playerName = getPlayerColorName(playerIndex);
                 if (isCatacomb) {
-                    updateStatus(`✨ ${playerName} cast ${spellName}! Activated: ${elements.join(', ')}`);
+                    updateStatus(`${playerName} cast ${spellName}! Activated: ${elements.join(', ')}`);
                 } else {
-                    updateStatus(`✨ ${playerName} cast ${spellName}! Activated ${element} (level ${level})`);
+                    updateStatus(`${playerName} cast ${spellName}! Activated ${element} (level ${level})`);
                 }
             });
 
@@ -1927,7 +1983,7 @@
                 // Show notification
                 const playerName = getPlayerColorName(playerIndex);
                 const activatedStr = activatedElements ? activatedElements.join(', ') : element;
-                updateStatus(`✨ ${playerName} used ${effectName}! Activated: ${activatedStr}`);
+                updateStatus(`${playerName} used ${effectName}! Activated: ${activatedStr}`);
 
                 // Check win condition — all 5 elements activated
                 if (spellSystem.playerScrolls[playerIndex].activated.size === 5) {
@@ -2171,7 +2227,7 @@
                 spellSystem.updateScrollCount();
 
                 const playerName = getPlayerColorName(playerIndex);
-                updateStatus(`📜 ${playerName} collected a ${shrineType} scroll!`);
+                updateStatus(`${playerName} collected a ${shrineType} scroll!`);
                 updateOpponentPanel();
                 if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
             });
@@ -2201,7 +2257,7 @@
                 spellSystem.updateScrollCount();
 
                 const playerName = getPlayerColorName(playerIndex);
-                updateStatus(`📜 ${playerName} used Scholar's Insight to search the ${element} deck!`);
+                updateStatus(`${playerName} used Scholar's Insight to search the ${element} deck!`);
                 updateOpponentPanel();
                 if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
             });
@@ -3107,9 +3163,9 @@
 
             // Show appropriate message based on turn order
             if (myPlayer.player_index === 0) {
-                updateStatus(`🎮 You are Player ${myPlayer.player_index + 1} (${playerColor})! It's your turn - drag your player tile to the board to start.`);
+                updateStatus(`You are Player ${myPlayer.player_index + 1} (${playerColor}). Drag your player tile to the board to start!`);
             } else {
-                updateStatus(`⏳ You are Player ${myPlayer.player_index + 1} (${playerColor}). Waiting for other players to place their tiles...`);
+                updateStatus(`You are Player ${myPlayer.player_index + 1} (${playerColor}). Waiting for other players to place their tiles...`);
             }
 
             // Initialize opponent panel
