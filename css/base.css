@@ -9,12 +9,18 @@ body {
     margin: 0;
     padding: 0;
     background: var(--bg-dark);
-    font-family: 'Segoe UI', 'Courier New', monospace;
+    font-family: var(--font-terminal);
+    font-size: 32px;
     color: var(--text-primary);
     user-select: none;
     overflow: hidden;
+    cursor: crosshair;
 
     filter: contrast(1.2) brightness(1.1);
+}
+
+img, svg {
+    image-rendering: pixelated;
 }
 
 /* Hide scrollbars but allow scrolling */
