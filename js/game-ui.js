@@ -336,13 +336,14 @@
                 console.log(`📜 ${element} deck shuffled after drawing`);
             }
 
-            // Broadcast in multiplayer (for testing only - in real game this wouldn't be allowed)
+            // Broadcast so other clients update their deck/hand state
             if (isMultiplayer) {
-                broadcastGameAction('scroll-drawn-test', {
-                    element: element,
+                broadcastGameAction('scroll-collected', {
+                    playerIndex: activePlayerIndex,
                     scrollName: scrollName,
-                    playerIndex: activePlayerIndex
+                    shrineType: element
                 });
+                if (typeof syncPlayerState === 'function') syncPlayerState();
             }
         }
 
@@ -386,16 +387,18 @@
                 const hudPlayerName = document.getElementById('hud-player-name');
                 const hudPlayerDot = document.getElementById('hud-player-dot');
                 if (hudPlayerName && typeof activePlayerIndex !== 'undefined') {
-                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
-                        const isMyTurnNow = myPlayerIndex === activePlayerIndex;
-                        hudPlayerName.textContent = isMyTurnNow ? 'Your Turn' : `Player ${activePlayerIndex + 1}'s Turn`;
+                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && myPlayerIndex === activePlayerIndex) {
+                        hudPlayerName.textContent = 'Your Turn';
                     } else {
-                        hudPlayerName.textContent = `Player ${activePlayerIndex + 1}`;
+                        const name = typeof getPlayerColorName === 'function'
+                            ? getPlayerColorName(activePlayerIndex)
+                            : `Player ${activePlayerIndex + 1}`;
+                        hudPlayerName.textContent = `${name}'s Turn`;
                     }
                 }
 
-                // Update player dot color
-                if (hudPlayerDot && typeof playerColor !== 'undefined' && playerColor) {
+                // Update player dot color — must reflect the ACTIVE player, not the local player
+                if (hudPlayerDot) {
                     const colorMap = {
                         'purple': '#9458f4',
                         'yellow': '#ffce00',
@@ -403,7 +406,15 @@
                         'blue': '#5894f4',
                         'green': '#69d83a'
                     };
-                    hudPlayerDot.style.background = colorMap[playerColor] || '#d9b08c';
+                    // Prefer the active player's colour from allPlayersData
+                    const activePlayerData = typeof allPlayersData !== 'undefined'
+                        ? allPlayersData.find(p => p.player_index === activePlayerIndex)
+                        : null;
+                    const activeColorKey = activePlayerData?.color
+                        || (typeof playerColor !== 'undefined' ? playerColor : null);
+                    hudPlayerDot.style.background = (activeColorKey && colorMap[activeColorKey])
+                        ? colorMap[activeColorKey]
+                        : '#d9b08c';
                 }
             } catch (e) {
                 // Variables not ready yet
@@ -735,6 +746,11 @@
             placedStones = [];
             playerPositions = [];
             activePlayerIndex = 0;
+            // Reset ID counters so each new game starts from 1 (prevents cross-game ID drift).
+            // Both clients must reset in sync — clearBoard is called from startMultiplayerGame
+            // before any tile/stone placement, so this is safe.
+            if (typeof nextTileId !== 'undefined') nextTileId = 1;
+            if (typeof nextStoneId !== 'undefined') nextStoneId = 1;
             updateStatus('Board cleared');
         }
 
@@ -982,7 +998,8 @@
                                 x: snapResult.x,
                                 y: snapResult.y,
                                 playerIndex: myPlayerIndex,
-                                color: playerColor
+                                color: playerColor,
+                                cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
                             });
                         }
                     }
@@ -1190,7 +1207,8 @@
                             playerIndex: activePlayerIndex,
                             x: finalPos.x,
                             y: finalPos.y,
-                            apSpent: totalCost
+                            apSpent: totalCost,
+                            cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
                         });
 
                         // Check if player stepped on a hidden tile - reveal it!
@@ -1626,7 +1644,8 @@
                                     x: snapResult.x,
                                     y: snapResult.y,
                                     playerIndex: myPlayerIndex,
-                                    color: playerColor
+                                    color: playerColor,
+                                    cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
                                 });
                             }
                         }
@@ -1779,7 +1798,8 @@
                                     playerIndex: activePlayerIndex,
                                     x: finalPos.x,
                                     y: finalPos.y,
-                                    apSpent: totalCost
+                                    apSpent: totalCost,
+                                    cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
                                 });
                             }
 
@@ -2096,6 +2116,15 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 return;
             }
 
+            // Block end-turn if the player has an unresolved scroll cascade.
+            // They must choose where to place the overflowing scroll before ending.
+            const turnPlayerIdx = isMultiplayer ? myPlayerIndex : activePlayerIndex;
+            if (spellSystem && spellSystem.hasPendingCascade(turnPlayerIdx)) {
+                updateStatus('⚠️ Resolve your pending scroll cascade before ending your turn!');
+                spellSystem.showPendingCascadePrompt(turnPlayerIdx);
+                return;
+            }
+
             isEndingTurn = true;
 
             // Replenish shrine stones BEFORE clearing buffs (Mine buff doubles output)
@@ -2127,11 +2156,21 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         const COLOR_RANK = {
                             '#9458f4': 1, '#ffce00': 2, '#ed1b43': 3, '#5894f4': 4, '#69d83a': 5
                         };
-                        const sortedPlayers = [...playerPositions].map((p, idx) => ({
-                            index: idx,
-                            rank: COLOR_RANK[p.color] || 999
-                        })).sort((a, b) => a.rank - b.rank);
-                        const currentSortedIndex = sortedPlayers.findIndex(p => p.index === activePlayerIndex);
+                        // Guard: skip null/undefined entries (e.g. sparse indices after a player disconnects)
+                        const sortedPlayers = playerPositions
+                            .map((p, idx) => ({ index: idx, color: p?.color, rank: COLOR_RANK[p?.color] || 999 }))
+                            .filter((_, idx) => playerPositions[idx] != null)
+                            .sort((a, b) => a.rank - b.rank);
+                        if (sortedPlayers.length === 0) {
+                            console.warn('⚠️ sortedPlayers is empty — cannot advance turn');
+                            isEndingTurn = false;
+                            return;
+                        }
+                        let currentSortedIndex = sortedPlayers.findIndex(p => p.index === activePlayerIndex);
+                        if (currentSortedIndex === -1) {
+                            console.warn('⚠️ activePlayerIndex', activePlayerIndex, 'not found in sortedPlayers — defaulting to first player');
+                            currentSortedIndex = sortedPlayers.length - 1; // will wrap to 0
+                        }
                         const nextSortedIndex = (currentSortedIndex + 1) % sortedPlayers.length;
                         activePlayerIndex = sortedPlayers[nextSortedIndex].index;
 
@@ -2139,9 +2178,11 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         if (isMultiplayer) {
                             const startedAt = Date.now();
                             turnStartedAtMs = startedAt;
+                            currentTurnNumber++;
                             broadcastGameAction('turn-change', {
                                 playerIndex: activePlayerIndex,
-                                turnStartedAt: startedAt
+                                turnStartedAt: startedAt,
+                                turnNumber: currentTurnNumber
                             });
                         }
 
@@ -2158,43 +2199,39 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         if (spellSystem?.scrollEffects?.clearExcavateForPlayer) {
                             spellSystem.scrollEffects.clearExcavateForPlayer(activePlayerIndex);
                         }
+                        // Reflect fires first, then Psychic fires after all reflects fully resolve.
+                        // Both use sequential onComplete chaining for interactive scrolls.
                         const reflectResult = spellSystem?.scrollEffects?.processReflectPending
-                            ? spellSystem.scrollEffects.processReflectPending(activePlayerIndex) : null;
-                        const psychicResult = spellSystem?.scrollEffects?.processPsychicPending
-                            ? spellSystem.scrollEffects.processPsychicPending(activePlayerIndex) : null;
+                            ? spellSystem.scrollEffects.processReflectPending(activePlayerIndex, () => {
+                                // All reflects done — now run Psychic stolen scrolls
+                                if (spellSystem?.scrollEffects?.processPsychicPending) {
+                                    spellSystem.scrollEffects.processPsychicPending(activePlayerIndex);
+                                }
+                              })
+                            : null;
+                        // If no reflects, start Psychic immediately
+                        if (reflectResult === null && spellSystem?.scrollEffects?.processPsychicPending) {
+                            spellSystem.scrollEffects.processPsychicPending(activePlayerIndex);
+                        }
                         // Excavate teleport: if this player has a pending teleport, trigger it
                         if (spellSystem?.scrollEffects?.processExcavateTeleport) {
                             spellSystem.scrollEffects.processExcavateTeleport(activePlayerIndex);
                         }
-                        // AP resets at the start of the new player's turn
-                        currentAP = 5;
-                        document.getElementById('ap-count').textContent = currentAP;
-                        refreshVoidAP();
-                        syncPlayerState();
+                        // AP resets at the start of the new player's turn (only for the new active player)
+                        if (activePlayerIndex === myPlayerIndex) {
+                            currentAP = 5;
+                            document.getElementById('ap-count').textContent = currentAP;
+                            refreshVoidAP();
+                            syncPlayerState();
+                        }
 
-                        // Broadcast reflect/psychic triggers after turn-change
+                        // Note: reflect-triggered and psychic-triggered broadcasts are both sent
+                        // inside processReflectPending/processPsychicPending respectively
+                        // (one per scroll, immediately before its interactive selection begins), so
+                        // remote clients receive them in order and can queue them sequentially.
                         if (isMultiplayer) {
-                            if (reflectResult?.triggered && reflectResult.definition) {
-                                const def = reflectResult.definition;
-                                broadcastGameAction('reflect-triggered', {
-                                    playerIndex: reflectResult.playerIndex,
-                                    scrollName: reflectResult.scrollName,
-                                    element: def.element,
-                                    elements: def.element === 'catacomb' ? def.patterns?.[0]?.map(p => p.type) : null,
-                                    isCatacomb: def.element === 'catacomb'
-                                });
-                                if (typeof syncPlayerState === 'function') syncPlayerState();
-                            }
-                            if (psychicResult?.triggered && psychicResult.definition) {
-                                const def = psychicResult.definition;
-                                broadcastGameAction('psychic-triggered', {
-                                    playerIndex: psychicResult.playerIndex,
-                                    scrollName: psychicResult.scrollName,
-                                    element: def.element,
-                                    elements: def.element === 'catacomb' ? def.patterns?.[0]?.map(p => p.type) : null,
-                                    isCatacomb: def.element === 'catacomb'
-                                });
-                                if (typeof syncPlayerState === 'function') syncPlayerState();
+                            if (Array.isArray(reflectResult) && typeof syncPlayerState === 'function') {
+                                syncPlayerState();
                             }
                         }
 
@@ -2230,15 +2267,25 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     '#69d83a': 5  // green/earth
                 };
 
-                // Sort players by rank
-                const sortedPlayers = [...playerPositions].map((p, idx) => ({
-                    index: idx,
-                    rank: COLOR_RANK[p.color] || 999
-                })).sort((a, b) => a.rank - b.rank);
+                // Sort players by rank — guard against null/undefined entries (sparse indices after disconnect)
+                const sortedPlayers = playerPositions
+                    .map((p, idx) => ({ index: idx, color: p?.color, rank: COLOR_RANK[p?.color] || 999 }))
+                    .filter((_, idx) => playerPositions[idx] != null)
+                    .sort((a, b) => a.rank - b.rank);
+
+                if (sortedPlayers.length === 0) {
+                    console.warn('⚠️ sortedPlayers is empty — cannot advance turn (no placed player positions)');
+                    isEndingTurn = false;
+                    return;
+                }
 
                 // Find current player in sorted list
-                const currentSortedIndex = sortedPlayers.findIndex(p => p.index === activePlayerIndex);
-                
+                let currentSortedIndex = sortedPlayers.findIndex(p => p.index === activePlayerIndex);
+                if (currentSortedIndex === -1) {
+                    console.warn('⚠️ activePlayerIndex', activePlayerIndex, 'not in sortedPlayers — defaulting to first player. Sorted:', sortedPlayers);
+                    currentSortedIndex = sortedPlayers.length - 1; // wraps to 0 below
+                }
+
                 // Move to next player in sorted order (wrap around)
                 const nextSortedIndex = (currentSortedIndex + 1) % sortedPlayers.length;
                 activePlayerIndex = sortedPlayers[nextSortedIndex].index;
@@ -2248,9 +2295,11 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 if (isMultiplayer) {
                     const startedAt = Date.now();
                     turnStartedAtMs = startedAt;
+                    currentTurnNumber++;
                     broadcastGameAction('turn-change', {
                         playerIndex: activePlayerIndex,
-                        turnStartedAt: startedAt
+                        turnStartedAt: startedAt,
+                        turnNumber: currentTurnNumber
                     });
                 }
 
@@ -2267,44 +2316,37 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 if (spellSystem?.scrollEffects?.clearExcavateForPlayer) {
                     spellSystem.scrollEffects.clearExcavateForPlayer(activePlayerIndex);
                 }
+                // Reflect fires first, then Psychic fires after all reflects fully resolve.
                 const reflectResult = spellSystem?.scrollEffects?.processReflectPending
-                    ? spellSystem.scrollEffects.processReflectPending(activePlayerIndex) : null;
-                const psychicResult = spellSystem?.scrollEffects?.processPsychicPending
-                    ? spellSystem.scrollEffects.processPsychicPending(activePlayerIndex) : null;
+                    ? spellSystem.scrollEffects.processReflectPending(activePlayerIndex, () => {
+                        // All reflects done — now run Psychic stolen scrolls
+                        if (spellSystem?.scrollEffects?.processPsychicPending) {
+                            spellSystem.scrollEffects.processPsychicPending(activePlayerIndex);
+                        }
+                      })
+                    : null;
+                // If no reflects, start Psychic immediately
+                if (reflectResult === null && spellSystem?.scrollEffects?.processPsychicPending) {
+                    spellSystem.scrollEffects.processPsychicPending(activePlayerIndex);
+                }
                 // Excavate teleport: if this player has a pending teleport, trigger it
                 if (spellSystem?.scrollEffects?.processExcavateTeleport) {
                     spellSystem.scrollEffects.processExcavateTeleport(activePlayerIndex);
                 }
 
-                // AP resets at the start of the new player's turn
-                currentAP = 5;
-                document.getElementById('ap-count').textContent = currentAP;
-                refreshVoidAP();
-                syncPlayerState();
+                // AP resets at the start of the new player's turn (only for the new active player)
+                if (activePlayerIndex === myPlayerIndex) {
+                    currentAP = 5;
+                    document.getElementById('ap-count').textContent = currentAP;
+                    refreshVoidAP();
+                    syncPlayerState();
+                }
 
-                // Broadcast reflect/psychic triggers after turn-change
+                // Note: reflect-triggered and psychic-triggered broadcasts are both handled
+                // inside processReflectPending/processPsychicPending respectively
                 if (isMultiplayer) {
-                    if (reflectResult?.triggered && reflectResult.definition) {
-                        const def = reflectResult.definition;
-                        broadcastGameAction('reflect-triggered', {
-                            playerIndex: reflectResult.playerIndex,
-                            scrollName: reflectResult.scrollName,
-                            element: def.element,
-                            elements: def.element === 'catacomb' ? def.patterns?.[0]?.map(p => p.type) : null,
-                            isCatacomb: def.element === 'catacomb'
-                        });
-                        if (typeof syncPlayerState === 'function') syncPlayerState();
-                    }
-                    if (psychicResult?.triggered && psychicResult.definition) {
-                        const def = psychicResult.definition;
-                        broadcastGameAction('psychic-triggered', {
-                            playerIndex: psychicResult.playerIndex,
-                            scrollName: psychicResult.scrollName,
-                            element: def.element,
-                            elements: def.element === 'catacomb' ? def.patterns?.[0]?.map(p => p.type) : null,
-                            isCatacomb: def.element === 'catacomb'
-                        });
-                        if (typeof syncPlayerState === 'function') syncPlayerState();
+                    if (Array.isArray(reflectResult) && typeof syncPlayerState === 'function') {
+                        syncPlayerState();
                     }
                 }
 
@@ -2331,10 +2373,15 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 if (spellSystem?.scrollEffects?.clearExcavateForPlayer) {
                     spellSystem.scrollEffects.clearExcavateForPlayer(activePlayerIndex);
                 }
-                if (spellSystem?.scrollEffects?.processReflectPending) {
-                    spellSystem.scrollEffects.processReflectPending(activePlayerIndex);
-                }
-                if (spellSystem?.scrollEffects?.processPsychicPending) {
+                // Reflect fires first, then Psychic fires after all reflects fully resolve.
+                const reflectResultSingle = spellSystem?.scrollEffects?.processReflectPending
+                    ? spellSystem.scrollEffects.processReflectPending(activePlayerIndex, () => {
+                        if (spellSystem?.scrollEffects?.processPsychicPending) {
+                            spellSystem.scrollEffects.processPsychicPending(activePlayerIndex);
+                        }
+                      })
+                    : null;
+                if (reflectResultSingle === null && spellSystem?.scrollEffects?.processPsychicPending) {
                     spellSystem.scrollEffects.processPsychicPending(activePlayerIndex);
                 }
                 // Excavate teleport for single player
@@ -2367,6 +2414,11 @@ document.getElementById('undo-move').onclick = function() {
             currentAP += lastMove.apCost;
             document.getElementById('ap-count').textContent = currentAP;
 
+            // Refresh void AP display in case void stones changed
+            if (typeof refreshVoidAP === 'function') {
+                refreshVoidAP();
+            }
+
             updateStatus(`Undid movement. Restored ${lastMove.apCost} AP (now ${currentAP} AP).`);
 
             // Broadcast undo in multiplayer
@@ -2377,6 +2429,11 @@ document.getElementById('undo-move').onclick = function() {
                     y: lastMove.prevPos.y,
                     apRestored: lastMove.apCost
                 });
+
+                // Sync player state so other players see updated AP
+                if (typeof syncPlayerState === 'function') {
+                    syncPlayerState();
+                }
             }
 
             // Clear the undo history (can only undo once)
@@ -2653,4 +2710,72 @@ document.getElementById('undo-move').onclick = function() {
             return positions;
         }
 
+        // ─── Hidden cheat panel ──────────────────────────────────────────────
+        // Activate: click the "AP" label in the HUD 5 times within 3 seconds
+        (function initCheatPanel() {
+            let clickCount = 0;
+            let clickTimer = null;
+
+            function openCheatPanel() {
+                const existing = document.getElementById('cheat-panel');
+                if (existing) { existing.remove(); return; }
+
+                const panel = document.createElement('div');
+                panel.id = 'cheat-panel';
+                Object.assign(panel.style, {
+                    position: 'fixed',
+                    bottom: '60px',
+                    right: '16px',
+                    background: '#1a1a2e',
+                    border: '1px solid #444',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    zIndex: '9999',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+                    minWidth: '160px'
+                });
+
+                function makeBtn(label, action) {
+                    const btn = document.createElement('button');
+                    btn.textContent = label;
+                    Object.assign(btn.style, {
+                        padding: '6px 10px',
+                        background: '#2d2d44',
+                        color: '#eee',
+                        border: '1px solid #555',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        textAlign: 'left'
+                    });
+                    btn.onclick = action;
+                    return btn;
+                }
+
+                panel.appendChild(makeBtn('🪨 Fill Stones', () => {
+                    if (typeof window.fillstones === 'function') window.fillstones();
+                }));
+                panel.appendChild(makeBtn('📜 Toggle Deck Browser', () => {
+                    if (typeof window.showdeck === 'function') window.showdeck();
+                }));
+                panel.appendChild(makeBtn('✕ Close', () => panel.remove()));
+
+                document.body.appendChild(panel);
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!e.target || !e.target.classList.contains('hud-ap-label')) return;
+                clickCount++;
+                clearTimeout(clickTimer);
+                if (clickCount >= 5) {
+                    clickCount = 0;
+                    openCheatPanel();
+                } else {
+                    clickTimer = setTimeout(() => { clickCount = 0; }, 3000);
+                }
+            });
+        })();
 

@@ -154,7 +154,8 @@
                 let replacedScroll = null;
 
                 // If there's already a scroll of this element in common area, send it to deck
-                if (this.commonArea[element]) {
+                // Guard: don't push to deck if it's the same scroll being discarded (avoids duplicates)
+                if (this.commonArea[element] && this.commonArea[element] !== scrollName) {
                     replacedScroll = this.commonArea[element];
                     this.scrollDecks[element].push(replacedScroll); // Add old scroll to bottom of deck
                     console.log(`📜 Common area: Replaced ${replacedScroll} with ${scrollName} (old scroll to deck)`);
@@ -245,15 +246,27 @@
                 }
                 const inHand = new Map();
                 const inActive = new Map();
+                let errorsFound = false;
+
                 for (let i = 0; i < (this.playerScrolls && this.playerScrolls.length) || 0; i++) {
                     const p = this.playerScrolls[i];
                     if (!p || !p.hand || !p.active) continue;
                     p.hand.forEach(name => {
-                        if (inHand.has(name)) console.warn('[Scroll state]', name, 'in hand of both player', inHand.get(name), 'and', i);
+                        if (inHand.has(name)) {
+                            console.warn('[Scroll state] ⚠️ DUPLICATE:', name, 'in hand of both player', inHand.get(name), 'and', i);
+                            errorsFound = true;
+                        }
                         inHand.set(name, i);
                     });
                     p.active.forEach(name => {
-                        if (inActive.has(name)) console.warn('[Scroll state]', name, 'in active of both player', inActive.get(name), 'and', i);
+                        if (inActive.has(name)) {
+                            console.warn('[Scroll state] ⚠️ DUPLICATE:', name, 'in active of both player', inActive.get(name), 'and', i);
+                            errorsFound = true;
+                        }
+                        if (inHand.has(name)) {
+                            console.warn('[Scroll state] ⚠️ DUPLICATE:', name, 'in both hand and active areas');
+                            errorsFound = true;
+                        }
                         inActive.set(name, i);
                     });
                 }
@@ -261,9 +274,247 @@
                 commonElements.forEach(element => {
                     const name = this.commonArea[element];
                     if (!name) return;
-                    if (inHand.has(name)) console.warn('[Scroll state]', name, 'in common area (' + element + ') and in hand of player', inHand.get(name));
-                    if (inActive.has(name)) console.warn('[Scroll state]', name, 'in common area (' + element + ') and in active of player', inActive.get(name));
+                    if (inHand.has(name)) {
+                        console.warn('[Scroll state] ⚠️ DUPLICATE:', name, 'in common area (' + element + ') and in hand of player', inHand.get(name));
+                        errorsFound = true;
+                    }
+                    if (inActive.has(name)) {
+                        console.warn('[Scroll state] ⚠️ DUPLICATE:', name, 'in common area (' + element + ') and in active of player', inActive.get(name));
+                        errorsFound = true;
+                    }
                 });
+
+                // If errors found in multiplayer and we're not the host, request sync
+                if (errorsFound && typeof isMultiplayer !== 'undefined' && isMultiplayer) {
+                    console.warn('⚠️ Scroll state errors detected! Requesting sync from host...');
+                    if (typeof broadcastGameAction === 'function' && typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== 0) {
+                        broadcastGameAction('scroll-state-sync-request', { playerIndex: myPlayerIndex });
+                    }
+                }
+
+                return errorsFound;
+            }
+
+            // Generate complete scroll state snapshot for syncing
+            getScrollStateSnapshot() {
+                const snapshot = {
+                    players: [],
+                    commonArea: {},
+                    decks: {}
+                };
+
+                // Capture each player's scrolls
+                for (let i = 0; i < this.playerScrolls.length; i++) {
+                    const p = this.playerScrolls[i];
+                    if (!p) continue;
+                    snapshot.players[i] = {
+                        hand: Array.from(p.hand || []),
+                        active: Array.from(p.active || []),
+                        activated: Array.from(p.activated || [])
+                    };
+                }
+
+                // Capture common area
+                ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'].forEach(element => {
+                    snapshot.commonArea[element] = this.commonArea[element] || null;
+                });
+
+                // Capture full decks (host is authoritative, clients should match exactly)
+                Object.keys(this.scrollDecks || {}).forEach(element => {
+                    snapshot.decks[element] = [...(this.scrollDecks[element] || [])];
+                });
+
+                return snapshot;
+            }
+
+            // Apply scroll state snapshot from authoritative source
+            applyScrollStateSnapshot(snapshot) {
+                let corrected = false;
+                const activatedChangedPlayers = [];
+
+                // Apply player scrolls
+                if (snapshot.players) {
+                    for (let i = 0; i < snapshot.players.length; i++) {
+                        if (!snapshot.players[i]) continue;
+                        this.ensurePlayerScrollsStructure(i);
+                        const p = this.playerScrolls[i];
+                        const snap = snapshot.players[i];
+
+                        // Sync hand
+                        const newHand = new Set(snap.hand || []);
+                        if (!this.setsEqual(p.hand, newHand)) {
+                            console.log(`🔄 Player ${i} hand corrected:`, Array.from(p.hand), '→', Array.from(newHand));
+                            p.hand = newHand;
+                            corrected = true;
+                        }
+
+                        // Sync active
+                        const newActive = new Set(snap.active || []);
+                        if (!this.setsEqual(p.active, newActive)) {
+                            console.log(`🔄 Player ${i} active corrected:`, Array.from(p.active), '→', Array.from(newActive));
+                            p.active = newActive;
+                            corrected = true;
+                        }
+
+                        // Sync activated (win condition tracking) - additive only.
+                        // Never remove locally-tracked activations: a non-host player may have
+                        // pre-tracked an element during an interactive scroll (e.g. Take Flight)
+                        // before the host's periodic sync fires, which would otherwise wipe it.
+                        const newActivated = new Set(snap.activated || []);
+                        const prevActivatedSize = p.activated.size;
+                        newActivated.forEach(el => p.activated.add(el));
+                        if (p.activated.size !== prevActivatedSize) {
+                            console.log(`🔄 Player ${i} activated updated (additive):`, Array.from(newActivated), '→', Array.from(p.activated));
+                            corrected = true;
+                            activatedChangedPlayers.push(i);
+                        }
+                    }
+                }
+
+                // Apply common area
+                if (snapshot.commonArea) {
+                    ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'].forEach(element => {
+                        const newScroll = snapshot.commonArea[element] || null;
+                        if (this.commonArea[element] !== newScroll) {
+                            console.log(`🔄 Common area ${element} corrected:`, this.commonArea[element], '→', newScroll);
+                            this.commonArea[element] = newScroll;
+                            corrected = true;
+                        }
+                    });
+                }
+
+                // Apply decks (sync full deck contents from host)
+                if (snapshot.decks) {
+                    Object.keys(snapshot.decks).forEach(element => {
+                        const newDeck = snapshot.decks[element] || [];
+                        const currentDeck = this.scrollDecks[element] || [];
+
+                        // Compare deck contents (order matters for deck draw)
+                        if (!this.arraysEqual(currentDeck, newDeck)) {
+                            console.log(`🔄 ${element} deck corrected: ${currentDeck.length} scrolls → ${newDeck.length} scrolls`);
+                            this.scrollDecks[element] = [...newDeck];
+                            corrected = true;
+                        }
+                    });
+                }
+
+                if (corrected) {
+                    // Only update UI and validate, no console spam
+                    this.validateScrollState();
+                    this.updateScrollCount();
+                    if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+                    if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
+                    // Refresh win-condition markers and check win condition for any player
+                    // whose activated set gained elements via this sync
+                    if (typeof updatePlayerElementSymbols === 'function') {
+                        activatedChangedPlayers.forEach(playerIdx => {
+                            updatePlayerElementSymbols(playerIdx);
+                            // Win condition: all 5 elements activated
+                            if (this.playerScrolls?.[playerIdx]?.activated?.size === 5) {
+                                console.log(`🏆 Win condition met for player ${playerIdx} (detected via state sync)`);
+                                this.showLevelComplete(playerIdx);
+                                if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
+                                    typeof handleGameOver === 'function') {
+                                    handleGameOver(playerIdx);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                return corrected;
+            }
+
+            // Helper: compare two sets for equality
+            setsEqual(set1, set2) {
+                if (set1.size !== set2.size) return false;
+                for (const item of set1) {
+                    if (!set2.has(item)) return false;
+                }
+                return true;
+            }
+
+            // Helper: compare two arrays for equality (order matters)
+            arraysEqual(arr1, arr2) {
+                if (arr1.length !== arr2.length) return false;
+                for (let i = 0; i < arr1.length; i++) {
+                    if (arr1[i] !== arr2[i]) return false;
+                }
+                return true;
+            }
+
+            // Comprehensive scroll audit - finds ALL scrolls and reports discrepancies
+            auditScrolls() {
+                const allScrolls = new Map(); // scrollName -> locations[]
+                const issues = [];
+
+                // Count scrolls in each location
+                const countScroll = (scrollName, location) => {
+                    if (!scrollName) return;
+                    if (!allScrolls.has(scrollName)) {
+                        allScrolls.set(scrollName, []);
+                    }
+                    allScrolls.get(scrollName).push(location);
+                };
+
+                // Check player hands and active areas
+                for (let i = 0; i < (this.playerScrolls?.length || 0); i++) {
+                    const p = this.playerScrolls[i];
+                    if (!p) continue;
+                    const playerName = typeof getPlayerColorName === 'function' ? getPlayerColorName(i) : `Player ${i}`;
+
+                    (p.hand || new Set()).forEach(scroll => countScroll(scroll, `${playerName} hand`));
+                    (p.active || new Set()).forEach(scroll => countScroll(scroll, `${playerName} active`));
+                }
+
+                // Check common area
+                ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'].forEach(element => {
+                    const scroll = this.commonArea[element];
+                    if (scroll) countScroll(scroll, `Common (${element})`);
+                });
+
+                // Check decks
+                Object.keys(this.scrollDecks || {}).forEach(element => {
+                    (this.scrollDecks[element] || []).forEach(scroll => {
+                        countScroll(scroll, `${element} deck`);
+                    });
+                });
+
+                // Analyze results
+                console.log('\n🔍 SCROLL AUDIT REPORT\n');
+
+                let duplicates = 0;
+                allScrolls.forEach((locations, scrollName) => {
+                    if (locations.length > 1) {
+                        console.warn(`⚠️  DUPLICATE: ${scrollName} exists in ${locations.length} locations:`, locations);
+                        issues.push({ scroll: scrollName, issue: 'duplicate', locations });
+                        duplicates++;
+                    }
+                });
+
+                if (duplicates === 0) {
+                    console.log('✅ No duplicates found');
+                } else {
+                    console.warn(`⚠️  Found ${duplicates} duplicated scrolls!`);
+                }
+
+                // Count total scrolls by element
+                const elementCounts = { earth: 0, water: 0, fire: 0, wind: 0, void: 0, catacomb: 0 };
+                allScrolls.forEach((locations, scrollName) => {
+                    const element = this.getScrollElement(scrollName);
+                    if (element && elementCounts.hasOwnProperty(element)) {
+                        elementCounts[element] += locations.length; // Count all instances (including duplicates)
+                    }
+                });
+
+                console.log('\n📊 Total Scroll Counts (across all locations):');
+                Object.entries(elementCounts).forEach(([element, count]) => {
+                    console.log(`  ${element}: ${count} scrolls found`);
+                });
+
+                console.log('\n');
+
+                return { issues, elementCounts, allScrolls };
             }
 
             // Compatibility getters for existing code
@@ -535,23 +786,9 @@
                 const scrolls = this.getPlayerScrolls(false);
                 const scrollInfo = this.patterns[selected];
 
-                // Cascading system: 2 hand max, 2 active max
-                // When hand is full, player must immediately cascade one scroll out
-
-                if (scrolls.hand.size >= this.MAX_HAND_SIZE) {
-                    // Hand is full - must cascade
-                    if (scrolls.active.size < this.MAX_ACTIVE_SIZE) {
-                        // Active has room - can cascade to Active OR Common Area
-                        this.showCascadePrompt(selected, scrollInfo, shrineType, true);
-                        return scrollInfo;
-                    } else {
-                        // Both hand and active are full - must cascade to Common Area only
-                        this.showCascadePrompt(selected, scrollInfo, shrineType, false);
-                        return scrollInfo;
-                    }
-                }
-
-                // Hand has room - add directly
+                // Always add to hand immediately so the player can still act this turn.
+                // If the hand now exceeds the limit the end-of-turn overflow modal will
+                // prompt for a cascade before the turn advances.
                 scrolls.hand.add(selected);
                 this.updateScrollCount();
 
@@ -564,7 +801,12 @@
                     });
                 }
 
-                this.showScrollNotification(scrollInfo, shrineType);
+                if (scrolls.hand.size > this.MAX_HAND_SIZE) {
+                    // Over limit — remind the player they must cascade before ending their turn
+                    updateStatus(`📜 Picked up "${scrollInfo?.name || selected}" — hand is over the limit. Cascade a scroll before ending your turn!`);
+                } else {
+                    this.showScrollNotification(scrollInfo, shrineType);
+                }
 
                 return scrollInfo;
             }
@@ -1382,7 +1624,15 @@
                     console.log(`📜 getEffect("${name}") returned:`, effect ? effect.name : null);
                     if (effect) {
                         console.log(`📜 Executing special effect for ${name}: ${effect.name}`);
-                        const result = this.scrollEffects.execute(name, activePlayerIndex, { spell, scrollName: name, previousScrollCast });
+                        // Wrap execute in try/catch so win-condition tracking always runs even if the
+                        // effect throws (e.g. DOM error inside enterTransmuteMode or similar)
+                        let result = { success: false, requiresSelection: false };
+                        try {
+                            result = this.scrollEffects.execute(name, activePlayerIndex, { spell, scrollName: name, previousScrollCast }) || result;
+                        } catch (execErr) {
+                            console.error(`❌ Effect execute threw for "${name}":`, execErr);
+                            // Continue below to still track win condition and broadcast
+                        }
                         if (typeof window !== 'undefined' && window.logScrollEvent) {
                             window.logScrollEvent('effect_execute', {
                                 playerIndex: activePlayerIndex,
@@ -1397,13 +1647,21 @@
                         // Refresh all stone count UI after scroll effect (effects may modify pools)
                         ['earth', 'water', 'fire', 'wind', 'void'].forEach(t => updateStoneCount(t));
 
-                        // Track activated element(s) for win condition regardless of effect
+                        // Track activated element(s) for win condition regardless of effect result
                         if (spell.element === 'catacomb' && spell.patterns && spell.patterns[0]) {
                             // Catacomb scrolls activate each component element
                             const elements = new Set(spell.patterns[0].map(pos => pos.type));
-                            elements.forEach(el => this.getPlayerScrolls(false).activated.add(el));
+                            elements.forEach(el => {
+                                this.getPlayerScrolls(false).activated.add(el);
+                                if (typeof window.gami?.onElementActivated === 'function') {
+                                    window.gami.onElementActivated(el, Array.from(this.getPlayerScrolls(false).activated));
+                                }
+                            });
                         } else {
                             this.getPlayerScrolls(false).activated.add(spell.element);
+                            if (typeof window.gami?.onElementActivated === 'function') {
+                                window.gami.onElementActivated(spell.element, Array.from(this.getPlayerScrolls(false).activated));
+                            }
                         }
                         updatePlayerElementSymbols(activePlayerIndex);
 
@@ -1520,19 +1778,40 @@
 
             // Called by scroll effects when a selection-based effect (e.g. Shifting Sands) is completed
             onSelectionEffectComplete(scrollName, effectName, spell) {
+                // Update element symbols on player tile
+                if (typeof updatePlayerElementSymbols === 'function') {
+                    updatePlayerElementSymbols(activePlayerIndex);
+                }
+
+                // Gamification hook for element activation via interactive scroll
+                if (typeof window.gami?.onElementActivated === 'function') {
+                    const activatedEl = (spell.element === 'catacomb' && spell.patterns && spell.patterns[0])
+                        ? [...new Set(spell.patterns[0].map(pos => pos.type))]
+                        : [spell.element];
+                    activatedEl.forEach(el => {
+                        window.gami.onElementActivated(el, Array.from(this.getPlayerScrolls(false).activated));
+                    });
+                }
+
                 if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                    // Determine activated elements (for catacomb scrolls)
+                    const activatedElements = (spell.element === 'catacomb' && spell.patterns && spell.patterns[0])
+                        ? [...new Set(spell.patterns[0].map(pos => pos.type))]
+                        : [spell.element];
+
                     broadcastGameAction('scroll-effect', {
-                        playerIndex: this.activePlayerIndex,
+                        playerIndex: activePlayerIndex,
                         scrollName: scrollName,
                         effectName: effectName,
-                        element: spell.element
+                        element: spell.element,
+                        activatedElements: activatedElements
                     });
                     if (typeof syncPlayerState === 'function') syncPlayerState();
                 }
                 if (this.getPlayerScrolls(false).activated.size === 5) {
-                    this.showLevelComplete(this.activePlayerIndex);
+                    this.showLevelComplete(activePlayerIndex);
                     if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof handleGameOver === 'function') {
-                        handleGameOver(this.activePlayerIndex);
+                        handleGameOver(activePlayerIndex);
                     }
                 }
             }
@@ -1592,7 +1871,8 @@
                     broadcastGameAction('scroll-used', {
                         playerIndex: activePlayerIndex,
                         scrollName: scrollName,
-                        fromCommonArea: fromCommonArea
+                        fromCommonArea: fromCommonArea,
+                        forceToCommonArea: forceToCommonArea
                     });
                 }
             }
@@ -1826,7 +2106,12 @@
             }
 
             showInventory() {
+                // Remove any existing inventory popup so we don't stack them
+                const existingPopup = document.getElementById('scroll-inventory-popup');
+                if (existingPopup) existingPopup.remove();
+
                 const popup = document.createElement('div');
+                popup.id = 'scroll-inventory-popup'; // used by Transmute to refresh this popup
                 Object.assign(popup.style, {
                     position: 'fixed', left: '50%', top: '50%',
                     transform: 'translate(-50%, -50%)',
@@ -2244,6 +2529,8 @@
         let kickOnTurnTimeout = true;
         let turnStartedAtMs = Date.now();
         let turnTimeoutInterval = null;
+        let turnSyncInterval = null; // Host's periodic turn sync broadcast
+        let commonAreaSyncInterval = null; // Host's periodic common area sync broadcast
  // Default 2 minutes in milliseconds (set by host)
         let myLastActivity = Date.now(); // Track my own activity
         let timerDisplayInterval = null;
@@ -3121,12 +3408,103 @@
                 }
             };
             window.dumpScrollEvents = function dumpScrollEvents() {
-                console.group('📜 Scroll Event Log');
-                window._scrollEventLog.forEach((e, i) => {
-                    console.log(`#${i + 1}`, e.ts, e.type, e.details);
+                const log = window._scrollEventLog || [];
+                console.group(`📜 Scroll Event Log (${log.length} events)`);
+                log.forEach((e, i) => {
+                    const time = new Date(e.ts).toLocaleTimeString();
+                    const type = e.type.padEnd(20);
+                    const details = JSON.stringify(e.details);
+                    console.log(`#${i + 1} [${time}] ${type} ${details}`);
                 });
                 console.groupEnd();
             };
+
+            // Clean scroll diagnostics - shows current state + recent events
+            window.scrollDiag = function scrollDiag() {
+                console.log('\n' + '═'.repeat(80));
+                console.log('📊 SCROLL DIAGNOSTICS');
+                console.log('═'.repeat(80));
+
+                // Current scroll state
+                if (typeof spellSystem !== 'undefined') {
+                    console.log('\n📦 CURRENT STATE:\n');
+
+                    for (let i = 0; i < (spellSystem.playerScrolls?.length || 0); i++) {
+                        const p = spellSystem.playerScrolls[i];
+                        if (!p) continue;
+                        const playerName = typeof getPlayerColorName === 'function' ? getPlayerColorName(i) : `Player ${i}`;
+                        const isMe = i === (typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : -1);
+                        const hand = Array.from(p.hand || []);
+                        const active = Array.from(p.active || []);
+                        const activated = Array.from(p.activated || []);
+
+                        console.log(`${playerName} ${isMe ? '(YOU)' : ''}`);
+                        console.log(`  Hand:    ${hand.length ? hand.join(', ') : '(empty)'}`);
+                        console.log(`  Active:  ${active.length ? active.join(', ') : '(empty)'}`);
+                        console.log(`  Win:     ${activated.length}/5 → ${activated.length ? activated.join(', ') : '(none)'}`);
+                    }
+
+                    console.log('\n🏛️  COMMON AREA:\n');
+                    ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'].forEach(element => {
+                        const scrollName = spellSystem.commonArea?.[element];
+                        if (scrollName) {
+                            console.log(`  ${element}: ${scrollName}`);
+                        }
+                    });
+
+                    console.log('\n📚 DECKS:\n');
+                    Object.keys(spellSystem.scrollDecks || {}).forEach(element => {
+                        const count = (spellSystem.scrollDecks[element] || []).length;
+                        console.log(`  ${element}: ${count} scrolls remaining`);
+                    });
+                }
+
+                // Recent events
+                const log = window._scrollEventLog || [];
+                const recent = log.slice(-30);
+
+                console.log('\n📜 RECENT EVENTS (last 30):\n');
+                recent.forEach((e) => {
+                    const time = new Date(e.ts).toLocaleTimeString();
+                    const icon = {
+                        'scroll_collected': '📥',
+                        'scroll_cast': '⚡',
+                        'scroll_moved': '➡️',
+                        'scroll_discarded': '🗑️',
+                        'effect_execute': '✨',
+                        'response_counter': '🛡️',
+                        'response_resolved': '⚔️',
+                        'original_countered': '❌',
+                        'original_resolved': '✅'
+                    }[e.type] || '•';
+
+                    let summary = e.type;
+                    if (e.details.scrollName) summary += ` ${e.details.scrollName}`;
+                    if (e.details.playerIndex !== undefined) {
+                        const name = typeof getPlayerColorName === 'function' ? getPlayerColorName(e.details.playerIndex) : `P${e.details.playerIndex}`;
+                        summary += ` [${name}]`;
+                    }
+
+                    console.log(`${icon} [${time}] ${summary}`);
+                });
+
+                console.log('\n' + '═'.repeat(80));
+                console.log('Run scrollDiag() again to refresh');
+                console.log('═'.repeat(80));
+            };
+
+            // Quick alias
+            window.sd = window.scrollDiag;
+
+            // Scroll audit command
+            window.auditScrolls = function() {
+                if (typeof spellSystem !== 'undefined' && spellSystem.auditScrolls) {
+                    return spellSystem.auditScrolls();
+                } else {
+                    console.error('spellSystem not available');
+                }
+            };
+
             window.SHOW_SCROLL_FINDER_UI = false;
             window.SHOW_SCROLL_DECK_BROWSER = false;
             window.showScrollFinderUI = function () {
@@ -3174,7 +3552,8 @@
             };
             window.showDebugCommands = function () {
                 console.log('Commands:');
-                console.log('- dumpScrollDebug()');
+                console.log('- dumpGameDebug()  /  debug()     — full game state snapshot (replaces dumpScrollDebug)');
+                console.log('- dumpScrollDebug()               — alias for dumpGameDebug');
                 console.log('- dumpScrollEvents()');
                 console.log('- showScrollFinderUI()');
                 console.log('- hideScrollFinderUI()');
@@ -3183,6 +3562,7 @@
                 console.log('- showdeck()  // toggle scroll deck browser');
                 console.log('- givePlayersFiveStones()');
                 console.log('- fillstones()');
+                console.log('- window.KNOWN_BUGS              — list of open bug tickets');
                 console.log('- window.DEBUG_LOG_VERBOSE = true/false');
             };
             window.help = function () {
@@ -3190,51 +3570,214 @@
             };
         }
 
-        // Console helper: dump key scroll-related state (low-noise summary)
+        // ─────────────────────────────────────────────────────────────────────
+        // KNOWN BUGS TODO LOG
+        // ─────────────────────────────────────────────────────────────────────
+        window.KNOWN_BUGS = [
+            {
+                id: 'TRANS-WIN-CON',
+                status: 'open',
+                title: 'Transmute win-condition marker',
+                description: 'Casting Transmute (Fire IV) does not always display the fire ♦ symbol on the player shrine tile. Belt-and-suspenders tracking added inside execute(); still investigating root cause.'
+            },
+            {
+                id: 'TRANS-DOUBLE-DISP',
+                status: 'open',
+                title: 'Transmute inventory display stale after discard',
+                description: 'After transmuting a scroll from hand/active, the scroll inventory popup may still show the discarded scroll if the popup was open before Transmute. State is correct; Done button now refreshes the popup.'
+            },
+            {
+                id: 'TURN-ORDER-NULL',
+                status: 'fixed',
+                title: 'Turn order crash on null playerPositions entries',
+                description: 'If playerPositions has null/undefined entries (e.g. sparse indices after disconnect), COLOR_RANK[p.color] throws TypeError. Fixed with optional-chain guard p?.color and length guard.'
+            },
+            {
+                id: 'COLOR-RANK-MP',
+                status: 'fixed',
+                title: 'Multiplayer turn order rank always 999 (wrong color key in playerPositions)',
+                description: 'In multiplayer, playerPositions stored string color names (\'purple\', \'yellow\') instead of hex values (\'#9458f4\'), so COLOR_RANK lookups returned undefined → rank 999 for every player → non-deterministic turn order. Fixed: placePlayer() now always receives assignedColor (hex) not playerColor (string).'
+            }
+        ];
+        (function printKnownBugs() {
+            if (window.KNOWN_BUGS.length === 0) return;
+            console.group('%c📋 Known Bugs (' + window.KNOWN_BUGS.length + ') — run dumpGameDebug() for full state', 'color:#e67e22;font-weight:bold');
+            window.KNOWN_BUGS.forEach(function(b) {
+                console.log('%c[' + b.status.toUpperCase() + '] ' + b.id + ': ' + b.title, 'color:#f39c12;font-weight:bold');
+                console.log('   ' + b.description);
+            });
+            console.groupEnd();
+        })();
+
+        // ─────────────────────────────────────────────────────────────────────
+        // COMPREHENSIVE GAME DEBUG TOOL  (replaces the old dumpScrollDebug)
+        // ─────────────────────────────────────────────────────────────────────
         if (typeof window !== 'undefined') {
-            window.dumpScrollDebug = function dumpScrollDebug() {
+            window.dumpGameDebug = function dumpGameDebug() {
                 try {
                     const ss = spellSystem;
-                    const activeIdx = typeof activePlayerIndex !== 'undefined' ? activePlayerIndex : null;
-                    const myIdx = (typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : null);
-                    const current = ss?.getPlayerScrolls ? ss.getPlayerScrolls(false) : null;
-                    const buffs = ss?.scrollEffects?.activeBuffs || {};
-                    const response = ss?.responseWindow ? {
-                        open: ss.responseWindow.isResponseWindowOpen,
-                        caster: ss.responseWindow.currentCaster,
-                        pending: ss.responseWindow.pendingScrollData?.name || null,
-                        responded: Array.from(ss.responseWindow.respondingPlayers || []),
-                        stack: (ss.responseWindow.responseStack || []).map(e => ({
-                            name: e.scrollData?.name,
-                            caster: e.casterIndex,
-                            isCounter: !!e.isCounter,
+                    const activeIdx  = typeof activePlayerIndex  !== 'undefined' ? activePlayerIndex  : null;
+                    const myIdx      = typeof myPlayerIndex      !== 'undefined' ? myPlayerIndex      : null;
+                    const numP       = typeof totalPlayers       !== 'undefined' ? totalPlayers       : 0;
+                    const poolsArr   = typeof playerPools        !== 'undefined' ? playerPools        : [];
+                    const posArr     = typeof playerPositions    !== 'undefined' ? playerPositions    : [];
+
+                    // ── helpers ───────────────────────────────────────────────
+                    const sumScrolls = (idx) => {
+                        if (!ss?.playerScrolls?.[idx]) return { hand: [], active: [], activated: [] };
+                        const p = ss.playerScrolls[idx];
+                        return {
+                            hand:      p.hand      ? Array.from(p.hand)      : [],
+                            active:    p.active    ? Array.from(p.active)    : [],
+                            activated: p.activated ? Array.from(p.activated) : []
+                        };
+                    };
+
+                    // Turn order reconstruction
+                    const COLOR_RANK_D = { '#9458f4': 1, '#ffce00': 2, '#ed1b43': 3, '#5894f4': 4, '#69d83a': 5 };
+                    const sortedD = posArr
+                        .map((p, idx) => ({ index: idx, color: p?.color, rank: COLOR_RANK_D[p?.color] || 999 }))
+                        .filter((_, idx) => posArr[idx] != null)
+                        .sort((a, b) => a.rank - b.rank);
+                    const curSortIdx = sortedD.findIndex(p => p.index === activeIdx);
+
+                    // Timer
+                    const turnStarted = typeof turnStartedAtMs !== 'undefined' ? turnStartedAtMs : null;
+                    const elapsed     = turnStarted ? Math.floor((Date.now() - turnStarted) / 1000) : null;
+                    const limitSec    = typeof TURN_TIME_LIMIT_MS !== 'undefined' ? TURN_TIME_LIMIT_MS / 1000 : '?';
+
+                    // Response window
+                    const rw = ss?.responseWindow;
+                    const rwState = rw ? {
+                        open:      rw.isResponseWindowOpen,
+                        caster:    rw.currentCaster,
+                        pending:   rw.pendingScrollData?.name || null,
+                        responded: Array.from(rw.respondingPlayers || []),
+                        stack:     (rw.responseStack || []).map(e => ({
+                            name:       e.scrollData?.name,
+                            caster:     e.casterIndex,
+                            isCounter:  !!e.isCounter,
                             isResponse: !!e.isResponse,
-                            isOriginal: !!e.isOriginal
+                            isOriginal: !!e.isOriginal,
+                            result:     e.result
                         }))
                     } : null;
 
-                    const summarizeScrolls = (p) => ({
-                        hand: p?.hand ? Array.from(p.hand) : [],
-                        active: p?.active ? Array.from(p.active) : [],
-                        activated: p?.activated ? Array.from(p.activated) : []
-                    });
+                    // ── output ────────────────────────────────────────────────
+                    console.group('%c🔍 dumpGameDebug() — Full Game Snapshot', 'color:#d4ac0d;font-weight:bold;font-size:14px');
 
-                    const pools = (typeof playerPools !== 'undefined' ? playerPools : null);
-                    const poolSummary = pools && activeIdx != null ? pools[activeIdx] : null;
-
-                    console.group('🧾 Scroll Debug Summary');
-                    console.log('playerIndex', { active: activeIdx, my: myIdx });
-                    console.log('ap', { currentAP, voidAP });
-                    console.log('scrolls(active player)', summarizeScrolls(current));
-                    console.log('commonArea', ss?.getCommonAreaScrolls ? ss.getCommonAreaScrolls() : []);
-                    console.log('activeBuffs', buffs);
-                    console.log('playerPool(active)', poolSummary);
-                    console.log('responseWindow', response);
+                    // Players & multiplayer
+                    console.group('👥 Players & Multiplayer');
+                    console.log('activePlayerIndex:', activeIdx, ' | myPlayerIndex:', myIdx, ' | totalPlayers:', numP);
+                    console.log('isMultiplayer:', typeof isMultiplayer !== 'undefined' ? isMultiplayer : '?',
+                                ' | isHost:',   typeof isHost          !== 'undefined' ? isHost         : '?');
+                    console.log('currentGameId:', typeof currentGameId  !== 'undefined' ? currentGameId  : '?');
+                    console.log('allPlayersData:', typeof allPlayersData !== 'undefined' ? allPlayersData : []);
                     console.groupEnd();
+
+                    // Turn state
+                    console.group('⏱️ Turn State');
+                    console.log('currentTurnNumber:',      typeof currentTurnNumber       !== 'undefined' ? currentTurnNumber       : '?');
+                    console.log('lastReceivedTurnNumber:', typeof lastReceivedTurnNumber  !== 'undefined' ? lastReceivedTurnNumber  : '?');
+                    console.log('turnStartedAt:',          turnStarted ? new Date(turnStarted).toISOString() + ' (' + elapsed + 's elapsed, limit ' + limitSec + 's)' : '?');
+                    console.log('isEndingTurn:',    typeof isEndingTurn    !== 'undefined' ? isEndingTurn    : '?');
+                    console.log('isPlacementPhase:', typeof isPlacementPhase !== 'undefined' ? isPlacementPhase : '?');
+                    console.log('playerTilesPlaced:', typeof playerTilesPlaced !== 'undefined' ? Array.from(playerTilesPlaced) : '?');
+                    console.groupEnd();
+
+                    // Turn order
+                    console.group('🔄 Turn Order');
+                    console.log('sorted:', sortedD.map(p => '[' + p.index + '] ' + (p.color || '?') + ' rank' + p.rank).join(' → '));
+                    console.log('currentSortedIndex:', curSortIdx,
+                        curSortIdx === -1 ? ' ⚠️ ACTIVE PLAYER NOT FOUND IN SORT — TURN ORDER BUG' :
+                        curSortIdx >= 0 && sortedD.length > 0 ? ' → next: [' + sortedD[(curSortIdx + 1) % sortedD.length].index + ']' : '');
+                    console.groupEnd();
+
+                    // AP
+                    console.group('⚡ AP');
+                    console.log('currentAP:', typeof currentAP !== 'undefined' ? currentAP : '?',
+                                ' | voidAP:', typeof voidAP   !== 'undefined' ? voidAP     : '?');
+                    console.groupEnd();
+
+                    // Scroll state per player
+                    console.group('📜 Scroll State (all players)');
+                    const printCount = Math.max(numP, ss?.playerScrolls?.length || 0, posArr.length);
+                    for (let i = 0; i < printCount; i++) {
+                        const scrollData = sumScrolls(i);
+                        const isMe       = i === myIdx    ? ' ← ME'          : '';
+                        const isActive   = i === activeIdx ? ' ← ACTIVE TURN' : '';
+                        const cascade    = ss?.hasPendingCascade?.(i) ? ' ⚠️ CASCADE PENDING' : '';
+                        console.group('Player ' + i + isMe + isActive + cascade);
+                        console.log('hand:',      scrollData.hand.length      ? scrollData.hand      : '(empty)');
+                        console.log('active:',    scrollData.active.length    ? scrollData.active    : '(empty)');
+                        console.log('activated:', scrollData.activated.length ? scrollData.activated : '(none)');
+                        console.groupEnd();
+                    }
+                    console.groupEnd();
+
+                    // Stone pools
+                    console.group('💎 Stone Pools');
+                    for (let i = 0; i < Math.max(numP, poolsArr.length); i++) {
+                        const isMe     = i === myIdx     ? ' ← ME'          : '';
+                        const isActive = i === activeIdx ? ' ← ACTIVE TURN' : '';
+                        console.log('Player ' + i + isMe + isActive + ':', poolsArr[i] || '(no pool)');
+                    }
+                    const srcPool = (typeof stonePools !== 'undefined') ? stonePools : (window.stonePools || null);
+                    console.log('sourcePool (board):', srcPool);
+                    console.groupEnd();
+
+                    // Common area
+                    console.group('🌐 Common Area');
+                    console.log('scrolls:', ss?.getCommonAreaScrolls ? ss.getCommonAreaScrolls() : '?');
+                    if (ss?.commonArea) console.log('raw:', ss.commonArea);
+                    console.groupEnd();
+
+                    // Active buffs
+                    console.group('✨ Active Buffs');
+                    const buffs = ss?.scrollEffects?.activeBuffs || {};
+                    const bKeys = Object.keys(buffs);
+                    if (bKeys.length === 0) console.log('(none)');
+                    else bKeys.forEach(k => console.log(k + ':', buffs[k]));
+                    console.groupEnd();
+
+                    // Response window
+                    console.group('🪟 Response Window');
+                    if (!rwState) console.log('(not initialized)');
+                    else {
+                        console.log('open:', rwState.open, ' | caster:', rwState.caster, ' | pending:', rwState.pending);
+                        console.log('responded:', rwState.responded);
+                        if (rwState.stack.length > 0) console.log('stack:', rwState.stack);
+                    }
+                    console.groupEnd();
+
+                    // Player positions
+                    console.group('🗺️ Player Positions (' + posArr.length + ')');
+                    posArr.forEach(function(p, i) {
+                        if (p) console.log('Player ' + i + ': x=' + (p.x != null ? p.x.toFixed(1) : '?') + ' y=' + (p.y != null ? p.y.toFixed(1) : '?') + ' color=' + p.color + ' element=' + p.element);
+                        else   console.log('Player ' + i + ': (not placed)');
+                    });
+                    console.groupEnd();
+
+                    // Known bugs
+                    const bugs = window.KNOWN_BUGS || [];
+                    if (bugs.length > 0) {
+                        console.group('📋 Known Bugs (' + bugs.length + ')');
+                        bugs.forEach(function(b, i) {
+                            console.log('%c' + (i + 1) + '. [' + b.status.toUpperCase() + '] ' + b.id + ': ' + b.title, 'color:#f39c12;font-weight:bold');
+                            console.log('   ' + b.description);
+                        });
+                        console.groupEnd();
+                    }
+
+                    console.groupEnd(); // end main group
                 } catch (e) {
-                    console.warn('dumpScrollDebug failed', e);
+                    console.error('dumpGameDebug failed:', e);
                 }
             };
+
+            // Aliases so old muscle memory still works
+            window.debug        = window.dumpGameDebug;
+            window.dumpScrollDebug = window.dumpGameDebug;
         }
 
         function isAdjacentToPlayer(x, y) {
@@ -3601,9 +4144,15 @@
 
                 // In multiplayer, use the pre-assigned playerColor
                 // In local mode, assign colors in rank order
-                if (isMultiplayer && playerColor) {
+                // skipMultiplayerLogic = true means playerColor is already hex (from placePlayerTileVisually),
+                // so skip the name→hex lookup to avoid PLAYER_COLORS[hexValue] = undefined.
+                if (isMultiplayer && playerColor && !skipMultiplayerLogic) {
                     assignedColor = PLAYER_COLORS[playerColor];
-                    console.log(`🎨 Multiplayer - Using assigned color: ${playerColor} (${assignedColor})`);
+                    playerColor = assignedColor; // Normalise to hex so placePlayer always gets a hex value
+                    console.log(`🎨 Multiplayer - Using assigned color: ${playerColor}`);
+                } else if (isMultiplayer && playerColor && skipMultiplayerLogic) {
+                    assignedColor = playerColor; // already hex
+                    console.log(`🎨 Multiplayer (visual-only) - Color already hex: ${playerColor}`);
                 } else {
                     // Local game - assign next color in rank order
                     const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
@@ -3758,8 +4307,25 @@
 
             // Place player marker on player tile
             if (isPlayerTile) {
-                // Create new player pawn at this tile's position
+                // Create new player pawn at this tile's position.
+                // playerColor is always hex by this point (normalised above for both
+                // multiplayer and local paths), so playerPositions stores hex values
+                // and COLOR_RANK lookups in game-ui.js work correctly.
                 placePlayer(x, y, playerColor);
+
+                // In multiplayer, ensure this player's pawn ends up at playerPositions[myPlayerIndex]
+                // regardless of simultaneous placements by other players.  placePlayer() always
+                // push()es to the end; if another player's broadcast arrived first, the index is wrong.
+                if (isMultiplayer && !skipMultiplayerLogic &&
+                        myPlayerIndex !== null && myPlayerIndex !== undefined) {
+                    const placed = playerPositions.pop();
+                    if (placed) {
+                        placed.index = myPlayerIndex;
+                        while (playerPositions.length < myPlayerIndex) playerPositions.push(null);
+                        playerPositions[myPlayerIndex] = placed;
+                        console.log(`🔧 Relocated local pawn to playerPositions[${myPlayerIndex}]`);
+                    }
+                }
 
                 // In multiplayer, broadcast tile placement and track placement phase
                 // Skip this logic if we're just placing visually from a broadcast
@@ -3801,9 +4367,11 @@
                         // Broadcast turn change during placement phase
                         const startedAt = Date.now();
                     turnStartedAtMs = startedAt;
+                    currentTurnNumber++;
                     broadcastGameAction('turn-change', {
                         playerIndex: activePlayerIndex,
-                        turnStartedAt: startedAt
+                        turnStartedAt: startedAt,
+                        turnNumber: currentTurnNumber
                     });
                         console.log(`📡 Broadcasted turn-change to player ${activePlayerIndex}`);
 
@@ -4246,7 +4814,7 @@ function clearPlayerPath() {
                 // Add drag handler
                 playerGroup.addEventListener('mousedown', (e) => {
                     // Only draggable if this is the active player (check dynamically)
-                    const thisPlayerIndex = playerPositions.findIndex(p => p.element === playerGroup);
+                    const thisPlayerIndex = playerPositions.findIndex(p => p && p.element === playerGroup);
                     const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
                     if (tf && tf.active && tf.targetPlayerIndex === thisPlayerIndex) {
                         e.stopPropagation();
@@ -4266,7 +4834,7 @@ function clearPlayerPath() {
 	                console.log('👆 Player pawn touchstart detected!', {touches: e.touches?.length, target: e.target});
 	                if (!(e.touches && e.touches.length === 1)) return;
 	                // Mirror mousedown behavior: only the active player pawn can be dragged
-	                const thisPlayerIndex = playerPositions.findIndex(p => p.element === playerGroup);
+	                const thisPlayerIndex = playerPositions.findIndex(p => p && p.element === playerGroup);
 	                console.log(`   thisPlayerIndex=${thisPlayerIndex}, activePlayerIndex=${activePlayerIndex}`);
                     const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
                     if (tf && tf.active && tf.targetPlayerIndex === thisPlayerIndex) {
@@ -4314,7 +4882,7 @@ function clearPlayerPath() {
 
                 viewport.appendChild(playerGroup);
                 playerPositions.push({ x, y, element: playerGroup, color, index: playerIndex });
-                
+
             } else {
                 // Moving the ACTIVE player
                 const activePlayer = playerPositions[activePlayerIndex];
@@ -4357,7 +4925,7 @@ function clearPlayerPath() {
 
                 playerGroup.addEventListener('mousedown', (e) => {
                     // Only draggable if this is the active player
-                    const currentIdx = playerPositions.findIndex(p => p.element === playerGroup);
+                    const currentIdx = playerPositions.findIndex(p => p && p.element === playerGroup);
                     if (currentIdx === activePlayerIndex) {
                         e.stopPropagation();
                         e.preventDefault();
@@ -4370,7 +4938,7 @@ function clearPlayerPath() {
 	                console.log('👆 Player pawn touchstart (path2) detected!', {touches: e.touches?.length});
 	                if (!(e.touches && e.touches.length === 1)) return;
 	                // Mirror mousedown behavior: only active player can be dragged
-	                const currentIdx = playerPositions.findIndex(p => p.element === playerGroup);
+	                const currentIdx = playerPositions.findIndex(p => p && p.element === playerGroup);
 	                console.log(`   currentIdx=${currentIdx}, activePlayerIndex=${activePlayerIndex}`);
 	                if (currentIdx === activePlayerIndex) {
                     // Set flag IMMEDIATELY to prevent other handlers from interfering
@@ -4416,7 +4984,7 @@ function clearPlayerPath() {
         }
 
         // Visual-only player tile placement (called when receiving broadcast from other players)
-        function placePlayerTileVisually(x, y, playerIndex, colorName) {
+        function placePlayerTileVisually(x, y, playerIndex, colorName, cosmetics) {
             console.log(`📄 Placing other player's tile: player ${playerIndex}, color ${colorName}, at (${x.toFixed(1)}, ${y.toFixed(1)})`);
 
             // Temporarily set playerColor to the other player's color
@@ -4425,6 +4993,24 @@ function clearPlayerPath() {
 
             // Place the player tile - skip multiplayer logic since this is visual-only
             placeTile(x, y, 0, false, 'player', true, true);
+
+            // Relocate the newly pushed pawn from the end of playerPositions to the
+            // correct slot.  placeTile → placePlayer always push()es, so simultaneous
+            // local placement means index .length is wrong.
+            const placed = playerPositions.pop();
+            if (placed) {
+                placed.index = playerIndex;
+                while (playerPositions.length < playerIndex) playerPositions.push(null);
+                playerPositions[playerIndex] = placed;
+                console.log(`🔧 Relocated remote pawn to playerPositions[${playerIndex}]`);
+            }
+
+            // Fix placedTiles entry — placeTile captured playerPositions.length (wrong for
+            // remote tiles); patch it to the correct playerIndex so tooltips are right.
+            const lastTile = placedTiles[placedTiles.length - 1];
+            if (lastTile && lastTile.isPlayerTile) {
+                lastTile.playerIndex = playerIndex;
+            }
 
             // Restore our color
             playerColor = originalColor;
@@ -4697,7 +5283,7 @@ function clearPlayerPath() {
             const { data: room, error: roomErr } = await supabase
                 .from('game_room')
                 .select('status')
-                .eq('id', 1)
+                .eq('id', currentGameId)
                 .single();
 
             if (roomErr) {
@@ -4712,8 +5298,87 @@ function clearPlayerPath() {
             if (elapsed < gameInactivityTimeout) return;
 
             // Time is up — either kick active player or auto-advance
-            console.log('⏰ Turn timer expired. kickOnTurnTimeout:', kickOnTurnTimeout, 'activePlayerIndex:', activePlayerIndex);
+            console.log('⏰ Turn timer expired. kickOnTurnTimeout:', kickOnTurnTimeout, 'activePlayerIndex:', activePlayerIndex, 'isPlacementPhase:', isPlacementPhase);
 
+            // SPECIAL CASE: During placement phase, timeout should kick all players back to lobby
+            if (isPlacementPhase) {
+                console.log('⏰ Turn timeout during placement phase — resetting game to lobby');
+                updateStatus('⏰ Player tile placement timed out — returning all players to lobby');
+
+                // First, kick the AFK player from the lobby
+                const { data: allPlayers } = await supabase
+                    .from('players')
+                    .select('id, username, player_index');
+
+                const afkPlayer = allPlayers?.find(p => p.player_index === activePlayerIndex);
+
+                if (afkPlayer) {
+                    console.log(`👢 Kicking AFK player: ${afkPlayer.username} (index ${afkPlayer.player_index})`);
+                    const { error: kickErr } = await supabase
+                        .from('players')
+                        .delete()
+                        .eq('id', afkPlayer.id);
+
+                    if (kickErr) {
+                        console.error('❌ Failed to kick AFK player:', kickErr);
+                    } else {
+                        console.log(`✅ AFK player ${afkPlayer.username} removed from lobby`);
+                    }
+                }
+
+                // Reset game room to waiting status
+                const { error: resetErr } = await supabase
+                    .from('game_room')
+                    .update({ status: 'waiting' })
+                    .eq('id', currentGameId);
+
+                if (resetErr) {
+                    console.error('❌ Failed to reset game room:', resetErr);
+                }
+
+                // Wait a moment for DELETE event to propagate to all clients
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Broadcast game-reset event to all players
+                if (typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('game-reset', {
+                        reason: 'placement-timeout',
+                        kickedPlayerIndex: activePlayerIndex
+                    });
+                }
+
+                // Reset local game state (host)
+                if (typeof resetToLobby === 'function') {
+                    resetToLobby();
+                }
+                return;
+            }
+
+            // SPECIAL CASE: If the active player has an unresolved scroll cascade, they forfeit.
+            // (They must place the overflowing scroll before ending their turn; if time runs out, they lose.)
+            const hasCascade = typeof spellSystem !== 'undefined' && spellSystem.hasPendingCascade(activePlayerIndex);
+            if (hasCascade) {
+                const forfeiterName = typeof getPlayerColorName === 'function'
+                    ? getPlayerColorName(activePlayerIndex) : `Player ${activePlayerIndex + 1}`;
+                console.log(`⏰ Cascade forfeit: ${forfeiterName} ran out of time with unresolved cascade`);
+                updateStatus(`⏰ ${forfeiterName} ran out of time with an unresolved scroll cascade — forfeiting!`);
+                if (typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('cascade-forfeit', { playerIndex: activePlayerIndex });
+                }
+                // Remove the forfeiting player from the game (same as kick path)
+                const { data: forfeitPlayers } = await supabase
+                    .from('players')
+                    .select('id, username, player_index')
+                    .eq('game_id', currentGameId);
+                const forfeitPlayer = forfeitPlayers?.find(p => p.player_index === activePlayerIndex);
+                if (forfeitPlayer) {
+                    await supabase.from('players').delete().eq('id', forfeitPlayer.id);
+                }
+                await hostAdvanceToNextPlayerAndRestartTimer();
+                return;
+            }
+
+            // NORMAL GAME PHASE: Use existing kick/auto-advance logic
             if (kickOnTurnTimeout) {
                 // Kick active player
                 const { data: allPlayers } = await supabase
@@ -4773,11 +5438,13 @@ function clearPlayerPath() {
             // Restart timer anchored to host time
             const started = Date.now();
             turnStartedAtMs = started;
+            currentTurnNumber++;
 
-            // Broadcast turn change with shared turn start timestamp
+            // Broadcast turn change with shared turn start timestamp and turn number
             broadcastGameAction('turn-change', {
                 playerIndex: activePlayerIndex,
-                turnStartedAt: started
+                turnStartedAt: started,
+                turnNumber: currentTurnNumber
             });
 
             // Update local display as host
@@ -4802,6 +5469,34 @@ function clearPlayerPath() {
                     // avoid unhandled promise rejections
                     checkTurnTimeout().catch(err => console.error('Turn timeout check failed:', err));
                 }, 1000);
+
+                // Host also broadcasts periodic sync every 5 seconds
+                turnSyncInterval = setInterval(() => {
+                    if (isMultiplayer && typeof broadcastGameAction === 'function') {
+                        broadcastGameAction('turn-sync', {
+                            playerIndex: activePlayerIndex,
+                            turnNumber: currentTurnNumber,
+                            turnStartedAt: turnStartedAtMs
+                        });
+                        console.log(`🔄 Turn sync broadcast: turn ${currentTurnNumber}, player ${activePlayerIndex}`);
+                    }
+                }, 5000);
+
+                // Host also broadcasts common area sync every 10 seconds
+                commonAreaSyncInterval = setInterval(() => {
+                    if (isMultiplayer && typeof broadcastGameAction === 'function' && typeof spellSystem !== 'undefined') {
+                        // Get current common area state
+                        const commonAreaState = {};
+                        Object.keys(spellSystem.commonArea).forEach(element => {
+                            commonAreaState[element] = spellSystem.commonArea[element];
+                        });
+
+                        broadcastGameAction('common-area-sync', {
+                            commonArea: commonAreaState
+                        });
+                        console.log(`🔄 Common area sync broadcast:`, commonAreaState);
+                    }
+                }, 10000);
             }
 
             // Everyone updates display every second
@@ -4813,6 +5508,14 @@ function clearPlayerPath() {
             if (turnTimeoutInterval) {
                 clearInterval(turnTimeoutInterval);
                 turnTimeoutInterval = null;
+            }
+            if (turnSyncInterval) {
+                clearInterval(turnSyncInterval);
+                turnSyncInterval = null;
+            }
+            if (commonAreaSyncInterval) {
+                clearInterval(commonAreaSyncInterval);
+                commonAreaSyncInterval = null;
             }
             stopTimerDisplay();
         }
@@ -4839,10 +5542,15 @@ function clearPlayerPath() {
                 playerAPs[activePlayerIndex].voidAP = voidAP;
             }
 
-            // Use playerPools[activePlayerIndex] directly instead of the playerPool
-            // getter, which returns myPlayerIndex's pool in multiplayer and would
-            // send the wrong data if this client isn't the active player.
-            const activeResources = playerPools[activePlayerIndex] || { ...INITIAL_PLAYER_STONES };
+            // Only broadcast resources when it's our own turn.
+            // When it's not our turn, we must not broadcast the other player's
+            // resource pool — we may have modified it locally (e.g. during
+            // processPsychicPending), and broadcasting those values would cause
+            // the active player's client to double-apply pool changes (e.g.
+            // Respirate drawing wind stones twice).
+            const activeResources = isMyTurn
+                ? (playerPools[activePlayerIndex] || { ...INITIAL_PLAYER_STONES })
+                : null;
             broadcastGameAction('player-state-update', {
                 playerIndex: activePlayerIndex,
                 currentAP: apToSend,
@@ -4973,9 +5681,10 @@ function clearPlayerPath() {
             
             if (activatedElements.length === 0) return;
 
-            // Arrange symbols in a pentagon pattern around the tile center
-            const radius = TILE_SIZE * 1.5; // Place symbols on the outer part of the tile
-            const angleStep = (Math.PI * 2) / 5; // 5 elements
+            // Arrange symbols in a tight pentagon pattern inside the tile's center hex
+            // Keep radius well within TILE_SIZE (20) so symbols never bleed outside the tile
+            const radius = TILE_SIZE * 0.75; // ~15 units — inside the center hex (r=20)
+            const angleStep = (Math.PI * 2) / 5;
             const elementOrder = ['earth', 'water', 'fire', 'wind', 'void'];
 
             activatedElements.forEach(element => {
@@ -4988,10 +5697,10 @@ function clearPlayerPath() {
                 const symbolBg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 symbolBg.setAttribute('cx', x);
                 symbolBg.setAttribute('cy', y);
-                symbolBg.setAttribute('r', '18');
+                symbolBg.setAttribute('r', '9');
                 symbolBg.setAttribute('fill', STONE_TYPES[element].color);
                 symbolBg.setAttribute('stroke', '#fff');
-                symbolBg.setAttribute('stroke-width', '2');
+                symbolBg.setAttribute('stroke-width', '1.5');
                 symbolsGroup.appendChild(symbolBg);
 
                 // Create symbol
@@ -5001,10 +5710,8 @@ function clearPlayerPath() {
                 symbol.setAttribute('text-anchor', 'middle');
                 symbol.setAttribute('dominant-baseline', 'middle');
                 symbol.setAttribute('fill', '#fff');
-                symbol.setAttribute('font-size', '20');
+                symbol.setAttribute('font-size', '10');
                 symbol.setAttribute('font-weight', 'bold');
-                symbol.setAttribute('stroke', '#000');
-                symbol.setAttribute('stroke-width', '0.5');
                 symbol.textContent = STONE_TYPES[element].symbol;
 
                 symbolsGroup.appendChild(symbol);
@@ -5012,6 +5719,9 @@ function clearPlayerPath() {
 
             console.log(`🎨 Updated player ${playerIndex}'s TILE with ${activatedElements.length} element symbol(s): ${activatedElements.join(', ')}`);
         }
+
+        // Expose on window so scroll-effects.js (outside this IIFE) can call it
+        window.updatePlayerElementSymbols = updatePlayerElementSymbols;
 
         function startPlayerDrag(e, options = {}) {
             const takeFlight = !!options.isTakeFlight || ((typeof window !== 'undefined') && window.takeFlightState?.active);
@@ -5716,6 +6426,13 @@ function clearPlayerPath() {
 
             // Update visuals for all water stones (mimicry indicators)
             updateAllWaterStoneVisuals();
+
+            // Control the Current: if a water stone was just placed during water-transform mode,
+            // refresh highlights so the new stone gets its click handler attached immediately
+            if (type === 'water' &&
+                spellSystem?.scrollEffects?.selectionMode?.type === 'water-transform') {
+                spellSystem.scrollEffects.refreshWaterTransformHighlights();
+            }
 
             // Update void nullification indicators
             updateAllVoidNullificationVisuals();

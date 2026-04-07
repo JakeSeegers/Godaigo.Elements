@@ -194,6 +194,72 @@ body {
     color: var(--text-primary);
 }
 
+.hud-stone-info-btn {
+    background: none;
+    border: 1px solid #555;
+    color: #aaa;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    padding: 3px 7px;
+    transition: border-color 0.15s, color 0.15s;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.hud-stone-info-btn:hover { border-color: var(--accent-gold); color: var(--accent-gold); }
+
+/* Stone info popup */
+.stone-info-overlay {
+    position: fixed; inset: 0; z-index: 3000;
+    background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center;
+}
+.stone-info-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    width: min(480px, 92vw);
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+}
+.stone-info-modal h3 {
+    margin: 0 0 14px;
+    font-size: 15px;
+    color: var(--text-primary);
+}
+.stone-info-close {
+    position: absolute; top: 12px; right: 14px;
+    background: none; border: none; color: #888;
+    font-size: 20px; cursor: pointer; line-height: 1;
+}
+.stone-info-close:hover { color: #fff; }
+.stone-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.stone-row:last-child { border-bottom: none; }
+.stone-icon {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: bold; flex-shrink: 0;
+    box-shadow: 0 0 8px rgba(0,0,0,0.4);
+}
+.stone-row-info { flex: 1; }
+.stone-row-name {
+    font-size: 13px; font-weight: 700; margin-bottom: 3px;
+}
+.stone-row-desc {
+    font-size: 12px; color: var(--text-secondary); line-height: 1.45;
+}
+.stone-row-cost {
+    font-size: 11px; color: #888; margin-top: 3px;
+}
+
 .hud-badges {
     display: flex;
     gap: var(--space-sm);
@@ -1413,4 +1479,909 @@ svg {
 
 .tutorial-got-it:active {
     transform: translateY(0);
+}
+
+/* ============================================
+   AUTH SCREEN
+   ============================================ */
+#auth-username:focus,
+#auth-password:focus {
+    border-color: #d9b08c;
+    outline: none;
+}
+
+#auth-login-btn:hover  { background: #c9a07c; }
+#auth-register-btn:hover { background: #555; }
+#auth-login-btn:disabled,
+#auth-register-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ============================================
+   GAMIFICATION PANEL
+   ============================================ */
+.gami-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gami-modal {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+.gami-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #333;
+}
+.gami-title { color: #d9b08c; margin: 0; font-size: 18px; }
+.gami-close {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 26px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+}
+.gami-close:hover { color: #fff; }
+
+/* Tabs */
+.gami-tabs {
+    display: flex;
+    border-bottom: 1px solid #333;
+    padding: 0 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.gami-tabs::-webkit-scrollbar { display: none; }
+.gami-tab {
+    padding: 9px 11px;
+    background: none;
+    border: none;
+    color: #777;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    white-space: nowrap;
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+.gami-tab:hover  { color: #ddd; }
+.gami-tab.active { color: #d9b08c; border-bottom-color: #d9b08c; }
+
+/* Scrollable content area */
+.gami-content {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+.gami-loading { color: #666; text-align: center; padding: 40px; }
+
+/* --- Profile --- */
+.gami-profile-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.gami-level-badge {
+    background: #d9b08c;
+    color: #1a1a1a;
+    border-radius: 50%;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.gami-level-num   { font-size: 24px; font-weight: bold; line-height: 1; }
+.gami-level-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.gami-profile-info { flex: 1; min-width: 0; }
+.gami-display-name {
+    color: #eee;
+    font-size: 17px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gami-xp-bar-wrap {
+    background: #333;
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+.gami-xp-bar {
+    background: #d9b08c;
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+}
+.gami-xp-text { color: #777; font-size: 12px; }
+
+.gami-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+.gami-stat {
+    background: #252525;
+    border-radius: 8px;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.gami-stat-val { color: #d9b08c; font-size: 20px; font-weight: bold; }
+.gami-stat-lbl { color: #777; font-size: 11px; text-align: center; line-height: 1.2; }
+
+/* --- Badges --- */
+.gami-badges-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+.gami-badge-card {
+    background: #252525;
+    border-radius: 8px;
+    padding: 14px 12px;
+    border: 1px solid #333;
+    text-align: center;
+    transition: border-color 0.15s;
+}
+.gami-badge-card.earned  { border-color: #d9b08c; }
+.gami-badge-card.locked  { opacity: 0.45; }
+.gami-badge-icon   { font-size: 30px; margin-bottom: 6px; }
+.gami-badge-name   { color: #eee; font-size: 13px; font-weight: bold; margin-bottom: 4px; }
+.gami-badge-desc   { color: #777; font-size: 11px; margin-bottom: 4px; line-height: 1.3; }
+.gami-badge-reward { color: #d9b08c; font-size: 11px; }
+
+/* --- Leaderboard --- */
+.gami-leaderboard { display: flex; flex-direction: column; gap: 8px; }
+.gami-lb-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #252525;
+    border-radius: 6px;
+    border: 1px solid #333;
+}
+.gami-lb-row.gami-lb-me { border-color: #d9b08c; background: #2a2416; }
+.gami-lb-rank { width: 32px; text-align: center; font-size: 18px; flex-shrink: 0; }
+.gami-lb-name { flex: 1; color: #eee; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gami-lb-xp   { color: #d9b08c; font-size: 14px; font-weight: bold; flex-shrink: 0; }
+.gami-lb-level { color: #777; font-size: 12px; flex-shrink: 0; margin-left: 6px; }
+
+/* --- XP / Gold toast notification --- */
+.gami-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #1a1a1a;
+    border: 1px solid #d9b08c;
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: #d9b08c;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 9999;
+    transform: translateX(calc(100% + 32px));
+    transition: transform 0.3s ease;
+    pointer-events: none;
+    white-space: nowrap;
+}
+.gami-toast.gami-toast-show { transform: translateX(0); }
+.gami-toast-icon { margin-right: 6px; }
+
+/* --- Section headings shared by Cosmetics + Emojis tabs --- */
+.gami-section-title {
+    color: #d9b08c;
+    font-size: 13px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 6px 0 8px;
+    border-bottom: 1px solid #333;
+    margin-bottom: 10px;
+}
+
+/* --- Cosmetics (Name Colours) tab --- */
+.gami-cos-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+}
+.gami-cos-list { display: flex; flex-direction: column; gap: 6px; }
+.gami-cos-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 8px;
+    transition: border-color 0.15s;
+}
+.gami-cos-item.active { border-color: #d9b08c; }
+.gami-cos-preview {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a1a;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+.gami-cos-name { flex: 1; color: #ccc; font-size: 14px; }
+.gami-cos-action { flex-shrink: 0; }
+.gami-cos-btn {
+    padding: 6px 14px;
+    font-size: 13px;
+    border: 1px solid #555;
+    border-radius: 5px;
+    background: #333;
+    color: #eee;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.gami-cos-btn:hover    { background: #444; }
+.gami-cos-btn.equipped { background: #2a3a1a; border-color: #6abf40; color: #6abf40; }
+.gami-cos-btn.buy      { border-color: #d9b08c; color: #d9b08c; }
+.gami-cos-btn.buy:hover { background: #2a2010; }
+.gami-cos-btn.cant-afford { opacity: 0.45; cursor: default; }
+
+/* --- Emojis tab --- */
+.gami-emoji-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.gami-emoji-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #252525;
+    border: 1px solid #444;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+    padding: 0;
+}
+.gami-emoji-btn.text-emoji { font-size: 11px; font-weight: bold; color: #eee; width: auto; padding: 0 8px; min-width: 44px; }
+.gami-emoji-btn:hover:not(.inactive) { background: #333; border-color: #d9b08c; }
+.gami-emoji-btn.inactive { opacity: 0.45; cursor: default; }
+
+.gami-tier-section { margin-bottom: 12px; }
+.gami-tier-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    background: #1e1e1e;
+    border-left: 3px solid #555;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+.gami-emoji-shop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
+}
+.gami-shop-item {
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+}
+.gami-shop-item.owned { opacity: 0.6; }
+.gami-shop-emoji {
+    font-size: 24px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    display: block;
+    line-height: 1;
+}
+.gami-shop-emoji.text-emoji {
+    font-size: 10px;
+    font-weight: bold;
+    color: #eee;
+    padding: 4px 2px;
+}
+.gami-shop-name {
+    color: #888;
+    font-size: 10px;
+    line-height: 1.2;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    width: 100%;
+}
+.gami-shop-owned {
+    color: #4caf50;
+    font-size: 13px;
+    font-weight: bold;
+}
+.gami-shop-buy-btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    background: transparent;
+    border: 1px solid;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.1s;
+}
+.gami-shop-buy-btn:hover { background: rgba(255,255,255,0.07); }
+
+/* ============================================
+   GAME BROWSER (multi-room lobby)
+   ============================================ */
+
+/* Public game browser cards */
+.game-room-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: var(--space-md) var(--space-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-sm);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.game-room-card:hover {
+    border-color: var(--accent-gold);
+    background: #2e2e2e;
+}
+.game-room-host {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.game-room-count {
+    color: var(--text-secondary);
+    font-size: 13px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.game-room-join-btn {
+    padding: 5px 14px;
+    background: var(--accent-orange);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.game-room-join-btn:hover {
+    background: var(--accent-orange-hover);
+}
+
+/* Room code click-to-copy */
+#room-code-value {
+    transition: color 0.1s;
+    cursor: pointer;
+}
+#room-code-value:hover {
+    color: #fff;
+    text-decoration: underline dotted;
+}
+
+/* Scrollable public game list */
+#public-games-list {
+    scrollbar-width: thin;
+    scrollbar-color: #444 transparent;
+}
+#public-games-list::-webkit-scrollbar {
+    width: 5px;
+}
+#public-games-list::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 3px;
+}
+
+/* ================================================================
+   EMOJI SYSTEM
+   ================================================================ */
+
+/* ── Sliding panel ──────────────────────────────────────────────── */
+#emoji-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100vh;
+    background: #1a1a1a;
+    border-left: 1px solid #3a3a3a;
+    z-index: 8500;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -6px 0 24px rgba(0,0,0,0.7);
+}
+#emoji-panel.open {
+    transform: translateX(0);
+}
+
+/* ── Panel header + tabs ────────────────────────────────────────── */
+.emoji-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid #2e2e2e;
+    flex-shrink: 0;
+    background: #222;
+}
+.emoji-panel-tabs {
+    display: flex;
+    gap: 6px;
+}
+.emoji-tab-btn {
+    padding: 5px 13px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #2e2e2e;
+    color: #888;
+    border: 1px solid #3a3a3a;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.emoji-tab-btn.active {
+    background: var(--accent-gold, #d9b08c);
+    color: #1a1a1a;
+    border-color: var(--accent-gold, #d9b08c);
+}
+.emoji-tab-btn:not(.active):hover {
+    background: #3a3a3a;
+    color: #ccc;
+}
+.emoji-panel-close {
+    width: 26px;
+    height: 26px;
+    background: #2e2e2e;
+    color: #888;
+    border: 1px solid #3a3a3a;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: background 0.12s, color 0.12s;
+}
+.emoji-panel-close:hover {
+    background: #444;
+    color: #eee;
+}
+
+/* ── Scrollable body ────────────────────────────────────────────── */
+.emoji-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a3a transparent;
+}
+.emoji-panel-body::-webkit-scrollbar { width: 4px; }
+.emoji-panel-body::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+
+/* ── Empty state ────────────────────────────────────────────────── */
+.emoji-empty-state {
+    text-align: center;
+    padding: 40px 16px;
+    color: #888;
+    font-size: 13px;
+}
+
+/* ── My Emojis grid ─────────────────────────────────────────────── */
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    padding: 2px;
+}
+.emoji-btn {
+    font-size: 26px;
+    line-height: 1;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 7px 4px;
+    text-align: center;
+    transition: background 0.12s, border-color 0.12s, transform 0.1s;
+}
+.emoji-btn:hover {
+    background: #363636;
+    border-color: var(--accent-gold, #d9b08c);
+    transform: scale(1.12);
+}
+.emoji-btn.text-emoji {
+    font-size: 10px;
+    font-weight: 800;
+    color: #eee;
+    letter-spacing: -0.5px;
+    padding: 9px 2px;
+}
+/* Inactive (not in game) — no hover, dimmed */
+.emoji-btn-inactive {
+    font-size: 26px;
+    line-height: 1;
+    background: #222;
+    border: 1px solid #2e2e2e;
+    border-radius: 8px;
+    padding: 7px 4px;
+    text-align: center;
+    opacity: 0.45;
+    cursor: default;
+}
+.emoji-btn-inactive.text-emoji {
+    font-size: 10px;
+    font-weight: 800;
+    color: #888;
+    padding: 9px 2px;
+}
+.emoji-no-game-note {
+    color: #666;
+    font-size: 11px;
+    text-align: center;
+    margin-top: 10px;
+}
+
+/* ── Shop layout ────────────────────────────────────────────────── */
+.shop-gold-display {
+    font-size: 15px;
+    font-weight: bold;
+    color: var(--accent-gold, #d9b08c);
+    text-align: right;
+    margin-bottom: 14px;
+    padding: 7px 10px;
+    background: #242424;
+    border-radius: 6px;
+    border: 1px solid #333;
+}
+.shop-tier-section {
+    margin-bottom: 18px;
+}
+.shop-tier-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-left: 3px solid;
+    background: #222;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+.shop-tier-name {
+    flex: 1;
+    font-size: 12px;
+    color: #bbb;
+}
+.shop-tier-cost {
+    font-weight: bold;
+    font-size: 11px;
+}
+.emoji-shop-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+}
+.shop-item {
+    background: #232323;
+    border: 1px solid #2e2e2e;
+    border-radius: 8px;
+    padding: 7px 4px 6px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    transition: border-color 0.14s;
+}
+.shop-item:hover:not(.owned) {
+    border-color: #4a4a4a;
+}
+.shop-item.owned {
+    border-color: #1e3a1e;
+    background: #1c2a1c;
+}
+.shop-emoji-btn {
+    font-size: 22px;
+    line-height: 1;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 5px;
+    transition: transform 0.1s;
+}
+.shop-emoji-btn:hover { transform: scale(1.18); }
+.shop-emoji-btn.text-emoji {
+    font-size: 9px;
+    font-weight: 800;
+    color: #eee;
+    background: #333;
+    padding: 5px 3px;
+    border-radius: 4px;
+    min-width: 30px;
+    cursor: pointer;
+    border: 1px solid #444;
+}
+.shop-item-name {
+    font-size: 9px;
+    color: #666;
+    line-height: 1.2;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 2px;
+}
+.shop-buy-btn {
+    font-size: 10px;
+    font-weight: bold;
+    background: transparent;
+    border: 1px solid;
+    border-radius: 10px;
+    padding: 2px 7px;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.12s;
+}
+.shop-buy-btn:hover { background: rgba(255,255,255,0.07); }
+.owned-badge {
+    font-size: 10px;
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+/* ── HUD emoji trigger button ───────────────────────────────────── */
+#emoji-panel-btn {
+    padding: 4px 7px;
+    font-size: 17px;
+    line-height: 1;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+}
+#emoji-panel-btn:hover {
+    background: #444;
+    border-color: var(--accent-gold, #d9b08c);
+}
+#emoji-panel-btn.active {
+    background: var(--accent-gold, #d9b08c);
+    border-color: var(--accent-gold, #d9b08c);
+    color: #1a1a1a;
+}
+
+/* ── Floating emoji animation ───────────────────────────────────── */
+.emoji-float {
+    position: fixed;
+    font-size: 54px;
+    line-height: 1;
+    transform: translateX(-50%);
+    pointer-events: none;
+    z-index: 9999;
+    user-select: none;
+    text-shadow: 0 3px 10px rgba(0,0,0,0.55);
+    animation: emojiFloat 5s ease-out forwards;
+}
+.emoji-float-text {
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    background: rgba(0,0,0,0.82);
+    color: #fff;
+    padding: 7px 16px;
+    border-radius: 20px;
+    border: 2px solid rgba(255,255,255,0.18);
+    text-shadow: none;
+    white-space: nowrap;
+}
+@keyframes emojiFloat {
+    0%   { opacity: 1;   transform: translateX(-50%) translateY(0px);  }
+    15%  { opacity: 1;   transform: translateX(-50%) translateY(-15px); }
+    75%  { opacity: 0.9; transform: translateX(-50%) translateY(-60px); }
+    100% { opacity: 0;   transform: translateX(-50%) translateY(-90px); }
+}
+
+/* ================================================================
+   COSMETICS SYSTEM
+   ================================================================ */
+
+/* ── Cosmetics panel ───────────────────────────────────────────── */
+#cosmetics-panel {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 340px;
+    max-height: 520px;
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 9999;
+    transform: translateY(100%);
+    transition: transform 0.28s ease;
+    box-shadow: -2px -2px 16px rgba(0,0,0,0.6);
+    font-family: inherit;
+}
+#cosmetics-panel.open { transform: translateY(0); }
+
+.cos-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #2a2a2a;
+    border-bottom: 1px solid #333;
+    border-radius: 10px 10px 0 0;
+}
+.cos-title { font-weight: bold; font-size: 15px; color: #fff; }
+.cos-close {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.cos-close:hover { background: #444; color: #fff; }
+
+
+.cos-gold-bar {
+    padding: 5px 14px;
+    font-size: 12px;
+    color: #FFD700;
+    background: #222;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.cos-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 8px;
+}
+.cos-body::-webkit-scrollbar { width: 4px; }
+.cos-body::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+
+/* ── Cosmetic item row ─────────────────────────────────────────── */
+.cos-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    margin-bottom: 6px;
+    background: #2a2a2a;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: border-color 0.15s;
+}
+.cos-item-equipped { border-color: #9458f4; }
+
+.cos-preview {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.cos-info { flex: 1; min-width: 0; }
+.cos-name { font-size: 13px; color: #eee; font-weight: 600; }
+.cos-desc { font-size: 11px; color: #888; margin-top: 2px; }
+
+.cos-action { flex-shrink: 0; }
+.cos-btn {
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: none;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity 0.15s;
+}
+.cos-equip-btn    { background: #444; color: #eee; }
+.cos-equip-btn:hover { background: #555; }
+.cos-equipped-btn { background: #9458f4; color: #fff; }
+.cos-equipped-btn:hover { background: #7a3fd4; }
+.cos-buy-btn      { background: #c8a000; color: #111; }
+.cos-buy-btn:hover { background: #e0b800; }
+.cos-cant-afford  { opacity: 0.45; cursor: not-allowed; }
+
+/* ── HUD cosmetics trigger button ──────────────────────────────── */
+#cosmetics-panel-btn {
+    background: none;
+    border: 1px solid #555;
+    color: #fff;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.15s;
+}
+#cosmetics-panel-btn:hover { background: #333; }
+
+/* ── Name rainbow animation ─────────────────────────────────────── */
+@keyframes nameRainbow {
+    0%   { background-position: 0%   50%; }
+    100% { background-position: 200% 50%; }
+}
+
+/* ── CRT flicker & scanlines (overrides base.css body::after) ───── */
+@keyframes flicker {
+    0%   { opacity: 0.97; }
+    50%  { opacity: 1; }
+    100% { opacity: 0.98; }
+}
+body::after {
+    content: "";
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background:
+        repeating-linear-gradient(
+            to bottom,
+            rgba(0,0,0,0.12),
+            rgba(0,0,0,0.12) 2px,
+            transparent 2px,
+            transparent 4px
+        );
+    animation: flicker 0.15s infinite;
 }

@@ -162,6 +162,12 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🔀 Shifting Sands activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🔀 Shifting Sands: skipping tile-swap UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 // Enter tile selection mode; pass payload so we can call onSelectionEffectComplete when done
                 const payload = {
                     scrollName: context.scrollName || 'EARTH_SCROLL_2',
@@ -225,8 +231,21 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`👣 Heavy Stomp activated by player ${casterIndex}`);
 
-                // Enter tile flip selection mode
-                system.enterTileFlipMode(casterIndex);
+                // If triggered via Psychic on a non-caster client, skip the interactive UI.
+                // The Psychic caster's client handles the tile selection and syncs state.
+                if (context?.psychicRemoteClient) {
+                    console.log(`👣 Heavy Stomp: skipping tile-flip UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
+                // Pass completionPayload and onComplete so interactive chaining works
+                // (needed when multiple Heavy Stomps are queued via Psychic)
+                const completionPayload = context?.scrollName ? {
+                    scrollName: context.scrollName,
+                    effectName: 'Heavy Stomp',
+                    spell: context.spell
+                } : null;
+                system.enterTileFlipMode(casterIndex, completionPayload, context?.onComplete);
 
                 return {
                     success: true,
@@ -289,12 +308,26 @@ const ScrollEffects = {
                         updateStatus('Reflect failed: Cannot reflect Reflect!');
                         return { success: false, reason: 'Cannot reflect Reflect' };
                     }
-                    system.activeBuffs.reflectPending = {
+                    // Initialize array if needed, then push this reflect to the stack
+                    if (!Array.isArray(system.activeBuffs.reflectPending)) {
+                        system.activeBuffs.reflectPending = [];
+                    }
+                    system.activeBuffs.reflectPending.push({
                         playerIndex: casterIndex,
                         scrollName: triggeringScroll.name,
                         definition: triggeringScroll.definition
-                    };
+                    });
                     updateStatus(`Reflect: At the beginning of your next turn, you will activate ${triggeringScroll.definition?.name || triggeringScroll.name}.`);
+
+                    // Broadcast Reflect buff in multiplayer
+                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                        broadcastGameAction('reflect-buff-applied', {
+                            playerIndex: casterIndex,
+                            scrollName: triggeringScroll.name,
+                            scrollDefinition: triggeringScroll.definition
+                        });
+                    }
+
                     return { success: true, deferred: true };
                 }
 
@@ -322,8 +355,14 @@ const ScrollEffects = {
                 const effect = system.getEffect(scrollName);
                 if (effect) {
                     console.log(`🪞 Reflecting special effect: ${effect.name}`);
+                    // Determine if we are the Reflect caster on this client.
+                    // If not, interactive scrolls should skip their UI (same as Psychic remote client behavior).
+                    const isReflectCaster = (typeof myPlayerIndex === 'undefined' || myPlayerIndex === null || myPlayerIndex === casterIndex);
                     // Execute the reflected scroll's special effect
-                    const result = system.execute(scrollName, casterIndex, context);
+                    const result = system.execute(scrollName, casterIndex, {
+                        ...context,
+                        psychicRemoteClient: context?.psychicRemoteClient || !isReflectCaster
+                    });
                     return {
                         success: true,
                         reflected: scrollName,
@@ -399,6 +438,12 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`💧 Refreshing Thought activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`💧 Refreshing Thought: skipping discard UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 // Enter scroll selection mode
                 system.enterScrollDiscardMode(casterIndex, 'refreshing-thought');
 
@@ -454,6 +499,12 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🌊 Wandering River activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🌊 Wandering River: skipping tile-element UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 // Enter tile selection mode for element change
                 system.enterTileElementChangeMode(casterIndex);
 
@@ -478,14 +529,25 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🌀 Control the Current activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🌀 Control the Current: skipping water-transform UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 // Activate water transformation buff - enables clicking water stones to transform
                 system.activeBuffs.controlTheCurrent = {
                     expiresThisTurn: true,
                     playerIndex: casterIndex
                 };
 
-                // Enter water stone selection mode
-                system.enterWaterTransformMode(casterIndex);
+                // Enter water stone selection mode with completion payload
+                const payload = {
+                    scrollName: context.scrollName || 'WATER_SCROLL_5',
+                    spell: context.spell,
+                    effectName: 'Control the Current'
+                };
+                system.enterWaterTransformMode(casterIndex, payload);
 
                 return {
                     success: true,
@@ -608,6 +670,12 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🔥 Sacrificial Pyre activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🔥 Sacrificial Pyre: skipping sacrifice UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 // Enter scroll selection mode for sacrificial activation
                 system.enterScrollSacrificeMode(casterIndex);
 
@@ -639,6 +707,17 @@ const ScrollEffects = {
                     }
                 }
 
+                // Belt-and-suspenders: track the fire element win condition HERE, before opening the
+                // modal, so it registers even if enterTransmuteMode encounters an error.
+                // applyScrollEffects will also do this tracking after execute() returns, which is
+                // idempotent (Set.add is safe to call twice). This early tracking ensures the symbol
+                // appears on the shrine tile regardless of what happens inside the modal.
+                system.spellSystem.ensurePlayerScrollsStructure(casterIndex);
+                system.spellSystem.playerScrolls[casterIndex].activated.add('fire');
+                if (typeof window !== 'undefined' && typeof window.updatePlayerElementSymbols === 'function') {
+                    window.updatePlayerElementSymbols(casterIndex);
+                }
+
                 // Suppress void AP auto-sync while Transmute is open
                 system.activeBuffs.suppressVoidAPSync = {
                     playerIndex: casterIndex
@@ -665,6 +744,12 @@ const ScrollEffects = {
 
             execute(casterIndex, context, system) {
                 console.log(`🔥 Arson activated by player ${casterIndex}`);
+
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🔥 Arson: skipping arson UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
 
                 // Enter opponent pool selection mode with completion payload
                 system.enterArsonMode(casterIndex, {
@@ -891,6 +976,12 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🌬️ Take Flight activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🌬️ Take Flight: skipping flight UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 system.enterTakeFlightMode(casterIndex, {
                     scrollName: context?.scrollName || 'WIND_SCROLL_4',
                     effectName: 'Take Flight',
@@ -950,6 +1041,13 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🔮 Create activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip the interactive UI.
+                // The Psychic caster's client handles the stone selection and syncs state.
+                if (context?.psychicRemoteClient) {
+                    console.log(`🔮 Create: skipping stone modal on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 system.showCreateStoneModal(casterIndex);
 
                 return {
@@ -985,6 +1083,12 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🔮 Telekinesis activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🔮 Telekinesis: skipping telekinesis UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 system.enterTelekinesisMode(casterIndex, {
                     scrollName: context?.scrollName || 'VOID_SCROLL_3',
                     effectName: 'Telekinesis',
@@ -1006,6 +1110,12 @@ const ScrollEffects = {
             priority: 2,
             execute(casterIndex, context, system) {
                 console.log(`🔮 Scholar's Insight activated by player ${casterIndex}`);
+
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🔮 Scholar's Insight: skipping deck-search UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
 
                 system.enterScholarsInsightMode(casterIndex, {
                     scrollName: context?.scrollName || 'VOID_SCROLL_2',
@@ -1042,12 +1152,24 @@ const ScrollEffects = {
                     }
 
                     // Store the countered scroll to be played at the beginning of
-                    // the caster's next turn (reuses the same mechanism as Reflect)
-                    system.activeBuffs.psychicPending = {
+                    // the caster's next turn. Initialize array if needed, then push.
+                    if (!Array.isArray(system.activeBuffs.psychicPending)) {
+                        system.activeBuffs.psychicPending = [];
+                    }
+                    system.activeBuffs.psychicPending.push({
                         playerIndex: casterIndex,
                         scrollName: triggeringScroll.name,
                         definition: triggeringScroll.definition
-                    };
+                    });
+
+                    // Broadcast Psychic buff in multiplayer
+                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                        broadcastGameAction('psychic-buff-applied', {
+                            playerIndex: casterIndex,
+                            scrollName: triggeringScroll.name,
+                            scrollDefinition: triggeringScroll.definition
+                        });
+                    }
 
                     // Mark Psychic itself to go to common area.
                     // The disposition handler in multiplayer-state.js handles
@@ -1153,7 +1275,7 @@ const ScrollEffects = {
                 system.activeBuffs.steamVents = {
                     expiresThisTurn: true,
                     playerIndex: casterIndex,
-                    freeStepBanked: false // tracks whether the next step is free (alternating)
+                    freeStepBanked: true // first step is always free (every other step costs AP)
                 };
 
                 const message = 'Steam Vents: each AP spent on movement moves you two spaces this turn!';
@@ -1321,6 +1443,12 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🏴‍☠️ Plunder activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🏴‍☠️ Plunder: skipping plunder UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
                 system.enterPlunderMode(casterIndex, {
                     scrollName: context?.scrollName || 'CATACOMB_SCROLL_8',
                     effectName: 'Plunder',
@@ -1337,22 +1465,34 @@ const ScrollEffects = {
 
         CATACOMB_SCROLL_9: {
             name: 'Quick Reflexes',
-            description: 'Until your next turn, level 1 scrolls cost 0 AP to activate. Each time you use a react scroll during this time, draw 1 void and 1 wind stone.',
+            description: 'Search for an available level 1 scroll and add it to your hand. Draw 2 stones of that type. Until your next turn, level 1 scrolls cost 0 AP to activate. Shuffle the deck searched.',
             isCounter: false,
             priority: 9,
             execute(casterIndex, context, system) {
                 console.log(`⚡ Quick Reflexes activated by player ${casterIndex}`);
 
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`⚡ Quick Reflexes: skipping search UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
+                // Activate the buff: level 1 scrolls cost 0 AP until next turn
                 system.activeBuffs.quickReflexes = {
                     playerIndex: casterIndex
                 };
 
-                const message = 'Quick Reflexes: level 1 scrolls cost 0 AP until your next turn. React scrolls draw 1 void + 1 wind.';
-                updateStatus(message);
+                // Enter deck-search mode to find a level 1 scroll
+                system.enterQuickReflexesMode(casterIndex, {
+                    scrollName: context?.scrollName || 'CATACOMB_SCROLL_9',
+                    effectName: 'Quick Reflexes',
+                    spell: context?.spell
+                });
 
                 return {
                     success: true,
-                    message: message
+                    requiresSelection: true,
+                    message: 'Quick Reflexes: searching for a level 1 scroll...'
                 };
             }
         },
@@ -1364,6 +1504,12 @@ const ScrollEffects = {
             priority: 10,
             execute(casterIndex, context, system) {
                 console.log(`🔥 Combust activated by player ${casterIndex}`);
+
+                // If triggered via Psychic on a non-caster client, skip interactive UI
+                if (context?.psychicRemoteClient) {
+                    console.log(`🔥 Combust: skipping combust UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
 
                 system.enterScorchedEarthMode(casterIndex);
 
@@ -2086,7 +2232,7 @@ const ScrollEffects = {
     // TILE FLIP MODE (Earth Scroll IV)
     // ============================================
 
-    enterTileFlipMode(casterIndex) {
+    enterTileFlipMode(casterIndex, completionPayload, onComplete) {
         const self = this;
 
         // Get eligible tiles (no stones, no players, not player tiles)
@@ -2094,6 +2240,11 @@ const ScrollEffects = {
 
         if (eligibleTiles.length === 0) {
             updateStatus('No eligible tiles to flip!');
+            // Still signal completion so the next queued Psychic scroll can run
+            if (typeof onComplete === 'function') onComplete();
+            else if (completionPayload && self.spellSystem?.onSelectionEffectComplete) {
+                self.spellSystem.onSelectionEffectComplete(completionPayload.scrollName, completionPayload.effectName, completionPayload.spell);
+            }
             return;
         }
 
@@ -2103,6 +2254,7 @@ const ScrollEffects = {
         // Create cancel button
         const cancelBtn = this.createCancelButton('Cancel Flip', () => {
             self.cancelSelectionMode();
+            if (typeof onComplete === 'function') onComplete();
         });
 
         // Store selection mode state
@@ -2123,6 +2275,14 @@ const ScrollEffects = {
                 self.performTileFlip(tile, casterIndex);
                 self.selectionMode.cleanup();
                 self.selectionMode = null;
+
+                // Signal completion (for normal casts via onSelectionEffectComplete,
+                // or for Psychic-chained casts via the onComplete callback)
+                if (typeof onComplete === 'function') {
+                    onComplete();
+                } else if (completionPayload && self.spellSystem?.onSelectionEffectComplete) {
+                    self.spellSystem.onSelectionEffectComplete(completionPayload.scrollName, completionPayload.effectName, completionPayload.spell);
+                }
             },
 
             cleanup() {
@@ -2362,31 +2522,220 @@ const ScrollEffects = {
         return toDraw;
     },
 
-    // Quick Reflexes: draw stones after using a react scroll
-    handleQuickReflexesReact(casterIndex) {
-        const buff = this.activeBuffs.quickReflexes;
-        if (!buff || buff.playerIndex !== casterIndex) return;
-        if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
-            if (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null && myPlayerIndex !== casterIndex) {
-                return; // Only the reacting player should draw locally in multiplayer
-            }
-        }
+    // Quick Reflexes: search for a level 1 scroll, add to hand, draw 2 stones of that type
+    enterQuickReflexesMode(casterIndex, completionPayload) {
+        const self = this;
+        const STONE_TYPES_LOCAL = {
+            earth: { color: '#69d83a', symbol: '▲' },
+            water: { color: '#5894f4', symbol: '◯' },
+            fire: { color: '#ed1b43', symbol: '♦' },
+            wind: { color: '#ffce00', symbol: '≋' },
+            void: { color: '#9458f4', symbol: '✺' }
+        };
 
-        const drawnVoid = this.drawStonesToPool('void', 1, casterIndex);
-        const drawnWind = this.drawStonesToPool('wind', 1, casterIndex);
+        const sp = self.spellSystem;
 
-        if (typeof updateStatus === 'function') {
-            updateStatus(`Quick Reflexes: drew ${drawnVoid} void and ${drawnWind} wind stone${(drawnVoid + drawnWind) === 1 ? '' : 's'}.`);
-        }
-
-        // Multiplayer sync
-        if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
-            broadcastGameAction('quick-reflexes-draw', {
-                playerIndex: casterIndex,
-                voidDrawn: drawnVoid,
-                windDrawn: drawnWind
+        // Collect all available level-1 scrolls across elemental decks (catacomb excluded)
+        const level1Elements = ['earth', 'water', 'fire', 'wind', 'void'];
+        const available = []; // [{ element, scrollName, index }]
+        level1Elements.forEach(element => {
+            const deck = sp?.scrollDecks?.[element];
+            if (!deck) return;
+            deck.forEach((scrollName, index) => {
+                const def = sp?.patterns?.[scrollName];
+                if (def && def.level === 1) {
+                    available.push({ element, scrollName, index });
+                }
             });
+        });
+
+        if (available.length === 0) {
+            if (typeof updateStatus === 'function') {
+                updateStatus('Quick Reflexes: no level 1 scrolls available in any deck!');
+            }
+            self.selectionMode = null;
+            return;
         }
+
+        // Build and show modal
+        const showPicker = () => {
+            const existing = document.getElementById('quick-reflexes-modal');
+            if (existing) existing.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'quick-reflexes-modal';
+            Object.assign(overlay.style, {
+                position: 'fixed',
+                top: '0', left: '0', right: '0', bottom: '0',
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                zIndex: '3000',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center'
+            });
+
+            const modal = document.createElement('div');
+            Object.assign(modal.style, {
+                backgroundColor: '#1a1a2e',
+                border: '2px solid #ffce00',
+                borderRadius: '10px',
+                padding: '20px',
+                color: 'white',
+                minWidth: '300px',
+                maxWidth: '420px',
+                maxHeight: '80vh',
+                overflowY: 'auto'
+            });
+
+            const titleEl = document.createElement('h3');
+            titleEl.textContent = '⚡ Quick Reflexes: Choose a Level 1 Scroll';
+            titleEl.style.marginBottom = '5px';
+            titleEl.style.textAlign = 'center';
+            titleEl.style.color = '#ffce00';
+            modal.appendChild(titleEl);
+
+            const subtitle = document.createElement('div');
+            subtitle.textContent = 'Add it to your hand and draw 2 stones of its type.';
+            subtitle.style.color = '#bdc3c7';
+            subtitle.style.fontSize = '13px';
+            subtitle.style.marginBottom = '15px';
+            subtitle.style.textAlign = 'center';
+            modal.appendChild(subtitle);
+
+            available.forEach(({ element, scrollName, index }) => {
+                const scrollInfo = sp?.patterns?.[scrollName];
+                if (!scrollInfo) return;
+                const info = STONE_TYPES_LOCAL[element] || { color: '#fff', symbol: '?' };
+
+                const card = document.createElement('div');
+                Object.assign(card.style, {
+                    backgroundColor: '#2d2d44',
+                    border: `1px solid ${info.color}`,
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '8px',
+                    cursor: 'pointer',
+                    transition: 'border-color 0.15s, background-color 0.15s'
+                });
+                card.onmouseenter = () => card.style.backgroundColor = '#3d3d55';
+                card.onmouseleave = () => card.style.backgroundColor = '#2d2d44';
+
+                const nameEl = document.createElement('div');
+                nameEl.textContent = `${info.symbol} ${scrollInfo.name || scrollName}`;
+                nameEl.style.fontWeight = 'bold';
+                nameEl.style.color = info.color;
+                nameEl.style.marginBottom = '4px';
+                card.appendChild(nameEl);
+
+                const descEl = document.createElement('div');
+                descEl.textContent = scrollInfo.description || 'No description';
+                descEl.style.fontSize = '12px';
+                descEl.style.color = '#95a5a6';
+                card.appendChild(descEl);
+
+                const bonusEl = document.createElement('div');
+                bonusEl.textContent = `Draws 2 ${element} stones`;
+                bonusEl.style.fontSize = '11px';
+                bonusEl.style.color = info.color;
+                bonusEl.style.marginTop = '4px';
+                bonusEl.style.fontStyle = 'italic';
+                card.appendChild(bonusEl);
+
+                card.onclick = () => {
+                    overlay.remove();
+                    selectScroll(element, scrollName, index);
+                };
+
+                modal.appendChild(card);
+            });
+
+            // Cancel button
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            Object.assign(cancelBtn.style, {
+                display: 'block',
+                width: '100%',
+                padding: '10px',
+                margin: '10px 0 0 0',
+                backgroundColor: '#e74c3c',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                fontSize: '14px'
+            });
+            cancelBtn.onclick = () => {
+                overlay.remove();
+                self.cancelSelectionMode();
+            };
+            modal.appendChild(cancelBtn);
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+        };
+
+        // Handle scroll selection
+        const selectScroll = (element, scrollName, deckIndex) => {
+            const deck = sp.scrollDecks[element];
+            if (!deck) return;
+
+            // Remove from deck and shuffle
+            deck.splice(deckIndex, 1);
+            if (sp.shuffleDeck) {
+                sp.shuffleDeck(deck);
+                console.log(`⚡ Quick Reflexes: ${element} deck shuffled after search`);
+            }
+
+            // Add scroll to hand (or cascade if full)
+            const scrolls = sp.getPlayerScrolls(false);
+            const scrollInfo = sp.patterns?.[scrollName];
+            if (scrolls.hand.size >= sp.MAX_HAND_SIZE) {
+                const canCascadeToActive = scrolls.active.size < sp.MAX_ACTIVE_SIZE;
+                sp.showCascadePrompt(scrollName, scrollInfo, element, canCascadeToActive);
+            } else {
+                scrolls.hand.add(scrollName);
+                sp.updateScrollCount();
+            }
+
+            // Draw 2 stones of the scroll's element type
+            const drawn = self.drawStonesToPool(element, 2, casterIndex);
+
+            if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
+            if (typeof updateHUD === 'function') updateHUD();
+            if (typeof syncPlayerState === 'function') syncPlayerState();
+
+            const displayName = scrollInfo?.name || scrollName;
+            if (typeof updateStatus === 'function') {
+                updateStatus(`⚡ Quick Reflexes: added "${displayName}" to hand, drew ${drawn} ${element} stone${drawn === 1 ? '' : 's'}. Level 1 scrolls cost 0 AP this turn.`);
+            }
+
+            // Multiplayer broadcast — includes buffActive flag so the remote client
+            // can set activeBuffs.quickReflexes and correctly price level-1 scrolls
+            // in the response window affordability check.
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                broadcastGameAction('quick-reflexes-search', {
+                    playerIndex: casterIndex,
+                    element: element,
+                    scrollName: scrollName,
+                    stonesDrawn: drawn,
+                    buffActive: true
+                });
+            }
+
+            self.selectionMode = null;
+        };
+
+        // Register selection mode for cancellation support
+        this.selectionMode = {
+            type: 'quick-reflexes',
+            casterIndex: casterIndex,
+            cleanup: () => {
+                const modal = document.getElementById('quick-reflexes-modal');
+                if (modal) modal.remove();
+            }
+        };
+
+        showPicker();
     },
 
     // Check if extended placement is active for a stone type
@@ -2445,67 +2794,220 @@ const ScrollEffects = {
         this.stonesPlacedThisTurn = 0;
     },
 
-    // At start of a player's turn: if they have a pending Reflect, run the stored scroll and count as water activation.
-    // Returns { triggered: true, playerIndex, scrollName, definition } when a reflect was processed so caller can broadcast.
-    processReflectPending(playerIndex) {
-        const pending = this.activeBuffs.reflectPending;
-        if (!pending || pending.playerIndex !== playerIndex) return null;
-        const scrollName = pending.scrollName;
-        const definition = pending.definition;
-        delete this.activeBuffs.reflectPending;
-        const displayName = definition?.name || scrollName;
-        updateStatus(`Reflect triggers: activating ${displayName}!`);
-        // Run the reflected scroll's ability with full context (spell + scrollName so effects can use it)
-        const result = this.execute(scrollName, playerIndex, { spell: definition, scrollName });
-        if (result.success && this.spellSystem) {
-            this.spellSystem.ensurePlayerScrollsStructure(playerIndex);
-            const activated = this.spellSystem.playerScrolls[playerIndex].activated;
-            activated.add('water');
-            // Also count the reflected scroll's element(s) as activated (same as normal cast)
-            // Resolve definition from patterns if it lacks .element (may be effect def, not scroll def)
-            const scrollDef = definition?.element ? definition : (this.spellSystem.patterns?.[scrollName] || definition);
-            if (scrollDef) {
-                if (scrollDef.element === 'catacomb' && scrollDef.patterns?.[0]) {
-                    scrollDef.patterns[0].forEach(p => { if (p.type) activated.add(p.type); });
-                } else if (scrollDef.element) {
-                    activated.add(scrollDef.element);
+    // At start of a player's turn: if they have pending Reflects, run all stored scrolls and count as water activation.
+    // Returns array of { triggered: true, playerIndex, scrollName, definition } for all reflects processed so caller can broadcast.
+    // Interactive scrolls (requiresSelection) are chained sequentially via onComplete callbacks.
+    // onAllComplete: optional callback fired after the last reflect fully resolves.
+    // Use this to chain processPsychicPending after all reflects finish.
+    processReflectPending(playerIndex, onAllComplete) {
+        const pendingArray = this.activeBuffs.reflectPending;
+        if (!Array.isArray(pendingArray) || pendingArray.length === 0) {
+            if (typeof onAllComplete === 'function') onAllComplete();
+            return null;
+        }
+
+        // Filter to only this player's reflects
+        const myReflects = pendingArray.filter(p => p.playerIndex === playerIndex);
+        if (myReflects.length === 0) {
+            if (typeof onAllComplete === 'function') onAllComplete();
+            return null;
+        }
+
+        console.log(`🪞 processReflectPending for player ${playerIndex}: ${myReflects.length} reflects queued:`, myReflects.map(r => r.scrollName));
+
+        // Remove this player's reflects from the array
+        this.activeBuffs.reflectPending = pendingArray.filter(p => p.playerIndex !== playerIndex);
+
+        const results = [];
+        let waterActivated = false;
+        const self = this;
+
+        // Store original active player so we can restore it after interactive selections
+        const originalActivePlayer = (typeof activePlayerIndex !== 'undefined') ? activePlayerIndex : null;
+
+        // Run each pending reflect one at a time. Interactive scrolls (requiresSelection) chain
+        // via onComplete so they fully resolve before the next one starts.
+        // When all are done, calls onAllComplete so Psychic (or other follow-up) can begin.
+        const runNext = (index) => {
+            if (index >= myReflects.length) {
+                // All reflects finished — fire the completion callback (starts Psychic, etc.)
+                if (typeof onAllComplete === 'function') onAllComplete();
+                return;
+            }
+
+            const pending = myReflects[index];
+            console.log(`🪞 Processing reflect #${index + 1}/${myReflects.length}: ${pending.scrollName}`);
+            const scrollName = pending.scrollName;
+            const definition = pending.definition;
+            const displayName = definition?.name || scrollName;
+            updateStatus(`Reflect triggers: activating ${displayName}!`);
+
+            // Broadcast reflect-triggered for this scroll immediately before executing,
+            // so remote clients receive them in order and can queue them sequentially.
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                const fullDef = definition?.element ? definition : (self.spellSystem?.patterns?.[scrollName] || definition);
+                broadcastGameAction('reflect-triggered', {
+                    playerIndex: playerIndex,
+                    scrollName: scrollName,
+                    element: fullDef?.element,
+                    elements: fullDef?.element === 'catacomb' ? fullDef?.patterns?.[0]?.map(p => p.type) : null,
+                    isCatacomb: fullDef?.element === 'catacomb'
+                });
+            }
+
+            // Run the reflected scroll's ability with full context
+            const result = self.execute(scrollName, playerIndex, {
+                spell: definition,
+                scrollName,
+                onComplete: () => {
+                    // Restore activePlayerIndex after interactive selection resolves
+                    if (originalActivePlayer !== null && typeof activePlayerIndex !== 'undefined') {
+                        activePlayerIndex = originalActivePlayer;
+                    }
+                    if (typeof syncPlayerState === 'function') syncPlayerState();
+                    runNext(index + 1);
+                }
+            });
+
+            // Restore activePlayerIndex immediately for non-interactive scrolls
+            if (!result?.requiresSelection) {
+                if (originalActivePlayer !== null && typeof activePlayerIndex !== 'undefined') {
+                    activePlayerIndex = originalActivePlayer;
                 }
             }
-            console.log(`🪞 processReflectPending activated elements for player ${playerIndex}:`, Array.from(activated));
-            if (typeof updatePlayerElementSymbols === 'function') {
-                updatePlayerElementSymbols(playerIndex);
+
+            // Only mark water as activated ONCE (even if multiple reflects trigger)
+            if (result.success && self.spellSystem && !waterActivated) {
+                self.spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                const activated = self.spellSystem.playerScrolls[playerIndex].activated;
+                activated.add('water');
+                waterActivated = true;
+                console.log(`🪞 processReflectPending activated water for player ${playerIndex}:`, Array.from(activated));
+                if (typeof updatePlayerElementSymbols === 'function') {
+                    updatePlayerElementSymbols(playerIndex);
+                }
             }
-        }
-        // Include full scroll definition (with element) for broadcast
-        const fullDef = definition?.element ? definition : (this.spellSystem?.patterns?.[scrollName] || definition);
-        return { triggered: true, playerIndex, scrollName, definition: fullDef };
+
+            const fullDef = definition?.element ? definition : (self.spellSystem?.patterns?.[scrollName] || definition);
+            results.push({ triggered: true, playerIndex, scrollName, definition: fullDef });
+
+            // For non-interactive scrolls, immediately advance to the next
+            if (!result?.requiresSelection) {
+                if (typeof syncPlayerState === 'function') syncPlayerState();
+                runNext(index + 1);
+            }
+            // Interactive scrolls will call runNext via onComplete when the player finishes
+        };
+
+        runNext(0);
+
+        return results.length > 0 ? results : null;
     },
 
-    // At start of a player's turn: if they have a pending Psychic, run the stolen scroll and count as void activation.
-    // Returns { triggered: true, playerIndex, scrollName, definition } when processed so caller can broadcast.
+    // At start of a player's turn: if they have pending Psychics, run all stolen scrolls and count as void activation.
+    // Returns array of { triggered: true, playerIndex, scrollName, definition } for all psychics processed so caller can broadcast.
+    // Interactive scrolls (requiresSelection) are chained sequentially via onComplete callbacks.
     processPsychicPending(playerIndex) {
-        const pending = this.activeBuffs.psychicPending;
-        if (!pending || pending.playerIndex !== playerIndex) return null;
-        const scrollName = pending.scrollName;
-        const definition = pending.definition;
-        delete this.activeBuffs.psychicPending;
-        const displayName = definition?.name || scrollName;
-        updateStatus(`Psychic triggers: activating ${displayName}!`);
-        // Run the stolen scroll's ability
-        const result = this.execute(scrollName, playerIndex, { spell: definition, scrollName });
-        if (result.success && this.spellSystem) {
-            this.spellSystem.ensurePlayerScrollsStructure(playerIndex);
-            const activated = this.spellSystem.playerScrolls[playerIndex].activated;
-            // Only count as void activation — the stolen scroll's element does NOT
-            // count toward the win condition (same approach as Reflect counting only water).
-            activated.add('void');
-            console.log(`🔮 processPsychicPending activated void for player ${playerIndex}:`, Array.from(activated));
-            if (typeof updatePlayerElementSymbols === 'function') {
-                updatePlayerElementSymbols(playerIndex);
+        const pendingArray = this.activeBuffs.psychicPending;
+        if (!Array.isArray(pendingArray) || pendingArray.length === 0) return null;
+
+        // Filter to only this player's psychics
+        const myPsychics = pendingArray.filter(p => p.playerIndex === playerIndex);
+        if (myPsychics.length === 0) return null;
+
+        console.log(`🔮 processPsychicPending for player ${playerIndex}: ${myPsychics.length} psychics queued:`, myPsychics.map(r => r.scrollName));
+
+        // Remove this player's psychics from the array
+        this.activeBuffs.psychicPending = pendingArray.filter(p => p.playerIndex !== playerIndex);
+
+        const results = [];
+        let voidActivated = false;
+        const self = this;
+
+        // Run each pending psychic scroll one at a time. If the scroll is interactive
+        // (requiresSelection), the next one only starts after the player finishes the
+        // selection (via the onComplete callback). Non-interactive scrolls run immediately
+        // and advance to the next in the same tick.
+        const runNext = (index) => {
+            if (index >= myPsychics.length) return; // All done
+
+            const pending = myPsychics[index];
+            console.log(`🔮 Processing psychic #${index + 1}/${myPsychics.length}: ${pending.scrollName}`);
+            const scrollName = pending.scrollName;
+            const definition = pending.definition;
+            const displayName = definition?.name || scrollName;
+            updateStatus(`Psychic triggers: activating ${displayName}!`);
+
+            const fullDef = definition?.element ? definition : (self.spellSystem?.patterns?.[scrollName] || definition);
+
+            // Broadcast this trigger to remote clients immediately (before interactive selection starts)
+            // so they can queue it on their side. This replaces the broadcast loop in game-ui.js.
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                broadcastGameAction('psychic-triggered', {
+                    playerIndex,
+                    scrollName,
+                    element: fullDef?.element,
+                    elements: fullDef?.element === 'catacomb' ? fullDef?.patterns?.[0]?.map(p => p.type) : null,
+                    isCatacomb: fullDef?.element === 'catacomb'
+                });
             }
-        }
-        const fullDef = definition?.element ? definition : (this.spellSystem?.patterns?.[scrollName] || definition);
-        return { triggered: true, playerIndex, scrollName, definition: fullDef };
+
+            // CRITICAL: Temporarily set activePlayerIndex to the Psychic caster
+            // so the stolen scroll executes with the correct player context
+            const originalActivePlayer = typeof activePlayerIndex !== 'undefined' ? activePlayerIndex : null;
+            if (typeof activePlayerIndex !== 'undefined') {
+                activePlayerIndex = playerIndex;
+            }
+
+            // Run the stolen scroll's ability (with flag to prevent marking its elements as activated)
+            // Pass onComplete so interactive scrolls (e.g. Heavy Stomp) can chain the next one
+            const result = self.execute(scrollName, playerIndex, {
+                spell: definition,
+                scrollName,
+                skipActivationTracking: true,  // Only void counts toward win condition
+                onComplete: () => {
+                    // Restore activePlayerIndex after interactive selection resolves
+                    if (originalActivePlayer !== null && typeof activePlayerIndex !== 'undefined') {
+                        activePlayerIndex = originalActivePlayer;
+                    }
+                    if (typeof syncPlayerState === 'function') syncPlayerState();
+                    runNext(index + 1);
+                }
+            });
+
+            // Restore activePlayerIndex immediately for non-interactive scrolls
+            // (interactive ones restore it inside the onComplete callback above)
+            if (!result?.requiresSelection) {
+                if (originalActivePlayer !== null && typeof activePlayerIndex !== 'undefined') {
+                    activePlayerIndex = originalActivePlayer;
+                }
+            }
+
+            // Only mark void as activated ONCE (even if multiple psychics trigger)
+            if (result.success && self.spellSystem && !voidActivated) {
+                self.spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                const activated = self.spellSystem.playerScrolls[playerIndex].activated;
+                activated.add('void');
+                voidActivated = true;
+                console.log(`🔮 processPsychicPending activated void for player ${playerIndex}:`, Array.from(activated));
+                if (typeof updatePlayerElementSymbols === 'function') {
+                    updatePlayerElementSymbols(playerIndex);
+                }
+            }
+
+            results.push({ triggered: true, playerIndex, scrollName, definition: fullDef });
+
+            // For non-interactive scrolls, immediately advance to the next
+            if (!result?.requiresSelection) {
+                if (typeof syncPlayerState === 'function') syncPlayerState();
+                runNext(index + 1);
+            }
+            // Interactive scrolls will call runNext via onComplete when the player finishes
+        };
+
+        runNext(0);
+
+        return results.length > 0 ? results : null;
     },
 
     // ============================================
@@ -2513,7 +3015,7 @@ const ScrollEffects = {
     // ============================================
 
     // Water V - Control the Current: This turn, transform water stones that are adjacent to you (no Done button; eligibility updates when you move)
-    enterWaterTransformMode(casterIndex) {
+    enterWaterTransformMode(casterIndex, completionPayload) {
         const self = this;
 
         const playerPos = typeof playerPositions !== 'undefined' ? playerPositions[casterIndex] : (typeof playerPosition !== 'undefined' ? playerPosition : null);
@@ -2529,6 +3031,7 @@ const ScrollEffects = {
             type: 'water-transform',
             casterIndex: casterIndex,
             highlightedStones: initialAdjacent,
+            completionPayload: completionPayload || null,
 
             handleStoneClick(stone) {
                 if (stone.type !== 'water') {
@@ -2725,18 +3228,29 @@ const ScrollEffects = {
         // Update the stone's type and visual
         stone.type = newElement;
 
-        // Update the stone's visual appearance
+        // Remove any water stone indicators (mimicry/chain rings) before transformation
         if (stone.element) {
-            const elementColors = {
-                earth: '#69d83a',
-                fire: '#ed1b43',
-                wind: '#ffce00',
-                void: '#9458f4'
-            };
+            const mimicryIndicator = stone.element.querySelector('.mimicry-indicator');
+            if (mimicryIndicator) {
+                mimicryIndicator.remove();
+            }
+            const chainIndicator = stone.element.querySelector('.chain-indicator');
+            if (chainIndicator) {
+                chainIndicator.remove();
+            }
+        }
 
+        // Update the stone's visual appearance - both color and symbol
+        if (stone.element && typeof STONE_TYPES !== 'undefined' && STONE_TYPES[newElement]) {
             const circle = stone.element.querySelector('circle');
+            const text = stone.element.querySelector('text');
+
             if (circle) {
-                circle.setAttribute('fill', elementColors[newElement]);
+                circle.setAttribute('fill', STONE_TYPES[newElement].color);
+            }
+
+            if (text) {
+                text.textContent = STONE_TYPES[newElement].symbol;
             }
         }
 
@@ -2749,6 +3263,16 @@ const ScrollEffects = {
                 stoneY: stone.y,
                 newElement: newElement
             });
+        }
+
+        // Signal completion to trigger win condition broadcast
+        // Note: Control the Current allows multiple transforms per turn, so we call this after each transform
+        // The win condition is only activated once (when the scroll is first cast), but we need to broadcast it
+        if (this.selectionMode && this.selectionMode.completionPayload) {
+            const payload = this.selectionMode.completionPayload;
+            if (this.spellSystem && typeof this.spellSystem.onSelectionEffectComplete === 'function') {
+                this.spellSystem.onSelectionEffectComplete(payload.scrollName, payload.effectName, payload.spell);
+            }
         }
     },
 
@@ -2858,9 +3382,13 @@ const ScrollEffects = {
                 this.spellSystem.discardToCommonArea(selectedScroll);
             }
 
-            // Draw a new scroll of that element type
+            // Draw a new scroll of the same element from the deck
+            let newScroll = null;
             if (element && this.spellSystem?.scrollDecks?.[element]?.length > 0) {
-                const newScroll = this.spellSystem.scrollDecks[element].pop();
+                newScroll = this.spellSystem.scrollDecks[element].pop();
+            }
+
+            if (newScroll) {
                 playerScrolls.hand.add(newScroll);
                 updateStatus(`Discarded ${scrollDef?.name || selectedScroll}. Drew a new ${element} scroll!`);
             } else {
@@ -3143,6 +3671,14 @@ const ScrollEffects = {
             return;
         }
 
+        // Only show the modal on the caster's client (in multiplayer)
+        const isMultiplayer = typeof window !== 'undefined' && window.isMultiplayer;
+        const myPlayerIndex = typeof window !== 'undefined' ? window.myPlayerIndex : null;
+        if (isMultiplayer && myPlayerIndex !== null && casterIndex !== myPlayerIndex) {
+            console.log(`🔥 Sacrificial Pyre: Skipping modal for non-local player ${casterIndex} (I am player ${myPlayerIndex})`);
+            return;
+        }
+
         const scrollArray = Array.from(playerScrolls.hand);
         this.showScrollSelectionModal(scrollArray, 'Select a scroll to sacrifice and activate:', (selectedScroll) => {
             // Remove from hand
@@ -3153,14 +3689,72 @@ const ScrollEffects = {
                 this.spellSystem.discardToCommonArea(selectedScroll);
             }
 
-            // Execute the scroll's effect
-            const result = self.execute(selectedScroll, casterIndex, {});
-
+            // Get the scroll definition
             const scrollDef = this.spellSystem?.patterns?.[selectedScroll];
-            updateStatus(`Sacrificed ${scrollDef?.name || selectedScroll} to the pyre!`);
+            if (!scrollDef) {
+                updateStatus(`Error: Could not find scroll definition for ${selectedScroll}`);
+                return;
+            }
+
+            // Activate the scroll: add stones to pool and track element
+            if (scrollDef.element === 'catacomb') {
+                // Catacomb scrolls: count how many of each element and add stones
+                const elementCounts = {};
+                if (scrollDef.patterns && scrollDef.patterns[0]) {
+                    scrollDef.patterns[0].forEach(pos => {
+                        elementCounts[pos.type] = (elementCounts[pos.type] || 0) + 1;
+                    });
+                }
+
+                const rewards = [];
+                Object.entries(elementCounts).forEach(([element, count]) => {
+                    const pools = typeof playerPools !== 'undefined' ? playerPools : [];
+                    const poolCaps = typeof playerPoolCapacity !== 'undefined' ? playerPoolCapacity : {};
+                    if (pools[casterIndex] && poolCaps) {
+                        pools[casterIndex][element] = Math.min(
+                            poolCaps[element] || 5,
+                            (pools[casterIndex][element] || 0) + count
+                        );
+                        rewards.push(`+${count} ${element}`);
+                    }
+                    if (typeof updateStoneCount === 'function') updateStoneCount(element);
+                });
+                updateStatus(`Sacrificed ${scrollDef.name}! Added ${rewards.join(', ')} stones!`);
+            } else {
+                // Regular element scrolls: add stones based on level
+                const pools = typeof playerPools !== 'undefined' ? playerPools : [];
+                const poolCaps = typeof playerPoolCapacity !== 'undefined' ? playerPoolCapacity : {};
+                if (pools[casterIndex] && poolCaps) {
+                    pools[casterIndex][scrollDef.element] = Math.min(
+                        poolCaps[scrollDef.element] || 5,
+                        (pools[casterIndex][scrollDef.element] || 0) + scrollDef.level
+                    );
+                }
+                if (typeof updateStoneCount === 'function') updateStoneCount(scrollDef.element);
+
+                updateStatus(`Sacrificed ${scrollDef.name}! Added +${scrollDef.level} ${scrollDef.element} stones!`);
+            }
+
+            // NOTE: Only FIRE is marked as activated (from casting Sacrificial Pyre itself)
+            // The sacrificed scroll's elements do NOT count toward win condition
+            // Fire activation is already handled by the normal executeSpell flow for FIRE_SCROLL_3
+
+            // If the scroll has a special effect, execute it too
+            const effect = self.getEffect(selectedScroll);
+            if (effect) {
+                self.execute(selectedScroll, casterIndex, {});
+            }
+
+            // Broadcast stone gains to other players (for resource tracking only, not win condition)
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof syncPlayerState === 'function') {
+                syncPlayerState();
+            }
 
             if (this.spellSystem?.updateScrollCount) {
                 this.spellSystem.updateScrollCount();
+            }
+            if (typeof updateCommonAreaUI === 'function') {
+                updateCommonAreaUI();
             }
         });
     },
@@ -3449,7 +4043,20 @@ const ScrollEffects = {
             cursor: 'pointer',
             fontSize: '14px'
         });
-        doneBtn.onclick = () => overlay.remove();
+        // Helper: close the scroll inventory popup (if open) and reopen it to reflect Transmute changes
+        const refreshInventoryPopup = () => {
+            const openInv = document.getElementById('scroll-inventory-popup');
+            if (openInv && self.spellSystem?.showInventory) {
+                openInv.remove();
+                self.spellSystem.showInventory();
+            }
+        };
+
+        doneBtn.onclick = () => {
+            overlay.remove();
+            // Refresh inventory popup so discarded scrolls no longer appear in hand/active lists
+            refreshInventoryPopup();
+        };
         modal.appendChild(doneBtn);
 
         // Cancel button
@@ -3467,7 +4074,11 @@ const ScrollEffects = {
             cursor: 'pointer',
             fontSize: '14px'
         });
-        cancelBtn.onclick = () => overlay.remove();
+        cancelBtn.onclick = () => {
+            overlay.remove();
+            // Refresh inventory even on Cancel — some items may have been discarded before cancelling
+            refreshInventoryPopup();
+        };
         modal.appendChild(cancelBtn);
 
         overlay.appendChild(modal);
@@ -4126,11 +4737,17 @@ const ScrollEffects = {
         // Use same radius as tileHasStones and findTileAtPosition: TILE_SIZE * 4
         const tileRadius = typeof TILE_SIZE !== 'undefined' ? TILE_SIZE * 4 : 80;
 
+        // Track which stones we're removing for multiplayer sync
+        const removedStoneIds = [];
+
         // Find and remove ALL stones on this tile (iterate backwards for safe splice)
         for (let i = placedStones.length - 1; i >= 0; i--) {
             const stone = placedStones[i];
             const dist = Math.sqrt(Math.pow(stone.x - tile.x, 2) + Math.pow(stone.y - tile.y, 2));
             if (dist < tileRadius) {
+                // Track stone ID for broadcast
+                removedStoneIds.push(stone.id);
+
                 // Remove stone from DOM
                 if (stone.element && stone.element.parentNode) {
                     stone.element.parentNode.removeChild(stone.element);
@@ -4143,7 +4760,8 @@ const ScrollEffects = {
         // Broadcast in multiplayer
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
             broadcastGameAction('stones-destroyed', {
-                tileId: tile.id
+                tileId: tile.id,
+                stoneIds: removedStoneIds
             });
         }
     },
