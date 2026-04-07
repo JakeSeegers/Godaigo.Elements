@@ -112,7 +112,7 @@ const CATACOMB_SCROLL_EFFECTS = {
     6: { name: 'Seed the Skies', description: 'Gather up to 5 water stones. This turn, you may place water and wind stones on any valid hex (not just adjacent).' },
     7: { name: 'Reflecting Pool', description: 'Regain 2 AP for each different stone type within 5 spaces of you. This can be used once per turn.' },
     8: { name: 'Plunder', description: 'Choose a target player. Select one of their active scrolls and discard it to the common area.' },
-    9: { name: 'Quick Reflexes', description: 'Until your next turn, level 1 scrolls cost 0 AP to activate. Each time you use a react scroll during this time, draw 1 void and 1 wind stone.' },
+    9: { name: 'Quick Reflexes', description: 'Search for an available level 1 scroll and add it to your hand. Draw 2 stones of that type. Until your next turn, level 1 scrolls cost 0 AP to activate. Shuffle the deck searched.' },
     10: { name: 'Combust', description: 'Select a tile and destroy all stones on it. Cannot target player tiles.' }
 };
 

@@ -1,0 +1,23 @@
+{
+  "output": {
+    "filePath": "repomix-output.txt",
+    "style": "xml",
+    "headerText": "Godaigo — hex-tile strategy game. See memory/backlog.md for pending tasks.",
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "showLineNumbers": true,
+    "copyToClipboard": false
+  },
+  "include": [
+    "index.html",
+    "css/**",
+    "js/**"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "repomix-output.txt"
+    ]
+  }
+}

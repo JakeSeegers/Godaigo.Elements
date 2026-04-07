@@ -13,82 +13,216 @@
     <!-- ============================================
          LOBBY WRAPPER (shown before game starts)
          ============================================ -->
-    <div class="lobby-wrapper">
+    <div class="lobby-wrapper" id="lobby-wrapper">
         <h1 class="site-logo">
             <img src="GodaigoLogoText.svg" alt="Godaigo">
         </h1>
+
+    <!-- Auth Screen (shown before lobby) -->
+    <div id="auth-screen" style="background:#222; padding:30px; border-radius:10px; max-width:400px; margin:0 auto 20px;">
+        <h2 style="color:#d9b08c; margin-top:0; text-align:center;">Sign In</h2>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <input type="text" id="auth-username" placeholder="Username"
+                   style="padding:10px; font-size:16px; background:#333; color:#eee; border:2px solid #666; border-radius:5px;">
+            <input type="password" id="auth-password" placeholder="Password"
+                   style="padding:10px; font-size:16px; background:#333; color:#eee; border:2px solid #666; border-radius:5px;">
+            <div style="display:flex; gap:10px;">
+                <button id="auth-login-btn" onclick="authLogin()"
+                        style="flex:1; padding:12px; font-size:16px; background:#d9b08c; color:#1a1a1a; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">
+                    Log In
+                </button>
+                <button id="auth-register-btn" onclick="authRegister()"
+                        style="flex:1; padding:12px; font-size:16px; background:#444; color:#eee; border:2px solid #666; border-radius:5px; cursor:pointer;">
+                    Register
+                </button>
+            </div>
+            <div id="auth-error" style="color:#ff6b6b; font-size:14px; text-align:center; display:none;"></div>
+            <div id="auth-loading" style="display:none; text-align:center; color:#d9b08c;">Signing in...</div>
+        </div>
     </div>
 
-    <!-- Multiplayer Lobby -->
-    <div id="multiplayer-lobby" style="background: #222; padding: 30px; border-radius: 10px; margin-bottom: 20px; max-width: 600px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h2 style="color: #d9b08c; margin-top: 0;">Multiplayer Lobby</h2>
+    <!-- Multiplayer Lobby (hidden until auth succeeds) -->
+    <div id="multiplayer-lobby" style="display:none; background: #222; padding: 30px; border-radius: 10px; margin-bottom: 20px; max-width: 860px;">
+
+        <!-- Auth bar: shows signed-in username + sign-out button -->
+        <div id="auth-bar" style="display:none; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 12px; background:#333; border-radius:5px;">
+            <span id="auth-bar-name" style="color:#d9b08c; font-size:14px;"></span>
+            <div style="display:flex; gap:8px;">
+                <button onclick="gami_openPanel()" style="padding:4px 12px; font-size:13px; background:#555; color:#d9b08c; border:1px solid #888; border-radius:4px; cursor:pointer;">👤 Profile</button>
+                <button onclick="authSignOut()" style="padding:4px 12px; font-size:13px; background:#555; color:#eee; border:1px solid #888; border-radius:4px; cursor:pointer;">Sign Out</button>
+            </div>
+        </div>
+
+        <!-- Header row: title + hidden reset button -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h2 style="color: #d9b08c; margin: 0;">Multiplayer Lobby</h2>
             <button id="reset-lobby-btn" onclick="resetLobby()"
                     style="display: none; padding: 8px 15px; font-size: 14px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">
                 🔄 Reset Lobby
             </button>
         </div>
 
-        <!-- Join Form -->
-        <div id="join-form" style="margin-bottom: 20px;">
-            <input type="text" id="username-input" placeholder="Enter your username"
-                   style="padding: 10px; font-size: 16px; width: 300px; background: #333; color: #eee; border: 2px solid #666; border-radius: 5px;">
-            <button id="join-button" onclick="joinLobby()"
-                    style="padding: 10px 20px; font-size: 16px; margin-left: 10px;">Join Game</button>
-            <div id="join-loading" style="display: none; margin-top: 15px; text-align: center;">
-                <div style="display: inline-block; width: 30px; height: 30px; border: 3px solid #666; border-top: 3px solid #d9b08c; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                <p style="color: #d9b08c; margin-top: 10px;">Joining lobby...</p>
+        <!-- Username is derived from auth and stored in lobbyUsername (lobby.js).
+             The input is kept hidden so existing code that reads it still works. -->
+        <input type="hidden" id="username-input">
+
+        <!-- ── Panel A: Game Browser (shown by default after login) ── -->
+        <div id="game-browser-panel" style="display: none;">
+            <div style="display: flex; gap: 16px; align-items: flex-start;">
+
+                <!-- Left column: inputs & room browser -->
+                <div style="flex: 1; min-width: 0;">
+
+                    <!-- Room Name input -->
+                    <div id="room-name-row" style="margin-bottom: 12px;">
+                        <label style="color: #999; font-size: 12px; display: block; margin-bottom: 4px;">Room Name <span style="color:#666;">(optional — used when hosting)</span></label>
+                        <input type="text" id="room-name-input" placeholder="e.g. Fire Nation Showdown" maxlength="30"
+                               style="padding: 10px; font-size: 15px; width: 100%; box-sizing: border-box; background: #333; color: #eee; border: 2px solid #666; border-radius: 5px;">
+                    </div>
+
+                    <!-- Host / create buttons -->
+                    <div id="room-action-buttons" style="display: flex; gap: 10px; margin-bottom: 12px;">
+                        <button id="host-public-btn" onclick="hostPublicGame()"
+                                style="flex:1; padding: 10px; font-size: 15px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            🌐 Host Public Game
+                        </button>
+                        <button id="create-private-btn" onclick="createPrivateRoom()"
+                                style="flex:1; padding: 10px; font-size: 15px; background: #7B5EA7; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            🔒 Create Private Room
+                        </button>
+                    </div>
+
+                    <!-- Join by code -->
+                    <div id="join-code-row" style="display: flex; gap: 8px; margin-bottom: 16px;">
+                        <input type="text" id="join-code-input" placeholder="Room code (e.g. ABCDEF)" maxlength="6"
+                               oninput="this.value = this.value.toUpperCase()"
+                               style="flex:1; padding: 10px; font-size: 16px; font-family: monospace; letter-spacing: 3px; text-transform: uppercase; background: #333; color: #eee; border: 2px solid #666; border-radius: 5px;">
+                        <button id="join-code-btn" onclick="joinByCode()"
+                                style="padding: 10px 18px; font-size: 15px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            Join
+                        </button>
+                    </div>
+
+                    <!-- Public game list -->
+                    <div id="public-games-section" style="margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <h3 style="margin: 0; color: #d9b08c; font-size: 15px;">Open Public Games</h3>
+                            <button id="refresh-browser-btn" onclick="refreshGameBrowser()"
+                                    style="padding: 4px 12px; font-size: 12px; background: #444; color: #eee; border: 1px solid #666; border-radius: 4px; cursor: pointer;">
+                                Refresh
+                            </button>
+                        </div>
+                        <div id="public-games-list"
+                             style="background: #1a1a1a; border-radius: 5px; min-height: 80px; max-height: 220px; overflow-y: auto; padding: 4px;">
+                            <p style="color: #666; font-style: italic; text-align: center; padding: 20px 0; margin: 0;">Loading...</p>
+                        </div>
+                    </div>
+
+                    <!-- Browser status / error line -->
+                    <div id="browser-status" style="color: #ff6b6b; font-size: 13px; min-height: 18px; margin-top: 4px;"></div>
+
+                </div><!-- end left column -->
+
+                <!-- Right column: leaderboard -->
+                <div style="width: 260px; flex-shrink: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h3 style="margin: 0; color: #d9b08c; font-size: 15px;">🏆 Leaderboard</h3>
+                        <button onclick="window.loadMainLeaderboard()"
+                                style="padding: 4px 10px; font-size: 12px; background: #444; color: #eee; border: 1px solid #666; border-radius: 4px; cursor: pointer;">
+                            ↻
+                        </button>
+                    </div>
+                    <div id="main-leaderboard-body"
+                         style="background: #1a1a1a; border-radius: 5px; overflow-y: auto; max-height: 360px; padding: 4px;">
+                        <div class="gami-loading" style="padding: 12px;">Sign in to view rankings.</div>
+                    </div>
+                </div><!-- end right column -->
+
             </div>
         </div>
 
-        <!-- Player List -->
-        <div id="player-list" style="background: #333; padding: 20px; border-radius: 5px; margin-bottom: 20px; min-height: 100px;">
-            <h3 style="margin-top: 0; color: #d9b08c;">Players in Lobby:</h3>
-            <div id="players-container" style="color: #eee;"></div>
-        </div>
+        <!-- ── Panel B: Waiting Room (shown after joining a room) ── -->
+        <div id="waiting-room-panel" style="display: none;">
 
-        <!-- Ready Button (hidden until joined) -->
-        <div id="ready-controls" style="display: none; text-align: center;">
-            <button id="ready-button" onclick="toggleReady()"
-                    style="padding: 15px 40px; font-size: 18px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                I'm Ready!
-            </button>
+            <!-- Room name header (static once set) -->
+            <div id="room-name-display" style="margin-bottom: 10px; padding: 6px 0;">
+                <span style="color: #999; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Room</span>
+                <span id="room-name-value" style="color: #d9b08c; font-size: 20px; font-weight: bold; margin-left: 10px;"></span>
+            </div>
 
-            <!-- Host-only Settings & Start Game -->
-            <div id="host-settings" style="display: none; margin-top: 20px; background: #333; padding: 15px; border-radius: 5px;">
-                <h4 style="color: #d9b08c; margin-top: 0;">Host Settings</h4>
-
-                <div style="margin-bottom: 10px;">
-                    <label style="color: #eee; display: block; margin-bottom: 5px;">Turn Time Limit:</label>
-                    <select id="timeout-setting" style="padding: 8px; background: #444; color: #eee; border: 1px solid #666; border-radius: 5px;">
-                        <option value="0">Disabled</option>
-                        <option value="30">30 seconds</option>
-                        <option value="60">1 minute</option>
-                        <option value="120" selected>2 minutes</option>
-                        <option value="180">3 minutes</option>
-                        <option value="300">5 minutes</option>
-                    </select>
-                    <label style="color: #eee; display: flex; align-items: center; gap: 8px; margin-top: 10px;">
-                        <input type="checkbox" id="kick-on-timeout" checked>
-                        Kick active player when turn timer expires
-                    </label>
-                    <div style="color: #999; font-size: 12px; margin-top: 6px;">
-                        If disabled, expired turns will auto-pass to the next player.
-                    </div>
+            <!-- Room info bar -->
+            <div id="room-info-bar" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #333; padding: 10px 14px; border-radius: 5px; margin-bottom: 14px;">
+                <!-- Private room code (hidden for public games) -->
+                <div id="room-code-display" style="display: none; flex-shrink: 0;">
+                    <span style="color: #999; font-size: 12px; display: block; margin-bottom: 2px;">Room Code</span>
+                    <span id="room-code-value" onclick="copyRoomCode()"
+                          style="font-family: monospace; font-size: 22px; font-weight: bold; color: #d9b08c; letter-spacing: 4px; cursor: pointer;" title="Click to copy">
+                        ——————
+                    </span>
                 </div>
-
-                <button id="host-start-button" onclick="hostStartGame()"
-                        style="padding: 15px 40px; font-size: 18px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
-                    Start Game (Host)
+                <div style="flex:1; min-width: 60px;">
+                    <span style="color: #999; font-size: 12px; display: block;">Players</span>
+                    <span id="room-player-count" style="color: #eee; font-size: 18px; font-weight: bold;">0 / 5</span>
+                </div>
+                <span id="room-type-badge"
+                      style="padding: 3px 10px; font-size: 11px; font-weight: bold; border-radius: 20px; background: #444; color: #aaa; letter-spacing: 1px;">
+                    PUBLIC
+                </span>
+                <button id="leave-room-btn" onclick="leaveRoom()"
+                        style="padding: 6px 14px; font-size: 13px; background: #c0392b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Leave Room
                 </button>
             </div>
 
-            <p id="lobby-instruction" style="color: #999; margin-top: 10px; font-size: 14px;">
-                The host can start the game when 2-5 players have joined
-            </p>
+            <!-- Player List -->
+            <div id="player-list" style="background: #333; padding: 20px; border-radius: 5px; margin-bottom: 16px; min-height: 80px;">
+                <h3 style="margin-top: 0; color: #d9b08c;">Players in Room:</h3>
+                <div id="players-container" style="color: #eee;"></div>
+            </div>
+
+            <!-- Ready Button (hidden until joined; shown by joinRoomAsPlayer) -->
+            <div id="ready-controls" style="display: none; text-align: center;">
+                <button id="ready-button" onclick="toggleReady()"
+                        style="padding: 15px 40px; font-size: 18px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    I'm Ready!
+                </button>
+
+                <!-- Host-only Settings & Start Game -->
+                <div id="host-settings" style="display: none; margin-top: 20px; background: #333; padding: 15px; border-radius: 5px;">
+                    <h4 style="color: #d9b08c; margin-top: 0;">Host Settings</h4>
+
+                    <div style="margin-bottom: 10px;">
+                        <label style="color: #eee; display: block; margin-bottom: 5px;">Turn Time Limit:</label>
+                        <select id="timeout-setting" style="padding: 8px; background: #444; color: #eee; border: 1px solid #666; border-radius: 5px;">
+                            <option value="0">Disabled</option>
+                            <option value="30">30 seconds</option>
+                            <option value="60">1 minute</option>
+                            <option value="120" selected>2 minutes</option>
+                            <option value="180">3 minutes</option>
+                            <option value="300">5 minutes</option>
+                        </select>
+                        <label style="color: #eee; display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                            <input type="checkbox" id="kick-on-timeout" checked>
+                            Kick active player when turn timer expires
+                        </label>
+                        <div style="color: #999; font-size: 12px; margin-top: 6px;">
+                            If disabled, expired turns will auto-pass to the next player.
+                        </div>
+                    </div>
+
+                    <button id="host-start-button" onclick="hostStartGame()"
+                            style="padding: 15px 40px; font-size: 18px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
+                        Start Game (Host)
+                    </button>
+                </div>
+
+                <p id="lobby-instruction" style="color: #999; margin-top: 10px; font-size: 14px;">
+                    The host can start the game when 2–5 players have joined
+                </p>
+            </div>
         </div>
 
-        <!-- Status -->
+        <!-- Status line (always visible) -->
         <div id="lobby-status" style="text-align: center; color: #999; margin-top: 15px;"></div>
     </div>
 
@@ -107,7 +241,7 @@
             Each additional player adds 6 more tiles in a spiral pattern
         </p>
     </div>
-    </div><!-- End lobby-wrapper -->
+</div><!-- End lobby-wrapper -->
 
     <!-- ============================================
          NEW GAME LAYOUT (CSS Grid based)
@@ -120,18 +254,11 @@
                 <div class="hud-player">
                     <span class="player-dot" id="hud-player-dot"></span>
                     <span class="hud-player-name" id="hud-player-name">Your Turn</span>
+                    <button class="hud-stone-info-btn" onclick="showStoneInfoPopup()" title="Stone types &amp; abilities">Elemental Reference Sheet</button>
                 </div>
             </div>
 
-            <div class="hud-section middle">
-                <div class="hud-badges">
-                    <span class="hud-badge hand" title="Scrolls in hand">🎴 <span id="hud-hand-count">0</span>/3</span>
-                    <span class="hud-badge active" title="Active scrolls">⚡ <span id="hud-active-count">0</span>/2</span>
-                    <span class="hud-badge common" title="Common area scrolls">🌐 <span id="hud-common-count">0</span></span>
-                </div>
-            </div>
-
-            <div class="hud-section right">
+<div class="hud-section right">
                 <div class="hud-ap" title="Action Points">
                     <span class="hud-ap-value" id="hud-ap-value">5</span>
                     <span class="hud-ap-label">AP</span>
@@ -141,6 +268,8 @@
                     <span>⏱</span>
                     <span id="hud-timer-value">2:00</span>
                 </div>
+                <button id="emoji-panel-btn" onclick="window.emojiSystem?.togglePanel()" title="Emojis">😊</button>
+                <button id="cosmetics-panel-btn" onclick="window.cosmeticsSystem?.togglePanel()" title="Cosmetics">🎨</button>
                 <button class="hud-toggle-btn" id="toggle-right-panel" title="Toggle opponents panel">▶</button>
             </div>
         </div>
@@ -250,7 +379,6 @@
 
                 <!-- Player Tiles Section -->
                 <div class="tiles-section">
-                    <div class="section-label">Player Tiles (<span id="new-player-tile-count">0</span>)</div>
                     <div id="new-player-tile-deck" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
                         <!-- Player tiles will be added here dynamically -->
                     </div>
@@ -291,7 +419,7 @@
             <div class="action-divider"></div>
 
             <div class="action-group">
-                <button id="undo-move">⟲ Undo</button>
+                <button id="undo-move">⟲ Undo Step</button>
             </div>
 
             <div class="action-divider"></div>
@@ -384,7 +512,7 @@
                     </div>
                     <button id="inventory-toggle" title="Show/hide inventory">🎒 Inventory</button>
                     <button id="end-turn" style="display: none;">End Turn</button>
-                    <button id="undo-move">Undo Move</button>
+                    <button id="undo-move">Undo Step</button>
                     <button id="scroll-inventory">📜 Scrolls (<span id="scroll-count">0</span>)</button>
                     <button id="cast-spell">✨ Cast Spell (2 AP)</button>
                                         <button id="leave-game" style="display: none; background: #f44336;">Leave Game</button>
@@ -439,6 +567,65 @@
     <script src="js/multiplayer-state.js" charset="UTF-8"></script>
     <script src="js/game-core.js" charset="UTF-8"></script>
     <script src="js/game-ui.js" charset="UTF-8"></script>
+    <script src="js/gamification.js" charset="UTF-8"></script>
+    <script src="js/gamification-ui.js" charset="UTF-8"></script>
     <script src="js/lobby.js" charset="UTF-8"></script>
+    <script src="js/emoji-system.js" charset="UTF-8"></script>
+    <script src="js/cosmetics-system.js" charset="UTF-8"></script>
+
+    <script>
+    function showStoneInfoPopup() {
+        if (document.getElementById('stone-info-overlay')) return;
+        const stones = [
+            {
+                name: 'Earth', symbol: '▲', color: '#69d83a',
+                cost: 5,
+                desc: 'The strongest stone. Costs the most AP to break. Earns the most XP when broken by opponents. Immune to transmutation by default.'
+            },
+            {
+                name: 'Water', symbol: '◯', color: '#5894f4',
+                cost: 4,
+                desc: 'Mimics the element of an adjacent stone when determining XP rewards. Can be transformed into another stone type using the Control the Current scroll.'
+            },
+            {
+                name: 'Fire', symbol: '♦', color: '#ed1b43',
+                cost: 3,
+                desc: 'A mid-rank offensive stone. Adjacent void stones nullify fire — the fire stone\'s element is suppressed and earns no XP when broken.'
+            },
+            {
+                name: 'Wind', symbol: '≋', color: '#ffce00',
+                cost: 2,
+                desc: 'A low-cost stone, quick to place and cheap to break. Effective for filling territory or protecting more valuable stones.'
+            },
+            {
+                name: 'Void', symbol: '✺', color: '#9458f4',
+                cost: 1,
+                desc: 'The cheapest stone to break. Nullifies adjacent fire stones, removing their element bonus. Strategic for countering fire-heavy players.'
+            }
+        ];
+
+        const rows = stones.map(s => `
+            <div class="stone-row">
+                <div class="stone-icon" style="background:${s.color};color:#111;">${s.symbol}</div>
+                <div class="stone-row-info">
+                    <div class="stone-row-name" style="color:${s.color};">${s.name}</div>
+                    <div class="stone-row-desc">${s.desc}</div>
+                    <div class="stone-row-cost">Break cost: ${s.cost} AP</div>
+                </div>
+            </div>`).join('');
+
+        const overlay = document.createElement('div');
+        overlay.id = 'stone-info-overlay';
+        overlay.className = 'stone-info-overlay';
+        overlay.innerHTML = `
+            <div class="stone-info-modal" role="dialog" aria-label="Stone types">
+                <button class="stone-info-close" onclick="document.getElementById('stone-info-overlay').remove()" aria-label="Close">×</button>
+                <h3>Stone Types &amp; Abilities</h3>
+                ${rows}
+            </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+    </script>
 </body>
 </html>

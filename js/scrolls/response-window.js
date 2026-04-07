@@ -57,7 +57,8 @@ class ResponseWindowSystem {
         }
 
         for (const scrollName of allCastableScrolls) {
-            if (this.checkPatternForPlayer(scrollName, playerIndex)) {
+            const patternOk = this.checkPatternForPlayer(scrollName, playerIndex);
+            if (patternOk) {
                 const scrollDef = this.spellSystem.patterns[scrollName];
                 const isCounter = scrollDef?.canCounter === 'any';
                 const isResponse = scrollDef?.isResponse === true;
@@ -66,7 +67,10 @@ class ResponseWindowSystem {
                 // Regular scrolls can't be cast as responses
                 if (isCounter || isResponse) {
                     const cost = this.spellSystem?.getSpellCost ? this.spellSystem.getSpellCost(scrollDef, playerIndex) : 2;
-                    if (playerAP < cost) continue;
+                    if (playerAP < cost) {
+                        console.log(`  ↳ ${scrollName}: pattern OK, isResponse=${isResponse} but can't afford (AP=${playerAP}, cost=${cost})`);
+                        continue;
+                    }
                     validScrolls.push({
                         name: scrollName,
                         definition: scrollDef,
@@ -75,12 +79,16 @@ class ResponseWindowSystem {
                         fromCommonArea: commonScrolls.includes(scrollName),
                         cost: cost
                     });
+                } else {
+                    console.log(`  ↳ ${scrollName}: pattern OK but not a counter/response scroll`);
                 }
+            } else {
+                console.log(`  ↳ ${scrollName}: pattern NOT matched for player ${playerIndex}`);
             }
         }
 
         if (validScrolls.length === 0) {
-            return { canRespond: false, validScrolls: [], reason: 'No valid responses you can afford' };
+            return { canRespond: false, validScrolls: [], reason: `No valid responses you can afford (AP=${playerAP})` };
         }
 
         return { canRespond: true, validScrolls, reason: null };
@@ -440,11 +448,6 @@ class ResponseWindowSystem {
         // Spend the AP for the response
         this.spendPlayerAP(myIndex, cost);
         console.log(`  Spent ${cost} AP for response`);
-
-        // Quick Reflexes: reward react usage immediately on responder client
-        if (this.spellSystem?.scrollEffects?.handleQuickReflexesReact) {
-            this.spellSystem.scrollEffects.handleQuickReflexesReact(myIndex);
-        }
 
         // Add response to stack
         this.responseStack.push({
@@ -945,9 +948,16 @@ class ResponseWindowSystem {
     // Multiplayer broadcast methods
     broadcastResponseWindowOpened(scrollData, casterIndex) {
         if (typeof broadcastGameAction === 'function') {
+            // Include the current common area state so receiving clients can apply it
+            // before checking canPlayerRespond — avoids a race condition where
+            // common-area-update (e.g. Psychic moving there) hasn't arrived yet.
+            const commonAreaSnapshot = this.spellSystem?.commonArea
+                ? { ...this.spellSystem.commonArea }
+                : null;
             broadcastGameAction('response-window-opened', {
                 scrollName: scrollData.name,
-                casterIndex: casterIndex
+                casterIndex: casterIndex,
+                commonArea: commonAreaSnapshot
             });
         }
     }

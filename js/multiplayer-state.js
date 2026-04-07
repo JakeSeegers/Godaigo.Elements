@@ -15,6 +15,14 @@ let isPlacementPhase = false;
 // Mobile deck initial state is set later after isMobile is computed
 let allPlayersData = []; // Store all player data from database (id, player_index, color, username)
 
+// Multi-room state
+let currentGameId = null;    // ID of the game_room row we have joined
+let currentJoinCode = null;  // 6-char code for private rooms, null for public games
+
+// Turn synchronization
+let currentTurnNumber = 0; // Increments with each turn change (for desync detection)
+let lastReceivedTurnNumber = 0; // Last turn number received from broadcast
+
 // Helper function to get player display name (Username (Color))
 function getPlayerColorName(playerIndex) {
     const colorNames = {
@@ -162,6 +170,33 @@ document.addEventListener('DOMContentLoaded', () => {
                                 spell: scrollDef,
                                 triggeringScroll: entry.triggeringScroll
                             });
+
+                            // Track activated element(s) for win condition (response scrolls count too!)
+                            spellSystem.ensurePlayerScrollsStructure(entry.casterIndex);
+                            if (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0]) {
+                                // Catacomb scrolls activate each component element
+                                const elements = new Set(scrollDef.patterns[0].map(pos => pos.type));
+                                elements.forEach(el => spellSystem.playerScrolls[entry.casterIndex].activated.add(el));
+                            } else {
+                                spellSystem.playerScrolls[entry.casterIndex].activated.add(scrollDef.element);
+                            }
+                            if (typeof updatePlayerElementSymbols === 'function') {
+                                updatePlayerElementSymbols(entry.casterIndex);
+                            }
+
+                            // Broadcast the activation in multiplayer
+                            if (isMultiplayer && typeof broadcastGameAction === 'function') {
+                                const activatedElements = (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0])
+                                    ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
+                                    : [scrollDef.element];
+                                broadcastGameAction('scroll-effect', {
+                                    playerIndex: entry.casterIndex,
+                                    scrollName: scrollName,
+                                    effectName: effect.name,
+                                    element: scrollDef.element,
+                                    activatedElements: activatedElements
+                                });
+                            }
                         }
                     } else {
                         console.log(`Skipping response effect execution for ${scrollName} (responder is player ${entry.casterIndex}, I am ${myPlayerIndex})`);
@@ -177,6 +212,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Regular resolved scroll (non-original)
                     console.log(`Applying resolved scroll effects: ${scrollName}`);
                     spellSystem.applyScrollEffects(scrollName, scrollDef);
+                } else if (entry.result === 'countered') {
+                    // Original scroll was countered - do NOT apply its effects
+                    console.log(`Original scroll countered: ${scrollName} - skipping execution`);
+                    // Still handle scroll disposition (remove from active scrolls, etc.)
+                    spellSystem.handleScrollDisposition(scrollName, fromCommonArea);
                 } else if (entry.result === 'countered-original') {
                     // Counter scroll was cast - execute its effect (e.g. Psychic stores the stolen scroll)
                     const counterCasterIdx = entry.casterIndex;
@@ -189,6 +229,33 @@ document.addEventListener('DOMContentLoaded', () => {
                                 scrollName: scrollName,
                                 triggeringScroll: entry.triggeringScroll
                             });
+
+                            // Track activated element(s) for win condition (counter scrolls count too!)
+                            spellSystem.ensurePlayerScrollsStructure(counterCasterIdx);
+                            if (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0]) {
+                                // Catacomb scrolls activate each component element
+                                const elements = new Set(scrollDef.patterns[0].map(pos => pos.type));
+                                elements.forEach(el => spellSystem.playerScrolls[counterCasterIdx].activated.add(el));
+                            } else {
+                                spellSystem.playerScrolls[counterCasterIdx].activated.add(scrollDef.element);
+                            }
+                            if (typeof updatePlayerElementSymbols === 'function') {
+                                updatePlayerElementSymbols(counterCasterIdx);
+                            }
+
+                            // Broadcast the activation in multiplayer
+                            if (isMultiplayer && typeof broadcastGameAction === 'function') {
+                                const activatedElements = (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0])
+                                    ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
+                                    : [scrollDef.element];
+                                broadcastGameAction('scroll-effect', {
+                                    playerIndex: counterCasterIdx,
+                                    scrollName: scrollName,
+                                    effectName: effect.name,
+                                    element: scrollDef.element,
+                                    activatedElements: activatedElements
+                                });
+                            }
                         }
                     }
                     // Check if the effect flagged this scroll to go to common area (e.g. Psychic)

@@ -1,10 +1,442 @@
         // ========================================
+        // AUTH SYSTEM (Supabase Auth)
+        // ========================================
+
+        // On page load: restore an existing session so the user doesn't have to log in again
+        async function checkAuthSession() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                onAuthSuccess(session.user);
+            }
+        }
+
+        async function authLogin() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            if (!username || !password) { showAuthError('Please enter a username and password.'); return; }
+
+            setAuthLoading(true);
+            const email = username.toLowerCase() + '@godaigo.game';
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            setAuthLoading(false);
+
+            if (error) { showAuthError(error.message); return; }
+            onAuthSuccess(data.user);
+        }
+
+        async function authRegister() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            if (!username) { showAuthError('Please enter a username.'); return; }
+            if (password.length < 6) { showAuthError('Password must be at least 6 characters.'); return; }
+            if (!/^[a-zA-Z0-9_\-\.]+$/.test(username)) {
+                showAuthError('Username may only contain letters, numbers, _, -, .');
+                return;
+            }
+
+            setAuthLoading(true);
+            const email = username.toLowerCase() + '@godaigo.game';
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: { data: { username } }
+            });
+            setAuthLoading(false);
+
+            if (error) {
+                // Replace the internal fake email with just the username in error messages
+                showAuthError(error.message.replace(email, username));
+                return;
+            }
+            if (data.session) {
+                onAuthSuccess(data.user);
+            } else {
+                // Email confirmation is still enabled in Supabase dashboard
+                showAuthError('Registration failed: email confirmation is required. Please disable it in your Supabase Authentication settings.');
+            }
+        }
+
+        async function authSignOut() {
+            await supabase.auth.signOut();
+            document.getElementById('multiplayer-lobby').style.display = 'none';
+            document.getElementById('auth-screen').style.display = 'block';
+            document.getElementById('auth-bar').style.display = 'none';
+            // Stop browser auto-refresh and hide panels so the next user starts fresh
+            stopBrowserRefresh();
+            const browserPanel = document.getElementById('game-browser-panel');
+            const waitingPanel = document.getElementById('waiting-room-panel');
+            if (browserPanel) browserPanel.style.display = 'none';
+            if (waitingPanel) waitingPanel.style.display = 'none';
+            const readyControls = document.getElementById('ready-controls');
+            if (readyControls) readyControls.style.display = 'none';
+            document.getElementById('auth-password').value = '';
+            document.getElementById('auth-error').style.display = 'none';
+        }
+
+        function onAuthSuccess(user) {
+            // Derive display username from metadata (set on register) or from synthetic email
+            const username = user.user_metadata?.username
+                || user.email?.replace('@godaigo.game', '')
+                || 'Player';
+
+            // Store globally so all lobby functions use it without reading the DOM
+            lobbyUsername = username;
+
+            // Keep the hidden input in sync (some code paths still read it as a fallback)
+            const usernameInput = document.getElementById('username-input');
+            if (usernameInput) usernameInput.value = username;
+
+            // Show signed-in bar inside the lobby
+            const authBar = document.getElementById('auth-bar');
+            const authBarName = document.getElementById('auth-bar-name');
+            if (authBarName) authBarName.textContent = `Signed in as ${username}`;
+            if (authBar) authBar.style.display = 'flex';
+
+            // Swap screens
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('multiplayer-lobby').style.display = 'block';
+
+            // Show the game browser (Panel A)
+            showGameBrowser();
+
+            // Initialise gamification profile and award daily login gold
+            if (window.gami) {
+                window.gami.init(user.id, username).then(() => {
+                    window.gami.onDailyLogin();
+                    window.loadMainLeaderboard?.();
+                });
+            }
+        }
+
+        function showAuthError(msg) {
+            const el = document.getElementById('auth-error');
+            if (!el) return;
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function setAuthLoading(on) {
+            const loading = document.getElementById('auth-loading');
+            const loginBtn = document.getElementById('auth-login-btn');
+            const regBtn = document.getElementById('auth-register-btn');
+            if (loading) loading.style.display = on ? 'block' : 'none';
+            if (loginBtn) loginBtn.disabled = on;
+            if (regBtn) regBtn.disabled = on;
+        }
+
+        // ========================================
         // MULTIPLAYER LOBBY FUNCTIONS
         // ========================================
 
         let isHost = false; // Track if this player is the host
 
         let isJoining = false; // Prevent double-joins
+
+        let lobbyUsername = ''; // Username from auth — set in onAuthSuccess, read everywhere instead of the hidden input
+
+        // ========================================
+        // GAME BROWSER & ROOM MANAGEMENT
+        // ========================================
+
+        // --- Panel toggle helpers ---
+
+        function showGameBrowser() {
+            const browserPanel = document.getElementById('game-browser-panel');
+            const waitingPanel = document.getElementById('waiting-room-panel');
+            if (browserPanel) browserPanel.style.display = 'block';
+            if (waitingPanel) waitingPanel.style.display = 'none';
+            // Unlock + clear room-name-input so the player can choose a fresh name next time
+            const roomNameInput = document.getElementById('room-name-input');
+            if (roomNameInput) {
+                roomNameInput.disabled = false;
+                roomNameInput.style.opacity = '';
+                roomNameInput.value = '';
+            }
+            refreshGameBrowser();
+            startBrowserRefresh(); // auto-refresh every 5 seconds
+        }
+
+        function showWaitingRoom(gameId, joinCode, isPrivate, roomName) {
+            currentGameId = gameId;
+            currentJoinCode = joinCode || null;
+            const browserPanel = document.getElementById('game-browser-panel');
+            const waitingPanel = document.getElementById('waiting-room-panel');
+            if (browserPanel) browserPanel.style.display = 'none';
+            if (waitingPanel) waitingPanel.style.display = 'block';
+            // Display the room name (static — set once at creation)
+            const roomNameValue = document.getElementById('room-name-value');
+            if (roomNameValue) roomNameValue.textContent = roomName || 'Game Room';
+            // Show/hide room code section
+            const codeDisplay = document.getElementById('room-code-display');
+            if (isPrivate && joinCode) {
+                codeDisplay.style.display = 'block';
+                document.getElementById('room-code-value').textContent = joinCode;
+            } else {
+                if (codeDisplay) codeDisplay.style.display = 'none';
+            }
+            // Update badge
+            const badge = document.getElementById('room-type-badge');
+            if (badge) badge.textContent = isPrivate ? 'PRIVATE' : 'PUBLIC';
+            stopBrowserRefresh();
+        }
+
+        function copyRoomCode() {
+            if (currentJoinCode) navigator.clipboard?.writeText(currentJoinCode);
+            updateStatus('Room code copied!');
+        }
+
+        function setBrowserStatus(msg) {
+            const el = document.getElementById('browser-status');
+            if (el) el.textContent = msg;
+        }
+
+        // --- Create room ---
+
+        async function hostPublicGame()    { await createRoom(false); }
+        async function createPrivateRoom() { await createRoom(true);  }
+
+        async function createRoom(isPrivate) {
+            const username = lobbyUsername;
+            if (!username) { alert('Not signed in — please sign in first'); return; }
+
+            // Read custom room name; fall back to "<username>'s Game" if left blank
+            const roomNameRaw = document.getElementById('room-name-input')?.value.trim();
+            const roomName = roomNameRaw || (username + "'s Game");
+
+            // --- One room at a time: check if this username is already in a waiting room ---
+            setBrowserStatus('Checking for existing rooms…');
+            const { data: existingPlayers } = await supabase
+                .from('players')
+                .select('game_id')
+                .eq('username', username);
+            if (existingPlayers?.length) {
+                const gameIds = existingPlayers.map(p => p.game_id).filter(Boolean);
+                if (gameIds.length) {
+                    const { data: waitingRooms } = await supabase
+                        .from('game_room')
+                        .select('id')
+                        .in('id', gameIds)
+                        .eq('status', 'waiting');
+                    if (waitingRooms?.length) {
+                        setBrowserStatus('You\'re already in a waiting room. Leave it first before creating a new one.');
+                        return;
+                    }
+                }
+            }
+
+            setBrowserStatus('Creating room…');
+            await supabase.rpc('cleanup_stale_rooms');
+            const { data, error } = await supabase.rpc('create_game_room',
+                { p_is_private: isPrivate, p_host_name: roomName });
+            if (error || !data?.length) {
+                console.error('❌ create_game_room RPC failed:', error);
+                setBrowserStatus('Error creating room: ' + (error?.message || 'no data returned — see Supabase SQL Editor'));
+                return;
+            }
+            const { room_id, join_code } = data[0];
+
+            // Lock the room-name input — can't rename mid-game; unlocked again on leaveRoom()
+            const roomNameInput = document.getElementById('room-name-input');
+            if (roomNameInput) {
+                roomNameInput.disabled = true;
+                roomNameInput.style.opacity = '0.5';
+            }
+
+            const ok = await joinRoomAsPlayer(room_id, username);
+            if (!ok) return;
+            isHost = true;
+            showWaitingRoom(room_id, join_code, isPrivate, roomName);
+        }
+
+        // --- Join by code ---
+
+        async function joinByCode() {
+            const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+            if (code.length !== 6) { setBrowserStatus('Enter a 6-character room code'); return; }
+            setBrowserStatus('Looking up room…');
+            const { data: room } = await supabase
+                .from('game_room')
+                .select('id,status,is_private,join_code,host_name')
+                .eq('join_code', code)
+                .single();
+            if (!room) { setBrowserStatus('Room not found — check the code and try again'); return; }
+            if (room.status !== 'waiting') { setBrowserStatus('That game has already started'); return; }
+            const username = lobbyUsername;
+            if (!username) { alert('Not signed in — please sign in first'); return; }
+            const ok = await joinRoomAsPlayer(room.id, username);
+            if (!ok) return;
+            showWaitingRoom(room.id, room.join_code, room.is_private, room.host_name);
+        }
+
+        // --- Join a public game from browser ---
+
+        async function joinPublicGame(gameId) {
+            const username = lobbyUsername;
+            if (!username) { alert('Not signed in — please sign in first'); return; }
+            const { data: room } = await supabase
+                .from('game_room')
+                .select('id,status,is_private,join_code,host_name')
+                .eq('id', gameId)
+                .single();
+            if (!room || room.status !== 'waiting') { refreshGameBrowser(); return; }
+            const ok = await joinRoomAsPlayer(gameId, username);
+            if (!ok) return;
+            showWaitingRoom(gameId, null, false, room.host_name);
+        }
+
+        // --- Shared join helper ---
+
+        async function joinRoomAsPlayer(gameId, username) {
+            // Check username uniqueness within this room
+            const { data: existing } = await supabase
+                .from('players')
+                .select('username')
+                .eq('game_id', gameId);
+            if (existing?.some(p => p.username === username)) {
+                setBrowserStatus('That username is already taken in this room');
+                return false;
+            }
+            const { data, error } = await supabase
+                .from('players')
+                .insert([{ username, is_ready: false, game_id: gameId }])
+                .select()
+                .single();
+            if (error) { setBrowserStatus('Could not join: ' + error.message); return false; }
+            myPlayerId = data.id;
+            currentGameId = gameId;  // must be set BEFORE subscribeToLobby so filters use the correct room ID
+            isMultiplayer = true;
+            // Determine host: first player by creation time
+            const { data: all } = await supabase
+                .from('players')
+                .select('*')
+                .eq('game_id', gameId)
+                .order('created_at', { ascending: true });
+            isHost = all?.[0]?.id === myPlayerId;
+            document.getElementById('ready-controls').style.display = 'block';
+            subscribeToLobby();
+            updateHeartbeat();
+            startLobbyPoll();
+            updatePlayerList();
+            console.log('✅ Joined room', gameId, 'as', username, isHost ? '(HOST)' : '');
+            return true;
+        }
+
+        // --- Leave room (return to game browser) ---
+
+        async function leaveRoom() {
+            const leavingRoomId = currentGameId; // capture before we null it out
+            const leavingAsHost = isHost;
+
+            if (myPlayerId) {
+                await supabase.from('players').delete().eq('id', myPlayerId);
+            }
+
+            // If the host leaves, delete the game_room entirely so it disappears from
+            // other players' browser lists immediately rather than lingering as an empty room.
+            if (leavingAsHost && leavingRoomId) {
+                const { error: roomDeleteErr } = await supabase
+                    .from('game_room')
+                    .delete()
+                    .eq('id', leavingRoomId);
+                if (roomDeleteErr) {
+                    console.warn('⚠️ Could not delete game_room on host leave:', roomDeleteErr.message);
+                } else {
+                    console.log('🗑️ Deleted game_room', leavingRoomId, '(host left waiting room)');
+                }
+            }
+
+            myPlayerId = null;
+            currentGameId = null;
+            currentJoinCode = null;
+            isHost = false;
+            isMultiplayer = false;
+            isJoining = false;
+            stopLobbyPoll();
+            if (playersSubscription) { playersSubscription.unsubscribe(); playersSubscription = null; }
+            if (gameRoomSubscription) { gameRoomSubscription.unsubscribe(); gameRoomSubscription = null; }
+            if (gameChannel) { gameChannel.unsubscribe(); gameChannel = null; }
+            document.getElementById('ready-controls').style.display = 'none';
+            showGameBrowser();
+        }
+
+        // --- Public game browser ---
+
+        let browserRefreshInterval = null;
+
+        async function refreshGameBrowser() {
+            const refreshBtn = document.getElementById('refresh-browser-btn');
+            if (refreshBtn) refreshBtn.textContent = '…';
+
+            const { data: rooms } = await supabase
+                .from('game_room')
+                .select('id,host_name,created_at')
+                .eq('status', 'waiting')
+                .eq('is_private', false)
+                .order('created_at', { ascending: false });
+
+            if (refreshBtn) refreshBtn.textContent = 'Refresh';
+
+            const list = document.getElementById('public-games-list');
+            if (!list) return;
+
+            if (!rooms?.length) {
+                list.innerHTML = '<p style="color:#666;font-style:italic;text-align:center;padding:20px 0;margin:0;">No public games open. Host one!</p>';
+                return;
+            }
+
+            // Fetch player counts for each room in one query
+            const ids = rooms.map(r => r.id);
+            const { data: players } = await supabase
+                .from('players')
+                .select('game_id')
+                .in('game_id', ids);
+            const counts = {};
+            (players || []).forEach(p => { counts[p.game_id] = (counts[p.game_id] || 0) + 1; });
+
+            list.innerHTML = rooms.map(r => `
+                <div class="game-room-card" onclick="joinPublicGame(${r.id})">
+                    <div class="game-room-host">${_esc(r.host_name || 'Unnamed Game')}</div>
+                    <div class="game-room-count">${counts[r.id] || 0} / 5</div>
+                    <button class="game-room-join-btn">Join</button>
+                </div>`).join('');
+        }
+
+        function startBrowserRefresh() {
+            stopBrowserRefresh();
+            browserRefreshInterval = setInterval(refreshGameBrowser, 5000);
+        }
+        function stopBrowserRefresh() {
+            clearInterval(browserRefreshInterval);
+            browserRefreshInterval = null;
+        }
+
+        // Simple HTML escape helper
+        function _esc(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // ========================================
+        // END GAME BROWSER & ROOM MANAGEMENT
+        // ========================================
+
+        // Sequence tracking for detecting out-of-order messages and deduplication
+        let scrollEventSequence = 0;
+        const receivedSequences = new Set();
+
+        // Periodically clean old sequence IDs (keep last 1000 to prevent memory leak)
+        setInterval(() => {
+            if (receivedSequences.size > 1000) {
+                const arr = Array.from(receivedSequences);
+                receivedSequences.clear();
+                // Keep most recent 500
+                arr.slice(-500).forEach(id => receivedSequences.add(id));
+                console.log('🧹 Cleaned old event IDs from deduplication cache');
+            }
+        }, 30000); // Every 30 seconds
 
         // Join the lobby
         async function joinLobby() {
@@ -14,11 +446,10 @@
                 return;
             }
 
-            const usernameInput = document.getElementById('username-input');
-            const username = usernameInput.value.trim();
+            const username = lobbyUsername;
 
             if (!username) {
-                alert('Please enter a username!');
+                alert('Not signed in — please sign in first');
                 return;
             }
 
@@ -174,10 +605,10 @@
                 }
 
                 // Reset UI
-                document.getElementById('join-form').style.display = 'block';
                 document.getElementById('ready-controls').style.display = 'none';
-                document.getElementById('username-input').value = '';
                 document.getElementById('leave-game').style.display = 'none';
+                currentGameId = null;
+                currentJoinCode = null;
 
                 // Hide game, show lobby
                 document.querySelector('.game-container').style.display = 'none';
@@ -185,6 +616,9 @@
 
                 // Clear the board
                 clearBoard(true);
+
+                // Return to game browser
+                showGameBrowser();
 
                 console.log('✅ Left game successfully');
                 alert('You have left the game.');
@@ -204,10 +638,11 @@
             try {
                 console.log('📄 Resetting lobby...');
 
-                // Delete all players (get all IDs first, then delete)
+                // Delete all players in the current room
                 const { data: allPlayers } = await supabase
                     .from('players')
-                    .select('id');
+                    .select('id')
+                    .eq('game_id', currentGameId);
 
                 if (allPlayers && allPlayers.length > 0) {
                     const { error: playersError } = await supabase
@@ -222,12 +657,14 @@
                 const { error: roomError } = await supabase
                     .from('game_room')
                     .update({ status: 'waiting', current_turn_index: 0 })
-                    .eq('id', 1);
+                    .eq('id', currentGameId);
 
                 if (roomError) throw roomError;
 
                 // Reset local state
                 myPlayerId = null;
+                currentGameId = null;
+                currentJoinCode = null;
                 isHost = false;
                 isJoining = false;
                 isMultiplayer = false;
@@ -245,13 +682,8 @@
                     gameRoomSubscription = null;
                 }
 
-                // Reset UI - show join form, hide ready controls
-                document.getElementById('join-form').style.display = 'block';
+                // Reset UI — return to game browser
                 document.getElementById('ready-controls').style.display = 'none';
-                document.getElementById('join-loading').style.display = 'none';
-                document.getElementById('join-button').disabled = false;
-                document.getElementById('username-input').disabled = false;
-                document.getElementById('username-input').value = '';
 
                 // Hide game, show lobby
                 document.querySelector('.game-container').style.display = 'none';
@@ -260,8 +692,11 @@
                 // Clear the board if it was started
                 clearBoard(true);
 
+                // Return to the game browser
+                showGameBrowser();
+
                 console.log('✅ Lobby reset complete!');
-                alert('✅ Lobby has been reset! You can now join again.');
+                alert('✅ Lobby has been reset! You can now host or join again.');
 
             } catch (error) {
                 console.error('Error resetting lobby:', error);
@@ -279,13 +714,20 @@
                 // Show win screen immediately for the winner
                 showGameOverToAll(winnerPlayerIndex, winType);
 
-                // Update game room status to 'finished'
+                // Award gamification XP for this game result
+                if (window.gami?.userId) {
+                    const isWinner = (winnerPlayerIndex === myPlayerIndex);
+                    window.gami.onGameComplete(isWinner, totalPlayers);
+                }
+
+                // Update game room status to 'finished' and store winner index
                 const { error } = await supabase
                     .from('game_room')
                     .update({
-                        status: 'finished'
+                        status: 'finished',
+                        current_turn_index: winnerPlayerIndex
                     })
-                    .eq('id', 1);
+                    .eq('id', currentGameId);
 
                 if (error) {
                     console.error('Error updating game over state:', error);
@@ -374,12 +816,15 @@
             lobbyBtn.style.fontWeight = 'bold';
             lobbyBtn.onclick = async () => {
                 try {
-                    // Clean up: delete all players and reset game room for a fresh lobby
-                    const { data: allP } = await supabase.from('players').select('id');
-                    if (allP && allP.length > 0) {
-                        await supabase.from('players').delete().in('id', allP.map(p => p.id));
+                    // Clean up: delete all players in this room and reset this game room
+                    const roomId = currentGameId;
+                    if (roomId) {
+                        const { data: allP } = await supabase.from('players').select('id').eq('game_id', roomId);
+                        if (allP && allP.length > 0) {
+                            await supabase.from('players').delete().in('id', allP.map(p => p.id));
+                        }
+                        await supabase.from('game_room').update({ status: 'waiting', current_turn_index: 0 }).eq('id', roomId);
                     }
-                    await supabase.from('game_room').update({ status: 'waiting', current_turn_index: 0 }).eq('id', 1);
                 } catch (err) {
                     console.error('Post-game cleanup error:', err);
                 }
@@ -437,20 +882,34 @@
                 gameRoomSubscription.unsubscribe();
             }
             
-            // Subscribe to players table
+            // Subscribe to players table (scoped to this room)
             playersSubscription = supabase
-                .channel('players-channel-' + Math.random())
+                .channel('players-' + currentGameId + '-' + Math.random())
                 .on('postgres_changes',
-                    { event: '*', schema: 'public', table: 'players' },
+                    { event: '*', schema: 'public', table: 'players',
+                      filter: `game_id=eq.${currentGameId}` },
                     async (payload) => {
                         console.log('Players update:', payload);
 
-                        // Handle our own player being deleted (lobby reset)
+                        // Handle our own player being deleted (kicked or lobby reset)
                         if (payload.eventType === 'DELETE' && payload.old.id === myPlayerId) {
-                            console.log('📄 You were removed from the lobby (reset detected)');
+                            console.log('📄 You were removed from the lobby (kicked or reset detected)');
+
+                            // Check if we're in a game - if so, need to reset game state first
+                            const gameContainer = document.querySelector('.game-container');
+                            const inGame = gameContainer && gameContainer.style.display !== 'none';
+
+                            if (inGame) {
+                                console.log('⏰ Kicked during game - resetting to lobby');
+                                // Call resetToLobby to properly clean up game state
+                                if (typeof resetToLobby === 'function') {
+                                    resetToLobby();
+                                }
+                            }
 
                             // Reset local state
                             myPlayerId = null;
+                            myPlayerIndex = null;
                             isHost = false;
                             isMultiplayer = false;
 
@@ -463,17 +922,19 @@
                                 gameRoomSubscription.unsubscribe();
                                 gameRoomSubscription = null;
                             }
+                            if (gameChannel) {
+                                gameChannel.unsubscribe();
+                                gameChannel = null;
+                            }
 
-                            // Reset UI
-                            document.getElementById('join-form').style.display = 'block';
-                            document.getElementById('ready-controls').style.display = 'none';
-                            document.getElementById('username-input').value = '';
+                            // Show alert and reload the page to fully reset
+                            alert('⚠️ You were kicked from the game (timeout). The page will refresh.');
 
-                            // Hide game, show lobby
-                            document.querySelector('.game-container').style.display = 'none';
-                            document.getElementById('multiplayer-lobby').style.display = 'block';
+                            // Reload the page to return to a clean state
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 500);
 
-                            alert('⚠️ Lobby was reset. Please join again.');
                             return; // Don't update player list since we're no longer in lobby
                         }
 
@@ -485,7 +946,7 @@
                             const { data: room } = await supabase
                                 .from('game_room')
                                 .select('status')
-                                .eq('id', 1)
+                                .eq('id', currentGameId)
                                 .single();
 
                             if (room && room.status === 'playing') {
@@ -493,10 +954,11 @@
                                 const playerName = leftPlayer ? getPlayerColorName(leftPlayer.player_index) : 'A player';
                                 updateStatus(`👋 ${playerName} left the game`);
 
-                                // Check if I'm the only player left
+                                // Check if I'm the only player left (scoped to this room)
                             const { data: remainingPlayers } = await supabase
                                 .from('players')
-                                .select('id, username, player_index, color');
+                                .select('id, username, player_index, color')
+                                .eq('game_id', currentGameId);
 
                                 console.log('💥 Remaining players after deletion:', remainingPlayers);
                                 console.log('📍 My player ID:', myPlayerId);
@@ -552,11 +1014,12 @@
                         }
 
                         // Update our local isHost status when players change
-                        // Check if we're now the first player (host)
+                        // Check if we're now the first player (host) within this room
                         if (myPlayerId) {
                             const { data: allPlayers } = await supabase
                                 .from('players')
                                 .select('*')
+                                .eq('game_id', currentGameId)
                                 .order('created_at', { ascending: true });
 
                             if (allPlayers && allPlayers.length > 0) {
@@ -575,18 +1038,24 @@
                 )
                 .subscribe();
             
-            // Subscribe to game_room table
+            // Subscribe to game_room table (scoped to this room)
             gameRoomSubscription = supabase
-                .channel('game-room-channel-' + Math.random())
+                .channel('game-room-sub-' + currentGameId + '-' + Math.random())
                 .on('postgres_changes',
-                    { event: '*', schema: 'public', table: 'game_room' },
+                    { event: '*', schema: 'public', table: 'game_room',
+                      filter: `id=eq.${currentGameId}` },
                     (payload) => {
                         console.log('Game room update:', payload);
                         if (payload.new && payload.new.status === 'playing') {
                             handleGameStart();
                         } else if (payload.new && payload.new.status === 'finished') {
-                            // Game ended - win screen is shown by handleGameOver directly
+                            // Game ended - show win screen to all players who didn't trigger it themselves
                             console.log('🏁 Game finished!');
+                            const winnerIndex = payload.new.current_turn_index ?? 0;
+                            // Only show if we're not the winner (winner already saw it via handleGameOver)
+                            if (winnerIndex !== myPlayerIndex) {
+                                showGameOverToAll(winnerIndex, 'scrolls');
+                            }
                         }
                     }
                 )
@@ -598,10 +1067,12 @@
 
         // Update player list display
         async function updatePlayerList() {
+            if (!currentGameId) return; // Not in a room yet
             try {
                 const { data: players, error } = await supabase
                     .from('players')
                     .select('*')
+                    .eq('game_id', currentGameId)
                     .order('created_at', { ascending: true });
 
                 if (error) throw error;
@@ -619,20 +1090,33 @@
                     const meLabel = isMe ? ' <span style="color: #ffd700;">(You)</span>' : '';
                     // First player in the list (index 0) is the host
                     const hostLabel = index === 0 ? ' <span style="color: #FF9800;">👑 Host</span>' : '';
+                    // Apply local player's equipped name colour; other players keep default
+                    const nameStyle = isMe
+                        ? (window.cosmeticsSystem?.getNameColorStyle() || '')
+                        : '';
 
                     return `
                         <div style="padding: 10px; margin: 5px 0; background: ${isMe ? '#444' : '#3a3a3a'}; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
-                            <span>${p.username}${hostLabel}${meLabel}</span>
+                            <span style="${nameStyle}">${p.username}${hostLabel}${meLabel}</span>
                             <span style="color: ${readyColor}; font-size: 20px;">${readyIcon}</span>
                         </div>
                     `;
                 }).join('');
 
+                // Update room player count in the info bar
+                const playerCountEl = document.getElementById('room-player-count');
+                if (playerCountEl) playerCountEl.textContent = `${players.length} / 5`;
+
                 // Show/hide host settings panel
                 const hostSettings = document.getElementById('host-settings');
                 const totalCount = players.length;
 
-                if (isHost && totalCount >= 2 && totalCount <= 5) {
+                // Host must also click "I'm Ready!" before the Start Game button appears,
+                // so the game can't start while the host is AFK or not yet prepared.
+                const hostPlayerData = players.find(p => p.id === myPlayerId);
+                const hostIsReady = hostPlayerData?.is_ready ?? false;
+
+                if (isHost && totalCount >= 2 && totalCount <= 5 && hostIsReady) {
                     hostSettings.style.display = 'block';
                 } else {
                     hostSettings.style.display = 'none';
@@ -647,6 +1131,9 @@
                 } else if (totalCount > 5) {
                     statusDiv.textContent = 'Too many players! Maximum is 5.';
                     statusDiv.style.color = '#f44336';
+                } else if (isHost && !hostIsReady) {
+                    statusDiv.textContent = `${totalCount} players in lobby. Click "I\'m Ready!" to reveal the Start button.`;
+                    statusDiv.style.color = '#FF9800';
                 } else {
                     statusDiv.textContent = `${totalCount} players in lobby. Host can start the game!`;
                     statusDiv.style.color = '#4CAF50';
@@ -664,20 +1151,27 @@
                 return;
             }
 
+            // Disable the button immediately to prevent double-clicks
+            const startBtn = document.getElementById('host-start-button');
+            if (startBtn) startBtn.disabled = true;
+
             try {
                 const { data: players, error } = await supabase
                     .from('players')
-                    .select('*');
+                    .select('*')
+                    .eq('game_id', currentGameId);
 
                 if (error) throw error;
 
                 // Validate player count
                 if (players.length < 2) {
+                    if (startBtn) startBtn.disabled = false;
                     alert('Need at least 2 players to start!');
                     return;
                 }
 
                 if (players.length > 5) {
+                    if (startBtn) startBtn.disabled = false;
                     alert('Too many players! Maximum is 5.');
                     return;
                 }
@@ -710,7 +1204,7 @@
                         kick_on_turn_timeout: kickMode,
                         turn_started_at: startedAtIso
                     })
-                    .eq('id', 1);
+                    .eq('id', currentGameId);
 
                 if (roomError) {
                     console.warn('⚠️ Failed to write extended turn timer fields to game_room. Trying without optional fields...', roomError);
@@ -722,7 +1216,7 @@
                             current_turn_index: 0,
                             inactivity_timeout: turnTimeLimit
                         })
-                        .eq('id', 1);
+                        .eq('id', currentGameId);
 
                     if (fallback.error) {
                         console.warn('⚠️ Second fallback failed, trying minimal update...', fallback.error);
@@ -733,7 +1227,7 @@
                                 status: 'playing',
                                 current_turn_index: 0
                             })
-                            .eq('id', 1);
+                            .eq('id', currentGameId);
                     }
 
                     roomError = fallback.error;
@@ -763,8 +1257,12 @@
 
                 console.log('✅ Game started by host!');
 
+                // Host transitions immediately; non-host players receive the trigger via Realtime
+                await handleGameStart();
+
             } catch (error) {
                 console.error('Error starting game:', error);
+                if (startBtn) startBtn.disabled = false; // allow retry
                 alert('Failed to start game: ' + error.message);
             }
         }
@@ -821,6 +1319,11 @@
 
         // Handle game start
         async function handleGameStart() {
+            // Guard against duplicate calls (host's direct call + Realtime subscription racing)
+            if (document.getElementById('game-layout').classList.contains('active')) {
+                console.log('🔁 handleGameStart: game already active — skipping duplicate call');
+                return;
+            }
             try {
                 // Wait for player_index to be assigned (retry up to 10 times)
                 let myPlayer = null;
@@ -851,10 +1354,11 @@
                 
                 myPlayerIndex = myPlayer.player_index;
                 
-                // Get all players
+                // Get all players in this room
                 const { data: allPlayers } = await supabase
                     .from('players')
                     .select('*')
+                    .eq('game_id', currentGameId)
                     .order('player_index', { ascending: true });
                 
                 console.log('🎮 Starting multiplayer game!');
@@ -867,7 +1371,7 @@
                 const { data: room } = await supabase
                     .from('game_room')
                     .select('*')
-                    .eq('id', 1)
+                    .eq('id', currentGameId)
                     .single();
 
                 if (room && room.inactivity_timeout !== null && room.inactivity_timeout !== undefined) {
@@ -1074,8 +1578,8 @@
                 gameChannel.unsubscribe();
             }
 
-            // Create a channel for this game room
-            gameChannel = supabase.channel('game-room-1', {
+            // Create a channel scoped to this specific game room
+            gameChannel = supabase.channel('game-room-' + currentGameId, {
                 config: {
                     broadcast: { self: false } // Don't receive our own broadcasts
                 }
@@ -1201,20 +1705,67 @@
             // Listen for player tile placement events
             gameChannel.on('broadcast', { event: 'player-tile-place' }, ({ payload }) => {
                 console.log('📄 Received player tile placement:', payload);
-                const { x, y, playerIndex, color } = payload;
-                placePlayerTileVisually(x, y, playerIndex, color);
+                const { x, y, playerIndex, color, cosmetics } = payload;
+                placePlayerTileVisually(x, y, playerIndex, color, cosmetics || null);
             });
 
             // Listen for player movement events
             gameChannel.on('broadcast', { event: 'player-move' }, ({ payload }) => {
                 console.log('📄 Received player movement:', payload);
-                const { playerIndex, x, y, apSpent } = payload;
+                const { playerIndex, x, y, apSpent, cosmetics } = payload;
+                // Cache remote cosmetics so movePlayerVisually can apply landing effects
+                if (cosmetics) {
+                    window._remotePlayerCosmetics = window._remotePlayerCosmetics || {};
+                    window._remotePlayerCosmetics[playerIndex] = cosmetics;
+                }
                 movePlayerVisually(playerIndex, x, y, apSpent);
+                // Defensively flip any hidden tiles at the destination.
+                // This ensures tile reveals are visible even if the tile-flip broadcast
+                // arrives out of order or is lost. Uses the shared deck state to determine
+                // shrine type (both clients drew from the same seed, so shrineType matches).
+                if (typeof getAllHexagonPositions === 'function' && typeof placedTiles !== 'undefined') {
+                    const allHexes = getAllHexagonPositions();
+                    let nearestHex = null;
+                    let nearestDist = Infinity;
+                    allHexes.forEach(hexPos => {
+                        const d = Math.sqrt(Math.pow(hexPos.x - x, 2) + Math.pow(hexPos.y - y, 2));
+                        if (d < nearestDist) { nearestDist = d; nearestHex = hexPos; }
+                    });
+                    if (nearestHex && nearestDist < 5 && nearestHex.tiles) {
+                        nearestHex.tiles
+                            .filter(t => t.flipped && !t.isPlayerTile)
+                            .forEach(t => {
+                                const el = document.querySelector(`[data-tile-id="${t.id}"]`);
+                                if (el && typeof flipTileVisually === 'function') {
+                                    console.log(`🔄 Proactively flipping tile ${t.id} at received player position`);
+                                    flipTileVisually(el, t.shrineType);
+                                }
+                            });
+                    }
+                }
             });
 
             // Listen for turn change events
             gameChannel.on('broadcast', { event: 'turn-change' }, ({ payload }) => {
-                console.log('📄 Received turn-change:', payload.playerIndex, 'myPlayerIndex:', myPlayerIndex, 'isPlacementPhase:', isPlacementPhase);
+                console.log('📄 Received turn-change:', payload.playerIndex, 'turnNumber:', payload.turnNumber, 'myPlayerIndex:', myPlayerIndex, 'isPlacementPhase:', isPlacementPhase);
+
+                // Validate turn number for desync detection
+                if (typeof payload.turnNumber === 'number') {
+                    const expectedTurn = lastReceivedTurnNumber + 1;
+
+                    if (payload.turnNumber > expectedTurn) {
+                        // We missed some turns! Log warning
+                        console.warn(`⚠️ DESYNC DETECTED: Expected turn ${expectedTurn}, received turn ${payload.turnNumber}. Missed ${payload.turnNumber - expectedTurn} turn(s).`);
+                        updateStatus(`⚠️ Turn sync issue detected - auto-correcting...`);
+                    } else if (payload.turnNumber < lastReceivedTurnNumber) {
+                        // Received an old turn? Ignore it
+                        console.warn(`⚠️ Received outdated turn ${payload.turnNumber} (current: ${lastReceivedTurnNumber}). Ignoring.`);
+                        return;
+                    }
+
+                    lastReceivedTurnNumber = payload.turnNumber;
+                }
+
                 activePlayerIndex = payload.playerIndex;
                 if (payload.turnStartedAt) {
                     turnStartedAtMs = payload.turnStartedAt;
@@ -1233,6 +1784,15 @@
                 }
                 if (spellSystem?.scrollEffects?.clearExcavateForPlayer) {
                     spellSystem.scrollEffects.clearExcavateForPlayer(activePlayerIndex);
+                }
+                // Clear all turn-based buffs (expiresThisTurn) on every client when the turn changes.
+                // This is a defensive cleanup: reflect-triggered / psychic-triggered execute() on
+                // ALL clients, so non-caster clients can end up with stale activeBuffs entries
+                // (e.g. steamVents set for the reflect caster). Without this call those entries
+                // linger until the next time clearTurnBuffs() fires on that client.
+                // Safe to call multiple times — idempotent (no-op if already cleared).
+                if (spellSystem?.scrollEffects?.clearTurnBuffs) {
+                    spellSystem.scrollEffects.clearTurnBuffs();
                 }
                 // Excavate teleport: if it's my turn and I have a pending teleport, trigger it
                 if (activePlayerIndex === myPlayerIndex && spellSystem?.scrollEffects?.processExcavateTeleport) {
@@ -1317,14 +1877,17 @@
                 const { playerIndex, spellName, element, elements, level, isCatacomb } = payload;
 
                 // Update that player's activated elements display
+                spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                const playerScrollData = spellSystem.playerScrolls[playerIndex];
+
                 if (isCatacomb) {
                     // Catacomb activates multiple elements
                     elements.forEach(el => {
-                        spellSystem.getPlayerScrolls(playerIndex === myPlayerIndex).activated.add(el);
+                        playerScrollData.activated.add(el);
                     });
                 } else {
                     // Regular spell activates one element
-                    spellSystem.getPlayerScrolls(playerIndex === myPlayerIndex).activated.add(element);
+                    playerScrollData.activated.add(element);
                 }
 
                 // Update the element symbols display for that player
@@ -1339,107 +1902,202 @@
                 }
             });
 
-            // Reflect triggered at start of turn: run the reflected scroll's effect and update activated elements
-            gameChannel.on('broadcast', { event: 'reflect-triggered' }, ({ payload }) => {
-                console.log('📄 Received reflect-triggered:', payload);
-                const { playerIndex, scrollName, element, elements, isCatacomb } = payload;
-                if (typeof spellSystem === 'undefined') return;
+            // Listen for scroll effect broadcasts (for scrolls with special effects)
+            gameChannel.on('broadcast', { event: 'scroll-effect' }, ({ payload }) => {
+                console.log('📄 Received scroll-effect:', payload);
+                const { playerIndex, scrollName, effectName, element, activatedElements } = payload;
 
-                // Execute the reflected scroll's effect on this client so the
-                // Reflect caster sees stones / abilities applied locally.
-                if (spellSystem.scrollEffects && scrollName) {
-                    const definition = spellSystem.patterns?.[scrollName];
-                    if (definition) {
-                        console.log(`🪞 Running reflected scroll effect locally: ${scrollName} for player ${playerIndex}`);
-                        spellSystem.scrollEffects.execute(scrollName, playerIndex, {
-                            spell: definition,
-                            scrollName: scrollName
-                        });
-                    }
-                }
-
-                // Update activated elements
+                // Update that player's activated elements
                 spellSystem.ensurePlayerScrollsStructure(playerIndex);
-                const activated = spellSystem.playerScrolls[playerIndex].activated;
-                if (isCatacomb && elements && elements.length) {
-                    elements.forEach(el => activated.add(el));
+                const playerScrollData = spellSystem.playerScrolls[playerIndex];
+
+                if (activatedElements && Array.isArray(activatedElements)) {
+                    // Add all activated elements (for catacomb scrolls or multi-element effects)
+                    activatedElements.forEach(el => {
+                        playerScrollData.activated.add(el);
+                    });
                 } else if (element) {
-                    activated.add(element);
+                    // Single element activation
+                    playerScrollData.activated.add(element);
                 }
-                // Fallback: look up the scroll's element from definitions if not provided
-                if (!element && !isCatacomb && scrollName) {
-                    const scrollDef = spellSystem.patterns?.[scrollName];
-                    if (scrollDef?.element && scrollDef.element !== 'catacomb') {
-                        activated.add(scrollDef.element);
-                    }
-                }
-                activated.add('water');
-                console.log(`🪞 Reflect activated elements for player ${playerIndex}:`, Array.from(activated));
+
+                // Update the element symbols display for that player
                 updatePlayerElementSymbols(playerIndex);
 
-                // Update stone UI if this is my reflect
-                if (playerIndex === myPlayerIndex) {
-                    Object.keys(stoneCounts).forEach(updateStoneCount);
-                }
-
+                // Show notification
                 const playerName = getPlayerColorName(playerIndex);
-                const displayName = scrollName ? (scrollName.replace(/_/g, ' ').toLowerCase()) : 'scroll';
-                updateStatus(`🪞 ${playerName}'s Reflect triggered: activated ${displayName} (counts as water + ${element || 'reflected element'}).`);
+                const activatedStr = activatedElements ? activatedElements.join(', ') : element;
+                updateStatus(`✨ ${playerName} used ${effectName}! Activated: ${activatedStr}`);
 
-                // Check win condition after Reflect activates elements
-                if (activated.size === 5 && playerIndex === myPlayerIndex) {
+                // Check win condition — all 5 elements activated
+                if (spellSystem.playerScrolls[playerIndex].activated.size === 5) {
+                    console.log(`🏆 Win condition met for player ${playerIndex} (detected via scroll-effect broadcast)`);
                     spellSystem.showLevelComplete(playerIndex);
-                    if (typeof handleGameOver === 'function') {
-                        handleGameOver(playerIndex);
-                    }
+                    handleGameOver(playerIndex);
                 }
             });
 
-            // Psychic triggered at start of turn: run the stolen scroll's effect and update activated elements
-            gameChannel.on('broadcast', { event: 'psychic-triggered' }, ({ payload }) => {
-                console.log('📄 Received psychic-triggered:', payload);
-                const { playerIndex, scrollName, element, elements, isCatacomb } = payload;
-                if (typeof spellSystem === 'undefined') return;
+            // Reflect triggered at start of turn: run the reflected scroll's effect and update activated elements.
+            // Multiple reflect-triggered events for the same player are queued and processed one at a time
+            // so that interactive scrolls fully resolve before the next one starts.
+            {
+                const reflectQueue = []; // pending { playerIndex, scrollName } entries
+                let reflectRunning = false;
 
-                // Execute the stolen scroll's effect on this client
-                if (spellSystem.scrollEffects && scrollName) {
-                    const definition = spellSystem.patterns?.[scrollName];
-                    if (definition) {
-                        console.log(`🔮 Running psychic scroll effect locally: ${scrollName} for player ${playerIndex}`);
-                        spellSystem.scrollEffects.execute(scrollName, playerIndex, {
-                            spell: definition,
-                            scrollName: scrollName
-                        });
+                const runNextReflectTrigger = () => {
+                    if (reflectRunning || reflectQueue.length === 0) return;
+                    const { playerIndex, scrollName } = reflectQueue.shift();
+                    reflectRunning = true;
+
+                    const advance = () => {
+                        reflectRunning = false;
+                        runNextReflectTrigger();
+                    };
+
+                    // Execute the reflected scroll's effect on this client.
+                    // Interactive scrolls (requiresSelection) should only run on the Reflect caster's
+                    // own client (playerIndex === myPlayerIndex). On other clients, skip execute() —
+                    // the caster's client handles the UI selection and syncs state via syncPlayerState.
+                    let wasInteractive = false;
+                    if (spellSystem.scrollEffects && scrollName) {
+                        const definition = spellSystem.patterns?.[scrollName];
+                        if (definition) {
+                            const isCaster = (playerIndex === myPlayerIndex);
+                            console.log(`🪞 Running reflected scroll effect locally: ${scrollName} for player ${playerIndex} (isCaster=${isCaster})`);
+                            const result = spellSystem.scrollEffects.execute(scrollName, playerIndex, {
+                                spell: definition,
+                                scrollName: scrollName,
+                                onComplete: advance,
+                                // Flag so interactive scroll effects skip UI on non-caster clients
+                                psychicRemoteClient: !isCaster
+                            });
+                            wasInteractive = !!(result?.requiresSelection);
+                            if (wasInteractive && !isCaster) {
+                                console.log(`🪞 Interactive scroll on non-caster client — advancing queue immediately`);
+                                wasInteractive = false;
+                            }
+                        }
                     }
-                }
 
-                // Update activated elements
-                spellSystem.ensurePlayerScrollsStructure(playerIndex);
-                const activated = spellSystem.playerScrolls[playerIndex].activated;
-                if (isCatacomb && elements && elements.length) {
-                    elements.forEach(el => activated.add(el));
-                } else if (element) {
-                    activated.add(element);
-                }
-                activated.add('void');
-                console.log(`🔮 Psychic activated elements for player ${playerIndex}:`, Array.from(activated));
-                updatePlayerElementSymbols(playerIndex);
+                    // Update activated elements (Reflect only counts as water, not the reflected scroll's elements)
+                    spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                    const activated = spellSystem.playerScrolls[playerIndex].activated;
+                    activated.add('water');
+                    console.log(`🪞 Reflect activated water for player ${playerIndex}:`, Array.from(activated));
+                    updatePlayerElementSymbols(playerIndex);
 
-                if (playerIndex === myPlayerIndex) {
-                    Object.keys(stoneCounts).forEach(updateStoneCount);
-                }
-
-                const playerName = getPlayerColorName(playerIndex);
-                const displayName = scrollName ? (scrollName.replace(/_/g, ' ').toLowerCase()) : 'scroll';
-                updateStatus(`🔮 ${playerName}'s Psychic triggered: activated ${displayName} (counts as void + ${element || 'stolen element'}).`);
-
-                if (activated.size === 5 && playerIndex === myPlayerIndex) {
-                    spellSystem.showLevelComplete(playerIndex);
-                    if (typeof handleGameOver === 'function') {
-                        handleGameOver(playerIndex);
+                    if (playerIndex === myPlayerIndex) {
+                        Object.keys(stoneCounts).forEach(updateStoneCount);
                     }
-                }
-            });
+
+                    const playerName = getPlayerColorName(playerIndex);
+                    const displayName = scrollName ? (scrollName.replace(/_/g, ' ').toLowerCase()) : 'scroll';
+                    updateStatus(`🪞 ${playerName}'s Reflect triggered: activated ${displayName} (counts as water only).`);
+
+                    if (activated.size === 5 && playerIndex === myPlayerIndex) {
+                        spellSystem.showLevelComplete(playerIndex);
+                        if (typeof handleGameOver === 'function') {
+                            handleGameOver(playerIndex);
+                        }
+                    }
+
+                    // For non-interactive scrolls, advance the queue immediately
+                    if (!wasInteractive) advance();
+                };
+
+                gameChannel.on('broadcast', { event: 'reflect-triggered' }, ({ payload }) => {
+                    console.log('📄 Received reflect-triggered:', payload);
+                    const { playerIndex, scrollName } = payload;
+                    if (typeof spellSystem === 'undefined') return;
+
+                    // Enqueue and start processing if not already running
+                    reflectQueue.push({ playerIndex, scrollName });
+                    runNextReflectTrigger();
+                });
+            }
+
+            // Psychic triggered at start of turn: run the stolen scroll's effect and update activated elements.
+            // Multiple psychic-triggered events for the same player are queued and processed one at a time
+            // so that interactive scrolls (e.g. Heavy Stomp) fully resolve before the next one starts.
+            {
+                const psychicQueue = []; // pending { playerIndex, scrollName } entries
+                let psychicRunning = false;
+
+                const runNextPsychicTrigger = () => {
+                    if (psychicRunning || psychicQueue.length === 0) return;
+                    const { playerIndex, scrollName } = psychicQueue.shift();
+                    psychicRunning = true;
+
+                    const advance = () => {
+                        psychicRunning = false;
+                        runNextPsychicTrigger();
+                    };
+
+                    // Execute the stolen scroll's effect on this client.
+                    // Interactive scrolls (requiresSelection) should only run on the Psychic caster's
+                    // own client (playerIndex === myPlayerIndex). On other clients, skip execute() —
+                    // the caster's client handles the UI selection and broadcasts state changes via syncPlayerState.
+                    let wasInteractive = false;
+                    if (spellSystem.scrollEffects && scrollName) {
+                        const definition = spellSystem.patterns?.[scrollName];
+                        if (definition) {
+                            const isCaster = (playerIndex === myPlayerIndex);
+                            console.log(`🔮 Running psychic scroll effect locally: ${scrollName} for player ${playerIndex} (isCaster=${isCaster})`);
+                            const result = spellSystem.scrollEffects.execute(scrollName, playerIndex, {
+                                spell: definition,
+                                scrollName: scrollName,
+                                // onComplete advances the queue when interactive effects finish
+                                onComplete: advance,
+                                // Flag so interactive scroll effects can skip UI on non-caster clients
+                                psychicRemoteClient: !isCaster
+                            });
+                            wasInteractive = !!(result?.requiresSelection);
+                            // If the scroll is interactive but we're not the caster, the execute()
+                            // should have returned early (due to psychicRemoteClient flag) without
+                            // opening any UI. Treat as non-interactive so the queue advances immediately.
+                            if (wasInteractive && !isCaster) {
+                                console.log(`🔮 Interactive scroll on non-caster client — advancing queue immediately (state synced via syncPlayerState)`);
+                                wasInteractive = false;
+                            }
+                        }
+                    }
+
+                    // Update activated elements (Psychic only counts as void, not the stolen scroll's elements)
+                    spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                    const activated = spellSystem.playerScrolls[playerIndex].activated;
+                    activated.add('void');
+                    console.log(`🔮 Psychic activated void for player ${playerIndex}:`, Array.from(activated));
+                    updatePlayerElementSymbols(playerIndex);
+
+                    if (playerIndex === myPlayerIndex) {
+                        Object.keys(stoneCounts).forEach(updateStoneCount);
+                    }
+
+                    const playerName = getPlayerColorName(playerIndex);
+                    const displayName = scrollName ? (scrollName.replace(/_/g, ' ').toLowerCase()) : 'scroll';
+                    updateStatus(`🔮 ${playerName}'s Psychic triggered: activated ${displayName} (counts as void only).`);
+
+                    if (activated.size === 5 && playerIndex === myPlayerIndex) {
+                        spellSystem.showLevelComplete(playerIndex);
+                        if (typeof handleGameOver === 'function') {
+                            handleGameOver(playerIndex);
+                        }
+                    }
+
+                    // For non-interactive scrolls, advance the queue immediately
+                    if (!wasInteractive) advance();
+                };
+
+                gameChannel.on('broadcast', { event: 'psychic-triggered' }, ({ payload }) => {
+                    console.log('📄 Received psychic-triggered:', payload);
+                    const { playerIndex, scrollName } = payload;
+                    if (typeof spellSystem === 'undefined') return;
+
+                    // Enqueue and start processing if not already running
+                    psychicQueue.push({ playerIndex, scrollName });
+                    runNextPsychicTrigger();
+                });
+            }
 
             // Listen for undo move events
             gameChannel.on('broadcast', { event: 'undo-move' }, ({ payload }) => {
@@ -1449,8 +2107,11 @@
                 // Visually move the player back
                 movePlayerVisually(playerIndex, x, y, -apRestored); // Negative to show AP restored
 
+                // Note: AP update will come via player-state-update broadcast (from syncPlayerState)
+                // which is sent right after the undo-move broadcast
+
                 const playerName = getPlayerColorName(playerIndex);
-                updateStatus(`→️ ${playerName} undid their move (restored ${apRestored} AP)`);
+                updateStatus(`⟲ ${playerName} undid their move (restored ${apRestored} AP)`);
             });
 
             // Listen for player state updates (AP and resources)
@@ -1465,27 +2126,46 @@
                 playerAPs[playerIndex].currentAP = currentAP;
                 playerAPs[playerIndex].voidAP = voidAP;
 
-                // Update resources
-                if (!playerPools[playerIndex]) {
-                    playerPools[playerIndex] = { earth: 0, water: 0, fire: 0, wind: 0, void: 0 };
+                // Update resources only when provided (null means sender is not the
+                // active player and should not overwrite our own pool values)
+                if (resources != null) {
+                    if (!playerPools[playerIndex]) {
+                        playerPools[playerIndex] = { earth: 0, water: 0, fire: 0, wind: 0, void: 0 };
+                    }
+                    Object.assign(playerPools[playerIndex], resources);
                 }
-                Object.assign(playerPools[playerIndex], resources);
                 updateOpponentPanel(); // Update opponent panel when player state changes
             });
 
-            // Listen for scroll collection events
+            // Listen for scroll collection events (with deduplication)
             gameChannel.on('broadcast', { event: 'scroll-collected' }, ({ payload }) => {
                 console.log('📄 Received scroll collection:', payload);
-                const { playerIndex, scrollName, shrineType } = payload;
+                const { playerIndex, scrollName, shrineType, _seq, _timestamp } = payload;
 
-                // Remove from the deck (scroll was drawn by the other player)
-                const deckIndex = spellSystem.scrollDecks[shrineType].indexOf(scrollName);
-                if (deckIndex > -1) {
-                    spellSystem.scrollDecks[shrineType].splice(deckIndex, 1);
+                // DEDUPLICATION: Check if we've already processed this event
+                const eventId = `scroll-collected-${playerIndex}-${scrollName}-${_timestamp || Date.now()}`;
+                if (receivedSequences.has(eventId)) {
+                    console.warn('⚠️  Duplicate scroll-collected event ignored:', eventId);
+                    return;
+                }
+                receivedSequences.add(eventId);
+
+                // Check if scroll is already in player's hand (idempotency check)
+                spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                if (spellSystem.playerScrolls[playerIndex].hand.has(scrollName)) {
+                    console.warn('⚠️  Scroll already in hand, skipping:', scrollName);
+                    return;
                 }
 
-                // Add to that player's hand (reinforce structure first)
-                spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                // Remove from the deck (scroll was drawn by the other player)
+                const deckIndex = spellSystem.scrollDecks[shrineType]?.indexOf(scrollName);
+                if (deckIndex > -1) {
+                    spellSystem.scrollDecks[shrineType].splice(deckIndex, 1);
+                } else {
+                    console.warn(`⚠️  Scroll ${scrollName} not found in ${shrineType} deck (might have been removed already)`);
+                }
+
+                // Add to that player's hand
                 spellSystem.playerScrolls[playerIndex].hand.add(scrollName);
                 spellSystem.validateScrollState();
                 spellSystem.updateScrollCount();
@@ -1549,27 +2229,53 @@
                 updateOpponentPanel();
             });
 
-            // Listen for Quick Reflexes draws (Wind/Void)
-            gameChannel.on('broadcast', { event: 'quick-reflexes-draw' }, ({ payload }) => {
-                console.log('📄 Received Quick Reflexes draw:', payload);
-                const { playerIndex, voidDrawn, windDrawn } = payload;
+            // Listen for Quick Reflexes deck search — remote player found a level 1 scroll
+            gameChannel.on('broadcast', { event: 'quick-reflexes-search' }, ({ payload }) => {
+                console.log('📄 Received Quick Reflexes search:', payload);
+                const { playerIndex, element, scrollName, stonesDrawn, buffActive } = payload;
 
-                // Update source pools
-                if (typeof stonePools !== 'undefined') {
-                    if (stonePools.void !== undefined) stonePools.void = Math.max(0, stonePools.void - (voidDrawn || 0));
-                    if (stonePools.wind !== undefined) stonePools.wind = Math.max(0, stonePools.wind - (windDrawn || 0));
+                // Remove chosen scroll from that element's deck and shuffle
+                const deck = spellSystem.scrollDecks?.[element];
+                if (deck) {
+                    const idx = deck.indexOf(scrollName);
+                    if (idx > -1) deck.splice(idx, 1);
+                    if (spellSystem.shuffleDeck) spellSystem.shuffleDeck(deck);
                 }
 
-                // Update target player's pool (if not local, since local already applied)
+                // Add scroll to that player's hand
+                spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                spellSystem.playerScrolls[playerIndex].hand.add(scrollName);
+                spellSystem.validateScrollState();
+                spellSystem.updateScrollCount();
+
+                // Update source pool (stones were drawn from it)
+                if (typeof stonePools !== 'undefined' && stonePools[element] !== undefined) {
+                    stonePools[element] = Math.max(0, stonePools[element] - (stonesDrawn || 0));
+                }
+
+                // Update remote player's stone pool display
                 if (playerIndex !== myPlayerIndex) {
                     if (!playerPools[playerIndex]) playerPools[playerIndex] = { earth: 0, water: 0, fire: 0, wind: 0, void: 0 };
-                    playerPools[playerIndex].void = Math.min(5, (playerPools[playerIndex].void || 0) + (voidDrawn || 0));
-                    playerPools[playerIndex].wind = Math.min(5, (playerPools[playerIndex].wind || 0) + (windDrawn || 0));
-                    const playerName = getPlayerColorName(playerIndex);
-                    updateStatus(`${playerName} drew ${voidDrawn || 0} void and ${windDrawn || 0} wind stones (Quick Reflexes).`);
+                    playerPools[playerIndex][element] = Math.min(5, (playerPools[playerIndex][element] || 0) + (stonesDrawn || 0));
                 }
 
+                // Apply the quickReflexes buff on this client so that getSpellCost()
+                // correctly prices level-1 scrolls at 0 AP during affordability checks
+                // in the response window (canAnyPlayerRespond / canPlayerRespond).
+                if (buffActive && spellSystem.scrollEffects) {
+                    spellSystem.scrollEffects.activeBuffs.quickReflexes = {
+                        playerIndex: playerIndex
+                    };
+                    console.log(`⚡ Applied quickReflexes buff for player ${playerIndex} on remote client`);
+                }
+
+                const playerName = getPlayerColorName(playerIndex);
+                const scrollDef = spellSystem.patterns?.[scrollName];
+                const displayName = scrollDef?.name || scrollName;
+                updateStatus(`⚡ ${playerName} used Quick Reflexes: found "${displayName}", drew ${stonesDrawn || 0} ${element} stone${stonesDrawn === 1 ? '' : 's'}.`);
+
                 if (typeof updateSourcePoolDisplay === 'function') updateSourcePoolDisplay();
+                if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
                 updateOpponentPanel();
             });
 
@@ -1614,12 +2320,31 @@
             // Listen for common area updates
             gameChannel.on('broadcast', { event: 'common-area-update' }, ({ payload }) => {
                 console.log('📄 Received common area update:', payload);
-                const { element, scrollName, replacedScroll } = payload;
+                const { element, scrollName, replacedScroll, _timestamp } = payload;
+
+                // DEDUPLICATION: Check if we've already processed this event
+                const eventId = `common-area-${element}-${scrollName}-${_timestamp || Date.now()}`;
+                if (receivedSequences.has(eventId)) {
+                    console.warn('⚠️  Duplicate common-area-update event ignored:', eventId);
+                    return;
+                }
+                receivedSequences.add(eventId);
+
+                // IDEMPOTENCY: Check if common area already has this scroll
+                if (spellSystem.commonArea[element] === scrollName) {
+                    console.warn('⚠️  Common area already has this scroll, skipping update');
+                    return;
+                }
 
                 // If there was a scroll being replaced, put it back in the deck
                 if (replacedScroll) {
-                    spellSystem.scrollDecks[element].push(replacedScroll);
-                    console.log(`📜 Common area: ${replacedScroll} returned to deck`);
+                    // Check if it's not already in the deck (avoid duplicates)
+                    if (!spellSystem.scrollDecks[element]?.includes(replacedScroll)) {
+                        spellSystem.scrollDecks[element].push(replacedScroll);
+                        console.log(`📜 Common area: ${replacedScroll} returned to deck`);
+                    } else {
+                        console.warn(`⚠️  ${replacedScroll} already in deck, not adding again`);
+                    }
                 }
 
                 spellSystem.commonArea[element] = scrollName;
@@ -1635,10 +2360,25 @@
             // Response window events for scroll responses
             gameChannel.on('broadcast', { event: 'response-window-opened' }, ({ payload }) => {
                 console.log('📄 Received response window opened:', payload);
-                const { scrollName, casterIndex } = payload;
+                const { scrollName, casterIndex, commonArea: commonAreaSnapshot } = payload;
 
                 // Only show response window if I'm NOT the caster
                 if (myPlayerIndex !== casterIndex && spellSystem.responseWindow) {
+                    // Apply the common area snapshot from the caster's client before
+                    // checking canPlayerRespond — prevents a race condition where a
+                    // preceding common-area-update (e.g. Psychic moving there) hasn't
+                    // arrived yet, causing the response check to miss available scrolls.
+                    if (commonAreaSnapshot) {
+                        const elements = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
+                        elements.forEach(el => {
+                            const incomingScroll = commonAreaSnapshot[el] ?? null;
+                            if (spellSystem.commonArea[el] !== incomingScroll) {
+                                console.log(`📜 Applying common area snapshot: ${el} = ${incomingScroll}`);
+                                spellSystem.commonArea[el] = incomingScroll;
+                            }
+                        });
+                    }
+
                     const scrollDef = spellSystem.patterns[scrollName];
                     const scrollData = { name: scrollName, spell: scrollDef };
 
@@ -1673,6 +2413,14 @@
                 updateStatus(`${getPlayerColorName(casterIndex)}'s scroll was countered!`);
             });
 
+            // Cascade forfeit: active player timed out with an unresolved scroll cascade
+            gameChannel.on('broadcast', { event: 'cascade-forfeit' }, ({ payload }) => {
+                console.log('📄 Received cascade-forfeit:', payload);
+                const { playerIndex } = payload;
+                const playerName = getPlayerColorName(playerIndex);
+                updateStatus(`⏰ ${playerName} ran out of time with an unresolved scroll cascade — they forfeit!`);
+            });
+
             gameChannel.on('broadcast', { event: 'response-resolved' }, ({ payload }) => {
                 console.log('📄 Received response resolved:', payload);
                 // Close the response window on this client
@@ -1687,7 +2435,6 @@
                             console.log(`ℹ️ Processing remote response scroll: ${result.scrollName}`);
                             // Only execute the response scroll effect on the RESPONDER's client.
                             // The responder's client owns the pools/decks that need modifying.
-                            // Other clients will be synced via broadcasts (scroll-collected, stone-sync, etc.)
                             if (spellSystem.scrollEffects && result.casterIndex === myPlayerIndex) {
                                 const scrollDef = spellSystem.patterns?.[result.scrollName];
                                 // Ensure triggeringScroll has its definition (resolve from
@@ -1700,6 +2447,30 @@
                                     spell: scrollDef,
                                     triggeringScroll: trigScroll
                                 });
+
+                                // Track activated element for win condition (response scrolls count too!)
+                                spellSystem.ensurePlayerScrollsStructure(result.casterIndex);
+                                const activatedEls = (scrollDef?.element === 'catacomb' && scrollDef?.patterns?.[0])
+                                    ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
+                                    : scrollDef?.element ? [scrollDef.element] : [];
+                                activatedEls.forEach(el => {
+                                    spellSystem.playerScrolls[result.casterIndex].activated.add(el);
+                                });
+                                if (typeof updatePlayerElementSymbols === 'function') {
+                                    updatePlayerElementSymbols(result.casterIndex);
+                                }
+
+                                // Broadcast activation so the caster's client (and any others)
+                                // updates this player's shrine win-condition symbols
+                                if (activatedEls.length > 0 && typeof broadcastGameAction === 'function') {
+                                    broadcastGameAction('scroll-effect', {
+                                        playerIndex: result.casterIndex,
+                                        scrollName: result.scrollName,
+                                        effectName: scrollDef?.name || result.scrollName,
+                                        element: scrollDef?.element,
+                                        activatedElements: activatedEls
+                                    });
+                                }
                             } else {
                                 console.log(`ℹ️ Skipping response effect for ${result.scrollName} (responder is player ${result.casterIndex}, I am ${myPlayerIndex})`);
                             }
@@ -1813,26 +2584,8 @@
                 }
             });
 
-            // Listen for scroll effect events (generic notification)
-            gameChannel.on('broadcast', { event: 'scroll-effect' }, ({ payload }) => {
-                console.log('📄 Received scroll effect:', payload);
-                const { playerIndex, scrollName, effectName, element, activatedElements } = payload;
-
-                // Track activated element(s) for the remote player (win condition + tile symbols)
-                if (typeof spellSystem !== 'undefined' && playerIndex != null) {
-                    spellSystem.ensurePlayerScrollsStructure(playerIndex);
-                    if (!spellSystem.playerScrolls[playerIndex]) return;
-                    // Use activatedElements array if provided (catacomb scrolls send component elements)
-                    const elements = activatedElements || (element ? [element] : []);
-                    elements.forEach(el => spellSystem.playerScrolls[playerIndex].activated.add(el));
-                    updatePlayerElementSymbols(playerIndex);
-                }
-
-                if (playerIndex !== myPlayerIndex) {
-                    const playerName = getPlayerColorName(playerIndex);
-                    updateStatus(`📜 ${playerName} activated ${effectName}!`);
-                }
-            });
+            // Note: scroll-effect handling (activated tracking, symbols, win check, status) is
+            // handled by the earlier scroll-effect listener above. No duplicate handler here.
 
             // Listen for Arson stone destruction on opponent's client
             // Listen for Plunder scroll events (Catacomb Scroll 8)
@@ -1916,6 +2669,267 @@
                 if (typeof updateOpponentPanel === 'function') updateOpponentPanel();
             });
 
+            // Listen for scroll-used: handles scroll disposition on remote clients
+            // Specifically needed for scrolls like Arson that force themselves to common area
+            gameChannel.on('broadcast', { event: 'scroll-used' }, ({ payload }) => {
+                const { playerIndex, scrollName, fromCommonArea, forceToCommonArea } = payload;
+                if (!forceToCommonArea) return; // Only act when a scroll forces itself to common area
+                if (playerIndex === myPlayerIndex) return; // Caster already handled it locally
+
+                spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                const playerScrolls = spellSystem.playerScrolls[playerIndex];
+                if (playerScrolls && playerScrolls.active.has(scrollName)) {
+                    playerScrolls.active.delete(scrollName);
+                    console.log(`📜 Remote scroll-used: moved ${scrollName} from player ${playerIndex}'s active to common area`);
+                }
+                spellSystem.discardToCommonArea(scrollName);
+                spellSystem.updateScrollCount();
+                if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+            });
+
+            // Listen for water stone transformation (Control the Current - Water V)
+            gameChannel.on('broadcast', { event: 'water-stone-transformed' }, ({ payload }) => {
+                console.log('📄 Received water-stone-transformed:', payload);
+                const { stoneX, stoneY, newElement } = payload;
+
+                // Find the stone at this location
+                if (typeof placedStones !== 'undefined' && typeof STONE_TYPES !== 'undefined') {
+                    const stone = placedStones.find(s =>
+                        Math.abs(s.x - stoneX) < 1 && Math.abs(s.y - stoneY) < 1
+                    );
+
+                    if (stone && stone.element && STONE_TYPES[newElement]) {
+                        // Update stone type
+                        stone.type = newElement;
+
+                        // Remove any water stone indicators (mimicry/chain rings) before transformation
+                        const mimicryIndicator = stone.element.querySelector('.mimicry-indicator');
+                        if (mimicryIndicator) {
+                            mimicryIndicator.remove();
+                        }
+                        const chainIndicator = stone.element.querySelector('.chain-indicator');
+                        if (chainIndicator) {
+                            chainIndicator.remove();
+                        }
+
+                        // Update visual appearance - update both color and symbol
+                        const circle = stone.element.querySelector('circle');
+                        const text = stone.element.querySelector('text');
+
+                        if (circle) {
+                            circle.setAttribute('fill', STONE_TYPES[newElement].color);
+                        }
+
+                        if (text) {
+                            text.textContent = STONE_TYPES[newElement].symbol;
+                        }
+
+                        console.log(`🌀 Transformed water stone at (${stoneX.toFixed(1)}, ${stoneY.toFixed(1)}) to ${newElement}`);
+                    } else {
+                        console.warn(`⚠️ Could not find stone at (${stoneX}, ${stoneY}) to transform`);
+                    }
+                }
+            });
+
+            // Listen for stones destroyed (Combust - Catacomb X)
+            gameChannel.on('broadcast', { event: 'stones-destroyed' }, ({ payload }) => {
+                console.log('📄 Received stones-destroyed:', payload);
+                const { tileId, stoneIds } = payload;
+
+                // Remove the destroyed stones from the board
+                if (typeof placedStones !== 'undefined' && stoneIds && stoneIds.length > 0) {
+                    stoneIds.forEach(stoneId => {
+                        const stoneIndex = placedStones.findIndex(s => s.id === stoneId);
+                        if (stoneIndex !== -1) {
+                            const stone = placedStones[stoneIndex];
+
+                            // Remove visual element
+                            if (stone.element && stone.element.parentNode) {
+                                stone.element.parentNode.removeChild(stone.element);
+                            }
+
+                            // Remove from array
+                            placedStones.splice(stoneIndex, 1);
+                            console.log(`💥 Removed stone ${stoneId} from board`);
+                        }
+                    });
+
+                    console.log(`🔥 Combust destroyed ${stoneIds.length} stone${stoneIds.length === 1 ? '' : 's'} on tile ${tileId}`);
+                }
+            });
+
+            // Listen for periodic turn sync from host (for desync recovery)
+            gameChannel.on('broadcast', { event: 'turn-sync' }, ({ payload }) => {
+                const { playerIndex, turnNumber, turnStartedAt } = payload;
+
+                // Check if we're desynced
+                if (activePlayerIndex !== playerIndex) {
+                    console.warn(`⚠️ DESYNC CORRECTED: Local activePlayerIndex was ${activePlayerIndex}, host says ${playerIndex}`);
+                    activePlayerIndex = playerIndex;
+                    updateTurnDisplay();
+                }
+
+                if (typeof turnNumber === 'number' && lastReceivedTurnNumber !== turnNumber) {
+                    console.warn(`⚠️ DESYNC CORRECTED: Local turn was ${lastReceivedTurnNumber}, host says ${turnNumber}`);
+                    lastReceivedTurnNumber = turnNumber;
+                }
+
+                if (turnStartedAt && Math.abs(turnStartedAtMs - turnStartedAt) > 2000) {
+                    console.warn(`⚠️ Turn timer desync corrected (diff: ${Math.abs(turnStartedAtMs - turnStartedAt)}ms)`);
+                    turnStartedAtMs = turnStartedAt;
+                }
+            });
+
+            // Listen for periodic common area sync from host (for desync recovery)
+            gameChannel.on('broadcast', { event: 'common-area-sync' }, ({ payload }) => {
+                const { commonArea } = payload;
+
+                if (!commonArea || typeof spellSystem === 'undefined') return;
+
+                // Compare and auto-correct any differences
+                let corrected = false;
+                Object.keys(commonArea).forEach(element => {
+                    const hostScroll = commonArea[element];
+                    const localScroll = spellSystem.commonArea[element];
+
+                    if (hostScroll !== localScroll) {
+                        console.warn(`⚠️ COMMON AREA DESYNC CORRECTED: ${element} slot was "${localScroll}", host says "${hostScroll}"`);
+                        spellSystem.commonArea[element] = hostScroll;
+                        corrected = true;
+                    }
+                });
+
+                if (corrected) {
+                    // Update UI after corrections
+                    if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+                    if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
+                    spellSystem.validateScrollState();
+                    spellSystem.updateScrollCount();
+                }
+            });
+
+            // Listen for Reflect buff applied (passive buff for next turn)
+            gameChannel.on('broadcast', { event: 'reflect-buff-applied' }, ({ payload }) => {
+                console.log('📄 Received reflect-buff-applied:', payload);
+                const { playerIndex, scrollName, scrollDefinition } = payload;
+
+                // Apply the Reflect buff to the spell system (push to array)
+                if (typeof spellSystem !== 'undefined' && spellSystem.scrollEffects) {
+                    if (!Array.isArray(spellSystem.scrollEffects.activeBuffs.reflectPending)) {
+                        spellSystem.scrollEffects.activeBuffs.reflectPending = [];
+                    }
+                    spellSystem.scrollEffects.activeBuffs.reflectPending.push({
+                        playerIndex: playerIndex,
+                        scrollName: scrollName,
+                        definition: scrollDefinition
+                    });
+                    console.log(`🛡️ Reflect buff applied to player ${playerIndex}: will reflect "${scrollName}" on their next turn`);
+                }
+            });
+
+            // Listen for Psychic buff applied (passive buff for next turn)
+            gameChannel.on('broadcast', { event: 'psychic-buff-applied' }, ({ payload }) => {
+                console.log('📄 Received psychic-buff-applied:', payload);
+                const { playerIndex, scrollName, scrollDefinition } = payload;
+
+                // Apply the Psychic buff to the spell system (push to array)
+                if (typeof spellSystem !== 'undefined' && spellSystem.scrollEffects) {
+                    if (!Array.isArray(spellSystem.scrollEffects.activeBuffs.psychicPending)) {
+                        spellSystem.scrollEffects.activeBuffs.psychicPending = [];
+                    }
+                    spellSystem.scrollEffects.activeBuffs.psychicPending.push({
+                        playerIndex: playerIndex,
+                        scrollName: scrollName,
+                        definition: scrollDefinition
+                    });
+                    console.log(`🔮 Psychic buff applied to player ${playerIndex}: will activate "${scrollName}" at start of their next turn`);
+                }
+            });
+
+            // Listen for scroll state sync from host (authoritative source)
+            gameChannel.on('broadcast', { event: 'scroll-state-sync' }, ({ payload }) => {
+                if (typeof spellSystem !== 'undefined' && spellSystem.applyScrollStateSnapshot) {
+                    const corrected = spellSystem.applyScrollStateSnapshot(payload.snapshot);
+                    // Only log if corrections were made
+                    if (corrected) {
+                        console.log('📊 Scroll state synchronized with host (corrections applied)');
+                    }
+                }
+            });
+
+            // Listen for scroll state sync requests (from clients who detected issues)
+            gameChannel.on('broadcast', { event: 'scroll-state-sync-request' }, ({ payload }) => {
+                // Only host responds to sync requests
+                if (myPlayerIndex === 0 && typeof spellSystem !== 'undefined') {
+                    console.log(`⚠️  Sync request from player ${payload.playerIndex} - sending authoritative state`);
+                    const snapshot = spellSystem.getScrollStateSnapshot();
+                    broadcastGameAction('scroll-state-sync', { snapshot });
+                }
+            });
+
+            // Aggressive scroll state validation and sync (every 3 seconds)
+            setInterval(() => {
+                if (!isMultiplayer || !spellSystem) return;
+
+                // Validate current state (only logs if errors found)
+                const hasErrors = spellSystem.validateScrollState();
+
+                // If I'm the host (player 0), broadcast authoritative state
+                if (myPlayerIndex === 0) {
+                    const snapshot = spellSystem.getScrollStateSnapshot();
+                    broadcastGameAction('scroll-state-sync', { snapshot });
+                }
+
+                // If errors found and I'm not the host, immediately request sync
+                if (hasErrors && myPlayerIndex !== 0) {
+                    console.warn('⚠️  Errors detected - immediately requesting sync from host');
+                    broadcastGameAction('scroll-state-sync-request', { playerIndex: myPlayerIndex });
+                }
+            }, 3000); // Every 3 seconds (more aggressive)
+
+            // Listen for game reset (placement timeout or other critical errors)
+            gameChannel.on('broadcast', { event: 'game-reset' }, ({ payload }) => {
+                console.log('📄 Received game-reset:', payload);
+                const { reason, kickedPlayerIndex } = payload;
+
+                // If I'm the kicked player, skip this - I'll handle it via DELETE event
+                if (typeof kickedPlayerIndex !== 'undefined' && kickedPlayerIndex === myPlayerIndex) {
+                    console.log('⏰ I am the kicked player - waiting for DELETE event to handle reset');
+                    return;
+                }
+
+                if (reason === 'placement-timeout') {
+                    const kickedPlayerName = typeof kickedPlayerIndex !== 'undefined'
+                        ? getPlayerColorName(kickedPlayerIndex)
+                        : 'A player';
+                    updateStatus(`⏰ ${kickedPlayerName} timed out during tile placement — returning to lobby`);
+                } else {
+                    updateStatus('🔄 Game reset — returning to lobby');
+                }
+
+                // Reset to lobby (for non-kicked players)
+                if (typeof resetToLobby === 'function') {
+                    setTimeout(() => {
+                        resetToLobby();
+                        // Refresh player list to show updated lobby without the kicked player
+                        if (typeof refreshPlayerList === 'function') {
+                            refreshPlayerList();
+                        }
+                    }, 1000);
+                }
+            });
+
+            // ── Emoji reactions ──────────────────────────────────────────
+            // Received when another player fires an emoji.
+            // Show it floating above their pawn on every client except the sender
+            // (sender already called showEmojiOverPawn locally before broadcasting).
+            gameChannel.on('broadcast', { event: 'emoji' }, ({ payload }) => {
+                const { playerIndex, display, isText } = payload;
+                if (typeof window.emojiSystem !== 'undefined') {
+                    window.emojiSystem.showEmojiOverPawn(playerIndex, display, !!isText);
+                }
+            });
+
             // Subscribe to the channel
             gameChannel.subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
@@ -1924,9 +2938,100 @@
             });
         }
 
+        // ----------------------------------------------------------------
+        // Multiplayer hooks called by game-core.js
+        // ----------------------------------------------------------------
+
+        // Called by game-core.js executeMovement() after a successful move.
+        // game-ui.js drag/tap handlers broadcast directly, but game-core.js uses
+        // this function as a named hook so it is safe to define it once here.
+        function broadcastPlayerMovement(playerIndex, x, y, apSpent) {
+            broadcastGameAction('player-move', { playerIndex, x, y, apSpent });
+        }
+
+        // Called by game-core.js executeMovement() after landing on a hex.
+        // Mirrors the tile-reveal logic in game-ui.js drag/tap handlers so that
+        // the game-core.js movement path also reveals hidden tiles correctly.
+        function handlePlayerLanding(x, y) {
+            if (typeof getAllHexagonPositions !== 'function' || typeof placedTiles === 'undefined') return;
+            const allHexes = getAllHexagonPositions();
+            let nearestHex = null;
+            let nearestDist = Infinity;
+            allHexes.forEach(hexPos => {
+                const d = Math.sqrt(Math.pow(hexPos.x - x, 2) + Math.pow(hexPos.y - y, 2));
+                if (d < nearestDist) { nearestDist = d; nearestHex = hexPos; }
+            });
+            if (nearestHex && nearestDist < 5 && nearestHex.tiles) {
+                nearestHex.tiles
+                    .filter(t => t.flipped && !t.isPlayerTile)
+                    .forEach(t => {
+                        if (typeof revealTile === 'function') revealTile(t.id);
+                    });
+            }
+        }
+
+        // Reset game back to lobby (used for placement timeout or critical errors)
+        function resetToLobby() {
+            console.log('🔄 Resetting game back to lobby');
+
+            // Stop turn timer monitoring
+            if (typeof stopTurnTimerMonitoring === 'function') {
+                stopTurnTimerMonitoring();
+            }
+
+            // Clear the board
+            if (typeof clearBoard === 'function') {
+                clearBoard(true);
+            }
+
+            // Reset viewport to default position
+            if (typeof viewportX !== 'undefined') viewportX = 0;
+            if (typeof viewportY !== 'undefined') viewportY = 0;
+            if (typeof viewportScale !== 'undefined') viewportScale = 1;
+            if (typeof updateViewport === 'function') {
+                updateViewport();
+            }
+
+            // Hide game, show lobby
+            document.getElementById('lobby-wrapper').style.display = 'block';
+            document.getElementById('game-layout').classList.remove('active');
+
+            // Hide leave game and end turn buttons
+            const leaveBtn = document.getElementById('leave-game');
+            const endTurnBtn = document.getElementById('end-turn');
+            if (leaveBtn) leaveBtn.style.display = 'none';
+            if (endTurnBtn) endTurnBtn.style.display = 'none';
+
+            // Hide timer HUD
+            const timerHud = document.getElementById('hud-timer');
+            if (timerHud) timerHud.style.display = 'none';
+
+            // Reset game state variables
+            isPlacementPhase = false;
+            playerTilesPlaced.clear();
+            activePlayerIndex = 0;
+            currentTurnNumber = 0;
+            lastReceivedTurnNumber = 0;
+
+            updateStatus('🏠 Returned to lobby');
+
+            // Refresh player list to show updated lobby (e.g., without kicked player)
+            if (typeof refreshPlayerList === 'function') {
+                setTimeout(() => refreshPlayerList(), 500);
+            }
+        }
+
         // Broadcast a game action to all other players
         function broadcastGameAction(event, payload) {
             if (!gameChannel || !isMultiplayer) return;
+
+            // Add sequence number for scroll-related events to detect out-of-order delivery
+            const isScrollEvent = event.includes('scroll') || event.includes('shrine') || event.includes('common-area');
+            if (isScrollEvent) {
+                scrollEventSequence++;
+                payload._seq = scrollEventSequence;
+                payload._timestamp = Date.now();
+            }
 
             gameChannel.send({
                 type: 'broadcast',
@@ -2266,3 +3371,13 @@
     
         // Initialize button visibility on load
         try { updateEndTurnButtonVisibility(); } catch (e) {}
+
+        // ── Auth init ──────────────────────────────────────────────────
+        // Wire Enter key on auth fields to trigger login
+        ['auth-username', 'auth-password'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') authLogin(); });
+        });
+
+        // Restore an existing Supabase Auth session (auto-login on page reload)
+        checkAuthSession();

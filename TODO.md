@@ -31,10 +31,10 @@ High-level task list for the Godaigo game project. Update this as you complete o
 - Implement or finish the **effect logic** for every scroll in `js/scrolls/effects/scroll-effects.js` so each scroll’s ability works as designed.
 - **Water (5):** I–III and V have effects; **IV (Wandering River)** is broken (see above). Ensure all five are correct.
 - **Fire (5):** I–V have effect stubs; verify and complete behavior for each (e.g. Unbidden Lamplight, Arson, Sacrificial Pyre, Scorched Earth, Burning Motivation).
-- **Wind (5):** **No effect entries** in `effects` – add WIND_SCROLL_1 … WIND_SCROLL_5 and implement each ability.
-- **Void (5):** **No effect entries** in `effects` – add VOID_SCROLL_1 … VOID_SCROLL_5 and implement each ability.
+- **Wind (5):** All five entries exist in `effects`; verify each ability works correctly.
+- **Void (5):** All five entries exist in `effects`; verify each ability works correctly.
 - **Earth (5):** I–V have effects; verify Iron Stance, Shifting Sands, Heavy Stomp, etc. are complete.
-- **Catacomb (10):** **No effect entries** in `effects` – add CATACOMB_SCROLL_1 … CATACOMB_SCROLL_10 and implement each ability (multi-element patterns, etc.).
+- **Catacomb (10):** All ten entries exist in `effects`; verify each ability works correctly.
 - Use `js/scrolls/scroll-definitions.js` and `docs/game-design-document.md` for names, descriptions, and intended behavior.
 
 ### Game design & content
