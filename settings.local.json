@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "mcp__filesystem__list_directory",
+      "mcp__filesystem__directory_tree",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__read_multiple_files",
+      "Bash(find \"C:/Users/aikij/Downloads/Godaigo.Elements2.13\" -type f -name \"*.sql\" -exec head -200 {} ;)",
+      "Bash(python -c \":*)",
+      "mcp__filesystem__list_allowed_directories",
+      "Bash(find \"C:/Users/aikij/Downloads/Godaigo.Elements2.13/js/\" -name \"*.js\" -exec grep -l \"handlePlayerLanding\\\\|checkTileRevealsAtPosition\" {} ;)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(node -e \"JSON.parse\\(require\\(''fs''\\).readFileSync\\(''C:/Users/aikij/Downloads/Godaigo.Elements2.13/.claude/settings.local.json'',''utf8''\\)\\); console.log\\(''valid''\\)\")",
+      "Bash(gh pr:*)",
+      "Bash(winget install:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(\"C:/Users/aikij/Downloads/Godaigo.Elements2.13/css/styles.css\")"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd 'C:/Users/aikij/Downloads/Godaigo.Elements2.13' && npx repomix 2>/dev/null || true",
+            "timeout": 60,
+            "statusMessage": "Packing codebase with Repomix...",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
