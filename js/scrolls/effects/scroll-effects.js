@@ -580,15 +580,16 @@ const ScrollEffects = {
                 const triggeringScroll = context?.triggeringScroll;
 
                 if (triggeringScroll) {
-                    // Mark the triggering scroll to go to common area
-                    system.pendingCommonAreaRedirect = {
+                    // Mark the triggering scroll to go to lamplight caster's hand
+                    system.pendingHandRedirect = {
                         scrollName: triggeringScroll.name,
-                        originalCasterIndex: triggeringScroll.casterIndex
+                        originalCasterIndex: triggeringScroll.casterIndex,
+                        redirectToPlayerIndex: casterIndex
                     };
 
                     const scrollDef = system.spellSystem?.patterns?.[triggeringScroll.name];
                     const scrollDisplayName = scrollDef?.name || triggeringScroll.name;
-                    const message = `Unbidden Lamplight! ${scrollDisplayName} will go to common area after resolving.`;
+                    const message = `Unbidden Lamplight! ${scrollDisplayName} will go to your hand after resolving.`;
                     updateStatus(message);
 
                     // Count as activating fire for win-condition indicator on player tile
@@ -602,7 +603,7 @@ const ScrollEffects = {
 
                     return {
                         success: true,
-                        redirectToCommon: triggeringScroll.name,
+                        redirectToHand: triggeringScroll.name,
                         message: message
                     };
                 }
@@ -930,31 +931,20 @@ const ScrollEffects = {
          * Until your next turn, elemental shrine centers act as catacomb tiles.
          */
         WIND_SCROLL_3: {
-            name: 'Freedom',
-            description: 'Until your next turn, the centers of elemental shrines act as catacomb tiles.',
+            name: 'Breath of Power',
+            description: 'Until end of turn, you may move adjacent stones to another adjacent empty space.',
             isCounter: false,
             priority: 3,
 
             execute(casterIndex, context, system) {
-                console.log(`🌬️ Freedom activated by player ${casterIndex}`);
+                console.log(`🌬️ Breath of Power activated by player ${casterIndex}`);
 
-                system.activeBuffs.freedom = {
-                    playerIndex: casterIndex,
-                    expiresNextTurn: true
+                system.activeBuffs.breathOfPower = {
+                    expiresThisTurn: true,
+                    playerIndex: casterIndex
                 };
 
-                if (typeof updateCatacombIndicators === 'function') {
-                    updateCatacombIndicators();
-                }
-
-                // Broadcast to other players so they also get the buff
-                if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
-                    broadcastGameAction('freedom-apply', {
-                        playerIndex: casterIndex
-                    });
-                }
-
-                const message = 'Freedom: elemental shrine centers act as catacomb tiles until your next turn.';
+                const message = 'Breath of Power: move adjacent stones to adjacent empty spaces this turn.';
                 updateStatus(message);
 
                 return {
@@ -1001,20 +991,24 @@ const ScrollEffects = {
          * Move adjacent stones to another adjacent empty space until end of turn.
          */
         WIND_SCROLL_5: {
-            name: 'Breath of Power',
-            description: 'Until end of turn, you may move adjacent stones to another adjacent empty space.',
+            name: 'Freedom',
+            description: 'Until your next turn, the centers of elemental shrines act as catacomb tiles (only applies to you).',
             isCounter: false,
             priority: 5,
 
             execute(casterIndex, context, system) {
-                console.log(`🌬️ Breath of Power activated by player ${casterIndex}`);
+                console.log(`🌬️ Freedom activated by player ${casterIndex}`);
 
-                system.activeBuffs.breathOfPower = {
-                    expiresThisTurn: true,
-                    playerIndex: casterIndex
+                system.activeBuffs.freedom = {
+                    playerIndex: casterIndex,
+                    expiresNextTurn: true
                 };
 
-                const message = 'Breath of Power: move adjacent stones to adjacent empty spaces this turn.';
+                if (typeof updateCatacombIndicators === 'function') {
+                    updateCatacombIndicators();
+                }
+
+                const message = 'Freedom: elemental shrine centers act as catacomb tiles until your next turn.';
                 updateStatus(message);
 
                 return {
@@ -1058,28 +1052,34 @@ const ScrollEffects = {
             }
         },
 
-        VOID_SCROLL_4: {
+        VOID_SCROLL_3: {
             name: 'Simplify',
-            description: 'Scrolls cost 1 AP to activate until the end of your turn.',
+            description: 'Scrolls cost 1 AP for you to cast until the beginning of your next turn.',
             isCounter: false,
-            priority: 4,
+            priority: 3,
             execute(casterIndex, context, system) {
                 console.log(`🔮 Simplify activated by player ${casterIndex}`);
                 system.activeBuffs.simplify = {
                     expiresThisTurn: true,
                     playerIndex: casterIndex
                 };
-                const message = 'Simplify: scrolls now cost 1 AP to activate this turn!';
+                const playerName = typeof getPlayerColorName === 'function' ? getPlayerColorName(casterIndex) : `Player ${casterIndex + 1}`;
+                const message = `Simplify: ${playerName}'s scrolls cost 1 AP to cast until their next turn.`;
                 updateStatus(message);
+
+                if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('simplify-applied', { playerIndex: casterIndex });
+                }
+
                 return { success: true, message: message };
             }
         },
 
-        VOID_SCROLL_3: {
+        VOID_SCROLL_4: {
             name: 'Telekinesis',
-            description: 'Move a tile unoccupied by stones or players. It must be touching 2 other tiles. Cannot move a tile if it would strand an adjacent tile.',
+            description: 'Move a tile unoccupied by stones or players. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.',
             isCounter: false,
-            priority: 3,
+            priority: 4,
             execute(casterIndex, context, system) {
                 console.log(`🔮 Telekinesis activated by player ${casterIndex}`);
 
@@ -1090,7 +1090,7 @@ const ScrollEffects = {
                 }
 
                 system.enterTelekinesisMode(casterIndex, {
-                    scrollName: context?.scrollName || 'VOID_SCROLL_3',
+                    scrollName: context?.scrollName || 'VOID_SCROLL_4',
                     effectName: 'Telekinesis',
                     spell: context?.spell
                 });
@@ -2766,9 +2766,9 @@ const ScrollEffects = {
         return false;
     },
 
-    // Check if Freedom is active (affects all players)
-    hasFreedomActive() {
-        return !!this.activeBuffs.freedom;
+    // Check if Freedom is active for a specific player
+    hasFreedomActive(playerIndex) {
+        return this.activeBuffs.freedom?.playerIndex === playerIndex;
     },
 
     // Track last scroll cast this turn (for Reflect)
@@ -3845,7 +3845,7 @@ const ScrollEffects = {
                 const display = document.getElementById('void-ap-display');
                 if (display) {
                     if (voidAP > 0) {
-                        display.textContent = `(+${voidAP} ✨ Void AP)`;
+                        display.textContent = `(+${voidAP} Void AP)`;
                         display.style.display = 'inline';
                     } else {
                         display.style.display = 'none';
@@ -4238,10 +4238,21 @@ const ScrollEffects = {
                     });
                 }
 
-                // Send Take Flight to common area using handleScrollDisposition
+                // Disposition: goes to opponent's hand if targeting another player, stays in active area if self
                 if (self.spellSystem) {
                     const scrollName = completionPayload?.scrollName || 'WIND_SCROLL_4';
-                    self.spellSystem.handleScrollDisposition(scrollName, false, true);
+                    if (targetPlayerIndex !== casterIndex) {
+                        // Remove from caster's active area and add to target's hand
+                        const casterScrolls = self.spellSystem.playerScrolls[casterIndex];
+                        if (casterScrolls?.active.has(scrollName)) {
+                            casterScrolls.active.delete(scrollName);
+                        }
+                        self.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
+                        self.spellSystem.playerScrolls[targetPlayerIndex].hand.add(scrollName);
+                        self.spellSystem.updateScrollCount();
+                        updateCommonAreaUI();
+                    }
+                    // If self-targeting, scroll stays in active area — no action needed
                 }
 
                 // Signal completion

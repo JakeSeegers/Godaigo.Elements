@@ -250,7 +250,7 @@
                         <!-- Scrolls will be added here -->
                     </div>
                     <div class="scroll-browse-footer">
-                        <button class="btn-shuffle">📜 Shuffle Deck</button>
+                        <button class="btn-shuffle">Shuffle Deck</button>
                         <button class="btn-close">Close</button>
                     </div>
                 </div>
@@ -293,7 +293,7 @@
             modal.querySelector('.btn-shuffle').addEventListener('click', () => {
                 if (spellSystem.shuffleDeck && spellSystem.scrollDecks[element]) {
                     spellSystem.shuffleDeck(spellSystem.scrollDecks[element]);
-                    updateStatus(`📜 ${element.charAt(0).toUpperCase() + element.slice(1)} scroll deck shuffled!`);
+                    updateStatus(`${element.charAt(0).toUpperCase() + element.slice(1)} scroll deck shuffled!`);
                     modal.remove();
                     // Reopen to show new order
                     showScrollDeckBrowser(element);
@@ -328,7 +328,7 @@
             updateHUD();
 
             const scrollInfo = spellSystem.patterns?.[scrollName] || SCROLL_DEFINITIONS?.[scrollName];
-            updateStatus(`📜 Drew ${scrollInfo?.name || scrollName} from the ${element} deck!`);
+            updateStatus(`Drew ${scrollInfo?.name || scrollName} from the ${element} deck!`);
 
             // Shuffle the deck after drawing (as requested)
             if (spellSystem.shuffleDeck) {
@@ -385,9 +385,12 @@
             // Update player name/turn indicator
             try {
                 const hudPlayerName = document.getElementById('hud-player-name');
-                const hudPlayerDot = document.getElementById('hud-player-dot');
+                const hudPlayerDot  = document.getElementById('hud-player-dot');
+                const hudPlayer     = hudPlayerName?.closest('.hud-player');
                 if (hudPlayerName && typeof activePlayerIndex !== 'undefined') {
-                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && myPlayerIndex === activePlayerIndex) {
+                    const isMyTurnNow = typeof isMultiplayer !== 'undefined' && isMultiplayer
+                        && myPlayerIndex === activePlayerIndex;
+                    if (isMyTurnNow) {
                         hudPlayerName.textContent = 'Your Turn';
                     } else {
                         const name = typeof getPlayerColorName === 'function'
@@ -395,6 +398,7 @@
                             : `Player ${activePlayerIndex + 1}`;
                         hudPlayerName.textContent = `${name}'s Turn`;
                     }
+                    if (hudPlayer) hudPlayer.classList.toggle('your-turn', isMyTurnNow);
                 }
 
                 // Update player dot color — must reflect the ACTIVE player, not the local player
@@ -468,18 +472,16 @@
             circle.setAttribute('class', 'stone-piece');
             circle.setAttribute('fill', STONE_TYPES[type].color);
 
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', 0);
-            text.setAttribute('y', 0);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', '#fff');
-            text.setAttribute('font-size', '14');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = STONE_TYPES[type].symbol;
+            const ghostImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            ghostImg.setAttribute('href', STONE_TYPES[type].img);
+            ghostImg.setAttribute('x', -STONE_SIZE);
+            ghostImg.setAttribute('y', -STONE_SIZE);
+            ghostImg.setAttribute('width', STONE_SIZE * 2);
+            ghostImg.setAttribute('height', STONE_SIZE * 2);
+            ghostImg.style.mixBlendMode = 'screen';
 
             ghostStone.appendChild(circle);
-            ghostStone.appendChild(text);
+            ghostStone.appendChild(ghostImg);
             viewport.appendChild(ghostStone);
         }
 
@@ -501,10 +503,17 @@
         }
 
         let lastStatusMessage = null;
+        let _statusFlashTimer = null;
         function updateStatus(msg) {
             if (msg === lastStatusMessage) return;
             lastStatusMessage = msg;
-            document.getElementById('status').textContent = msg;
+            const el = document.getElementById('status');
+            if (!el) return;
+            el.textContent = msg;
+            // Brief gold flash to draw attention to new messages
+            el.style.color = '#d9b08c';
+            clearTimeout(_statusFlashTimer);
+            _statusFlashTimer = setTimeout(() => { el.style.color = ''; }, 1800);
         }
 
         let endTurnPromptShown = false;
@@ -524,71 +533,33 @@
 
             const overlay = document.createElement('div');
             overlay.id = 'end-turn-empty-ap-modal';
-            Object.assign(overlay.style, {
-                position: 'fixed',
-                top: '0', left: '0', right: '0', bottom: '0',
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                zIndex: '3000',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            });
+            overlay.className = 'retro-dlg-overlay';
 
             const modal = document.createElement('div');
-            Object.assign(modal.style, {
-                backgroundColor: '#1a1a2e',
-                border: '2px solid #f39c12',
-                borderRadius: '10px',
-                padding: '20px',
-                color: 'white',
-                minWidth: '260px',
-                maxWidth: '360px',
-                textAlign: 'center'
-            });
+            modal.className = 'retro-dlg-box';
 
-            const title = document.createElement('h3');
+            const title = document.createElement('div');
             title.textContent = 'Out of AP';
-            title.style.marginTop = '0';
+            title.className = 'retro-dlg-title';
             modal.appendChild(title);
 
             const message = document.createElement('div');
             message.textContent = "You're out of AP. Do you want to end your turn?";
-            message.style.margin = '10px 0 16px';
+            message.className = 'retro-dlg-line';
             modal.appendChild(message);
 
             const btnRow = document.createElement('div');
-            btnRow.style.display = 'flex';
-            btnRow.style.gap = '8px';
-            btnRow.style.justifyContent = 'center';
+            btnRow.className = 'retro-dlg-btns';
 
             const cancelBtn = document.createElement('button');
             cancelBtn.textContent = 'Keep Playing';
-            Object.assign(cancelBtn.style, {
-                padding: '8px 12px',
-                backgroundColor: '#2d2d44',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            });
-            cancelBtn.onclick = () => {
-                overlay.remove();
-            };
+            cancelBtn.className = 'retro-dlg-btn cancel';
+            cancelBtn.onclick = () => overlay.remove();
 
             const confirmBtn = document.createElement('button');
             confirmBtn.textContent = 'End Turn';
-            Object.assign(confirmBtn.style, {
-                padding: '8px 12px',
-                backgroundColor: '#e67e22',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            });
-            confirmBtn.onclick = () => {
-                overlay.remove();
-                endTurnBtn.click();
-            };
+            confirmBtn.className = 'retro-dlg-btn ok';
+            confirmBtn.onclick = () => { overlay.remove(); endTurnBtn.click(); };
 
             btnRow.appendChild(cancelBtn);
             btnRow.appendChild(confirmBtn);
@@ -620,10 +591,15 @@
             if (cardsContainer) cardsContainer.innerHTML = '';
             if (newCardsContainer) newCardsContainer.innerHTML = '';
 
-            // Get all players except myself
+            // Build ordered list: self first, then others
+            const playerOrder = [];
+            playerOrder.push(myPlayerIndex);
             for (let i = 0; i < totalPlayers; i++) {
-                if (i === myPlayerIndex) continue; // Skip myself
+                if (i !== myPlayerIndex) playerOrder.push(i);
+            }
 
+            for (const i of playerOrder) {
+                const isSelf = (i === myPlayerIndex);
                 const playerData = allPlayersData.find(p => p.player_index === i);
                 const playerName = getPlayerColorName(i);
                 const playerColor = playerData ? PLAYER_COLORS[playerData.color] : '#666';
@@ -632,18 +608,18 @@
                 // Get player resources
                 const pool = playerPools[i] || { earth: 0, water: 0, fire: 0, wind: 0, void: 0 };
                 const ap = playerAPs[i] || { currentAP: 5, voidAP: 0 };
-                const scrollData = spellSystem.playerScrolls[i] || { hand: new Set(), active: new Set() };
+                const scrollData = spellSystem.playerScrolls[i] || { hand: new Set(), active: new Set(), activated: new Set() };
 
                 const card = document.createElement('div');
-                card.className = 'opponent-card' + (isActiveTurn ? ' active-turn' : '');
+                card.className = 'opponent-card' + (isActiveTurn ? ' active-turn' : '') + (isSelf ? ' self-card' : '');
                 card.style.borderLeftColor = playerColor;
 
                 // Header with name and AP
                 const header = document.createElement('div');
                 header.className = 'opponent-header';
                 header.innerHTML = `
-                    <span class="opponent-name" style="color: ${playerColor};">${playerName}</span>
-                    <span class="opponent-ap">AP: ${ap.currentAP}${ap.voidAP > 0 ? ` +${ap.voidAP}✺` : ''}</span>
+                    <span class="opponent-name" style="color: ${playerColor};">${playerName}${isSelf ? ' (you)' : ''}</span>
+                    <span class="opponent-ap">AP: ${ap.currentAP}${ap.voidAP > 0 ? ` +${ap.voidAP}<img src="images/voidsymbol.png${IMG_V}" class="element-icon-sm" alt="void" style="vertical-align:middle;">` : ''}</span>
                 `;
                 card.appendChild(header);
 
@@ -651,19 +627,34 @@
                 const stonesDiv = document.createElement('div');
                 stonesDiv.className = 'opponent-stones';
                 const stoneElements = ['earth', 'water', 'fire', 'wind', 'void'];
+                let hasStones = false;
                 stoneElements.forEach(element => {
                     if (pool[element] > 0) {
+                        hasStones = true;
                         const stoneSpan = document.createElement('span');
                         stoneSpan.className = 'opponent-stone';
                         stoneSpan.style.color = STONE_TYPES[element].color;
-                        stoneSpan.textContent = `${STONE_TYPES[element].symbol} ${pool[element]}`;
+                        stoneSpan.innerHTML = `<img src="${STONE_TYPES[element].img}" class="element-icon-sm" alt="${element}"> ${element}: ${pool[element]}/5`;
                         stonesDiv.appendChild(stoneSpan);
                     }
                 });
-                if (stonesDiv.children.length === 0) {
-                    stonesDiv.innerHTML = '<span style="color: #666; font-size: 11px;">No stones</span>';
+                if (!hasStones) {
+                    stonesDiv.innerHTML = '<span class="opponent-no-stones">No stones</span>';
                 }
                 card.appendChild(stonesDiv);
+
+                // Win condition progress
+                const activated = scrollData.activated ? scrollData.activated : new Set();
+                const activatedCount = activated.size;
+                const winDiv = document.createElement('div');
+                winDiv.className = 'opponent-win-progress';
+                const activatedSymbols = ['earth', 'water', 'fire', 'wind', 'void'].map(el => {
+                    const done = activated.has(el);
+                    const img = STONE_TYPES[el]?.img || '';
+                    return `<img src="${img}" class="element-icon-sm win-pip${done ? ' win-pip-active' : ''}" alt="${el}" title="${el}">`;
+                }).join('');
+                winDiv.innerHTML = `<span class="opponent-win-label">Elements:</span> ${activatedSymbols} <span class="opponent-win-count">${activatedCount}/5</span>`;
+                card.appendChild(winDiv);
 
                 // Scrolls summary (hand count only - hand contents are private)
                 const handSize = scrollData.hand ? scrollData.hand.size : 0;
@@ -671,7 +662,7 @@
 
                 const scrollsSummary = document.createElement('div');
                 scrollsSummary.className = 'opponent-scrolls-summary';
-                scrollsSummary.textContent = `📜 Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''} (hidden)`;
+                scrollsSummary.textContent = `Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''} (hidden)`;
                 card.appendChild(scrollsSummary);
 
                 // Active scrolls (visible to opponents)
@@ -681,21 +672,21 @@
 
                     const activeTitle = document.createElement('div');
                     activeTitle.className = 'opponent-active-scrolls-title';
-                    activeTitle.textContent = `⚡ Active Area (${activeSize}):`;
+                    activeTitle.textContent = `Active Area (${activeSize}):`;
                     activeScrollsDiv.appendChild(activeTitle);
 
                     scrollData.active.forEach(scrollName => {
                         const pattern = spellSystem.patterns[scrollName];
                         const element = spellSystem.getScrollElement(scrollName);
                         const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#666';
-                        const elementSymbol = element === 'catacomb' ? '🔅' : STONE_TYPES[element]?.symbol || '?';
+                        const elementIconHTML = `<img src="${STONE_TYPES[element]?.img || ''}" class="element-icon-sm" alt="${element}" style="vertical-align:middle;">`;
 
                         const scrollCard = document.createElement('div');
                         scrollCard.className = 'opponent-scroll-card';
                         scrollCard.innerHTML = `
                             <div class="opponent-scroll-name">${pattern ? pattern.name : scrollName}</div>
                             <div class="opponent-scroll-element" style="color: ${elementColor};">
-                                ${elementSymbol} ${element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown'}
+                                ${elementIconHTML} ${element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown'}
                             </div>
                             <div class="opponent-scroll-pattern-wrap"></div>
                         `;
@@ -1049,7 +1040,7 @@
                     placeTile(draggedTileOriginalPos.x, draggedTileOriginalPos.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
                 } else if (isPlayerTile) {
                     // Player tile couldn't be placed - show why
-                    updateStatus('⚠️ Player tiles must touch at least 2 unrevealed tiles!');
+                    updateStatus('Player tiles must touch at least 2 unrevealed tiles!');
                 }
 
                 ghostTile.remove();
@@ -1390,8 +1381,8 @@
                 let newScale = pinchStartScale * (dist / pinchStartDist);
                 newScale = Math.max(0.25, Math.min(3.0, newScale));
 
-                const centerX = boardSvg.width.baseVal.value / 2;
-                const centerY = boardSvg.height.baseVal.value / 2;
+                const centerX = boardSvg.clientWidth / 2;
+                const centerY = boardSvg.clientHeight / 2;
 
                 // Keep pinch midpoint roughly stable during zoom
                 const k = (1 / viewportScale) - (1 / newScale);
@@ -1673,7 +1664,7 @@
                         } else if (draggedTileId !== null) {
                             // Moving already-placed non-player tiles is not synced in multiplayer; revert to avoid desync.
                             if (isMultiplayer && draggedTileOriginalPos) {
-                                updateStatus('⚠️ Tiles cannot be moved in multiplayer.');
+                                updateStatus('Tiles cannot be moved in multiplayer.');
                                 placeTile(draggedTileOriginalPos.x, draggedTileOriginalPos.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
                             }
                         }
@@ -2120,7 +2111,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             // They must choose where to place the overflowing scroll before ending.
             const turnPlayerIdx = isMultiplayer ? myPlayerIndex : activePlayerIndex;
             if (spellSystem && spellSystem.hasPendingCascade(turnPlayerIdx)) {
-                updateStatus('⚠️ Resolve your pending scroll cascade before ending your turn!');
+                updateStatus('Resolve your pending scroll cascade before ending your turn!');
                 spellSystem.showPendingCascadePrompt(turnPlayerIdx);
                 return;
             }
@@ -2532,7 +2523,7 @@ document.getElementById('undo-move').onclick = function() {
             const currentShrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
             const freedomActive = spellSystem && spellSystem.scrollEffects
                 && typeof spellSystem.scrollEffects.hasFreedomActive === 'function'
-                && spellSystem.scrollEffects.hasFreedomActive();
+                && spellSystem.scrollEffects.hasFreedomActive(myPlayerIndex);
             const elementalTypes = ['earth', 'water', 'fire', 'wind', 'void'];
             const isCatacombLike = (tile) => {
                 if (!tile) return false;
@@ -2755,10 +2746,10 @@ document.getElementById('undo-move').onclick = function() {
                     return btn;
                 }
 
-                panel.appendChild(makeBtn('🪨 Fill Stones', () => {
+                panel.appendChild(makeBtn('Fill Stones', () => {
                     if (typeof window.fillstones === 'function') window.fillstones();
                 }));
-                panel.appendChild(makeBtn('📜 Toggle Deck Browser', () => {
+                panel.appendChild(makeBtn('Toggle Deck Browser', () => {
                     if (typeof window.showdeck === 'function') window.showdeck();
                 }));
                 panel.appendChild(makeBtn('✕ Close', () => panel.remove()));

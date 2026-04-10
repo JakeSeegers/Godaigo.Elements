@@ -5,13 +5,17 @@
         const SNAP_THRESHOLD = 40;
         const STONE_SIZE = 12;
 
+        // Cache-bust token for image assets — bump when replacing an image file
+        window.IMG_V = '?v=2';
+        const IMG_V = window.IMG_V;
+
         const STONE_TYPES = {
-            earth: { color: '#69d83a', symbol: '▲' },
-            water: { color: '#5894f4', symbol: '◯' },
-            fire: { color: '#ed1b43', symbol: '♦' },
-            wind: { color: '#ffce00', symbol: '≋' },
-            void: { color: '#9458f4', symbol: '✺' },
-            catacomb: { color: '#8b4513', symbol: '🔅' }
+            earth:    { color: '#69d83a', symbol: '▲', img: 'images/mountainsymbol.png' + IMG_V },
+            water:    { color: '#5894f4', symbol: '◯', img: 'images/watersymbol.png'    + IMG_V },
+            fire:     { color: '#ed1b43', symbol: '♦', img: 'images/firesymbol.png'     + IMG_V },
+            wind:     { color: '#ffce00', symbol: '≋', img: 'images/windsymbol.png'     + IMG_V },
+            void:     { color: '#9458f4', symbol: '✺', img: 'images/voidsymbol.png'     + IMG_V },
+            catacomb: { color: '#8b4513', symbol: '✦', img: 'images/Catacomb.png'       + IMG_V }
         };
 
         // Spell System for pattern-based stone generation
@@ -803,7 +807,7 @@
 
                 if (scrolls.hand.size > this.MAX_HAND_SIZE) {
                     // Over limit — remind the player they must cascade before ending their turn
-                    updateStatus(`📜 Picked up "${scrollInfo?.name || selected}" — hand is over the limit. Cascade a scroll before ending your turn!`);
+                    updateStatus(`Picked up "${scrollInfo?.name || selected}" — hand is over the limit. Cascade a scroll before ending your turn!`);
                 } else {
                     this.showScrollNotification(scrollInfo, shrineType);
                 }
@@ -846,8 +850,8 @@
 
                 const title = document.createElement('h2');
                 title.textContent = canCascadeToActive
-                    ? '📜 Hand Full! Cascade a Scroll'
-                    : '📜 All Slots Full! Cascade to Common Area';
+                    ? 'Hand Full! Cascade a Scroll'
+                    : 'All Slots Full! Cascade to Common Area';
                 title.style.textAlign = 'center';
                 title.style.color = canCascadeToActive ? '#f39c12' : '#e74c3c';
                 title.style.marginTop = '0';
@@ -898,7 +902,7 @@
 
                     const nameSpan = document.createElement('span');
                     let prefix = '';
-                    if (isNew) prefix = '✨ NEW: ';
+                    if (isNew) prefix = 'NEW: ';
                     else if (isInActive) prefix = '⚡ ACTIVE: ';
                     nameSpan.textContent = prefix + (pattern ? pattern.name : scrollName);
                     nameSpan.style.fontWeight = 'bold';
@@ -924,7 +928,7 @@
                     // Cascade to Active button (only if active has room and scroll isn't already in active)
                     if (canCascadeToActive && !isInActive) {
                         const toActiveBtn = document.createElement('button');
-                        toActiveBtn.textContent = '⚡ To Active';
+                        toActiveBtn.textContent = 'To Active';
                         Object.assign(toActiveBtn.style, {
                             backgroundColor: '#f39c12',
                             color: 'white',
@@ -985,7 +989,7 @@
 
                     // Cascade to Common Area button
                     const toCommonBtn = document.createElement('button');
-                    toCommonBtn.textContent = '🌐 To Common';
+                    toCommonBtn.textContent = 'To Common';
                     Object.assign(toCommonBtn.style, {
                         backgroundColor: '#e74c3c',
                         color: 'white',
@@ -1065,7 +1069,7 @@
                 });
 
                 const title = document.createElement('h2');
-                title.textContent = '📜 Scroll Overflow – Resolve Before Ending Turn';
+                title.textContent = 'Scroll Overflow – Resolve Before Ending Turn';
                 title.style.textAlign = 'center';
                 title.style.color = '#f39c12';
                 title.style.marginTop = '0';
@@ -1137,7 +1141,7 @@
                         });
 
                         const nameSpan = document.createElement('span');
-                        nameSpan.textContent = '🎴 Hand: ' + (pattern ? pattern.name : scrollName);
+                        nameSpan.textContent = 'Hand: ' + (pattern ? pattern.name : scrollName);
                         nameSpan.style.fontWeight = 'bold';
                         nameSpan.style.color = elementColor;
                         card.appendChild(nameSpan);
@@ -1161,7 +1165,7 @@
                             toActiveBtn.type = 'button';
                             toActiveBtn.setAttribute('data-scroll-name', scrollName);
                             toActiveBtn.setAttribute('data-action', 'to-active');
-                            toActiveBtn.textContent = '⚡ To Active';
+                            toActiveBtn.textContent = 'To Active';
                             Object.assign(toActiveBtn.style, {
                                 backgroundColor: '#f39c12', color: 'white', border: 'none',
                                 padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold'
@@ -1173,7 +1177,7 @@
                         toCommonBtn.type = 'button';
                         toCommonBtn.setAttribute('data-scroll-name', scrollName);
                         toCommonBtn.setAttribute('data-action', 'to-common');
-                        toCommonBtn.textContent = '🌐 To Common';
+                        toCommonBtn.textContent = 'To Common';
                         Object.assign(toCommonBtn.style, {
                             backgroundColor: '#e74c3c', color: 'white', border: 'none',
                             padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold'
@@ -1219,7 +1223,7 @@
                         toCommonBtn.type = 'button';
                         toCommonBtn.setAttribute('data-scroll-name', scrollName);
                         toCommonBtn.setAttribute('data-action', 'to-common');
-                        toCommonBtn.textContent = '🌐 To Common';
+                        toCommonBtn.textContent = 'To Common';
                         Object.assign(toCommonBtn.style, {
                             backgroundColor: '#e74c3c', color: 'white', border: 'none',
                             padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold'
@@ -1261,43 +1265,53 @@
             }
 
             showScrollNotification(scrollInfo, elementType) {
-                const notification = document.createElement('div');
-                Object.assign(notification.style, {
-                    position: 'fixed', left: '50%', top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    backgroundColor: '#2c3e50', padding: '30px',
-                    borderRadius: '10px', boxShadow: '0 0 20px rgba(0,0,0,0.5)',
-                    zIndex: '1000', color: 'white', textAlign: 'center',
-                    minWidth: '400px', maxWidth: '600px'
-                });
-
-                const title = document.createElement('h2');
-                title.textContent = '📜 New Scroll Discovered!';
                 const stoneType = STONE_TYPES[elementType];
-                title.style.color = stoneType ? stoneType.color : '#9458f4'; // Default to void purple
-                title.style.margin = '0 0 20px 0';
-                notification.appendChild(title);
+                const color = stoneType ? stoneType.color : '#9458f4';
+                const symbolImg = stoneType ? `<img src="${stoneType.img}" class="element-icon-sm" alt="${elementType}" style="vertical-align:middle;">` : '';
 
-                const name = document.createElement('div');
-                name.textContent = scrollInfo.name;
-                name.style.fontSize = '24px';
-                name.style.fontWeight = 'bold';
-                name.style.marginBottom = '15px';
-                notification.appendChild(name);
+                const overlay = document.createElement('div');
+                overlay.className = 'retro-dlg-overlay';
+                overlay.id = 'scroll-found-overlay';
+
+                const box = document.createElement('div');
+                box.className = 'retro-dlg-box wide';
+
+                const title = document.createElement('div');
+                title.textContent = 'New Scroll Found!';
+                title.className = 'retro-dlg-title';
+                title.style.color = color;
+                box.appendChild(title);
+
+                const card = document.createElement('div');
+                card.className = 'si-card';
+
+                const nameRow = document.createElement('div');
+                nameRow.className = 'si-card-header';
+                const nameEl = document.createElement('div');
+                nameEl.innerHTML = `<span style="color:${color}">${symbolImg}</span> ${scrollInfo.name}`;
+                nameEl.className = 'si-card-name';
+                nameRow.appendChild(nameEl);
+                card.appendChild(nameRow);
 
                 const desc = document.createElement('div');
                 desc.textContent = scrollInfo.description;
-                desc.style.fontSize = '16px';
-                desc.style.color = '#bdc3c7';
-                desc.style.marginBottom = '20px';
-                notification.appendChild(desc);
+                desc.className = 'si-card-desc';
+                card.appendChild(desc);
+
+                const patternVisual = this.createPatternVisual(scrollInfo, elementType);
+                card.appendChild(patternVisual);
+
+                box.appendChild(card);
 
                 const closeBtn = document.createElement('button');
                 closeBtn.textContent = 'Got it!';
-                closeBtn.onclick = () => document.body.removeChild(notification);
-                notification.appendChild(closeBtn);
+                closeBtn.className = 'retro-dlg-btn ok';
+                closeBtn.style.width = '100%';
+                closeBtn.onclick = () => overlay.remove();
+                box.appendChild(closeBtn);
 
-                document.body.appendChild(notification);
+                overlay.appendChild(box);
+                document.body.appendChild(overlay);
             }
 
             checkPattern(patternName) {
@@ -1832,11 +1846,10 @@
                     }
                 }
 
-                // Check if Unbidden Lamplight has marked this scroll to go to common area
-                const redirect = this.scrollEffects?.pendingCommonAreaRedirect;
+                // Check if Unbidden Lamplight has marked this scroll to go to caster's hand
+                const redirect = this.scrollEffects?.pendingHandRedirect;
                 if (redirect && redirect.scrollName === scrollName) {
-                    // Unbidden Lamplight redirects this scroll to common area
-                    // Remove from the ORIGINAL CASTER's scrolls, not current player
+                    // Remove from the ORIGINAL CASTER's active area
                     const originalCasterIndex = redirect.originalCasterIndex;
                     if (originalCasterIndex !== undefined && this.playerScrolls[originalCasterIndex]) {
                         const originalCasterScrolls = this.playerScrolls[originalCasterIndex];
@@ -1844,15 +1857,18 @@
                             originalCasterScrolls.active.delete(scrollName);
                         }
                     } else if (scrolls.active.has(scrollName)) {
-                        // Fallback to current player's scrolls
                         scrolls.active.delete(scrollName);
                     }
-                    this.discardToCommonArea(scrollName);
+
+                    // Add to lamplight caster's hand
+                    const lamplightCasterIndex = redirect.redirectToPlayerIndex;
+                    this.ensurePlayerScrollsStructure(lamplightCasterIndex);
+                    this.playerScrolls[lamplightCasterIndex].hand.add(scrollName);
 
                     // Clear the pending redirect
-                    this.scrollEffects.pendingCommonAreaRedirect = null;
+                    this.scrollEffects.pendingHandRedirect = null;
 
-                    updateStatus('Unbidden Lamplight sent the scroll to the common area!');
+                    updateStatus('Unbidden Lamplight sent the scroll to your hand!');
                 } else if (forceToCommonArea) {
                     // Explicit request to send to common area
                     if (scrolls.active.has(scrollName)) {
@@ -1878,99 +1894,68 @@
             }
 
             showLevelComplete(playerIndex) {
-                const notification = document.createElement('div');
-                Object.assign(notification.style, {
-                    position: 'fixed', left: '50%', top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    backgroundColor: '#2c3e50', padding: '40px',
-                    borderRadius: '15px', boxShadow: '0 0 30px rgba(0,0,0,0.8)',
-                    zIndex: '1000', color: 'white', textAlign: 'center', minWidth: '500px',
-                    border: '3px solid gold'
-                });
+                const overlay = document.createElement('div');
+                overlay.className = 'game-over-overlay';
 
-                const title = document.createElement('h1');
-                title.textContent = '🎉 VICTORY! 🎉';
-                title.style.marginTop = '0';
-                title.style.color = 'gold';
-                title.style.fontSize = '42px';
-                title.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
-                notification.appendChild(title);
+                const box = document.createElement('div');
+                box.className = 'game-over-box';
 
-                // Show which player won
+                const title = document.createElement('div');
+                title.textContent = 'VICTORY';
+                title.className = 'game-over-title';
+                box.appendChild(title);
+
                 const playerColor = playerPositions[playerIndex]?.color;
                 const colorNames = {
-                    '#9458f4': 'Purple (Void)',
-                    '#ffce00': 'Yellow (Wind)',
-                    '#ed1b43': 'Red (Fire)',
-                    '#5894f4': 'Blue (Water)',
-                    '#69d83a': 'Green (Earth)'
+                    '#9458f4': 'Purple wins!',
+                    '#ffce00': 'Yellow wins!',
+                    '#ed1b43': 'Red wins!',
+                    '#5894f4': 'Blue wins!',
+                    '#69d83a': 'Green wins!'
                 };
-                
                 const playerName = document.createElement('div');
-                playerName.textContent = `${colorNames[playerColor] || 'Player ' + (playerIndex + 1)} wins!`;
-                playerName.style.fontSize = '28px';
-                playerName.style.fontWeight = 'bold';
-                playerName.style.color = playerColor || 'gold';
-                playerName.style.marginBottom = '10px';
-                notification.appendChild(playerName);
+                playerName.textContent = colorNames[playerColor] || `Player ${playerIndex + 1} wins!`;
+                playerName.className = 'game-over-winner';
+                playerName.style.color = playerColor || '#d9b08c';
+                box.appendChild(playerName);
 
                 const msg = document.createElement('div');
                 msg.textContent = 'You have mastered all five elements!';
-                msg.style.fontSize = '24px';
-                msg.style.marginBottom = '10px';
-                notification.appendChild(msg);
+                msg.className = 'game-over-msg';
+                box.appendChild(msg);
 
                 const elements = document.createElement('div');
-                elements.style.fontSize = '32px';
-                elements.style.margin = '20px 0';
-                elements.innerHTML = '▲ ◯ ♦ ≋ ✺';
-                notification.appendChild(elements);
+                elements.className = 'game-over-elements';
+                elements.innerHTML = ['earth','water','fire','wind','void'].map(el =>
+                    `<img src="images/${el === 'earth' ? 'mountainsymbol' : el === 'water' ? 'watersymbol' : el === 'fire' ? 'firesymbol' : el === 'wind' ? 'windsymbol' : 'voidsymbol'}.png" class="element-icon-sm" alt="${el}">`
+                ).join(' ');
+                box.appendChild(elements);
 
                 const subtitle = document.createElement('div');
                 subtitle.textContent = 'The path of balance is complete.';
-                subtitle.style.fontSize = '16px';
-                subtitle.style.fontStyle = 'italic';
-                subtitle.style.color = '#bdc3c7';
-                subtitle.style.marginBottom = '20px';
-                notification.appendChild(subtitle);
+                subtitle.className = 'game-over-subtitle';
+                box.appendChild(subtitle);
 
-                const buttonContainer = document.createElement('div');
-                buttonContainer.style.display = 'flex';
-                buttonContainer.style.gap = '10px';
-                buttonContainer.style.justifyContent = 'center';
+                const btnRow = document.createElement('div');
+                btnRow.className = 'game-over-btns';
 
                 if (isMultiplayer) {
                     const lobbyBtn = document.createElement('button');
                     lobbyBtn.textContent = 'Return to Lobby';
-                    lobbyBtn.style.padding = '12px 24px';
-                    lobbyBtn.style.fontSize = '16px';
-                    lobbyBtn.style.backgroundColor = 'gold';
-                    lobbyBtn.style.color = '#2c3e50';
-                    lobbyBtn.style.border = 'none';
-                    lobbyBtn.style.borderRadius = '5px';
-                    lobbyBtn.style.cursor = 'pointer';
-                    lobbyBtn.style.fontWeight = 'bold';
-                    lobbyBtn.onclick = () => {
-                        window.location.reload(); // Reload to return to lobby
-                    };
-                    buttonContainer.appendChild(lobbyBtn);
+                    lobbyBtn.className = 'retro-dlg-btn ok';
+                    lobbyBtn.onclick = () => window.location.reload();
+                    btnRow.appendChild(lobbyBtn);
                 } else {
                     const closeBtn = document.createElement('button');
                     closeBtn.textContent = 'Continue Playing';
-                    closeBtn.style.padding = '12px 24px';
-                    closeBtn.style.fontSize = '16px';
-                    closeBtn.style.backgroundColor = 'gold';
-                    closeBtn.style.color = '#2c3e50';
-                    closeBtn.style.border = 'none';
-                    closeBtn.style.borderRadius = '5px';
-                    closeBtn.style.cursor = 'pointer';
-                    closeBtn.style.fontWeight = 'bold';
-                    closeBtn.onclick = () => document.body.removeChild(notification);
-                    buttonContainer.appendChild(closeBtn);
+                    closeBtn.className = 'retro-dlg-btn cancel';
+                    closeBtn.onclick = () => overlay.remove();
+                    btnRow.appendChild(closeBtn);
                 }
 
-                notification.appendChild(buttonContainer);
-                document.body.appendChild(notification);
+                box.appendChild(btnRow);
+                overlay.appendChild(box);
+                document.body.appendChild(overlay);
             }
 
             createPatternVisual(scroll, elementType) {
@@ -2054,16 +2039,14 @@
                         stoneHex.setAttribute('stroke-width', '2');
                         group.appendChild(stoneHex);
 
-                        // Add symbol
-                        const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        symbol.setAttribute('x', pixelPos.x);
-                        symbol.setAttribute('y', pixelPos.y);
-                        symbol.setAttribute('text-anchor', 'middle');
-                        symbol.setAttribute('dominant-baseline', 'middle');
-                        symbol.setAttribute('fill', '#fff');
-                        symbol.setAttribute('font-size', '12');
-                        symbol.setAttribute('font-weight', 'bold');
-                        symbol.textContent = STONE_TYPES[stoneType].symbol;
+                        // Add element image
+                        const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                        symbol.setAttribute('href', STONE_TYPES[stoneType].img);
+                        symbol.setAttribute('x', pixelPos.x - hexSize);
+                        symbol.setAttribute('y', pixelPos.y - hexSize);
+                        symbol.setAttribute('width', hexSize * 2);
+                        symbol.setAttribute('height', hexSize * 2);
+                        symbol.style.mixBlendMode = 'screen';
                         group.appendChild(symbol);
                     });
 
@@ -2115,35 +2098,24 @@
                 Object.assign(popup.style, {
                     position: 'fixed', left: '50%', top: '50%',
                     transform: 'translate(-50%, -50%)',
-                    backgroundColor: '#2c3e50', padding: '20px',
-                    borderRadius: '10px', boxShadow: '0 0 20px rgba(0,0,0,0.5)',
                     zIndex: '1001', minWidth: '450px', maxWidth: '600px', maxHeight: '80vh',
-                    overflowY: 'auto', color: 'white'
+                    overflowY: 'auto'
                 });
 
                 const title = document.createElement('h2');
-                title.textContent = '📜 Scroll Inventory';
-                title.style.textAlign = 'center';
+                title.textContent = 'Scroll Inventory';
+                title.className = 'si-title';
                 title.style.color = '#3498db';
-                title.style.marginBottom = '5px';
                 popup.appendChild(title);
 
-                // Subtitle showing limits
                 const subtitle = document.createElement('div');
                 subtitle.textContent = `Hand: ${this.handScrolls.size}/${this.MAX_HAND_SIZE} | Active: ${this.activeScrolls.size}/${this.MAX_ACTIVE_SIZE}`;
-                subtitle.style.textAlign = 'center';
-                subtitle.style.color = '#95a5a6';
-                subtitle.style.fontSize = '14px';
-                subtitle.style.marginBottom = '15px';
+                subtitle.className = 'si-subtitle';
                 popup.appendChild(subtitle);
 
                 const closeBtn = document.createElement('button');
                 closeBtn.textContent = '×';
-                Object.assign(closeBtn.style, {
-                    position: 'absolute', right: '10px', top: '10px',
-                    background: 'transparent', border: 'none',
-                    color: 'white', fontSize: '24px', cursor: 'pointer'
-                });
+                closeBtn.className = 'si-close';
                 closeBtn.onclick = () => document.body.removeChild(popup);
                 popup.appendChild(closeBtn);
 
@@ -2152,37 +2124,22 @@
                 // Helper to create a scroll card with move button
                 const createScrollCard = (scrollName, scroll, element, location) => {
                     const scrollDiv = document.createElement('div');
-                    scrollDiv.style.backgroundColor = '#34495e';
-                    scrollDiv.style.padding = '15px';
-                    scrollDiv.style.marginBottom = '10px';
-                    scrollDiv.style.borderRadius = '5px';
-                    scrollDiv.style.border = location === 'active' ? '2px solid #f39c12' : '2px solid transparent';
+                    scrollDiv.className = 'si-card' + (location === 'active' ? ' si-card-active' : '');
 
-                    // Header row with name and move button
                     const headerRow = document.createElement('div');
-                    headerRow.style.display = 'flex';
-                    headerRow.style.justifyContent = 'space-between';
-                    headerRow.style.alignItems = 'center';
-                    headerRow.style.marginBottom = '5px';
+                    headerRow.className = 'si-card-header';
 
                     const nameDiv = document.createElement('div');
                     nameDiv.textContent = scroll.name;
-                    nameDiv.style.fontWeight = 'bold';
+                    nameDiv.className = 'si-card-name';
                     headerRow.appendChild(nameDiv);
 
-                    // Move/Discard buttons (only show if it's my turn in multiplayer, or always in single player)
                     const canModify = !isMultiplayer || (myPlayerIndex === activePlayerIndex);
                     if (canModify) {
                         if (location === 'hand') {
-                            // Hand scrolls can be moved to Active
                             const moveBtn = document.createElement('button');
-                            moveBtn.textContent = '⚡ To Active';
-                            Object.assign(moveBtn.style, {
-                                padding: '5px 10px', fontSize: '12px', cursor: 'pointer',
-                                backgroundColor: '#27ae60',
-                                border: 'none', borderRadius: '3px', color: 'white',
-                                marginRight: '5px'
-                            });
+                            moveBtn.textContent = 'To Active';
+                            moveBtn.className = 'si-btn si-btn-active-area';
                             moveBtn.onclick = () => {
                                 self.moveToActive(scrollName);
                                 document.body.removeChild(popup);
@@ -2191,14 +2148,9 @@
                             headerRow.appendChild(moveBtn);
                         }
 
-                        // Both hand and active scrolls can be discarded to Common Area
                         const discardBtn = document.createElement('button');
-                        discardBtn.textContent = '📤 To Common';
-                        Object.assign(discardBtn.style, {
-                            padding: '5px 10px', fontSize: '12px', cursor: 'pointer',
-                            backgroundColor: '#e74c3c',
-                            border: 'none', borderRadius: '3px', color: 'white'
-                        });
+                        discardBtn.textContent = 'To Common';
+                        discardBtn.className = 'si-btn si-btn-common';
                         discardBtn.onclick = () => {
                             self.discardScroll(scrollName);
                             document.body.removeChild(popup);
@@ -2211,50 +2163,35 @@
 
                     const scrollDesc = document.createElement('div');
                     scrollDesc.textContent = scroll.description;
-                    scrollDesc.style.fontSize = '14px';
-                    scrollDesc.style.color = '#bdc3c7';
-                    scrollDesc.style.marginBottom = '10px';
+                    scrollDesc.className = 'si-card-desc';
                     scrollDiv.appendChild(scrollDesc);
 
-                    // Add visual hex pattern display
                     const patternVisual = this.createPatternVisual(scroll, element);
                     scrollDiv.appendChild(patternVisual);
 
-                    // Add pattern visualization
                     const patternInfo = document.createElement('div');
-                    patternInfo.style.fontSize = '12px';
-                    patternInfo.style.color = '#95a5a6';
-                    patternInfo.style.fontFamily = 'monospace';
-                    patternInfo.style.backgroundColor = '#2c3e50';
-                    patternInfo.style.padding = '10px';
-                    patternInfo.style.borderRadius = '5px';
-                    patternInfo.style.marginTop = '10px';
+                    patternInfo.className = 'si-pattern-box';
 
                     const patternTitle = document.createElement('div');
                     patternTitle.textContent = 'Required Pattern (one of these):';
-                    patternTitle.style.marginBottom = '5px';
+                    patternTitle.className = 'si-pattern-title';
                     patternInfo.appendChild(patternTitle);
 
-                    // Show pattern variations
                     const isCatacomb = element === 'catacomb';
-                    const patternsToShow = scroll.patterns.slice(0, 3);
-                    patternsToShow.forEach((pattern, idx) => {
+                    scroll.patterns.slice(0, 3).forEach((pattern, idx) => {
                         const patternLine = document.createElement('div');
                         const coords = isCatacomb
                             ? pattern.map(pos => `${pos.type.charAt(0).toUpperCase()}(${pos.q},${pos.r})`).join(' + ')
                             : pattern.map(pos => `(${pos.q},${pos.r})`).join(' + ');
                         patternLine.textContent = `${idx + 1}. Stones at: ${coords}`;
-                        patternLine.style.marginLeft = '10px';
-                        patternLine.style.marginTop = '3px';
+                        patternLine.className = 'si-pattern-line';
                         patternInfo.appendChild(patternLine);
                     });
 
                     if (scroll.patterns.length > 3) {
                         const moreText = document.createElement('div');
                         moreText.textContent = `... and ${scroll.patterns.length - 3} more rotations`;
-                        moreText.style.marginLeft = '10px';
-                        moreText.style.marginTop = '3px';
-                        moreText.style.fontStyle = 'italic';
+                        moreText.className = 'si-pattern-more';
                         patternInfo.appendChild(moreText);
                     }
 
@@ -2264,24 +2201,18 @@
 
                 // ACTIVE AREA SECTION
                 const activeSection = document.createElement('div');
-                activeSection.style.marginBottom = '25px';
-                activeSection.style.backgroundColor = '#1a252f';
-                activeSection.style.padding = '15px';
-                activeSection.style.borderRadius = '8px';
-                activeSection.style.border = '2px solid #f39c12';
+                activeSection.className = 'si-section si-active';
 
                 const activeHeader = document.createElement('h3');
-                activeHeader.textContent = `⚡ Active Area (${this.activeScrolls.size}/${this.MAX_ACTIVE_SIZE}) - Visible to opponents`;
-                activeHeader.style.color = '#f39c12';
-                activeHeader.style.marginTop = '0';
+                activeHeader.textContent = `Active Area (${this.activeScrolls.size}/${this.MAX_ACTIVE_SIZE}) - Visible to opponents`;
+                activeHeader.className = 'si-section-header';
                 activeSection.appendChild(activeHeader);
 
                 const activeScrollsList = Array.from(this.activeScrolls);
                 if (activeScrollsList.length === 0) {
                     const emptyMsg = document.createElement('div');
                     emptyMsg.textContent = 'No scrolls in active area. Move scrolls here to prepare for activation.';
-                    emptyMsg.style.color = '#7f8c8d';
-                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.className = 'si-empty';
                     activeSection.appendChild(emptyMsg);
                 } else {
                     activeScrollsList.forEach(scrollName => {
@@ -2292,36 +2223,27 @@
                 }
                 popup.appendChild(activeSection);
 
-                // COMMON AREA SECTION - Shared pool any player can activate from
+                // COMMON AREA SECTION
                 const commonSection = document.createElement('div');
-                commonSection.style.marginBottom = '25px';
-                commonSection.style.backgroundColor = '#1a252f';
-                commonSection.style.padding = '15px';
-                commonSection.style.borderRadius = '8px';
-                commonSection.style.border = '2px solid #9b59b6';
+                commonSection.className = 'si-section si-common';
 
                 const commonAreaScrolls = this.getCommonAreaScrolls();
                 const commonHeader = document.createElement('h3');
-                commonHeader.textContent = `🌐 Common Area (${commonAreaScrolls.length}/6) - Shared`;
-                commonHeader.style.color = '#9b59b6';
-                commonHeader.style.marginTop = '0';
+                commonHeader.textContent = `Common Area (${commonAreaScrolls.length}/6) - Shared`;
+                commonHeader.className = 'si-section-header';
                 commonSection.appendChild(commonHeader);
 
                 const commonSubtitle = document.createElement('div');
                 commonSubtitle.textContent = 'Discarded scrolls go here. Any player can activate these on their turn.';
-                commonSubtitle.style.color = '#7f8c8d';
-                commonSubtitle.style.fontSize = '12px';
-                commonSubtitle.style.marginBottom = '10px';
+                commonSubtitle.className = 'si-common-note';
                 commonSection.appendChild(commonSubtitle);
 
                 if (commonAreaScrolls.length === 0) {
                     const emptyMsg = document.createElement('div');
                     emptyMsg.textContent = 'No scrolls in common area yet. Discarded scrolls will appear here.';
-                    emptyMsg.style.color = '#7f8c8d';
-                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.className = 'si-empty';
                     commonSection.appendChild(emptyMsg);
                 } else {
-                    // Group by element
                     const elementTypes = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
                     elementTypes.forEach(element => {
                         if (this.commonArea[element]) {
@@ -2329,28 +2251,21 @@
                             const scroll = this.patterns[scrollName];
 
                             const scrollDiv = document.createElement('div');
-                            scrollDiv.style.backgroundColor = '#34495e';
-                            scrollDiv.style.padding = '10px';
-                            scrollDiv.style.marginBottom = '8px';
-                            scrollDiv.style.borderRadius = '5px';
-                            scrollDiv.style.borderLeft = '4px solid #9b59b6';
+                            scrollDiv.className = 'si-common-item';
 
                             const color = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element].color;
-                            const symbol = element === 'catacomb' ? '🔅' : STONE_TYPES[element].symbol;
+                            const iconHTML = `<img src="${STONE_TYPES[element].img}" class="element-icon-sm" alt="${element}" style="vertical-align:middle;">`;
 
                             const nameDiv = document.createElement('div');
-                            nameDiv.innerHTML = `<span style="color: ${color}">${symbol}</span> ${scroll.name}`;
-                            nameDiv.style.fontWeight = 'bold';
+                            nameDiv.innerHTML = `<span style="color:${color}">${iconHTML}</span> ${scroll.name}`;
+                            nameDiv.className = 'si-common-item-name';
                             scrollDiv.appendChild(nameDiv);
 
                             const descDiv = document.createElement('div');
                             descDiv.textContent = scroll.description;
-                            descDiv.style.fontSize = '12px';
-                            descDiv.style.color = '#bdc3c7';
-                            descDiv.style.marginTop = '3px';
+                            descDiv.className = 'si-common-item-desc';
                             scrollDiv.appendChild(descDiv);
 
-                            // Stone formation / pattern display (match hand and active scrolls)
                             if (scroll.patterns) {
                                 const patternVisual = this.createPatternVisual(scroll, element);
                                 scrollDiv.appendChild(patternVisual);
@@ -2364,39 +2279,29 @@
 
                 // HAND SECTION
                 const handSection = document.createElement('div');
-                handSection.style.marginBottom = '20px';
-                handSection.style.backgroundColor = '#1a252f';
-                handSection.style.padding = '15px';
-                handSection.style.borderRadius = '8px';
-                handSection.style.border = '2px solid #3498db';
+                handSection.className = 'si-section si-hand';
 
                 const handHeader = document.createElement('h3');
-                handHeader.textContent = `🎴 Hand (${this.handScrolls.size}/${this.MAX_HAND_SIZE}) - Private`;
-                handHeader.style.color = '#3498db';
-                handHeader.style.marginTop = '0';
+                handHeader.textContent = `Hand (${this.handScrolls.size}/${this.MAX_HAND_SIZE}) - Private`;
+                handHeader.className = 'si-section-header';
                 handSection.appendChild(handHeader);
 
                 const handScrollsList = Array.from(this.handScrolls);
                 if (handScrollsList.length === 0) {
                     const emptyMsg = document.createElement('div');
                     emptyMsg.textContent = 'No scrolls in hand. Reveal shrine tiles to collect scrolls!';
-                    emptyMsg.style.color = '#7f8c8d';
-                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.className = 'si-empty';
                     handSection.appendChild(emptyMsg);
                 } else {
-                    // Group by element
                     const elementTypes = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
                     elementTypes.forEach(element => {
                         const elementScrolls = handScrollsList.filter(s => this.getScrollElement(s) === element);
                         if (elementScrolls.length > 0) {
                             const elementLabel = document.createElement('div');
                             const color = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element].color;
-                            const symbol = element === 'catacomb' ? '🔅' : STONE_TYPES[element].symbol;
-                            elementLabel.textContent = `${symbol} ${element.charAt(0).toUpperCase() + element.slice(1)}`;
-                            elementLabel.style.color = color;
-                            elementLabel.style.fontWeight = 'bold';
-                            elementLabel.style.marginTop = '10px';
-                            elementLabel.style.marginBottom = '5px';
+                            const iconHTML = `<img src="${STONE_TYPES[element].img}" class="element-icon-sm" alt="${element}" style="vertical-align:middle;">`;
+                            elementLabel.innerHTML = `<span style="color:${color}">${iconHTML} ${element.charAt(0).toUpperCase() + element.slice(1)}</span>`;
+                            elementLabel.className = 'si-element-label';
                             handSection.appendChild(elementLabel);
 
                             elementScrolls.forEach(scrollName => {
@@ -2408,14 +2313,9 @@
                 }
                 popup.appendChild(handSection);
 
-                // Info text
                 const infoText = document.createElement('div');
-                infoText.innerHTML = '<strong>Tip:</strong> Move scrolls from Hand to Active Area (0 AP) to prepare for casting. Scrolls in Active Area stay there after casting. Scrolls cannot be moved back to Hand - discard to Common Area instead. Common Area scrolls are shared (max 1 per element).';
-                infoText.style.fontSize = '12px';
-                infoText.style.color = '#95a5a6';
-                infoText.style.padding = '10px';
-                infoText.style.backgroundColor = '#1a252f';
-                infoText.style.borderRadius = '5px';
+                infoText.innerHTML = '<strong>Tip:</strong> Move scrolls from Hand to Active Area (0 AP) to prepare for casting. Scrolls in Active Area stay there after casting. Scrolls cannot be moved back to Hand — discard to Common Area instead. Common Area scrolls are shared (max 1 per element).';
+                infoText.className = 'si-tip';
                 popup.appendChild(infoText);
 
                 document.body.appendChild(popup);
@@ -2619,7 +2519,7 @@
             const display = document.getElementById('void-ap-display');
             if (display) {
                 if (voidAP > 0) {
-                    display.textContent = `(+${voidAP} ✨ Void AP)`;
+                    display.textContent = `(+${voidAP} Void AP)`;
                     display.style.display = 'inline';
                 } else {
                     display.style.display = 'none';
@@ -2637,7 +2537,7 @@
             const display = document.getElementById('void-ap-display');
             if (display) {
                 if (voidAP > 0) {
-                    display.textContent = `(+${voidAP} ✨ Void AP)`;
+                    display.textContent = `(+${voidAP} Void AP)`;
                     display.style.display = 'inline';
                 } else {
                     display.style.display = 'none';
@@ -2668,7 +2568,7 @@
             const display = document.getElementById('void-ap-display');
             if (display) {
                 if (voidAP > 0) {
-                    display.textContent = `(+${voidAP} ✨ Void AP)`;
+                    display.textContent = `(+${voidAP} Void AP)`;
                     display.style.display = 'inline';
                 } else {
                     display.style.display = 'none';
@@ -2710,7 +2610,7 @@
             const voidDisplay = document.getElementById('void-ap-display');
             if (voidDisplay) {
                 if (voidAP > 0) {
-                    voidDisplay.textContent = `(+${voidAP} ✨ Void AP)`;
+                    voidDisplay.textContent = `(+${voidAP} Void AP)`;
                     voidDisplay.style.display = 'inline';
                 } else {
                     voidDisplay.style.display = 'none';
@@ -2907,8 +2807,8 @@
         let rightButtonDown = false;
 
         function updateViewport() {
-            const centerX = boardSvg.width.baseVal.value / 2;
-            const centerY = boardSvg.height.baseVal.value / 2;
+            const centerX = boardSvg.clientWidth / 2;
+            const centerY = boardSvg.clientHeight / 2;
             viewport.setAttribute('transform',
                 `translate(${centerX}, ${centerY}) rotate(${viewportRotation}) translate(${viewportX - centerX}, ${viewportY - centerY}) scale(${viewportScale})`);
         }
@@ -2960,8 +2860,8 @@
         }
 
         function screenToWorld(screenX, screenY) {
-            const centerX = boardSvg.width.baseVal.value / 2;
-            const centerY = boardSvg.height.baseVal.value / 2;
+            const centerX = boardSvg.clientWidth / 2;
+            const centerY = boardSvg.clientHeight / 2;
             let x = screenX - centerX;
             let y = screenY - centerY;
             const rad = -viewportRotation * Math.PI / 180;
@@ -3193,13 +3093,13 @@
             // Add mousedown event for dragging
             svg.addEventListener('mousedown', (e) => {
                 if (playerTilesAvailable <= 0) return;
-
-                // In multiplayer placement phase, only allow drag if it's your turn
-                if (isMultiplayer && isPlacementPhase && !canPlaceTile()) {
+                // Placement tiles can only be dragged during the placement phase
+                if (!isPlacementPhase) return;
+                // In multiplayer, only allow drag if it's your turn to place
+                if (isMultiplayer && !canPlaceTile()) {
                     notYourTurn();
                     return;
                 }
-
                 if (e.button === 0) {
                     startPlayerTileDrag(playerIndex, e);
                 }
@@ -3208,12 +3108,11 @@
             // Add touch support for mobile
             svg.addEventListener('touchstart', (e) => {
                 if (playerTilesAvailable <= 0) return;
-
-                if (isMultiplayer && isPlacementPhase && !canPlaceTile()) {
+                if (!isPlacementPhase) return;
+                if (isMultiplayer && !canPlaceTile()) {
                     notYourTurn();
                     return;
                 }
-
                 e.preventDefault();
                 startPlayerTileDrag(playerIndex, e);
             }, { passive: false });
@@ -3898,11 +3797,11 @@
                     console.log(`✅ Player tile at (${snapPos.x.toFixed(1)}, ${snapPos.y.toFixed(1)}) touches ${touchingUnrevealedCount} unrevealed tiles`);
                 }
 
-                // TELEKINESIS RULE: Must touch at least 2 other tiles (any tiles)
+                // TELEKINESIS RULE: Must touch at least 1 other tile
                 if (window.telekinesisState && window.telekinesisState.active) {
                     const touchingCount = countTouchingTiles(snapPos.x, snapPos.y);
-                    if (touchingCount < 2) {
-                        console.log(`❌ Telekinesis: tile at (${snapPos.x.toFixed(1)}, ${snapPos.y.toFixed(1)}) only touches ${touchingCount} tile(s), need 2+`);
+                    if (touchingCount < 1) {
+                        console.log(`❌ Telekinesis: tile at (${snapPos.x.toFixed(1)}, ${snapPos.y.toFixed(1)}) touches ${touchingCount} tile(s), need 1+`);
                         return { x: x, y: y, snapped: false };
                     }
                     console.log(`✅ Telekinesis: tile at (${snapPos.x.toFixed(1)}, ${snapPos.y.toFixed(1)}) touches ${touchingCount} tiles`);
@@ -4072,16 +3971,6 @@
                 'catacomb': '#8b4513'
             };
 
-            // Symbol mapping for shrine types
-            const shrineSymbols = {
-                'earth': '▲',
-                'water': '◯',
-                'fire': '♦',
-                'wind': '≋',
-                'void': '✺',
-                'catacomb': '🔅'
-            };
-
             // Create a circle background
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             circle.setAttribute('cx', '0');
@@ -4093,17 +3982,15 @@
             circle.setAttribute('stroke-width', '2');
             g.appendChild(circle);
 
-            // Create the symbol text
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', '0');
-            text.setAttribute('y', '0');
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', '#fff');
-            text.setAttribute('font-size', '10');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = shrineSymbols[shrineType];
-            g.appendChild(text);
+            // Element image on shrine indicator
+            const shrineImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            shrineImg.setAttribute('href', STONE_TYPES[shrineType]?.img || '');
+            shrineImg.setAttribute('x', '-8');
+            shrineImg.setAttribute('y', '-8');
+            shrineImg.setAttribute('width', '16');
+            shrineImg.setAttribute('height', '16');
+            shrineImg.style.mixBlendMode = 'screen';
+            g.appendChild(shrineImg);
 
             return g;
         }
@@ -4266,29 +4153,6 @@
             }, { passive: false });
 
 
-            // Add hover tooltip for player tiles in multiplayer
-            if (isPlayerTile && isMultiplayer) {
-                let tooltip = null;
-
-                tileGroup.addEventListener('mouseenter', (e) => {
-                    tooltip = showPlayerTooltip(tilePlayerIndex, e.clientX, e.clientY);
-                });
-
-                tileGroup.addEventListener('mousemove', (e) => {
-                    if (tooltip) {
-                        tooltip.style.left = (e.clientX + 15) + 'px';
-                        tooltip.style.top = (e.clientY + 15) + 'px';
-                    }
-                });
-
-                tileGroup.addEventListener('mouseleave', () => {
-                    if (tooltip && tooltip.parentNode) {
-                        tooltip.parentNode.removeChild(tooltip);
-                        tooltip = null;
-                    }
-                });
-            }
-
             viewport.insertBefore(tileGroup, snapIndicator);
 
             placedTiles.push({
@@ -4353,10 +4217,10 @@
                         });
 
                         if (isMyTurn()) {
-                            updateStatus(`✅ All tiles placed! It's your turn!`);
+                            updateStatus(`All tiles placed! It's your turn!`);
                         } else {
                             const nextColorName = getPlayerColorName(activePlayerIndex);
-                            updateStatus(`✅ All tiles placed! Waiting for ${nextColorName}'s turn...`);
+                            updateStatus(`All tiles placed! Waiting for ${nextColorName}'s turn...`);
                         }
                     } else {
                         // Advance to next player in turn order
@@ -5560,100 +5424,6 @@ function clearPlayerPath() {
         }
 
         // Show tooltip with player's AP and resources
-        function showPlayerTooltip(playerIndex, mouseX, mouseY) {
-            const tooltip = document.createElement('div');
-            tooltip.className = 'player-tooltip';
-            tooltip.style.left = (mouseX + 15) + 'px';
-            tooltip.style.top = (mouseY + 15) + 'px';
-
-            // Get player name
-            const playerName = getPlayerColorName(playerIndex);
-
-            // Get player's resources
-            const playerPool = playerPools[playerIndex] || { ...INITIAL_PLAYER_STONES };
-            const playerAP = playerAPs[playerIndex] || { currentAP: 5, voidAP: 0 };
-
-            // Build tooltip content
-            let html = `<div class="tooltip-header">${playerName}</div>`;
-
-            // AP info
-            html += `<div class="tooltip-row">
-                <span class="tooltip-label">AP:</span>
-                <span>${playerAP.currentAP}/5</span>
-            </div>`;
-
-            if (playerAP.voidAP > 0) {
-                html += `<div class="tooltip-row">
-                    <span class="tooltip-label" style="color: #9458f4;">Void AP:</span>
-                    <span style="color: #9458f4;">${playerAP.voidAP}</span>
-                </div>`;
-            }
-
-            // Resources
-            html += `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #555;">`;
-            html += `<div style="margin-bottom: 5px; color: #999;">Stone Resources:</div>`;
-
-            const elementSymbols = { earth: '▲', water: '◯', fire: '♦', wind: '≋', void: '✺' };
-            const elementColors = { earth: '#69d83a', water: '#5894f4', fire: '#ed1b43', wind: '#ffce00', void: '#9458f4' };
-
-            ['earth', 'water', 'fire', 'wind', 'void'].forEach(element => {
-                if (playerPool[element] > 0) {
-                    html += `<div class="tooltip-row">
-                        <span style="color: ${elementColors[element]};">${elementSymbols[element]} ${element}:</span>
-                        <span>${playerPool[element]}/5</span>
-                    </div>`;
-                }
-            });
-
-            html += `</div>`;
-
-            // Scrolls
-            const playerScrollData = spellSystem.playerScrolls[playerIndex];
-            const totalScrolls = playerScrollData ?
-                (playerScrollData.hand ? playerScrollData.hand.size : 0) +
-                (playerScrollData.active ? playerScrollData.active.size : 0) : 0;
-            if (playerScrollData && totalScrolls > 0) {
-                html += `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #555;">`;
-                html += `<div style="margin-bottom: 5px; color: #999;">Scrolls (Hand: ${playerScrollData.hand ? playerScrollData.hand.size : 0}, Active: ${playerScrollData.active ? playerScrollData.active.size : 0}):</div>`;
-
-                // Count scrolls by element type (combine hand + active)
-                const scrollCounts = { earth: 0, water: 0, fire: 0, wind: 0, void: 0, catacomb: 0 };
-                const allScrolls = new Set([
-                    ...(playerScrollData.hand || []),
-                    ...(playerScrollData.active || [])
-                ]);
-                allScrolls.forEach(scrollName => {
-                    const element = scrollName.split('_')[0].toLowerCase();
-                    if (scrollCounts[element] !== undefined) {
-                        scrollCounts[element]++;
-                    }
-                });
-
-                // Display scroll counts
-                ['earth', 'water', 'fire', 'wind', 'void'].forEach(element => {
-                    if (scrollCounts[element] > 0) {
-                        html += `<div class="tooltip-row">
-                            <span style="color: ${elementColors[element]};">📜 ${element}:</span>
-                            <span>${scrollCounts[element]}</span>
-                        </div>`;
-                    }
-                });
-
-                if (scrollCounts.catacomb > 0) {
-                    html += `<div class="tooltip-row">
-                        <span style="color: #8b4513;">📜 catacomb:</span>
-                        <span>${scrollCounts.catacomb}</span>
-                    </div>`;
-                }
-
-                html += `</div>`;
-            }
-            tooltip.innerHTML = html;
-
-            document.body.appendChild(tooltip);
-            return tooltip;
-        }
-
         function updatePlayerElementSymbols(playerIndex = null) {
             // If no player index specified, use active player
             if (playerIndex === null) {
@@ -5693,31 +5463,32 @@ function clearPlayerPath() {
                 const x = Math.cos(angle) * radius;
                 const y = Math.sin(angle) * radius;
 
-                // Create symbol with background circle
+                // Outline ring so the pip is visible against any background
                 const symbolBg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 symbolBg.setAttribute('cx', x);
                 symbolBg.setAttribute('cy', y);
                 symbolBg.setAttribute('r', '9');
-                symbolBg.setAttribute('fill', STONE_TYPES[element].color);
-                symbolBg.setAttribute('stroke', '#fff');
+                symbolBg.setAttribute('fill', '#000');
+                symbolBg.setAttribute('stroke', STONE_TYPES[element].color);
                 symbolBg.setAttribute('stroke-width', '1.5');
                 symbolsGroup.appendChild(symbolBg);
 
-                // Create symbol
-                const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                symbol.setAttribute('x', x);
-                symbol.setAttribute('y', y);
-                symbol.setAttribute('text-anchor', 'middle');
-                symbol.setAttribute('dominant-baseline', 'middle');
-                symbol.setAttribute('fill', '#fff');
-                symbol.setAttribute('font-size', '10');
-                symbol.setAttribute('font-weight', 'bold');
-                symbol.textContent = STONE_TYPES[element].symbol;
-
-                symbolsGroup.appendChild(symbol);
+                // Element image (screen blend so black bg is transparent)
+                const imgEl = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                imgEl.setAttribute('href', STONE_TYPES[element].img);
+                imgEl.setAttribute('x', x - 9);
+                imgEl.setAttribute('y', y - 9);
+                imgEl.setAttribute('width', '18');
+                imgEl.setAttribute('height', '18');
+                imgEl.setAttribute('clip-path', `circle(9px at center)`);
+                imgEl.style.mixBlendMode = 'screen';
+                symbolsGroup.appendChild(imgEl);
             });
 
             console.log(`🎨 Updated player ${playerIndex}'s TILE with ${activatedElements.length} element symbol(s): ${activatedElements.join(', ')}`);
+
+            // Refresh Players panel win-condition progress
+            if (typeof updateOpponentPanel === 'function') updateOpponentPanel();
         }
 
         // Expose on window so scroll-effects.js (outside this IIFE) can call it
@@ -5995,104 +5766,125 @@ function clearPlayerPath() {
         }
 
         function updatePlayerPath(x, y) {
+            const targetPos = findNearestHexPosition(x, y);
+            if (!targetPos.valid) return;
+
+            const startPos = playerPath[0];
+            if (!startPos) return;
+
+            const targetKey = `${Math.round(targetPos.x)},${Math.round(targetPos.y)}`;
+
+            // No-op if cursor hasn't moved to a different hex
+            if (targetKey === lastAttemptedHex) return;
+            lastAttemptedHex = targetKey;
+
+            // Cursor on start hex → reset path to just the origin
+            if (Math.hypot(targetPos.x - startPos.x, targetPos.y - startPos.y) < 5) {
+                playerPath = [{ x: startPos.x, y: startPos.y, cost: 0 }];
+                _applyPathToLine();
+                updatePathLabels();
+                return;
+            }
+
+            // Cursor is on an existing path node → backtrack to that point
+            for (let i = playerPath.length - 1; i >= 1; i--) {
+                if (Math.hypot(playerPath[i].x - targetPos.x, playerPath[i].y - targetPos.y) < 5) {
+                    playerPath = playerPath.slice(0, i + 1);
+                    _applyPathToLine();
+                    updatePathLabels();
+                    return;
+                }
+            }
+
+            // Cursor is already at the end of the path → nothing to do
             const lastPos = playerPath[playerPath.length - 1];
-            if (!lastPos) return;
+            if (Math.hypot(lastPos.x - targetPos.x, lastPos.y - targetPos.y) < 5) return;
 
-            // Only consider the 6 neighbors of the last hex for path extension.
-            // This avoids "zig-zag" selection when zoomed out (small cursor movements map to big world deltas).
-            const neighbors = getNeighborHexPositions(lastPos.x, lastPos.y);
+            // Find the shortest affordable path from start to the cursor hex using Dijkstra
+            const newPath = _dijkstraPath(startPos, targetPos);
+            if (newPath) playerPath = newPath;
 
-            // Dynamic direction bias: stronger when zoomed out.
-            // viewportScale is the world->screen scale (smaller = more zoomed out).
-            const scale = (typeof viewportScale === 'number' && isFinite(viewportScale)) ? viewportScale : 1;
-            const directionWeight = Math.min(TILE_SIZE * 1.2, (TILE_SIZE * 0.6) / Math.max(0.25, scale));
+            _applyPathToLine();
+            updatePathLabels();
+        }
 
-            let prevVec = null;
-            if (playerPath.length >= 2) {
-                const prevPos = playerPath[playerPath.length - 2];
-                prevVec = { x: lastPos.x - prevPos.x, y: lastPos.y - prevPos.y };
-            }
+        /**
+         * Dijkstra shortest-path from startPos to targetPos across placed hexes.
+         * Returns a playerPath array [{x, y, cost}] or null if unreachable / unaffordable.
+         */
+        function _dijkstraPath(startPos, targetPos) {
+            const hexes = getAllHexagonPositions();
+            const SNAP_R = TILE_SIZE * 0.6;
+            const key = (x, y) => `${Math.round(x)},${Math.round(y)}`;
+            const startKey = key(startPos.x, startPos.y);
+            const targetKey = key(targetPos.x, targetPos.y);
+            const totalAP = getTotalAP();
 
-            let best = null;
-            let bestScore = Infinity;
-
-            for (const n of neighbors) {
-                const dx = x - n.x;
-                const dy = y - n.y;
-                const distToCursor = Math.hypot(dx, dy);
-
-                // Basic snap radius (world-space). Keep generous, but selection is stabilized by scoring.
-                if (distToCursor > TILE_SIZE * 1.6) continue;
-
-                let anglePenalty = 0;
-                if (prevVec) {
-                    const candVec = { x: n.x - lastPos.x, y: n.y - lastPos.y };
-                    const aLen = Math.hypot(prevVec.x, prevVec.y);
-                    const bLen = Math.hypot(candVec.x, candVec.y);
-                    if (aLen > 0.0001 && bLen > 0.0001) {
-                        const dot = (prevVec.x * candVec.x + prevVec.y * candVec.y) / (aLen * bLen);
-                        const clamped = Math.max(-1, Math.min(1, dot));
-                        const angle = Math.acos(clamped); // 0 = straight, PI = reverse
-                        anglePenalty = angle;
-                    }
+            // Snap a theoretical neighbour position to the nearest actual placed hex
+            const snapNeighbor = (nx, ny) => {
+                let best = null, bestD = SNAP_R;
+                for (const h of hexes) {
+                    const d = Math.hypot(h.x - nx, h.y - ny);
+                    if (d < bestD) { bestD = d; best = h; }
                 }
+                return best;
+            };
 
-                // Score: prefer closer-to-cursor, with a gentle bias to continue straight.
-                const score = distToCursor + (directionWeight * anglePenalty);
-                if (score < bestScore) {
-                    bestScore = score;
-                    best = n;
+            const dist     = new Map([[startKey, 0]]);
+            const prev     = new Map([[startKey, null]]);
+            const costMap  = new Map([[startKey, 0]]);
+            const posMap   = new Map([[startKey, startPos]]);
+            const queue    = [{ cost: 0, key: startKey }];
+
+            while (queue.length) {
+                // Simple priority queue — board is small so this is fast enough
+                queue.sort((a, b) => a.cost - b.cost);
+                const curr = queue.shift();
+                if (curr.key === targetKey) break;
+                if (curr.cost > (dist.get(curr.key) ?? Infinity)) continue;
+
+                const currPos = posMap.get(curr.key);
+                for (const nb of getNeighborHexPositions(currPos.x, currPos.y)) {
+                    const snapped = snapNeighbor(nb.x, nb.y);
+                    if (!snapped) continue;
+
+                    const nKey = key(snapped.x, snapped.y);
+                    const moveCheck = canPlayerMoveToHex(snapped.x, snapped.y);
+                    if (!moveCheck.canMove) continue;
+
+                    const newDist = curr.cost + moveCheck.cost;
+                    if (newDist > totalAP) continue;
+                    if (newDist >= (dist.get(nKey) ?? Infinity)) continue;
+
+                    dist.set(nKey, newDist);
+                    prev.set(nKey, curr.key);
+                    costMap.set(nKey, moveCheck.cost);
+                    posMap.set(nKey, snapped);
+                    queue.push({ cost: newDist, key: nKey });
                 }
             }
 
-            if (!best) return;
+            if (!dist.has(targetKey)) return null;
 
-            // If the cursor is still basically on the current hex, don't add.
-            const isDifferentHex = Math.hypot(best.x - lastPos.x, best.y - lastPos.y) > 5;
-            if (!isDifferentHex) return;
-
-            // Only log once per hex attempt
-            const hexKey = `${best.x.toFixed(1)},${best.y.toFixed(1)}`;
-            const shouldLog = hexKey !== lastAttemptedHex;
-            if (shouldLog) lastAttemptedHex = hexKey;
-
-            const moveCheck = canPlayerMoveToHex(best.x, best.y, shouldLog);
-            if (shouldLog && shouldDebugLog('attemptAddHex', 300)) {
-                console.log(`👆 Attempting to add hex (${best.x.toFixed(1)}, ${best.y.toFixed(1)}): canMove=${moveCheck.canMove}, cost=${moveCheck.cost}`);
+            // Reconstruct path by following parent pointers
+            const path = [];
+            let k = targetKey;
+            while (k !== null) {
+                const p = posMap.get(k);
+                path.unshift({ x: p.x, y: p.y, cost: costMap.get(k) });
+                k = prev.get(k);
             }
+            return path;
+        }
 
-            if (moveCheck.canMove) {
-                // Temporarily add step to calculate discounted cost (Steam Vents halves total)
-                playerPath.push({ x: best.x, y: best.y, cost: moveCheck.cost });
-                const projectedCost = calculatePathCost();
-                if (projectedCost <= getTotalAP()) {
-                    // Keep the step
-                    if (shouldLog) {
-                        console.log(`✅ Added to path! Total cost now: ${projectedCost}`);
-                    }
-                } else {
-                    // Remove the step — can't afford it
-                    playerPath.pop();
-                    if (shouldLog) {
-                        console.log(`⚠️ Cannot extend path to (${best.x.toFixed(1)}, ${best.y.toFixed(1)}): Insufficient AP (need ${projectedCost}, have ${getTotalAP()})`);
-                    }
-                }
-            } else if (shouldLog) {
-                console.log(`⚠️ Cannot extend path to (${best.x.toFixed(1)}, ${best.y.toFixed(1)}): Blocked`);
-            }
-
-            // Update path line
-
-            if (pathLine && playerPath.length > 1) {
-                const points = playerPath.map(p => `${p.x},${p.y}`).join(' ');
-                pathLine.setAttribute('points', points);
-            } else if (pathLine) {
+        /** Sync the SVG polyline to the current playerPath */
+        function _applyPathToLine() {
+            if (!pathLine) return;
+            if (playerPath.length > 1) {
+                pathLine.setAttribute('points', playerPath.map(p => `${p.x},${p.y}`).join(' '));
+            } else {
                 pathLine.setAttribute('points', '');
             }
-
-
-            // Update AP cost labels
-            updatePathLabels();
         }
 
         function updatePathLabels() {
@@ -6294,18 +6086,16 @@ function clearPlayerPath() {
             circle.setAttribute('class', 'stone-piece');
             circle.setAttribute('fill', STONE_TYPES[type].color);
 
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', 0);
-            text.setAttribute('y', 0);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', '#fff');
-            text.setAttribute('font-size', '14');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = STONE_TYPES[type].symbol;
+            const stoneImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            stoneImg.setAttribute('href', STONE_TYPES[type].img);
+            stoneImg.setAttribute('x', -STONE_SIZE);
+            stoneImg.setAttribute('y', -STONE_SIZE);
+            stoneImg.setAttribute('width', STONE_SIZE * 2);
+            stoneImg.setAttribute('height', STONE_SIZE * 2);
+            stoneImg.style.mixBlendMode = 'screen';
 
             stoneGroup.appendChild(circle);
-            stoneGroup.appendChild(text);
+            stoneGroup.appendChild(stoneImg);
 
             stoneGroup.addEventListener('mousedown', (e) => {
                 e.stopPropagation();
@@ -6326,7 +6116,7 @@ function clearPlayerPath() {
                 }
 
                 // Stone dragging disabled - stones can only be placed from pool or broken (right-click)
-                updateStatus('📡 Right-click to break this stone (costs AP based on rank)');
+                updateStatus('Right-click to break this stone (costs AP based on rank)');
             });
 
             // Touch support: long-press to break stone
@@ -6354,7 +6144,7 @@ function clearPlayerPath() {
                     return;
                 }
 
-                updateStatus('📡 Long-press to break this stone (costs AP based on rank)');
+                updateStatus('Long-press to break this stone (costs AP based on rank)');
                 clearTimeout(stoneLongPressTimer);
                 stoneLongPressTimer = setTimeout(() => {
                     attemptBreakStone(stoneId);
@@ -6457,18 +6247,16 @@ function clearPlayerPath() {
             circle.setAttribute('class', 'stone-piece');
             circle.setAttribute('fill', STONE_TYPES[type].color);
 
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', 0);
-            text.setAttribute('y', 0);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', '#fff');
-            text.setAttribute('font-size', '14');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = STONE_TYPES[type].symbol;
+            const stoneImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            stoneImg.setAttribute('href', STONE_TYPES[type].img);
+            stoneImg.setAttribute('x', -STONE_SIZE);
+            stoneImg.setAttribute('y', -STONE_SIZE);
+            stoneImg.setAttribute('width', STONE_SIZE * 2);
+            stoneImg.setAttribute('height', STONE_SIZE * 2);
+            stoneImg.style.mixBlendMode = 'screen';
 
             stoneGroup.appendChild(circle);
-            stoneGroup.appendChild(text);
+            stoneGroup.appendChild(stoneImg);
 
             stoneGroup.addEventListener('mousedown', (e) => {
                 e.stopPropagation();
@@ -6488,7 +6276,7 @@ function clearPlayerPath() {
                     return;
                 }
 
-                updateStatus('📡 Right-click to break this stone (costs AP based on rank)');
+                updateStatus('Right-click to break this stone (costs AP based on rank)');
             });
 
             // Touch support: long-press to break stone (or drag if Wind II is active)
@@ -6516,7 +6304,7 @@ function clearPlayerPath() {
                     return;
                 }
 
-                updateStatus('📡 Long-press to break this stone (costs AP based on rank)');
+                updateStatus('Long-press to break this stone (costs AP based on rank)');
                 clearTimeout(stoneLongPressTimer);
                 stoneLongPressTimer = setTimeout(() => {
                     attemptBreakStone(resolvedId);
@@ -6593,18 +6381,16 @@ function clearPlayerPath() {
             circle.setAttribute('class', 'stone-piece');
             circle.setAttribute('fill', STONE_TYPES[stoneType].color);
 
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', 0);
-            text.setAttribute('y', 0);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', '#fff');
-            text.setAttribute('font-size', '14');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = STONE_TYPES[stoneType].symbol;
+            const stoneImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            stoneImg.setAttribute('href', STONE_TYPES[stoneType].img);
+            stoneImg.setAttribute('x', -STONE_SIZE);
+            stoneImg.setAttribute('y', -STONE_SIZE);
+            stoneImg.setAttribute('width', STONE_SIZE * 2);
+            stoneImg.setAttribute('height', STONE_SIZE * 2);
+            stoneImg.style.mixBlendMode = 'screen';
 
             stoneGroup.appendChild(circle);
-            stoneGroup.appendChild(text);
+            stoneGroup.appendChild(stoneImg);
 
             stoneGroup.addEventListener('mousedown', (e) => {
                 e.stopPropagation();
@@ -6624,7 +6410,7 @@ function clearPlayerPath() {
                     return;
                 }
 
-                updateStatus('📡 Right-click to break this stone (costs AP based on rank)');
+                updateStatus('Right-click to break this stone (costs AP based on rank)');
             });
 
             // Touch support: long-press to break stone
@@ -6652,7 +6438,7 @@ function clearPlayerPath() {
                     return;
                 }
 
-                updateStatus('📡 Long-press to break this stone (costs AP based on rank)');
+                updateStatus('Long-press to break this stone (costs AP based on rank)');
                 clearTimeout(stoneLongPressTimer);
                 stoneLongPressTimer = setTimeout(() => {
                     attemptBreakStone(stoneId);
@@ -7090,18 +6876,16 @@ function clearPlayerPath() {
             circle.setAttribute('class', 'stone-piece');
             circle.setAttribute('fill', STONE_TYPES[draggedStoneType].color);
 
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', 0);
-            text.setAttribute('y', 0);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', '#fff');
-            text.setAttribute('font-size', '14');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = STONE_TYPES[draggedStoneType].symbol;
+            const ghostImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            ghostImg.setAttribute('href', STONE_TYPES[draggedStoneType].img);
+            ghostImg.setAttribute('x', -STONE_SIZE);
+            ghostImg.setAttribute('y', -STONE_SIZE);
+            ghostImg.setAttribute('width', STONE_SIZE * 2);
+            ghostImg.setAttribute('height', STONE_SIZE * 2);
+            ghostImg.style.mixBlendMode = 'screen';
 
             ghostStone.appendChild(circle);
-            ghostStone.appendChild(text);
+            ghostStone.appendChild(ghostImg);
             viewport.appendChild(ghostStone);
         }
 
@@ -7116,6 +6900,9 @@ function clearPlayerPath() {
             if (newCountEl) newCountEl.textContent = stoneCounts[type] + '/' + stoneCapacity[type];
             const newSourceEl = document.getElementById('new-' + type + '-source');
             if (newSourceEl) newSourceEl.textContent = sourcePool[type] + '/' + (sourcePoolCapacity[type] ?? 25);
+
+            // Refresh Players panel so self-card stone counts stay in sync
+            if (typeof updateOpponentPanel === 'function') updateOpponentPanel();
 
             // Update void AP whenever void stones change
             if (type === 'void') {
@@ -7134,4 +6921,36 @@ function clearPlayerPath() {
 
         // Expose updateStoneCount for scroll effects system
         window.updateStoneCount = updateStoneCount;
+
+        // Reset all per-game state so a new game starts clean (no leftover resources)
+        function resetGameResources() {
+            // Remove any leftover game-over overlays from a previous game
+            document.querySelectorAll('.game-over-overlay').forEach(el => el.remove());
+
+            // Stone pools
+            playerPools.length = 0;
+            sourcePool.earth = 20;
+            sourcePool.water = 20;
+            sourcePool.fire  = 20;
+            sourcePool.wind  = 20;
+            sourcePool.void  = 20;
+
+            // AP
+            currentAP = 5;
+            voidAP    = 0;
+            playerAPs.length = 0;
+
+            // Scroll state (hands, activated elements)
+            spellSystem.playerScrolls = [];
+
+            // Scroll effect buffs and interactive-scroll states
+            if (spellSystem.scrollEffects) {
+                spellSystem.scrollEffects.activeBuffs = {};
+            }
+            window.telekinesisState = null;
+            window.takeFlightState  = null;
+
+            console.log('🔄 Game resources reset');
+        }
+        window.resetGameResources = resetGameResources;
 

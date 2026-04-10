@@ -18,15 +18,16 @@ function gami_openPanel() {
     overlay.innerHTML = `
         <div class="gami-modal" role="dialog" aria-label="Profile panel">
             <div class="gami-header">
-                <h2 class="gami-title">👤 Profile</h2>
+                <h2 class="gami-title">Profile</h2>
                 <button class="gami-close" aria-label="Close" onclick="document.getElementById('gami-panel').remove()">×</button>
             </div>
             <div class="gami-tabs" role="tablist">
                 <button class="gami-tab active" role="tab" onclick="gami_switchTab('profile')">Stats</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('cosmetics')">🎨 Colours</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('emojis')">😊 Emojis</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('badges')">🏅 Badges</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('leaderboard')">🏆 Board</button>
+                <button class="gami-tab"        role="tab" onclick="gami_switchTab('cosmetics')">Colours</button>
+                <button class="gami-tab"        role="tab" onclick="gami_switchTab('emojis')">Emojis</button>
+                <button class="gami-tab"        role="tab" onclick="gami_switchTab('badges')">Badges</button>
+                <button class="gami-tab"        role="tab" onclick="gami_switchTab('leaderboard')">Board</button>
+                <button class="gami-tab"        role="tab" onclick="gami_switchTab('settings')">Settings</button>
             </div>
             <div id="gami-content" class="gami-content">
                 <div class="gami-loading">Loading…</div>
@@ -48,7 +49,7 @@ async function gami_switchTab(tab) {
     if (!panel) return;
 
     const tabs   = panel.querySelectorAll('.gami-tab');
-    const tabIdx = ['profile', 'cosmetics', 'emojis', 'badges', 'leaderboard'].indexOf(tab);
+    const tabIdx = ['profile', 'cosmetics', 'emojis', 'badges', 'leaderboard', 'settings'].indexOf(tab);
     tabs.forEach((btn, i) => btn.classList.toggle('active', i === tabIdx));
 
     const content = document.getElementById('gami-content');
@@ -59,6 +60,7 @@ async function gami_switchTab(tab) {
         else if (tab === 'cosmetics')        _renderCosmetics(content);
         else if (tab === 'emojis')           _renderEmojis(content);
         else if (tab === 'badges')      await _renderBadges(content);
+        else if (tab === 'settings')         _renderSettings(content);
         else                            await _renderLeaderboard(content);
     } catch (err) {
         console.error('[gami-ui] render error:', err);
@@ -104,7 +106,7 @@ async function _renderProfile(content) {
                 <span class="gami-stat-lbl">Total XP</span>
             </div>
             <div class="gami-stat">
-                <span class="gami-stat-val">${(profile.gold || 0).toLocaleString()} 💰</span>
+                <span class="gami-stat-val">${(profile.gold || 0).toLocaleString()}</span>
                 <span class="gami-stat-lbl">Gold</span>
             </div>
             <div class="gami-stat">
@@ -142,7 +144,7 @@ function _renderCosmetics(content) {
     content.innerHTML = `
         <div class="gami-cos-header">
             <span style="color:#eee;font-size:15px;font-weight:bold;">Name Colours</span>
-            <span style="color:#d9b08c;font-size:14px;">💰 ${gold}g</span>
+            <span style="color:#d9b08c;font-size:14px;">${gold}g</span>
         </div>
         <div class="gami-cos-list">
             ${items.map(item => {
@@ -163,7 +165,7 @@ function _renderCosmetics(content) {
                 } else {
                     actionHTML = `<button class="gami-cos-btn buy${canAfford ? '' : ' cant-afford'}"
                         onclick="_gami_cosmeticsBuy('${item.id}')">
-                        💰 ${item.cost}g
+                        ${item.cost}g
                     </button>`;
                 }
 
@@ -210,7 +212,7 @@ function _renderEmojis(content) {
         if (!inGame) html += `<div style="color:#666;font-size:12px;padding:4px 0 14px;">Join a game to use emojis</div>`;
     }
 
-    html += `<div class="gami-section-title" style="margin-top:4px;">🛒 Shop <span style="color:#d9b08c;float:right;">💰 ${gold}g</span></div>`;
+    html += `<div class="gami-section-title" style="margin-top:4px;">Shop <span style="color:#d9b08c;float:right;">${gold}g</span></div>`;
 
     for (const tier of tiers) {
         const tierItems = items.filter(e => e.tier === tier.id);
@@ -259,10 +261,10 @@ async function _renderBadges(content) {
 
     const cards = badges.map(b => `
         <div class="gami-badge-card ${b.earned ? 'earned' : 'locked'}" title="${_esc(b.description)}">
-            <div class="gami-badge-icon">${b.earned ? b.icon : '🔒'}</div>
+            <div class="gami-badge-icon">${b.earned ? b.icon : '?'}</div>
             <div class="gami-badge-name">${_esc(b.name)}</div>
             <div class="gami-badge-desc">${_esc(b.description)}</div>
-            ${b.gold_reward ? `<div class="gami-badge-reward">+${b.gold_reward} 💰</div>` : ''}
+            ${b.gold_reward ? `<div class="gami-badge-reward">+${b.gold_reward}g</div>` : ''}
         </div>
     `).join('');
 
@@ -278,7 +280,7 @@ async function _renderLeaderboard(content) {
         return;
     }
 
-    const medals = ['🥇', '🥈', '🥉'];
+    const medals = ['#1', '#2', '#3'];
     const items  = rows.map((row, i) => {
         const isMe = row.user_id === window.gami.userId;
         const rank = medals[i] || `#${i + 1}`;
@@ -309,7 +311,7 @@ async function loadMainLeaderboard() {
         return;
     }
 
-    const medals = ['🥇', '🥈', '🥉'];
+    const medals = ['#1', '#2', '#3'];
     el.innerHTML = rows.map((row, i) => {
         const isMe = row.user_id === window.gami.userId;
         const rank = medals[i] || `#${i + 1}`;
@@ -345,6 +347,88 @@ function _gami_emojisUse(id) {
 async function _gami_emojisBuy(id) {
     await window.emojiSystem.purchaseEmoji(id);
     gami_switchTab('emojis');
+}
+
+// ── Settings tab ─────────────────────────────────────────────
+
+function _renderSettings(content) {
+    const uiSound   = localStorage.getItem('godaigo_ui_sound')   !== 'false';
+    const gameSound = localStorage.getItem('godaigo_game_sound') !== 'false';
+    const crt = window.crtOverlay ? window.crtOverlay.getOptions()
+                                  : { scanlines: true, vignette: true, grain: true, flicker: true };
+
+    content.innerHTML = `
+        <div class="gami-settings-list">
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">UI Sounds</div>
+                    <div class="gami-settings-desc">Button click sound effects</div>
+                </div>
+                <button class="gami-toggle ${uiSound ? 'on' : 'off'}"
+                        onclick="_gami_toggleSetting('ui_sound', this)">${uiSound ? 'ON' : 'OFF'}</button>
+            </div>
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">Game Sounds</div>
+                    <div class="gami-settings-desc">In-game audio effects</div>
+                </div>
+                <button class="gami-toggle ${gameSound ? 'on' : 'off'}"
+                        onclick="_gami_toggleSetting('game_sound', this)">${gameSound ? 'ON' : 'OFF'}</button>
+            </div>
+            <div style="font-family:var(--font-terminal);font-size:17px;color:#555;padding:8px 0 2px;letter-spacing:1px;">— Display —</div>
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">Scanlines</div>
+                    <div class="gami-settings-desc">Horizontal CRT scan-line overlay</div>
+                </div>
+                <button class="gami-toggle ${crt.scanlines ? 'on' : 'off'}"
+                        onclick="_gami_toggleCrt('scanlines', this)">${crt.scanlines ? 'ON' : 'OFF'}</button>
+            </div>
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">Vignette</div>
+                    <div class="gami-settings-desc">Dark edges around the screen</div>
+                </div>
+                <button class="gami-toggle ${crt.vignette ? 'on' : 'off'}"
+                        onclick="_gami_toggleCrt('vignette', this)">${crt.vignette ? 'ON' : 'OFF'}</button>
+            </div>
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">Film Grain</div>
+                    <div class="gami-settings-desc">Animated noise texture</div>
+                </div>
+                <button class="gami-toggle ${crt.grain ? 'on' : 'off'}"
+                        onclick="_gami_toggleCrt('grain', this)">${crt.grain ? 'ON' : 'OFF'}</button>
+            </div>
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">Flicker</div>
+                    <div class="gami-settings-desc">Subtle screen brightness variation</div>
+                </div>
+                <button class="gami-toggle ${crt.flicker ? 'on' : 'off'}"
+                        onclick="_gami_toggleCrt('flicker', this)">${crt.flicker ? 'ON' : 'OFF'}</button>
+            </div>
+        </div>
+    `;
+}
+
+function _gami_toggleCrt(key, btn) {
+    if (!window.crtOverlay) return;
+    const newVal = !window.crtOverlay.getOptions()[key];
+    window.crtOverlay.setOption(key, newVal);
+    window.crtOverlay.saveForUser(window.gami?.userId || null);
+    btn.textContent = newVal ? 'ON' : 'OFF';
+    btn.className   = `gami-toggle ${newVal ? 'on' : 'off'}`;
+}
+
+function _gami_toggleSetting(key, btn) {
+    const current = localStorage.getItem(`godaigo_${key}`) !== 'false';
+    const newVal  = !current;
+    localStorage.setItem(`godaigo_${key}`, newVal ? 'true' : 'false');
+    if (key === 'ui_sound')   window.uiSoundEnabled   = newVal;
+    if (key === 'game_sound') window.gameSoundEnabled = newVal;
+    btn.textContent = newVal ? 'ON' : 'OFF';
+    btn.className   = `gami-toggle ${newVal ? 'on' : 'off'}`;
 }
 
 // ── Utility ───────────────────────────────────────────────────

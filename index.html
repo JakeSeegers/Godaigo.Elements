@@ -4,9 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Godaigo - Hexagon Tile Game</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap" rel="stylesheet">
     <!-- Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
     <!-- CSS -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -19,36 +25,28 @@
         </h1>
 
     <!-- Auth Screen (shown before lobby) -->
-    <div id="auth-screen" style="background:#222; padding:30px; border-radius:10px; max-width:400px; margin:0 auto 20px;">
-        <h2 style="color:#d9b08c; margin-top:0; text-align:center;">Sign In</h2>
-        <div style="display:flex; flex-direction:column; gap:12px;">
-            <input type="text" id="auth-username" placeholder="Username"
-                   style="padding:10px; font-size:16px; background:#333; color:#eee; border:2px solid #666; border-radius:5px;">
-            <input type="password" id="auth-password" placeholder="Password"
-                   style="padding:10px; font-size:16px; background:#333; color:#eee; border:2px solid #666; border-radius:5px;">
-            <div style="display:flex; gap:10px;">
-                <button id="auth-login-btn" onclick="authLogin()"
-                        style="flex:1; padding:12px; font-size:16px; background:#d9b08c; color:#1a1a1a; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">
-                    Log In
-                </button>
-                <button id="auth-register-btn" onclick="authRegister()"
-                        style="flex:1; padding:12px; font-size:16px; background:#444; color:#eee; border:2px solid #666; border-radius:5px; cursor:pointer;">
-                    Register
-                </button>
+    <div id="auth-screen" class="auth-screen">
+        <h2 class="auth-title">Sign In</h2>
+        <div class="auth-fields">
+            <input type="text" id="auth-username" placeholder="Username" class="auth-input">
+            <input type="password" id="auth-password" placeholder="Password" class="auth-input">
+            <div class="auth-buttons">
+                <button id="auth-login-btn" onclick="authLogin()" class="auth-btn-primary">Log In</button>
+                <button id="auth-register-btn" onclick="authRegister()" class="auth-btn-secondary">Register</button>
             </div>
-            <div id="auth-error" style="color:#ff6b6b; font-size:14px; text-align:center; display:none;"></div>
-            <div id="auth-loading" style="display:none; text-align:center; color:#d9b08c;">Signing in...</div>
+            <div id="auth-error" class="auth-error" style="display:none;"></div>
+            <div id="auth-loading" class="auth-loading" style="display:none;">Signing in...</div>
         </div>
     </div>
 
     <!-- Multiplayer Lobby (hidden until auth succeeds) -->
-    <div id="multiplayer-lobby" style="display:none; background: #222; padding: 30px; border-radius: 10px; margin-bottom: 20px; max-width: 860px;">
+    <div id="multiplayer-lobby" style="display:none;">
 
         <!-- Auth bar: shows signed-in username + sign-out button -->
         <div id="auth-bar" style="display:none; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 12px; background:#333; border-radius:5px;">
             <span id="auth-bar-name" style="color:#d9b08c; font-size:14px;"></span>
             <div style="display:flex; gap:8px;">
-                <button onclick="gami_openPanel()" style="padding:4px 12px; font-size:13px; background:#555; color:#d9b08c; border:1px solid #888; border-radius:4px; cursor:pointer;">👤 Profile</button>
+                <button onclick="gami_openPanel()" style="padding:4px 12px; font-size:13px; background:#555; color:#d9b08c; border:1px solid #888; border-radius:4px; cursor:pointer;">Profile</button>
                 <button onclick="authSignOut()" style="padding:4px 12px; font-size:13px; background:#555; color:#eee; border:1px solid #888; border-radius:4px; cursor:pointer;">Sign Out</button>
             </div>
         </div>
@@ -58,7 +56,7 @@
             <h2 style="color: #d9b08c; margin: 0;">Multiplayer Lobby</h2>
             <button id="reset-lobby-btn" onclick="resetLobby()"
                     style="display: none; padding: 8px 15px; font-size: 14px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                🔄 Reset Lobby
+                Reset Lobby
             </button>
         </div>
 
@@ -84,11 +82,11 @@
                     <div id="room-action-buttons" style="display: flex; gap: 10px; margin-bottom: 12px;">
                         <button id="host-public-btn" onclick="hostPublicGame()"
                                 style="flex:1; padding: 10px; font-size: 15px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                            🌐 Host Public Game
+                            Host Public Game
                         </button>
                         <button id="create-private-btn" onclick="createPrivateRoom()"
                                 style="flex:1; padding: 10px; font-size: 15px; background: #7B5EA7; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                            🔒 Create Private Room
+                            Create Private Room
                         </button>
                     </div>
 
@@ -124,16 +122,13 @@
                 </div><!-- end left column -->
 
                 <!-- Right column: leaderboard -->
-                <div style="width: 260px; flex-shrink: 0;">
+                <div style="width: 320px; flex-shrink: 0;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <h3 style="margin: 0; color: #d9b08c; font-size: 15px;">🏆 Leaderboard</h3>
-                        <button onclick="window.loadMainLeaderboard()"
-                                style="padding: 4px 10px; font-size: 12px; background: #444; color: #eee; border: 1px solid #666; border-radius: 4px; cursor: pointer;">
-                            ↻
-                        </button>
+                        <h3 style="margin: 0; color: #d9b08c;">Leaderboard</h3>
+                        <button onclick="window.loadMainLeaderboard()" title="Refresh">&#8635;</button>
                     </div>
                     <div id="main-leaderboard-body"
-                         style="background: #1a1a1a; border-radius: 5px; overflow-y: auto; max-height: 360px; padding: 4px;">
+                         style="background: #1a1a1a; border: 2px solid #333; border-radius: 2px; overflow-y: auto; max-height: 360px; padding: 4px;">
                         <div class="gami-loading" style="padding: 12px;">Sign in to view rankings.</div>
                     </div>
                 </div><!-- end right column -->
@@ -254,6 +249,7 @@
                 <div class="hud-player">
                     <span class="player-dot" id="hud-player-dot"></span>
                     <span class="hud-player-name" id="hud-player-name">Your Turn</span>
+                    <button id="end-turn" class="hud-end-turn" style="display: none;">End Turn</button>
                     <button class="hud-stone-info-btn" onclick="showStoneInfoPopup()" title="Stone types &amp; abilities">Elemental Reference Sheet</button>
                 </div>
             </div>
@@ -265,11 +261,10 @@
                     <span id="hud-void-ap" style="color: #9458f4; margin-left: 4px;"></span>
                 </div>
                 <div class="hud-timer" id="hud-timer" style="display: none;">
-                    <span>⏱</span>
                     <span id="hud-timer-value">2:00</span>
                 </div>
-                <button id="emoji-panel-btn" onclick="window.emojiSystem?.togglePanel()" title="Emojis">😊</button>
-                <button id="cosmetics-panel-btn" onclick="window.cosmeticsSystem?.togglePanel()" title="Cosmetics">🎨</button>
+                <button id="emoji-panel-btn" onclick="window.emojiSystem?.togglePanel()" title="Emojis">E</button>
+                <button id="cosmetics-panel-btn" onclick="window.cosmeticsSystem?.togglePanel()" title="Colours">C</button>
                 <button class="hud-toggle-btn" id="toggle-right-panel" title="Toggle opponents panel">▶</button>
             </div>
         </div>
@@ -285,7 +280,7 @@
                     <div class="stone-card" id="new-earth-deck" data-element="earth">
                         <svg width="36" height="36">
                             <circle cx="18" cy="18" r="14" fill="#69d83a" class="stone-piece"/>
-                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">▲</text>
+                            <image href="images/mountainsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
                         </svg>
                         <div class="count" id="new-earth-count">0/5</div>
                         <div class="source" id="new-earth-source">20</div>
@@ -293,7 +288,7 @@
                     <div class="stone-card" id="new-water-deck" data-element="water">
                         <svg width="36" height="36">
                             <circle cx="18" cy="18" r="14" fill="#5894f4" class="stone-piece"/>
-                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">◯</text>
+                            <image href="images/watersymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
                         </svg>
                         <div class="count" id="new-water-count">0/5</div>
                         <div class="source" id="new-water-source">20</div>
@@ -301,7 +296,7 @@
                     <div class="stone-card" id="new-fire-deck" data-element="fire">
                         <svg width="36" height="36">
                             <circle cx="18" cy="18" r="14" fill="#ed1b43" class="stone-piece"/>
-                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">♦</text>
+                            <image href="images/firesymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
                         </svg>
                         <div class="count" id="new-fire-count">0/5</div>
                         <div class="source" id="new-fire-source">20</div>
@@ -309,7 +304,7 @@
                     <div class="stone-card" id="new-wind-deck" data-element="wind">
                         <svg width="36" height="36">
                             <circle cx="18" cy="18" r="14" fill="#ffce00" class="stone-piece"/>
-                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">≋</text>
+                            <image href="images/windsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
                         </svg>
                         <div class="count" id="new-wind-count">0/5</div>
                         <div class="source" id="new-wind-source">20</div>
@@ -317,7 +312,7 @@
                     <div class="stone-card" id="new-void-deck" data-element="void">
                         <svg width="36" height="36">
                             <circle cx="18" cy="18" r="14" fill="#9458f4" class="stone-piece"/>
-                            <text x="18" y="18" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">✺</text>
+                            <image href="images/voidsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
                         </svg>
                         <div class="count" id="new-void-count">0/5</div>
                         <div class="source" id="new-void-source">20</div>
@@ -387,6 +382,9 @@
         </div>
 
         <!-- BOARD AREA (Center) -->
+        <!-- Status bar anchored below the HUD -->
+        <div id="status">Ready to play</div>
+
         <div class="board-area">
             <div class="board-container" id="new-board-container">
                 <svg id="boardSvg" width="1000" height="800">
@@ -395,7 +393,6 @@
                     </g>
                 </svg>
             </div>
-            <div id="status">Ready to play</div>
         </div>
 
         <!-- RIGHT PANEL (Opponents/Players) -->
@@ -412,20 +409,19 @@
         <!-- BOTTOM ACTION BAR -->
         <div class="action-bar">
             <div class="action-group">
-                <button id="scroll-inventory">📜 Scrolls (<span id="scroll-count">0</span>)</button>
-                <button id="cast-spell" class="primary">✨ Cast Spell</button>
+                <button id="scroll-inventory">Scrolls (<span id="scroll-count">0</span>)</button>
+                <button id="cast-spell" class="primary">Cast Spell</button>
             </div>
 
             <div class="action-divider"></div>
 
             <div class="action-group">
-                <button id="undo-move">⟲ Undo Step</button>
+                <button id="undo-move">Undo Step</button>
             </div>
 
             <div class="action-divider"></div>
 
             <div class="action-group">
-                <button id="end-turn" class="primary" style="display: none;">End Turn</button>
                 <button id="leave-game" class="danger" style="display: none;">Leave</button>
             </div>
         </div>
@@ -435,7 +431,7 @@
     <div class="game-container inventory-collapsed" style="display: none !important;">
         <div class="deck-panel">
             <div class="inventory-header">
-                <div class="inventory-title">🎒 Inventory</div>
+                <div class="inventory-title">Inventory</div>
                 <button id="inventory-close" class="inventory-close-btn" aria-label="Close inventory">✕</button>
             </div>
 
@@ -454,7 +450,7 @@
                 <div class="stone-deck-item" id="earth-deck">
                     <svg width="40" height="40">
                         <circle cx="20" cy="20" r="12" fill="#69d83a" class="stone-piece"/>
-                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">▲</text>
+                        <image href="images/mountainsymbol.png" x="8" y="8" width="24" height="24" style="mix-blend-mode:screen"/>
                     </svg>
                     <div class="stone-count" id="earth-count">0/5</div>
                     <div class="source-count" id="earth-source">20/25</div>
@@ -462,7 +458,7 @@
                 <div class="stone-deck-item" id="water-deck">
                     <svg width="40" height="40">
                         <circle cx="20" cy="20" r="12" fill="#5894f4" class="stone-piece"/>
-                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">◯</text>
+                        <image href="images/watersymbol.png" x="8" y="8" width="24" height="24" style="mix-blend-mode:screen"/>
                     </svg>
                     <div class="stone-count" id="water-count">0/5</div>
                     <div class="source-count" id="water-source">20/25</div>
@@ -470,7 +466,7 @@
                 <div class="stone-deck-item" id="fire-deck">
                     <svg width="40" height="40">
                         <circle cx="20" cy="20" r="12" fill="#ed1b43" class="stone-piece"/>
-                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">♦</text>
+                        <image href="images/firesymbol.png" x="8" y="8" width="24" height="24" style="mix-blend-mode:screen"/>
                     </svg>
                     <div class="stone-count" id="fire-count">0/5</div>
                     <div class="source-count" id="fire-source">20/25</div>
@@ -478,7 +474,7 @@
                 <div class="stone-deck-item" id="wind-deck">
                     <svg width="40" height="40">
                         <circle cx="20" cy="20" r="12" fill="#ffce00" class="stone-piece"/>
-                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">≋</text>
+                        <image href="images/windsymbol.png" x="8" y="8" width="24" height="24" style="mix-blend-mode:screen"/>
                     </svg>
                     <div class="stone-count" id="wind-count">0/5</div>
                     <div class="source-count" id="wind-source">20/25</div>
@@ -486,7 +482,7 @@
                 <div class="stone-deck-item" id="void-deck">
                     <svg width="40" height="40">
                         <circle cx="20" cy="20" r="12" fill="#9458f4" class="stone-piece"/>
-                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">✺</text>
+                        <image href="images/voidsymbol.png" x="8" y="8" width="24" height="24" style="mix-blend-mode:screen"/>
                     </svg>
                     <div class="stone-count" id="void-count">0/5</div>
                     <div class="source-count" id="void-source">20/25</div>
@@ -510,22 +506,22 @@
                         <span id="void-ap-display" style="color: #9458f4; margin-left: 10px;"></span>
                         <span id="inactivity-timer" style="display: none; margin-left: 15px; padding: 5px 10px; border-radius: 5px; font-weight: bold;"></span>
                     </div>
-                    <button id="inventory-toggle" title="Show/hide inventory">🎒 Inventory</button>
+                    <button id="inventory-toggle" title="Show/hide inventory">Inventory</button>
                     <button id="end-turn" style="display: none;">End Turn</button>
                     <button id="undo-move">Undo Step</button>
-                    <button id="scroll-inventory">📜 Scrolls (<span id="scroll-count">0</span>)</button>
-                    <button id="cast-spell">✨ Cast Spell (2 AP)</button>
+                    <button id="scroll-inventory">Scrolls (<span id="scroll-count">0</span>)</button>
+                    <button id="cast-spell">Cast Spell (2 AP)</button>
                                         <button id="leave-game" style="display: none; background: #f44336;">Leave Game</button>
                 </div>
 
                 <div id="status">Drag tiles from the deck to build your board. Drag stones onto hexes.<br>
-                <small style="color: #999;">All stones: 1 AP baseline | 🔥 Fire destroys adjacent non-void | 💧 Water (2 AP) chains abilities | 🌪️ Wind free movement | 🗻 Earth blocks | ✨ Void nullifies</small></div>
+                <small style="color: #999;">All stones: 1 AP baseline | Fire destroys adjacent non-void | Water (2 AP) chains abilities | Wind free movement | Earth blocks | Void nullifies</small></div>
             </div>
         </div>
 
         <!-- Opponent Panel (visible in multiplayer) -->
         <div class="opponent-panel" id="opponent-panel">
-            <h3>👥 Opponents</h3>
+            <h3>Opponents</h3>
             <div id="opponent-cards">
                 <!-- Opponent cards will be populated dynamically -->
             </div>
@@ -568,10 +564,25 @@
     <script src="js/game-core.js" charset="UTF-8"></script>
     <script src="js/game-ui.js" charset="UTF-8"></script>
     <script src="js/gamification.js" charset="UTF-8"></script>
+    <script src="js/crt-overlay.js" charset="UTF-8"></script>
     <script src="js/gamification-ui.js" charset="UTF-8"></script>
     <script src="js/lobby.js" charset="UTF-8"></script>
     <script src="js/emoji-system.js" charset="UTF-8"></script>
     <script src="js/cosmetics-system.js" charset="UTF-8"></script>
+    <script>
+    (function() {
+        const _clickSnd = new Audio('minecraft-click-cropped.mp3');
+        _clickSnd.volume = 0.25;
+        window.uiSoundEnabled   = localStorage.getItem('godaigo_ui_sound')   !== 'false';
+        window.gameSoundEnabled = localStorage.getItem('godaigo_game_sound') !== 'false';
+        document.addEventListener('mousedown', e => {
+            if (window.uiSoundEnabled && e.target.closest('button')) {
+                _clickSnd.currentTime = 0;
+                _clickSnd.play().catch(() => {});
+            }
+        });
+    })();
+    </script>
 
     <script>
     function showStoneInfoPopup() {

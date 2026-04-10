@@ -14,12 +14,12 @@ const SNAP_THRESHOLD = 40;
 const STONE_SIZE = 12;
 
 const STONE_TYPES = {
-    earth: { color: '#69d83a', symbol: '▲' },
-    water: { color: '#5894f4', symbol: '◯' },
-    fire: { color: '#ed1b43', symbol: '♦' },
-    wind: { color: '#ffce00', symbol: '≋' },
-    void: { color: '#9458f4', symbol: '✺' },
-    catacomb: { color: '#8b4513', symbol: '🔅' }
+    earth:    { color: '#69d83a', symbol: '▲', img: 'images/mountainsymbol.png' },
+    water:    { color: '#5894f4', symbol: '◯', img: 'images/watersymbol.png'    },
+    fire:     { color: '#ed1b43', symbol: '♦', img: 'images/firesymbol.png'     },
+    wind:     { color: '#ffce00', symbol: '≋', img: 'images/windsymbol.png'     },
+    void:     { color: '#9458f4', symbol: '✺', img: 'images/voidsymbol.png'     },
+    catacomb: { color: '#8b4513', symbol: '✦', img: 'images/Catacomb.png'       }
 };
 
 const PLAYER_COLORS = {

@@ -205,7 +205,7 @@
         if (owned.length === 0) {
             container.innerHTML = `
               <div class="emoji-empty-state">
-                <div style="font-size:42px;margin-bottom:10px;">🛒</div>
+                <div style="font-size:42px;margin-bottom:10px;"></div>
                 <div style="color:#ccc;font-weight:bold;">No emojis yet!</div>
                 <div style="font-size:12px;color:#888;margin-top:6px;">Head to the Shop tab to get started.</div>
               </div>`;
@@ -239,7 +239,7 @@
         // Pull cached gold — refreshed when gami is ready
         const gold = (window.gami?.profile?.gold != null) ? window.gami.profile.gold : '…';
 
-        let html = `<div class="shop-gold-display">💰 ${gold}g</div>`;
+        let html = `<div class="shop-gold-display">${gold}g</div>`;
 
         for (const tier of EMOJI_TIERS) {
             const items = EMOJI_ITEMS.filter(e => e.tier === tier.id);
@@ -306,7 +306,26 @@
             return;
         }
 
-        if (!confirm(`Buy "${item.name}" for ${item.cost}g?`)) return;
+        const confirmed = await new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.className = 'retro-dlg-overlay';
+            overlay.innerHTML = `
+              <div class="retro-dlg-box">
+                <div class="retro-dlg-title">Confirm Purchase</div>
+                <div class="retro-dlg-body">
+                  <div class="retro-dlg-line">${item.display}  ${item.name}</div>
+                  <div class="retro-dlg-line">Cost: ${item.cost}g</div>
+                </div>
+                <div class="retro-dlg-btns">
+                  <button class="retro-dlg-btn ok" id="rdlg-ok">Buy</button>
+                  <button class="retro-dlg-btn cancel" id="rdlg-cancel">Cancel</button>
+                </div>
+              </div>`;
+            document.body.appendChild(overlay);
+            overlay.querySelector('#rdlg-ok').onclick = () => { overlay.remove(); resolve(true); };
+            overlay.querySelector('#rdlg-cancel').onclick = () => { overlay.remove(); resolve(false); };
+        });
+        if (!confirmed) return;
 
         try {
             // Deduct gold atomically via the existing RPC
@@ -435,7 +454,7 @@
               <button class="emoji-tab-btn active" data-view="inventory"
                       onclick="window.emojiSystem.switchView('inventory')">My Emojis</button>
               <button class="emoji-tab-btn" data-view="shop"
-                      onclick="window.emojiSystem.switchView('shop')">🛒 Shop</button>
+                      onclick="window.emojiSystem.switchView('shop')">Shop</button>
             </div>
             <button class="emoji-panel-close" onclick="window.emojiSystem.closePanel()" title="Close">✕</button>
           </div>
