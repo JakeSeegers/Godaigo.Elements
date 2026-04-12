@@ -1981,7 +1981,9 @@
                 // Check win condition — all 5 elements activated
                 if (spellSystem.playerScrolls[playerIndex].activated.size === 5) {
                     console.log(`🏆 Win condition met for player ${playerIndex} (detected via scroll-effect broadcast)`);
-                    spellSystem.showLevelComplete(playerIndex);
+                    // For the winner's own echo: showLevelComplete already ran locally and
+                    // showGameOverToAll is guarded by #game-over-notification. Safe to call again.
+                    // For observers: handleGameOver → showGameOverToAll shows the win screen.
                     handleGameOver(playerIndex);
                 }
             });

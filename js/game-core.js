@@ -377,8 +377,23 @@
 
                 // Apply common area
                 if (snapshot.commonArea) {
+                    // Build a set of scrolls already in players' hands/active areas locally.
+                    // If a scroll is here, the player just drew/played it and the host's
+                    // periodic broadcast is stale — don't put it back in the common area.
+                    const inLocalPlay = new Set();
+                    for (const p of this.playerScrolls) {
+                        if (!p) continue;
+                        p.hand.forEach(s => inLocalPlay.add(s));
+                        p.active.forEach(s => inLocalPlay.add(s));
+                    }
+
                     ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'].forEach(element => {
                         const newScroll = snapshot.commonArea[element] || null;
+                        if (newScroll && inLocalPlay.has(newScroll)) {
+                            // Host state is stale — this scroll was already drawn by a player
+                            console.log(`[sync] Skipping common area restore for ${element}: ${newScroll} is already in local play`);
+                            return;
+                        }
                         if (this.commonArea[element] !== newScroll) {
                             console.log(`🔄 Common area ${element} corrected:`, this.commonArea[element], '→', newScroll);
                             this.commonArea[element] = newScroll;
@@ -1872,6 +1887,9 @@
             }
 
             showLevelComplete(playerIndex) {
+                // Guard: only one win overlay at a time
+                if (document.querySelector('.game-over-overlay')) return;
+
                 const overlay = document.createElement('div');
                 overlay.className = 'game-over-overlay';
 
@@ -2012,9 +2030,9 @@
                         stoneHex.setAttribute('points', createHexPoints(pixelPos.x, pixelPos.y, hexSize));
                         // Use pos.type if available (for catacomb multi-element), otherwise use elementType
                         const stoneType = pos.type || elementType;
-                        stoneHex.setAttribute('fill', STONE_TYPES[stoneType].color);
-                        stoneHex.setAttribute('stroke', '#fff');
-                        stoneHex.setAttribute('stroke-width', '2');
+                        stoneHex.setAttribute('fill', darkenHex(STONE_TYPES[stoneType].color, 0.55));
+                        stoneHex.setAttribute('stroke', STONE_TYPES[stoneType].color);
+                        stoneHex.setAttribute('stroke-width', '1.5');
                         group.appendChild(stoneHex);
 
                         // Add element image
@@ -2024,7 +2042,7 @@
                         symbol.setAttribute('y', pixelPos.y - hexSize);
                         symbol.setAttribute('width', hexSize * 2);
                         symbol.setAttribute('height', hexSize * 2);
-                        symbol.style.mixBlendMode = 'screen';
+                        symbol.setAttribute('opacity', '0.92');
                         group.appendChild(symbol);
                     });
 
@@ -4355,6 +4373,7 @@
             tileGroup.appendChild(shrineMarker);
 
             tileGroup.addEventListener('mousedown', (e) => {
+                if (!tileMoveMode) return;
                 if (e.button === 0 && !tileHasStones(tileId) && !isPanning && !isDraggingStone) {
                     e.stopPropagation();
                     e.preventDefault();
@@ -4439,6 +4458,7 @@
             tileGroup.appendChild(shrineMarker);
 
             tileGroup.addEventListener('mousedown', (e) => {
+                if (!tileMoveMode) return;
                 if (e.button === 0 && !tileHasStones(tileId) && !isPanning && !isDraggingStone) {
                     e.stopPropagation();
                     e.preventDefault();
@@ -6041,6 +6061,15 @@ function clearPlayerPath() {
 
         let nextStoneId = 1; // Global counter for unique stone IDs
 
+        // Returns a darkened version of a hex color (factor 0–1)
+        function darkenHex(hex, factor) {
+            const c = hex.replace('#', '');
+            const r = Math.round(parseInt(c.slice(0, 2), 16) * factor);
+            const g = Math.round(parseInt(c.slice(2, 4), 16) * factor);
+            const b = Math.round(parseInt(c.slice(4, 6), 16) * factor);
+            return `rgb(${r},${g},${b})`;
+        }
+
         function placeStone(x, y, type) {
             const stoneId = nextStoneId++;
             console.log(`   Placing stone: id=${stoneId}, type=${type}, position=(${x.toFixed(1)}, ${y.toFixed(1)})`);
@@ -6062,7 +6091,9 @@ function clearPlayerPath() {
             circle.setAttribute('cy', 0);
             circle.setAttribute('r', STONE_SIZE);
             circle.setAttribute('class', 'stone-piece');
-            circle.setAttribute('fill', STONE_TYPES[type].color);
+            circle.setAttribute('fill', darkenHex(STONE_TYPES[type].color, 0.55));
+            circle.setAttribute('stroke', STONE_TYPES[type].color);
+            circle.setAttribute('stroke-width', '1.5');
 
             const stoneImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
             stoneImg.setAttribute('href', STONE_TYPES[type].img);
@@ -6070,7 +6101,7 @@ function clearPlayerPath() {
             stoneImg.setAttribute('y', -STONE_SIZE);
             stoneImg.setAttribute('width', STONE_SIZE * 2);
             stoneImg.setAttribute('height', STONE_SIZE * 2);
-            stoneImg.style.mixBlendMode = 'screen';
+            stoneImg.setAttribute('opacity', '0.92');
 
             stoneGroup.appendChild(circle);
             stoneGroup.appendChild(stoneImg);
@@ -6223,7 +6254,9 @@ function clearPlayerPath() {
             circle.setAttribute('cy', 0);
             circle.setAttribute('r', STONE_SIZE);
             circle.setAttribute('class', 'stone-piece');
-            circle.setAttribute('fill', STONE_TYPES[type].color);
+            circle.setAttribute('fill', darkenHex(STONE_TYPES[type].color, 0.55));
+            circle.setAttribute('stroke', STONE_TYPES[type].color);
+            circle.setAttribute('stroke-width', '1.5');
 
             const stoneImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
             stoneImg.setAttribute('href', STONE_TYPES[type].img);
@@ -6231,7 +6264,7 @@ function clearPlayerPath() {
             stoneImg.setAttribute('y', -STONE_SIZE);
             stoneImg.setAttribute('width', STONE_SIZE * 2);
             stoneImg.setAttribute('height', STONE_SIZE * 2);
-            stoneImg.style.mixBlendMode = 'screen';
+            stoneImg.setAttribute('opacity', '0.92');
 
             stoneGroup.appendChild(circle);
             stoneGroup.appendChild(stoneImg);
@@ -6357,7 +6390,9 @@ function clearPlayerPath() {
             circle.setAttribute('cy', 0);
             circle.setAttribute('r', STONE_SIZE);
             circle.setAttribute('class', 'stone-piece');
-            circle.setAttribute('fill', STONE_TYPES[stoneType].color);
+            circle.setAttribute('fill', darkenHex(STONE_TYPES[stoneType].color, 0.55));
+            circle.setAttribute('stroke', STONE_TYPES[stoneType].color);
+            circle.setAttribute('stroke-width', '1.5');
 
             const stoneImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
             stoneImg.setAttribute('href', STONE_TYPES[stoneType].img);
@@ -6365,7 +6400,7 @@ function clearPlayerPath() {
             stoneImg.setAttribute('y', -STONE_SIZE);
             stoneImg.setAttribute('width', STONE_SIZE * 2);
             stoneImg.setAttribute('height', STONE_SIZE * 2);
-            stoneImg.style.mixBlendMode = 'screen';
+            stoneImg.setAttribute('opacity', '0.92');
 
             stoneGroup.appendChild(circle);
             stoneGroup.appendChild(stoneImg);
@@ -6852,7 +6887,9 @@ function clearPlayerPath() {
             circle.setAttribute('cy', 0);
             circle.setAttribute('r', STONE_SIZE);
             circle.setAttribute('class', 'stone-piece');
-            circle.setAttribute('fill', STONE_TYPES[draggedStoneType].color);
+            circle.setAttribute('fill', darkenHex(STONE_TYPES[draggedStoneType].color, 0.55));
+            circle.setAttribute('stroke', STONE_TYPES[draggedStoneType].color);
+            circle.setAttribute('stroke-width', '1.5');
 
             const ghostImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
             ghostImg.setAttribute('href', STONE_TYPES[draggedStoneType].img);
@@ -6860,7 +6897,7 @@ function clearPlayerPath() {
             ghostImg.setAttribute('y', -STONE_SIZE);
             ghostImg.setAttribute('width', STONE_SIZE * 2);
             ghostImg.setAttribute('height', STONE_SIZE * 2);
-            ghostImg.style.mixBlendMode = 'screen';
+            ghostImg.setAttribute('opacity', '0.92');
 
             ghostStone.appendChild(circle);
             ghostStone.appendChild(ghostImg);
@@ -6904,6 +6941,10 @@ function clearPlayerPath() {
         function resetGameResources() {
             // Remove any leftover game-over overlays from a previous game
             document.querySelectorAll('.game-over-overlay').forEach(el => el.remove());
+
+            // Remove all stone SVG elements still on the board from the previous game
+            document.querySelectorAll('.stone').forEach(el => el.remove());
+            placedStones.length = 0;
 
             // Stone pools
             playerPools.length = 0;

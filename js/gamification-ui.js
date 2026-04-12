@@ -43,6 +43,25 @@ function gami_openPanel() {
     gami_switchTab('profile');
 }
 
+/** Open the panel directly on the Settings tab (usable from in-game HUD) */
+function gami_openSettings() {
+    const existing = document.getElementById('gami-panel');
+    if (existing) {
+        // Panel already open — if we're already on settings, close it; otherwise switch to it
+        const activeTab = existing.querySelector('.gami-tab.active');
+        if (activeTab && activeTab.textContent.trim() === 'Settings') {
+            existing.remove();
+        } else {
+            gami_switchTab('settings');
+        }
+        return;
+    }
+    // Open panel, but land on settings tab instead of profile
+    gami_openPanel();
+    // gami_openPanel ends on 'profile'; immediately switch to settings
+    gami_switchTab('settings');
+}
+
 /** Switch the active tab and load its content */
 async function gami_switchTab(tab) {
     const panel = document.getElementById('gami-panel');

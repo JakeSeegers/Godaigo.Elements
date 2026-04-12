@@ -189,6 +189,11 @@
             if (existing) existing.remove();
 
             const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#aaa';
+            const elementLabel = element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown';
+            const elementImg   = STONE_TYPES[element]?.img || '';
+            const scrollTitle  = pattern?.name || scrollName;
+            const levelText    = pattern?.level ? `Level ${pattern.level}` : '';
+            const description  = pattern?.description || 'No description available.';
 
             const overlay = document.createElement('div');
             overlay.id = 'scroll-info-popup-overlay';
@@ -198,44 +203,99 @@
 
             const box = document.createElement('div');
             box.className = 'retro-dlg-box wide';
+            box.style.cssText = `
+                max-width: 380px;
+                padding: 0;
+                overflow: hidden;
+                border: 2px solid ${elementColor};
+                box-shadow: 0 0 24px ${elementColor}55, 0 4px 32px #000a;
+            `;
 
-            const title = document.createElement('div');
-            title.className = 'retro-dlg-title';
-            title.style.color = elementColor;
-            title.textContent = pattern ? pattern.name : scrollName;
-            box.appendChild(title);
-
-            if (element) {
-                const elLine = document.createElement('div');
-                elLine.className = 'retro-dlg-line';
-                elLine.style.fontSize = '16px';
-                elLine.textContent = element.charAt(0).toUpperCase() + element.slice(1) + (pattern?.level ? '  –  Level ' + pattern.level : '');
-                box.appendChild(elLine);
+            // ── Coloured header band ──────────────────────────────────
+            const header = document.createElement('div');
+            header.style.cssText = `
+                background: ${elementColor}22;
+                border-bottom: 2px solid ${elementColor};
+                padding: 14px 18px 10px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            `;
+            if (elementImg) {
+                const icon = document.createElement('img');
+                icon.src = elementImg;
+                icon.className = 'element-icon-sm';
+                icon.alt = elementLabel;
+                icon.style.cssText = 'width:28px;height:28px;object-fit:contain;flex-shrink:0;';
+                header.appendChild(icon);
             }
+            const headerText = document.createElement('div');
+            headerText.style.cssText = 'flex:1;';
+            headerText.innerHTML = `
+                <div style="font-family:var(--font-pixel);font-size:11px;color:${elementColor};letter-spacing:2px;text-transform:uppercase;">${elementLabel}${levelText ? ' &nbsp;·&nbsp; ' + levelText : ''}</div>
+                <div style="font-family:var(--font-terminal);font-size:20px;color:#e8dcc8;margin-top:3px;line-height:1.2;">${scrollTitle}</div>
+            `;
+            header.appendChild(headerText);
+            box.appendChild(header);
+
+            // ── Description ──────────────────────────────────────────
+            const body = document.createElement('div');
+            body.style.cssText = 'padding: 16px 18px 4px;';
 
             const desc = document.createElement('div');
-            desc.className = 'retro-dlg-line';
-            desc.style.fontSize = '18px';
-            desc.style.textAlign = 'left';
-            desc.style.padding = '0 8px';
-            desc.textContent = pattern?.description || 'No description available.';
-            box.appendChild(desc);
+            desc.style.cssText = `
+                font-family: var(--font-terminal);
+                font-size: 17px;
+                color: #cfc9b8;
+                line-height: 1.55;
+                text-align: left;
+            `;
+            desc.textContent = description;
+            body.appendChild(desc);
+            box.appendChild(body);
 
+            // ── Pattern visual ───────────────────────────────────────
             if (pattern?.patterns && typeof spellSystem?.createPatternVisual === 'function') {
+                const sep = document.createElement('div');
+                sep.style.cssText = `
+                    margin: 14px 18px 0;
+                    border-top: 1px solid ${elementColor}44;
+                    padding-top: 12px;
+                `;
+                const patternLabel = document.createElement('div');
+                patternLabel.style.cssText = `
+                    font-family: var(--font-pixel);
+                    font-size: 10px;
+                    color: ${elementColor};
+                    letter-spacing: 2px;
+                    text-transform: uppercase;
+                    margin-bottom: 10px;
+                    text-align: center;
+                `;
+                patternLabel.textContent = 'Stone Pattern';
+                sep.appendChild(patternLabel);
+
                 const patternWrap = document.createElement('div');
-                patternWrap.style.display = 'flex';
-                patternWrap.style.justifyContent = 'center';
-                patternWrap.style.marginTop = '10px';
-                patternWrap.appendChild(spellSystem.createPatternVisual(pattern, element));
-                box.appendChild(patternWrap);
+                patternWrap.style.cssText = 'display:flex;justify-content:center;padding-bottom:4px;';
+                const visual = spellSystem.createPatternVisual(pattern, element);
+                // Scale up the pattern SVG slightly for readability
+                visual.style.transform = 'scale(1.3)';
+                visual.style.transformOrigin = 'center top';
+                visual.style.marginBottom = '20px';
+                patternWrap.appendChild(visual);
+                sep.appendChild(patternWrap);
+                box.appendChild(sep);
             }
 
+            // ── Close button ─────────────────────────────────────────
+            const footer = document.createElement('div');
+            footer.style.cssText = 'padding: 14px 18px 16px; text-align: center;';
             const closeBtn = document.createElement('button');
             closeBtn.textContent = 'Close';
             closeBtn.className = 'retro-dlg-btn';
-            closeBtn.style.marginTop = '12px';
             closeBtn.onclick = () => overlay.remove();
-            box.appendChild(closeBtn);
+            footer.appendChild(closeBtn);
+            box.appendChild(footer);
 
             overlay.appendChild(box);
             document.body.appendChild(overlay);
@@ -649,6 +709,22 @@
             if (cardsContainer) cardsContainer.innerHTML = '';
             if (newCardsContainer) newCardsContainer.innerHTML = '';
 
+            // Delegated click handler for scroll card popups — added once per container.
+            // innerHTML = '' only clears children, not listeners on the container itself,
+            // so we guard with a data flag to avoid stacking listeners on re-calls.
+            const attachScrollDelegate = (container) => {
+                if (!container || container.dataset.scrollDelegated) return;
+                container.dataset.scrollDelegated = 'true';
+                container.addEventListener('click', (e) => {
+                    const sc = e.target.closest('.opponent-scroll-card[data-scroll-name]');
+                    if (!sc) return;
+                    const sName = sc.dataset.scrollName;
+                    showScrollInfoPopup(sName, spellSystem.patterns[sName], spellSystem.getScrollElement(sName));
+                });
+            };
+            attachScrollDelegate(cardsContainer);
+            attachScrollDelegate(newCardsContainer);
+
             // Build ordered list: self first, then others
             const playerOrder = [];
             playerOrder.push(myPlayerIndex);
@@ -742,7 +818,8 @@
                         const scrollCard = document.createElement('div');
                         scrollCard.className = 'opponent-scroll-card';
                         scrollCard.style.cursor = 'pointer';
-                        scrollCard.title = pattern?.description || '';
+                        scrollCard.title = 'Click to view scroll details';
+                        scrollCard.dataset.scrollName = scrollName; // stored for clone re-wiring
                         scrollCard.innerHTML = `
                             <div class="opponent-scroll-name">${pattern ? pattern.name : scrollName}</div>
                             <div class="opponent-scroll-element" style="color: ${elementColor};">
@@ -757,9 +834,7 @@
                             patternVisual.classList?.add?.('opponent-scroll-pattern');
                             patternWrap.appendChild(patternVisual);
                         }
-                        scrollCard.addEventListener('click', () => {
-                            showScrollInfoPopup(scrollName, pattern, element);
-                        });
+                        // Click handled by delegated listener on the container (see attachScrollDelegate above)
                         activeScrollsDiv.appendChild(scrollCard);
                     });
 
@@ -767,7 +842,8 @@
                 }
 
                 if (cardsContainer) cardsContainer.appendChild(card);
-                // Clone card for new UI
+                // Clone into new UI container — delegation listener on the container
+                // handles clicks so no per-card event wiring is needed on the clone.
                 if (newCardsContainer) newCardsContainer.appendChild(card.cloneNode(true));
             }
 
