@@ -15,7 +15,7 @@
             fire:     { color: '#ed1b43', symbol: '♦', img: 'images/firesymbol.png'     + IMG_V },
             wind:     { color: '#ffce00', symbol: '≋', img: 'images/windsymbol.png'     + IMG_V },
             void:     { color: '#9458f4', symbol: '✺', img: 'images/voidsymbol.png'     + IMG_V },
-            catacomb: { color: '#8b4513', symbol: '✦', img: 'images/Catacomb.png'       + IMG_V }
+            catacomb: { color: '#c8a870', symbol: '✦', img: 'images/Catacomb.png'       + IMG_V }
         };
 
         // Spell System for pattern-based stone generation
@@ -2042,7 +2042,7 @@
                         symbol.setAttribute('y', pixelPos.y - hexSize);
                         symbol.setAttribute('width', hexSize * 2);
                         symbol.setAttribute('height', hexSize * 2);
-                        symbol.setAttribute('opacity', '0.92');
+                        // No opacity reduction — symbol renders at full strength
                         group.appendChild(symbol);
                     });
 
@@ -6101,7 +6101,7 @@ function clearPlayerPath() {
             stoneImg.setAttribute('y', -STONE_SIZE);
             stoneImg.setAttribute('width', STONE_SIZE * 2);
             stoneImg.setAttribute('height', STONE_SIZE * 2);
-            stoneImg.setAttribute('opacity', '0.92');
+            // No opacity reduction — symbol renders at full strength
 
             stoneGroup.appendChild(circle);
             stoneGroup.appendChild(stoneImg);
@@ -6264,7 +6264,7 @@ function clearPlayerPath() {
             stoneImg.setAttribute('y', -STONE_SIZE);
             stoneImg.setAttribute('width', STONE_SIZE * 2);
             stoneImg.setAttribute('height', STONE_SIZE * 2);
-            stoneImg.setAttribute('opacity', '0.92');
+            // No opacity reduction — symbol renders at full strength
 
             stoneGroup.appendChild(circle);
             stoneGroup.appendChild(stoneImg);
@@ -6400,7 +6400,7 @@ function clearPlayerPath() {
             stoneImg.setAttribute('y', -STONE_SIZE);
             stoneImg.setAttribute('width', STONE_SIZE * 2);
             stoneImg.setAttribute('height', STONE_SIZE * 2);
-            stoneImg.setAttribute('opacity', '0.92');
+            // No opacity reduction — symbol renders at full strength
 
             stoneGroup.appendChild(circle);
             stoneGroup.appendChild(stoneImg);
@@ -6897,7 +6897,7 @@ function clearPlayerPath() {
             ghostImg.setAttribute('y', -STONE_SIZE);
             ghostImg.setAttribute('width', STONE_SIZE * 2);
             ghostImg.setAttribute('height', STONE_SIZE * 2);
-            ghostImg.setAttribute('opacity', '0.92');
+            // No opacity reduction — symbol renders at full strength
 
             ghostStone.appendChild(circle);
             ghostStone.appendChild(ghostImg);
