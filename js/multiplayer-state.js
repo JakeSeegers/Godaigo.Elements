@@ -335,6 +335,8 @@ function updateTurnDisplay() {
     const activeColorName = getPlayerColorName(activePlayerIndex);
     const myTurn          = isMyTurn();
 
+    console.log(`[turn] updateTurnDisplay: myPlayerIndex=${myPlayerIndex} activePlayerIndex=${activePlayerIndex} isMyTurn=${myTurn} isPlacementPhase=${isPlacementPhase}`);
+
     // Update HUD player name + dot immediately (don't wait for render loop)
     const hudPlayerName = document.getElementById('hud-player-name');
     const hudPlayerDot  = document.getElementById('hud-player-dot');

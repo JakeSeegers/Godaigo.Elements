@@ -6943,6 +6943,27 @@ function clearPlayerPath() {
             // Scroll state (hands, activated elements)
             spellSystem.playerScrolls = [];
 
+            // Reset common area (clear stale cards from previous game)
+            spellSystem.commonArea = { earth: null, water: null, fire: null, wind: null, void: null, catacomb: null };
+
+            // Reset scroll decks to full from definitions (or fallback)
+            if (typeof SCROLL_DECKS !== 'undefined') {
+                spellSystem.scrollDecks = {};
+                Object.keys(SCROLL_DECKS).forEach(element => {
+                    spellSystem.scrollDecks[element] = [...SCROLL_DECKS[element]];
+                });
+            } else {
+                spellSystem.scrollDecks = {
+                    earth: ['EARTH_SCROLL_1','EARTH_SCROLL_2','EARTH_SCROLL_3','EARTH_SCROLL_4','EARTH_SCROLL_5'],
+                    water: ['WATER_SCROLL_1','WATER_SCROLL_2','WATER_SCROLL_3','WATER_SCROLL_4','WATER_SCROLL_5'],
+                    fire:  ['FIRE_SCROLL_1','FIRE_SCROLL_2','FIRE_SCROLL_3','FIRE_SCROLL_4','FIRE_SCROLL_5'],
+                    wind:  ['WIND_SCROLL_1','WIND_SCROLL_2','WIND_SCROLL_3','WIND_SCROLL_4','WIND_SCROLL_5'],
+                    void:  ['VOID_SCROLL_1','VOID_SCROLL_2','VOID_SCROLL_3','VOID_SCROLL_4','VOID_SCROLL_5'],
+                    catacomb: ['CATACOMB_SCROLL_1','CATACOMB_SCROLL_2','CATACOMB_SCROLL_3','CATACOMB_SCROLL_4','CATACOMB_SCROLL_5']
+                };
+            }
+            spellSystem.shuffleAllDecks();
+
             // Scroll effect buffs and interactive-scroll states
             if (spellSystem.scrollEffects) {
                 spellSystem.scrollEffects.activeBuffs = {};
@@ -6950,7 +6971,7 @@ function clearPlayerPath() {
             window.telekinesisState = null;
             window.takeFlightState  = null;
 
-            console.log('🔄 Game resources reset');
+            console.log('🔄 Game resources reset (scroll decks and common area cleared)');
         }
         window.resetGameResources = resetGameResources;
 
