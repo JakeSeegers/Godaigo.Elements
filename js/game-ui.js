@@ -174,13 +174,71 @@
                     scrollEl.appendChild(patternVisual);
                 }
 
-                // Click to view details or take from common area
+                // Click to view details
                 scrollEl.addEventListener('click', () => {
-                    showCommonAreaScrollDetails(scrollName, scrollInfo, element);
+                    showScrollInfoPopup(scrollName, scrollInfo, element);
                 });
 
                 container.appendChild(scrollEl);
             });
+        }
+
+        // Shared scroll info popup — used by common area and opponent active area
+        function showScrollInfoPopup(scrollName, pattern, element) {
+            const existing = document.getElementById('scroll-info-popup-overlay');
+            if (existing) existing.remove();
+
+            const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#aaa';
+
+            const overlay = document.createElement('div');
+            overlay.id = 'scroll-info-popup-overlay';
+            overlay.className = 'retro-dlg-overlay';
+            overlay.style.zIndex = '2000';
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+            const box = document.createElement('div');
+            box.className = 'retro-dlg-box wide';
+
+            const title = document.createElement('div');
+            title.className = 'retro-dlg-title';
+            title.style.color = elementColor;
+            title.textContent = pattern ? pattern.name : scrollName;
+            box.appendChild(title);
+
+            if (element) {
+                const elLine = document.createElement('div');
+                elLine.className = 'retro-dlg-line';
+                elLine.style.fontSize = '16px';
+                elLine.textContent = element.charAt(0).toUpperCase() + element.slice(1) + (pattern?.level ? '  –  Level ' + pattern.level : '');
+                box.appendChild(elLine);
+            }
+
+            const desc = document.createElement('div');
+            desc.className = 'retro-dlg-line';
+            desc.style.fontSize = '18px';
+            desc.style.textAlign = 'left';
+            desc.style.padding = '0 8px';
+            desc.textContent = pattern?.description || 'No description available.';
+            box.appendChild(desc);
+
+            if (pattern?.patterns && typeof spellSystem?.createPatternVisual === 'function') {
+                const patternWrap = document.createElement('div');
+                patternWrap.style.display = 'flex';
+                patternWrap.style.justifyContent = 'center';
+                patternWrap.style.marginTop = '10px';
+                patternWrap.appendChild(spellSystem.createPatternVisual(pattern, element));
+                box.appendChild(patternWrap);
+            }
+
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = 'Close';
+            closeBtn.className = 'retro-dlg-btn';
+            closeBtn.style.marginTop = '12px';
+            closeBtn.onclick = () => overlay.remove();
+            box.appendChild(closeBtn);
+
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
         }
 
         // Show details for a common area scroll
@@ -683,6 +741,8 @@
 
                         const scrollCard = document.createElement('div');
                         scrollCard.className = 'opponent-scroll-card';
+                        scrollCard.style.cursor = 'pointer';
+                        scrollCard.title = pattern?.description || '';
                         scrollCard.innerHTML = `
                             <div class="opponent-scroll-name">${pattern ? pattern.name : scrollName}</div>
                             <div class="opponent-scroll-element" style="color: ${elementColor};">
@@ -697,6 +757,9 @@
                             patternVisual.classList?.add?.('opponent-scroll-pattern');
                             patternWrap.appendChild(patternVisual);
                         }
+                        scrollCard.addEventListener('click', () => {
+                            showScrollInfoPopup(scrollName, pattern, element);
+                        });
                         activeScrollsDiv.appendChild(scrollCard);
                     });
 

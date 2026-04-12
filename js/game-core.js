@@ -1050,35 +1050,28 @@
             showEndTurnOverflowModal(onResolved) {
                 const overlay = document.createElement('div');
                 overlay.id = 'end-turn-overflow-overlay';
-                Object.assign(overlay.style, {
-                    position: 'fixed',
-                    top: '0', left: '0', right: '0', bottom: '0',
-                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                    zIndex: '1001'
-                });
+                overlay.className = 'retro-dlg-overlay';
+                overlay.style.zIndex = '1001';
 
                 const popup = document.createElement('div');
                 popup.id = 'end-turn-overflow-popup';
-                Object.assign(popup.style, {
-                    position: 'fixed', left: '50%', top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    backgroundColor: '#2c3e50', padding: '20px',
-                    borderRadius: '10px', boxShadow: '0 0 20px rgba(0,0,0,0.5)',
-                    zIndex: '1002', minWidth: '400px', maxWidth: '600px',
-                    maxHeight: '80vh', overflowY: 'auto', color: 'white'
-                });
+                popup.className = 'retro-dlg-box wide';
 
-                const title = document.createElement('h2');
-                title.textContent = 'Scroll Overflow – Resolve Before Ending Turn';
-                title.style.textAlign = 'center';
-                title.style.color = '#f39c12';
-                title.style.marginTop = '0';
+                const title = document.createElement('div');
+                title.textContent = 'Scroll Overflow';
+                title.className = 'retro-dlg-title';
                 popup.appendChild(title);
+
+                const subtitle2 = document.createElement('div');
+                subtitle2.textContent = 'Resolve Before Ending Turn';
+                subtitle2.className = 'retro-dlg-title';
+                subtitle2.style.fontSize = '13px';
+                subtitle2.style.marginTop = '-8px';
+                popup.appendChild(subtitle2);
 
                 const subtitle = document.createElement('p');
                 subtitle.id = 'end-turn-overflow-subtitle';
-                subtitle.style.textAlign = 'center';
-                subtitle.style.color = '#bdc3c7';
+                subtitle.className = 'retro-dlg-line';
                 subtitle.style.marginBottom = '12px';
                 popup.appendChild(subtitle);
 
@@ -1128,30 +1121,31 @@
                     [...scrolls.hand].forEach(scrollName => {
                         const pattern = self.patterns[scrollName];
                         const element = self.getScrollElement(scrollName);
-                        const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#666';
+                        const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#aaa';
 
                         const card = document.createElement('div');
                         Object.assign(card.style, {
-                            backgroundColor: '#34495e',
-                            border: '1px solid #555',
-                            borderRadius: '8px',
-                            padding: '12px',
+                            background: '#1a1a2a',
+                            border: '2px solid #444',
+                            borderLeft: `4px solid ${elementColor}`,
+                            padding: '10px 14px',
                             marginBottom: '10px',
-                            color: 'white'
                         });
 
-                        const nameSpan = document.createElement('span');
+                        const nameSpan = document.createElement('div');
                         nameSpan.textContent = 'Hand: ' + (pattern ? pattern.name : scrollName);
-                        nameSpan.style.fontWeight = 'bold';
-                        nameSpan.style.color = elementColor;
+                        Object.assign(nameSpan.style, {
+                            fontFamily: 'var(--font-terminal)', fontSize: '20px',
+                            color: elementColor, marginBottom: '4px'
+                        });
                         card.appendChild(nameSpan);
                         if (pattern) {
                             const desc = document.createElement('div');
                             desc.textContent = pattern.description;
-                            desc.style.fontSize = '12px';
-                            desc.style.color = '#95a5a6';
-                            desc.style.marginTop = '4px';
-                            desc.style.marginBottom = '8px';
+                            Object.assign(desc.style, {
+                                fontFamily: 'var(--font-terminal)', fontSize: '16px',
+                                color: '#aaa', marginBottom: '10px', lineHeight: '1.3'
+                            });
                             card.appendChild(desc);
                         }
 
@@ -1166,10 +1160,7 @@
                             toActiveBtn.setAttribute('data-scroll-name', scrollName);
                             toActiveBtn.setAttribute('data-action', 'to-active');
                             toActiveBtn.textContent = 'To Active';
-                            Object.assign(toActiveBtn.style, {
-                                backgroundColor: '#f39c12', color: 'white', border: 'none',
-                                padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold'
-                            });
+                            toActiveBtn.className = 'retro-dlg-btn ok';
                             buttonRow.appendChild(toActiveBtn);
                         }
 
@@ -1178,10 +1169,7 @@
                         toCommonBtn.setAttribute('data-scroll-name', scrollName);
                         toCommonBtn.setAttribute('data-action', 'to-common');
                         toCommonBtn.textContent = 'To Common';
-                        Object.assign(toCommonBtn.style, {
-                            backgroundColor: '#e74c3c', color: 'white', border: 'none',
-                            padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold'
-                        });
+                        toCommonBtn.className = 'retro-dlg-btn cancel';
                         buttonRow.appendChild(toCommonBtn);
 
                         card.appendChild(buttonRow);
@@ -1192,30 +1180,31 @@
                     [...scrolls.active].forEach(scrollName => {
                         const pattern = self.patterns[scrollName];
                         const element = self.getScrollElement(scrollName);
-                        const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#666';
+                        const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#aaa';
 
                         const card = document.createElement('div');
                         Object.assign(card.style, {
-                            backgroundColor: '#3a2a1a',
-                            border: '2px solid #f39c12',
-                            borderRadius: '8px',
-                            padding: '12px',
+                            background: '#1a1a2a',
+                            border: '2px solid #d9b08c',
+                            borderLeft: `4px solid ${elementColor}`,
+                            padding: '10px 14px',
                             marginBottom: '10px',
-                            color: 'white'
                         });
 
-                        const nameSpan = document.createElement('span');
-                        nameSpan.textContent = '⚡ Active: ' + (pattern ? pattern.name : scrollName);
-                        nameSpan.style.fontWeight = 'bold';
-                        nameSpan.style.color = elementColor;
+                        const nameSpan = document.createElement('div');
+                        nameSpan.textContent = 'Active: ' + (pattern ? pattern.name : scrollName);
+                        Object.assign(nameSpan.style, {
+                            fontFamily: 'var(--font-terminal)', fontSize: '20px',
+                            color: elementColor, marginBottom: '4px'
+                        });
                         card.appendChild(nameSpan);
                         if (pattern) {
                             const desc = document.createElement('div');
                             desc.textContent = pattern.description;
-                            desc.style.fontSize = '12px';
-                            desc.style.color = '#95a5a6';
-                            desc.style.marginTop = '4px';
-                            desc.style.marginBottom = '8px';
+                            Object.assign(desc.style, {
+                                fontFamily: 'var(--font-terminal)', fontSize: '16px',
+                                color: '#aaa', marginBottom: '10px', lineHeight: '1.3'
+                            });
                             card.appendChild(desc);
                         }
 
@@ -1224,10 +1213,7 @@
                         toCommonBtn.setAttribute('data-scroll-name', scrollName);
                         toCommonBtn.setAttribute('data-action', 'to-common');
                         toCommonBtn.textContent = 'To Common';
-                        Object.assign(toCommonBtn.style, {
-                            backgroundColor: '#e74c3c', color: 'white', border: 'none',
-                            padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold'
-                        });
+                        toCommonBtn.className = 'retro-dlg-btn cancel';
                         card.appendChild(toCommonBtn);
                         content.appendChild(card);
                     });
@@ -1240,16 +1226,8 @@
                     doneBtn.type = 'button';
                     doneBtn.textContent = stillOverflow ? 'Resolve overflow first' : 'Done – End Turn';
                     doneBtn.disabled = stillOverflow;
-                    Object.assign(doneBtn.style, {
-                        backgroundColor: stillOverflow ? '#555' : '#27ae60',
-                        color: 'white',
-                        border: 'none',
-                        padding: '10px 20px',
-                        borderRadius: '5px',
-                        cursor: stillOverflow ? 'not-allowed' : 'pointer',
-                        fontWeight: 'bold',
-                        fontSize: '14px'
-                    });
+                    doneBtn.className = 'retro-dlg-btn' + (stillOverflow ? '' : ' ok');
+                    if (stillOverflow) doneBtn.style.opacity = '0.5';
                     doneBtn.onclick = () => {
                         if (stillOverflow) return;
                         document.body.removeChild(overlay);

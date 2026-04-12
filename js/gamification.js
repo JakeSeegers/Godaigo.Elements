@@ -274,7 +274,7 @@ window.gami = (function () {
             const toast = document.createElement('div');
             toast.className = 'gami-toast';
             toast.innerHTML =
-                `<span class="gami-toast-icon">${type === 'gold' ? '💰' : '⚡'}</span>${message}`;
+                `<span class="gami-toast-icon">${type === 'gold' ? '[G]' : '[XP]'}</span>${message}`;
             document.body.appendChild(toast);
 
             requestAnimationFrame(() => toast.classList.add('gami-toast-show'));

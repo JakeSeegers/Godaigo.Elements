@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS badges (
     id          VARCHAR(50)  PRIMARY KEY,
     name        VARCHAR(255) NOT NULL,
     description TEXT,
-    icon        VARCHAR(10)  DEFAULT '🏆',
+    icon        VARCHAR(10)  DEFAULT '',
     criteria    JSONB,
     xp_reward   INTEGER      DEFAULT 0,
     gold_reward INTEGER      DEFAULT 0,
@@ -343,61 +343,53 @@ GRANT EXECUTE ON FUNCTION check_badge_criteria TO authenticated;
 -- SEED DATA — GAMEPLAY BADGES
 -- =============================================================
 
-INSERT INTO badges (id, name, description, icon, criteria, xp_reward, gold_reward, rarity) VALUES
+INSERT INTO badges (id, name, description, criteria, xp_reward, gold_reward, rarity) VALUES
 
 ('first_steps',
  'First Steps',
  'Complete your first game.',
- '🌱',
  '{"type": "first_time", "activity_type": "game_complete"}',
  50, 10, 'common'),
 
 ('first_victory',
  'First Victory',
  'Win your first game.',
- '🏆',
  '{"type": "first_time", "activity_type": "game_win"}',
  100, 25, 'common'),
 
 ('scroll_apprentice',
  'Scroll Apprentice',
  'Cast 10 scrolls total.',
- '📜',
  '{"type": "activity_count", "activity_type": "scroll_cast", "count": 10}',
  50, 10, 'common'),
 
 ('scroll_adept',
  'Scroll Adept',
  'Cast 50 scrolls total.',
- '📖',
  '{"type": "activity_count", "activity_type": "scroll_cast", "count": 50}',
  100, 25, 'rare'),
 
 ('veteran',
  'Veteran',
  'Complete 10 games.',
- '⚔️',
  '{"type": "activity_count", "activity_type": "game_complete", "count": 10}',
  100, 20, 'rare'),
 
 ('champion',
  'Champion',
  'Win 5 games.',
- '🥇',
  '{"type": "activity_count", "activity_type": "game_win", "count": 5}',
  200, 50, 'epic'),
 
 ('master',
  'Master',
  'Win 10 games.',
- '👑',
  '{"type": "activity_count", "activity_type": "game_win", "count": 10}',
  300, 100, 'legendary'),
 
 ('dedicated',
  'Dedicated',
  'Log in on 7 different days.',
- '🔥',
  '{"type": "activity_count", "activity_type": "daily_login", "count": 7}',
  100, 25, 'rare')
 
