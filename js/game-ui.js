@@ -2784,6 +2784,149 @@ document.getElementById('undo-move').onclick = function() {
         // Expose for scroll effects (e.g. Freedom)
         window.updateCatacombIndicators = updateCatacombIndicators;
 
+        // ── Scroll Reference Panel ────────────────────────────────────────────────
+        // Read-only in-game encyclopedia of all scrolls pulled from scroll-definitions.js.
+        // Toggling calls remove so the button acts as open/close.
+        function showScrollReferencePopup() {
+            const existing = document.getElementById('scroll-ref-overlay');
+            if (existing) { existing.remove(); return; }
+
+            const ELEMENT_ORDER = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
+            const elementColor = (el) => el === 'catacomb' ? '#c8a870' : (STONE_TYPES[el]?.color || '#aaa');
+
+            const overlay = document.createElement('div');
+            overlay.id = 'scroll-ref-overlay';
+            overlay.className = 'retro-dlg-overlay';
+            overlay.style.zIndex = '2000';
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+            const box = document.createElement('div');
+            box.className = 'retro-dlg-box';
+            box.style.cssText = `
+                max-width: 540px; width: 95vw; max-height: 85vh;
+                display: flex; flex-direction: column;
+                padding: 0; overflow: hidden;
+            `;
+
+            // Header
+            const header = document.createElement('div');
+            header.style.cssText = `
+                padding: 12px 16px; border-bottom: 1px solid #333;
+                display: flex; align-items: center; justify-content: space-between;
+                flex-shrink: 0;
+            `;
+            const titleEl = document.createElement('div');
+            titleEl.textContent = 'Scroll Reference';
+            titleEl.style.cssText = `font-family: var(--font-pixel); font-size: 12px; color: #e8dcc8; letter-spacing: 1px;`;
+            const closeX = document.createElement('button');
+            closeX.textContent = '×';
+            closeX.className = 'retro-dlg-btn';
+            closeX.style.cssText = `padding: 1px 10px; font-size: 20px; line-height: 1;`;
+            closeX.onclick = () => overlay.remove();
+            header.appendChild(titleEl);
+            header.appendChild(closeX);
+            box.appendChild(header);
+
+            // Tab bar
+            const tabBar = document.createElement('div');
+            tabBar.style.cssText = `
+                display: flex; flex-wrap: wrap; gap: 2px;
+                padding: 8px 10px 0; background: #111; flex-shrink: 0;
+                border-bottom: 1px solid #2a2a2a;
+            `;
+            ELEMENT_ORDER.forEach(el => {
+                const c = elementColor(el);
+                const tab = document.createElement('button');
+                tab.dataset.element = el;
+                tab.textContent = el.charAt(0).toUpperCase() + el.slice(1);
+                tab.style.cssText = `
+                    font-family: var(--font-pixel); font-size: 9px;
+                    padding: 6px 11px; border: 1px solid ${c}44;
+                    background: transparent; color: ${c}88; cursor: pointer;
+                    border-radius: 3px 3px 0 0; letter-spacing: 1px;
+                `;
+                tab.addEventListener('click', () => switchTab(el));
+                tabBar.appendChild(tab);
+            });
+            box.appendChild(tabBar);
+
+            // Scroll list content
+            const content = document.createElement('div');
+            content.style.cssText = `overflow-y: auto; flex: 1; padding: 12px 14px;`;
+            box.appendChild(content);
+
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            function switchTab(el) {
+                const c = elementColor(el);
+
+                // Update tab button styles
+                tabBar.querySelectorAll('button[data-element]').forEach(btn => {
+                    const bc = elementColor(btn.dataset.element);
+                    const active = btn.dataset.element === el;
+                    btn.style.background  = active ? `${bc}1a` : 'transparent';
+                    btn.style.color       = active ? bc : `${bc}88`;
+                    btn.style.borderColor = active ? bc : `${bc}44`;
+                });
+
+                // Build list
+                content.innerHTML = '';
+                const scrollNames = (typeof SCROLL_DECKS !== 'undefined' && SCROLL_DECKS[el]) || [];
+
+                if (scrollNames.length === 0) {
+                    content.innerHTML = `<div style="color:#555;font-family:var(--font-terminal);padding:20px;text-align:center;">No scrolls found.</div>`;
+                    return;
+                }
+
+                scrollNames.forEach(scrollName => {
+                    const pattern = spellSystem?.patterns?.[scrollName];
+                    if (!pattern) return;
+
+                    const card = document.createElement('div');
+                    card.style.cssText = `
+                        border-left: 3px solid ${c}; background: ${c}0d;
+                        border-radius: 0 4px 4px 0; padding: 10px 12px;
+                        margin-bottom: 8px; cursor: pointer;
+                    `;
+                    card.title = 'Click to see stone pattern';
+                    card.addEventListener('click', () => showScrollInfoPopup(scrollName, pattern, el));
+
+                    // Name + level row
+                    const nameRow = document.createElement('div');
+                    nameRow.style.cssText = `display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;`;
+
+                    const nameEl = document.createElement('span');
+                    nameEl.textContent = pattern.name;
+                    nameEl.style.cssText = `font-family: var(--font-terminal); font-size: 17px; color: ${c};`;
+
+                    const lvl = document.createElement('span');
+                    lvl.textContent = `Lv ${pattern.level}`;
+                    lvl.style.cssText = `font-family: var(--font-pixel); font-size: 8px; color: #666; letter-spacing: 1px;`;
+
+                    nameRow.appendChild(nameEl);
+                    nameRow.appendChild(lvl);
+                    card.appendChild(nameRow);
+
+                    const descEl = document.createElement('div');
+                    descEl.textContent = pattern.description;
+                    descEl.style.cssText = `font-family: var(--font-terminal); font-size: 14px; color: #aaa; line-height: 1.45;`;
+                    card.appendChild(descEl);
+
+                    const hint = document.createElement('div');
+                    hint.textContent = 'click for pattern';
+                    hint.style.cssText = `font-family: var(--font-pixel); font-size: 7px; color: ${c}55; margin-top: 5px; letter-spacing: 1px;`;
+                    card.appendChild(hint);
+
+                    content.appendChild(card);
+                });
+            }
+
+            switchTab('earth');
+        }
+
+        window.showScrollReferencePopup = showScrollReferencePopup;
+
         // Generate spiral tile positions starting from center
         // Based on the spiral pattern from the image: 1(center), 2(SE), 3(SW), 4(W), 5(NW), 6(NE), 7(E), then ring 2...
         function generateSpiralPositions(numTiles) {
