@@ -3034,6 +3034,37 @@ document.getElementById('undo-move').onclick = function() {
                 panel.appendChild(makeBtn('Toggle Deck Browser', () => {
                     if (typeof window.showdeck === 'function') window.showdeck();
                 }));
+
+                // Place Anywhere toggle — uses the same globalPlacement buff as Avalanche,
+                // but with expiresThisTurn:false so it persists until toggled off.
+                const placeAnywhereBtn = makeBtn('Place Anywhere: OFF', () => {
+                    if (!spellSystem || !spellSystem.scrollEffects) {
+                        updateStatus('spellSystem not ready');
+                        return;
+                    }
+                    const idx = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null)
+                        ? myPlayerIndex : activePlayerIndex;
+                    const buff = spellSystem.scrollEffects.activeBuffs.globalPlacement;
+                    if (buff && buff.playerIndex === idx && buff.cheatPersist) {
+                        // Turn off
+                        spellSystem.scrollEffects.activeBuffs.globalPlacement = null;
+                        placeAnywhereBtn.textContent = 'Place Anywhere: OFF';
+                        placeAnywhereBtn.style.color = '#eee';
+                        updateStatus('Place anywhere: OFF');
+                    } else {
+                        // Turn on
+                        spellSystem.scrollEffects.activeBuffs.globalPlacement = {
+                            playerIndex: idx,
+                            expiresThisTurn: false,
+                            cheatPersist: true   // flag so we can toggle it off
+                        };
+                        placeAnywhereBtn.textContent = 'Place Anywhere: ON';
+                        placeAnywhereBtn.style.color = '#6ef';
+                        updateStatus('Place anywhere: ON — stones may be placed on any empty tile');
+                    }
+                });
+                panel.appendChild(placeAnywhereBtn);
+
                 panel.appendChild(makeBtn('✕ Close', () => panel.remove()));
 
                 document.body.appendChild(panel);
