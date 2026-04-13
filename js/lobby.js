@@ -814,6 +814,10 @@
             }
         }
 
+        // Guard: XP is awarded once per game session — prevents double-award from
+        // multiple handleGameOver calls (game-core direct + broadcast echo + DB subscription)
+        let _gameOverXpAwarded = false;
+
         // Handle game over - mark game as finished and show win screen
         async function handleGameOver(winnerPlayerIndex, winType = 'scrolls') {
             if (!isMultiplayer) return;
@@ -824,10 +828,18 @@
                 // Show win screen immediately for the winner
                 showGameOverToAll(winnerPlayerIndex, winType);
 
-                // Award gamification XP for this game result
-                if (window.gami?.userId) {
+                // Award gamification XP — only once per game session
+                if (!_gameOverXpAwarded) {
+                    _gameOverXpAwarded = true;
                     const isWinner = (winnerPlayerIndex === myPlayerIndex);
-                    await window.gami.onGameComplete(isWinner, totalPlayers);
+                    console.log(`[XP] Attempting to award XP — isWinner=${isWinner}, userId=${window.gami?.userId}, totalPlayers=${totalPlayers}`);
+                    if (window.gami?.userId) {
+                        await window.gami.onGameComplete(isWinner, totalPlayers);
+                    } else {
+                        console.warn('[XP] gami.userId not set — XP skipped. gami object:', window.gami);
+                    }
+                } else {
+                    console.log('[XP] handleGameOver called again — XP already awarded this session, skipping.');
                 }
 
                 // Update game room status to 'finished' and store winner index
@@ -896,6 +908,20 @@
             subtitle.textContent = 'The path of balance is complete.';
             subtitle.className = 'game-over-subtitle';
             box.appendChild(subtitle);
+
+            // XP reward line — shown after onGameComplete resolves
+            const xpLine = document.createElement('div');
+            xpLine.id = 'game-over-xp-line';
+            xpLine.style.cssText = `
+                font-family: var(--font-pixel, monospace); font-size: 9px;
+                color: #f0c040; letter-spacing: 1px; margin: 8px 0 4px;
+                min-height: 16px;
+            `;
+            const isWinner = (winnerPlayerIndex === myPlayerIndex);
+            const n = Math.max(2, totalPlayers || 2);
+            const xpAmt = isWinner ? 75 + (n - 1) * 25 : 20 + (n - 1) * 10;
+            xpLine.textContent = isWinner ? `+${xpAmt} XP  —  VICTORY` : `+${xpAmt} XP  —  GAME COMPLETE`;
+            box.appendChild(xpLine);
 
             const lobbyBtn = document.createElement('button');
             lobbyBtn.textContent = 'Return to Lobby';
@@ -1136,7 +1162,9 @@
                             // Only show if we're not the winner (winner already saw it via handleGameOver)
                             if (winnerIndex !== myPlayerIndex) {
                                 showGameOverToAll(winnerIndex, 'scrolls');
-                                if (window.gami?.userId) {
+                                if (!_gameOverXpAwarded && window.gami?.userId) {
+                                    _gameOverXpAwarded = true;
+                                    console.log(`[XP] Observer path — awarding loss XP. userId=${window.gami.userId}`);
                                     window.gami.onGameComplete(false, totalPlayers);
                                 }
                             }
@@ -2731,13 +2759,30 @@
             });
 
             // Listen for scroll-used: handles scroll disposition on remote clients
-            // Specifically needed for scrolls like Arson that force themselves to common area
+            // Handles two cases:
+            //   fromCommonArea=true  → a player USED a scroll borrowed from the common area; clear that slot
+            //   forceToCommonArea=true → a scroll (e.g. Arson) forced itself into the common area after use
             gameChannel.on('broadcast', { event: 'scroll-used' }, ({ payload }) => {
                 const { playerIndex, scrollName, fromCommonArea, forceToCommonArea } = payload;
-                if (!forceToCommonArea) return; // Only act when a scroll forces itself to common area
                 if (playerIndex === myPlayerIndex) return; // Caster already handled it locally
 
                 spellSystem.ensurePlayerScrollsStructure(playerIndex);
+
+                if (fromCommonArea) {
+                    // The caster drew and used a scroll from the common area — clear that element slot
+                    const element = spellSystem.getScrollElement(scrollName);
+                    if (element && spellSystem.commonArea[element] === scrollName) {
+                        spellSystem.commonArea[element] = null;
+                        console.log(`📜 Remote scroll-used (from common): cleared ${scrollName} from ${element} slot`);
+                    }
+                    spellSystem.updateScrollCount();
+                    if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+                    return;
+                }
+
+                if (!forceToCommonArea) return; // Nothing to do for normal active-area disposition
+
+                // forceToCommonArea=true: scroll pushed itself to common area (e.g. Arson)
                 const playerScrolls = spellSystem.playerScrolls[playerIndex];
                 if (playerScrolls && playerScrolls.active.has(scrollName)) {
                     playerScrolls.active.delete(scrollName);
@@ -2847,6 +2892,16 @@
 
                 if (!commonArea || typeof spellSystem === 'undefined') return;
 
+                // Build a set of scrolls already in local play (hand or active).
+                // If the host's broadcast still shows a scroll in the common area but we have
+                // it in a player's hand/active, the host state is stale — do NOT restore it.
+                const inLocalPlay = new Set();
+                for (const p of spellSystem.playerScrolls) {
+                    if (!p) continue;
+                    p.hand.forEach(s => inLocalPlay.add(s));
+                    p.active.forEach(s => inLocalPlay.add(s));
+                }
+
                 // Compare and auto-correct any differences
                 let corrected = false;
                 Object.keys(commonArea).forEach(element => {
@@ -2854,6 +2909,11 @@
                     const localScroll = spellSystem.commonArea[element];
 
                     if (hostScroll !== localScroll) {
+                        // Don't restore a scroll that's already been drawn into play locally
+                        if (hostScroll && inLocalPlay.has(hostScroll)) {
+                            console.log(`[common-area-sync] Skipping restore of ${hostScroll} in ${element} — already in local play`);
+                            return;
+                        }
                         console.warn(`⚠️ COMMON AREA DESYNC CORRECTED: ${element} slot was "${localScroll}", host says "${hostScroll}"`);
                         spellSystem.commonArea[element] = hostScroll;
                         corrected = true;
@@ -3107,6 +3167,9 @@
             if (typeof window.resetGameResources === 'function') {
                 window.resetGameResources();
             }
+
+            // Reset XP dedup flag so the next game can award XP fresh
+            _gameOverXpAwarded = false;
 
             // Clear the board first (skip confirmation in multiplayer)
             clearBoard(true);

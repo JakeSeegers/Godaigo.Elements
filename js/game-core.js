@@ -1932,6 +1932,16 @@
                 subtitle.className = 'game-over-subtitle';
                 box.appendChild(subtitle);
 
+                if (isMultiplayer) {
+                    const n = Math.max(2, (typeof playerPositions !== 'undefined' ? playerPositions.length : 2));
+                    const xpAmt = 75 + (n - 1) * 25;
+                    const xpLine = document.createElement('div');
+                    xpLine.style.cssText = `font-family: var(--font-pixel, monospace); font-size: 9px;
+                        color: #f0c040; letter-spacing: 1px; margin: 8px 0 4px;`;
+                    xpLine.textContent = `+${xpAmt} XP  —  VICTORY`;
+                    box.appendChild(xpLine);
+                }
+
                 const btnRow = document.createElement('div');
                 btnRow.className = 'game-over-btns';
 
