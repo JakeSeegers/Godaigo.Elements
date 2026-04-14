@@ -102,15 +102,9 @@
 
             // Initialise gamification profile and award daily login gold
             if (window.gami) {
-                window.gami.init(user.id, username).then(async () => {
+                window.gami.init(user.id, username).then(() => {
                     window.gami.onDailyLogin();
                     window.loadMainLeaderboard?.();
-                    // ── TEST: award 5 XP on every sign-in to verify XP pipeline ──
-                    const { error: testXpErr } = await supabase.rpc('update_user_xp', {
-                        p_user_id: user.id, p_xp_points: 5, p_description: 'Sign-in test XP'
-                    });
-                    if (testXpErr) console.error('[XP TEST] RPC error:', testXpErr);
-                    else { console.log('[XP TEST] +5 XP awarded on sign-in'); window.gami.notify('+5 XP (sign-in test)', 5, 'xp'); }
                 });
             }
 
@@ -1169,11 +1163,6 @@
                             // Only show if we're not the winner (winner already saw it via handleGameOver)
                             if (winnerIndex !== myPlayerIndex) {
                                 showGameOverToAll(winnerIndex, 'scrolls');
-                                if (!_gameOverXpAwarded && window.gami?.userId) {
-                                    _gameOverXpAwarded = true;
-                                    console.log(`[XP] Observer path — awarding loss XP. userId=${window.gami.userId}`);
-                                    window.gami.onGameComplete(false, totalPlayers);
-                                }
                             }
                         }
                     }
