@@ -1829,15 +1829,9 @@
             handleScrollDisposition(scrollName, fromCommonArea = false, forceToCommonArea = false) {
                 const scrolls = this.getPlayerScrolls(false);
 
-                // If the scroll came from common area, remove it from there
-                // (it was "borrowed" from common area to cast)
-                if (fromCommonArea) {
-                    // Remove from commonArea object (keyed by element)
-                    const element = this.getScrollElement(scrollName);
-                    if (element && this.commonArea[element] === scrollName) {
-                        this.commonArea[element] = null;
-                    }
-                }
+                // Common area scrolls are permanent shared resources — casting them does NOT
+                // remove them from the common area. They only leave when replaced by a new scroll
+                // of the same element type. So fromCommonArea=true requires no action here.
 
                 // Check if Unbidden Lamplight has marked this scroll to go to caster's hand
                 const redirect = this.scrollEffects?.pendingHandRedirect;

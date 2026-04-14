@@ -825,10 +825,8 @@
             try {
                 console.log('🏆 Game Over! Winner:', winnerPlayerIndex, 'Type:', winType);
 
-                // Show win screen immediately for the winner
-                showGameOverToAll(winnerPlayerIndex, winType);
-
-                // Award gamification XP — only once per game session
+                // Award gamification XP FIRST — before showing the overlay — so the async RPC
+                // completes before any page reload triggered by "Return to Lobby" can cancel it
                 if (!_gameOverXpAwarded) {
                     _gameOverXpAwarded = true;
                     const isWinner = (winnerPlayerIndex === myPlayerIndex);
@@ -841,6 +839,9 @@
                 } else {
                     console.log('[XP] handleGameOver called again — XP already awarded this session, skipping.');
                 }
+
+                // Show win screen after XP is secured
+                showGameOverToAll(winnerPlayerIndex, winType);
 
                 // Update game room status to 'finished' and store winner index
                 const { error } = await supabase
@@ -2759,9 +2760,10 @@
             });
 
             // Listen for scroll-used: handles scroll disposition on remote clients
-            // Handles two cases:
-            //   fromCommonArea=true  → a player USED a scroll borrowed from the common area; clear that slot
-            //   forceToCommonArea=true → a scroll (e.g. Arson) forced itself into the common area after use
+            // Only handles forceToCommonArea=true (e.g. Arson forcing itself into the common area).
+            // fromCommonArea=true events are intentionally ignored — common area scrolls are permanent
+            // shared resources and stay after being cast; they're only replaced by a new scroll of the
+            // same element type being discarded to the common area.
             gameChannel.on('broadcast', { event: 'scroll-used' }, ({ payload }) => {
                 const { playerIndex, scrollName, fromCommonArea, forceToCommonArea } = payload;
                 if (playerIndex === myPlayerIndex) return; // Caster already handled it locally
@@ -2769,14 +2771,7 @@
                 spellSystem.ensurePlayerScrollsStructure(playerIndex);
 
                 if (fromCommonArea) {
-                    // The caster drew and used a scroll from the common area — clear that element slot
-                    const element = spellSystem.getScrollElement(scrollName);
-                    if (element && spellSystem.commonArea[element] === scrollName) {
-                        spellSystem.commonArea[element] = null;
-                        console.log(`📜 Remote scroll-used (from common): cleared ${scrollName} from ${element} slot`);
-                    }
-                    spellSystem.updateScrollCount();
-                    if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+                    // Common area scrolls persist after casting — nothing to clear
                     return;
                 }
 
