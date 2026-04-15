@@ -4351,12 +4351,12 @@
         // Settings are stored in window.tileOverlaySettings and persist across reveals.
 
         window.tileOverlaySettings = window.tileOverlaySettings || {
-            earth:    { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
-            fire:     { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
-            water:    { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
-            wind:     { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
-            void:     { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
-            catacomb: { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
+            earth:    { src: 'images/tiles/earth.png', x: 0, y: 0, rotation: 0, scale: 1.1,  opacity: 0.46 },
+            fire:     { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
+            water:    { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
+            wind:     { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
+            void:     { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
+            catacomb: { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
         };
 
         function ensureTileOverlayClipPath() {
