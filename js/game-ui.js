@@ -3008,7 +3008,8 @@ document.getElementById('undo-move').onclick = function() {
                     flexDirection: 'column',
                     gap: '8px',
                     boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-                    minWidth: '160px'
+                    minWidth: '240px',
+                    maxWidth: '280px'
                 });
 
                 function makeBtn(label, action) {
@@ -3064,6 +3065,169 @@ document.getElementById('undo-move').onclick = function() {
                     }
                 });
                 panel.appendChild(placeAnywhereBtn);
+
+                // ── Overlay Editor ───────────────────────────────────────────
+                const overlaySection = document.createElement('div');
+                overlaySection.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';
+
+                const overlayTitle = document.createElement('div');
+                overlayTitle.textContent = '🖼 Tile Image Overlays';
+                overlayTitle.style.cssText = 'font-size:12px;color:#aaa;font-weight:bold;cursor:pointer;user-select:none;';
+                let overlayOpen = false;
+                const overlayBody = document.createElement('div');
+                overlayBody.style.cssText = 'display:none;flex-direction:column;gap:6px;';
+                overlayTitle.onclick = () => {
+                    overlayOpen = !overlayOpen;
+                    overlayBody.style.display = overlayOpen ? 'flex' : 'none';
+                };
+                overlaySection.appendChild(overlayTitle);
+                overlaySection.appendChild(overlayBody);
+
+                const ELEMENTS = ['earth', 'fire', 'water', 'wind', 'void', 'catacomb'];
+                const EL_COLORS = { earth:'#69d83a', fire:'#ed1b43', water:'#5894f4', wind:'#ffce00', void:'#9458f4', catacomb:'#aaa' };
+                let selectedEl = 'earth';
+
+                // Element selector pills
+                const pillRow = document.createElement('div');
+                pillRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
+                const pills = {};
+                ELEMENTS.forEach(el => {
+                    const pill = document.createElement('button');
+                    pill.textContent = el;
+                    pill.style.cssText = `padding:2px 6px;border-radius:10px;border:1px solid ${EL_COLORS[el]};background:#1a1a2e;color:${EL_COLORS[el]};font-size:11px;cursor:pointer;`;
+                    pill.onclick = () => { selectedEl = el; refreshOverlayControls(); highlightPill(); };
+                    pills[el] = pill;
+                    pillRow.appendChild(pill);
+                });
+                overlayBody.appendChild(pillRow);
+
+                function highlightPill() {
+                    ELEMENTS.forEach(el => {
+                        pills[el].style.background = el === selectedEl ? EL_COLORS[el] : '#1a1a2e';
+                        pills[el].style.color = el === selectedEl ? '#111' : EL_COLORS[el];
+                    });
+                }
+                highlightPill();
+
+                // Image src input
+                const srcRow = document.createElement('div');
+                srcRow.style.cssText = 'display:flex;gap:4px;align-items:center;';
+                const srcLabel = document.createElement('span');
+                srcLabel.textContent = 'Src:';
+                srcLabel.style.cssText = 'font-size:11px;color:#aaa;width:30px;flex-shrink:0;';
+                const srcInput = document.createElement('input');
+                srcInput.type = 'text';
+                srcInput.placeholder = 'images/tiles/earth.png';
+                srcInput.style.cssText = 'flex:1;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:2px 5px;font-size:11px;';
+                srcInput.onchange = () => {
+                    if (window.tileOverlaySettings?.[selectedEl]) {
+                        window.tileOverlaySettings[selectedEl].src = srcInput.value.trim();
+                        window.refreshAllTileOverlays?.();
+                    }
+                };
+                srcRow.appendChild(srcLabel);
+                srcRow.appendChild(srcInput);
+                overlayBody.appendChild(srcRow);
+
+                // Slider helper
+                function makeOverlaySlider(label, min, max, step, key) {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+                    const lbl = document.createElement('span');
+                    lbl.textContent = label;
+                    lbl.style.cssText = 'font-size:11px;color:#aaa;width:38px;flex-shrink:0;';
+                    const slider = document.createElement('input');
+                    slider.type = 'range';
+                    slider.min = min; slider.max = max; slider.step = step;
+                    slider.style.cssText = 'flex:1;accent-color:#6ef;min-width:0;';
+                    const val = document.createElement('span');
+                    val.style.cssText = 'font-size:11px;color:#eee;width:36px;text-align:right;flex-shrink:0;';
+                    slider.oninput = () => {
+                        const v = parseFloat(slider.value);
+                        val.textContent = step < 1 ? v.toFixed(2) : Math.round(v);
+                        if (window.tileOverlaySettings?.[selectedEl]) {
+                            window.tileOverlaySettings[selectedEl][key] = v;
+                            window.refreshAllTileOverlays?.();
+                        }
+                    };
+                    row.appendChild(lbl); row.appendChild(slider); row.appendChild(val);
+                    overlayBody.appendChild(row);
+                    return { slider, val };
+                }
+
+                const sliders = {
+                    x:        makeOverlaySlider('X',       -80,  80,  1,    'x'),
+                    y:        makeOverlaySlider('Y',       -80,  80,  1,    'y'),
+                    rotation: makeOverlaySlider('Rotate',  0,    360, 1,    'rotation'),
+                    scale:    makeOverlaySlider('Scale',   0.1,  3,   0.05, 'scale'),
+                    opacity:  makeOverlaySlider('Opacity', 0,    1,   0.01, 'opacity'),
+                };
+
+                function refreshOverlayControls() {
+                    const s = window.tileOverlaySettings?.[selectedEl];
+                    if (!s) return;
+                    srcInput.value = s.src || '';
+                    sliders.x.slider.value = s.x;        sliders.x.val.textContent = s.x;
+                    sliders.y.slider.value = s.y;        sliders.y.val.textContent = s.y;
+                    sliders.rotation.slider.value = s.rotation; sliders.rotation.val.textContent = s.rotation;
+                    sliders.scale.slider.value = s.scale; sliders.scale.val.textContent = s.scale.toFixed(2);
+                    sliders.opacity.slider.value = s.opacity; sliders.opacity.val.textContent = s.opacity.toFixed(2);
+                }
+                refreshOverlayControls();
+
+                // Click-to-select tile mode
+                let clickSelectActive = false;
+                let clickSelectListener = null;
+                const clickSelectBtn = document.createElement('button');
+                clickSelectBtn.textContent = '🎯 Click Tile to Select';
+                Object.assign(clickSelectBtn.style, { padding:'4px 8px', background:'#2d2d44', color:'#eee', border:'1px solid #555', borderRadius:'5px', cursor:'pointer', fontSize:'11px' });
+                clickSelectBtn.onclick = () => {
+                    clickSelectActive = !clickSelectActive;
+                    clickSelectBtn.style.background = clickSelectActive ? '#3a5a3a' : '#2d2d44';
+                    clickSelectBtn.textContent = clickSelectActive ? '🎯 Selecting... (click tile)' : '🎯 Click Tile to Select';
+                    if (clickSelectActive) {
+                        clickSelectListener = (e) => {
+                            const tileEl = e.target.closest('[data-tile-id]');
+                            if (!tileEl) return;
+                            const tileId = parseInt(tileEl.getAttribute('data-tile-id'));
+                            const tile = (typeof placedTiles !== 'undefined') && placedTiles.find(t => t.id === tileId);
+                            if (tile && tile.shrineType && tile.shrineType !== 'player') {
+                                selectedEl = tile.shrineType;
+                                highlightPill();
+                                refreshOverlayControls();
+                            }
+                            // Deactivate after one click
+                            clickSelectActive = false;
+                            clickSelectBtn.style.background = '#2d2d44';
+                            clickSelectBtn.textContent = '🎯 Click Tile to Select';
+                            document.removeEventListener('click', clickSelectListener, true);
+                            clickSelectListener = null;
+                        };
+                        document.addEventListener('click', clickSelectListener, true);
+                    } else if (clickSelectListener) {
+                        document.removeEventListener('click', clickSelectListener, true);
+                        clickSelectListener = null;
+                    }
+                };
+                overlayBody.appendChild(clickSelectBtn);
+
+                // Export button
+                const exportBtn = document.createElement('button');
+                exportBtn.textContent = '📋 Export Settings';
+                Object.assign(exportBtn.style, { padding:'4px 8px', background:'#2d2d44', color:'#6ef', border:'1px solid #555', borderRadius:'5px', cursor:'pointer', fontSize:'11px' });
+                exportBtn.onclick = () => {
+                    const out = JSON.stringify(window.tileOverlaySettings, null, 2);
+                    console.log('[OVERLAY EXPORT]\n' + out);
+                    const pre = document.createElement('textarea');
+                    pre.value = out;
+                    pre.style.cssText = 'width:100%;height:120px;background:#111;color:#6ef;border:1px solid #444;border-radius:4px;font-size:10px;padding:4px;box-sizing:border-box;resize:vertical;';
+                    // Replace or append export area
+                    const existing = overlayBody.querySelector('.overlay-export-area');
+                    if (existing) existing.remove(); else { pre.className = 'overlay-export-area'; overlayBody.appendChild(pre); pre.select(); }
+                };
+                overlayBody.appendChild(exportBtn);
+                overlaySection.appendChild(overlayBody);
+                panel.appendChild(overlaySection);
 
                 panel.appendChild(makeBtn('✕ Close', () => panel.remove()));
 

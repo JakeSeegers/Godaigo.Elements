@@ -4346,6 +4346,78 @@
             return closestStone;
         }
 
+        // ── Tile Image Overlay System ─────────────────────────────────────────
+        // Per-element image overlays rendered as SVG <image> clipped to hex shape.
+        // Settings are stored in window.tileOverlaySettings and persist across reveals.
+
+        window.tileOverlaySettings = window.tileOverlaySettings || {
+            earth:    { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
+            fire:     { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
+            water:    { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
+            wind:     { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
+            void:     { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
+            catacomb: { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6 },
+        };
+
+        function ensureTileOverlayClipPath() {
+            const svgEl = document.getElementById('boardSvg');
+            if (!svgEl) return;
+            if (document.getElementById('tile-hex-clip')) return;
+            let defs = svgEl.querySelector('defs');
+            if (!defs) {
+                defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                svgEl.insertBefore(defs, svgEl.firstChild);
+            }
+            const clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+            clip.setAttribute('id', 'tile-hex-clip');
+            const hex = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            const R = TILE_SIZE * 3.75; // ~75 units — covers full tile, pointy-top orientation
+            const pts = [];
+            for (let i = 0; i < 6; i++) {
+                const a = (Math.PI / 3) * i - Math.PI / 6;
+                pts.push(`${(R * Math.cos(a)).toFixed(2)},${(R * Math.sin(a)).toFixed(2)}`);
+            }
+            hex.setAttribute('points', pts.join(' '));
+            clip.appendChild(hex);
+            defs.appendChild(clip);
+        }
+
+        function addTileOverlay(tileGroup, shrineType) {
+            if (!shrineType || !window.tileOverlaySettings) return;
+            const settings = window.tileOverlaySettings[shrineType];
+            if (!settings || !settings.src) return;
+            ensureTileOverlayClipPath();
+            const R = TILE_SIZE * 3.75;
+            const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            img.setAttribute('class', 'tile-overlay');
+            img.setAttribute('data-element', shrineType);
+            img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', settings.src);
+            img.setAttribute('href', settings.src);
+            img.setAttribute('x', -R);
+            img.setAttribute('y', -R);
+            img.setAttribute('width', R * 2);
+            img.setAttribute('height', R * 2);
+            img.setAttribute('opacity', settings.opacity);
+            img.setAttribute('clip-path', 'url(#tile-hex-clip)');
+            img.setAttribute('transform',
+                `translate(${settings.x},${settings.y}) rotate(${settings.rotation}) scale(${settings.scale})`);
+            img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+            tileGroup.appendChild(img);
+        }
+
+        function refreshAllTileOverlays() {
+            document.querySelectorAll('.tile-overlay').forEach(el => el.remove());
+            if (typeof placedTiles !== 'undefined') {
+                placedTiles.forEach(tile => {
+                    if (!tile.flipped && tile.shrineType && tile.element) {
+                        addTileOverlay(tile.element, tile.shrineType);
+                    }
+                });
+            }
+        }
+        window.refreshAllTileOverlays = refreshAllTileOverlays;
+        window.addTileOverlay = addTileOverlay;
+
         function revealTile(tileId) {
             const tile = placedTiles.find(t => t.id === tileId);
             if (!tile || !tile.flipped) {
@@ -4375,6 +4447,7 @@
             // Add shrine marker
             const shrineMarker = createShrineMarker(tile.shrineType);
             tileGroup.appendChild(shrineMarker);
+            addTileOverlay(tileGroup, tile.shrineType);
 
             tileGroup.addEventListener('mousedown', (e) => {
                 if (!tileMoveMode) return;
@@ -4460,6 +4533,7 @@
 
             const shrineMarker = createShrineMarker(shrineType);
             tileGroup.appendChild(shrineMarker);
+            addTileOverlay(tileGroup, shrineType);
 
             tileGroup.addEventListener('mousedown', (e) => {
                 if (!tileMoveMode) return;
