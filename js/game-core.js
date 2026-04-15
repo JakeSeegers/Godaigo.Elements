@@ -4351,66 +4351,106 @@
         // Settings are stored in window.tileOverlaySettings and persist across reveals.
 
         window.tileOverlaySettings = window.tileOverlaySettings || {
-            earth:    { src: 'images/Tiles/earth.png', x: 0, y: 0, rotation: 0, scale: 1.1,  opacity: 0.46 },
-            fire:     { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
-            water:    { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
-            wind:     { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
-            void:     { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
-            catacomb: { src: '',                       x: 0, y: 0, rotation: 0, scale: 1,    opacity: 0.6  },
+            earth:    { src: 'images/Tiles/pixelearth.png',    x: 0, y: 0,   rotation: 60,  scale: 1.05, opacity: 0.41 },
+            fire:     { src: 'images/Tiles/pixelfire.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6  },
+            water:    { src: 'images/Tiles/pixelwater.png',    x: 0, y: 0,   rotation: 233, scale: 1.25, opacity: 0.49 },
+            wind:     { src: 'images/Tiles/pixelwind.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6  },
+            void:     { src: 'images/Tiles/pixelvoid.png',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6  },
+            catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -38, rotation: 0,   scale: 1,    opacity: 0.6  },
         };
 
-        function ensureTileOverlayClipPath() {
-            const svgEl = document.getElementById('boardSvg');
-            if (!svgEl) return;
-            if (document.getElementById('tile-hex-clip')) return;
-            let defs = svgEl.querySelector('defs');
-            if (!defs) {
-                defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-                svgEl.insertBefore(defs, svgEl.firstChild);
-            }
-            const clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
-            clip.setAttribute('id', 'tile-hex-clip');
-            const hex = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            const R = TILE_SIZE * 3.75; // ~75 units — covers full tile, pointy-top orientation
+        const ELEMENT_TINTS = {
+            earth: '#4a8a2a', fire: '#cc2200', water: '#1a6ab5',
+            wind:  '#c8a800', void: '#6a30b0', catacomb: '#888888'
+        };
+
+        function makeTileHexPoints(R) {
             const pts = [];
             for (let i = 0; i < 6; i++) {
                 const a = (Math.PI / 3) * i - Math.PI / 6;
                 pts.push(`${(R * Math.cos(a)).toFixed(2)},${(R * Math.sin(a)).toFixed(2)}`);
             }
-            hex.setAttribute('points', pts.join(' '));
-            clip.appendChild(hex);
-            defs.appendChild(clip);
+            return pts.join(' ');
         }
 
         function addTileOverlay(tileGroup, shrineType) {
             if (!shrineType || !window.tileOverlaySettings) return;
             const settings = window.tileOverlaySettings[shrineType];
             if (!settings || !settings.src) return;
-            ensureTileOverlayClipPath();
-            const R = TILE_SIZE * 3.75;
+
+            const tileId = tileGroup.getAttribute('data-tile-id');
+            const clipId = `tile-overlay-clip-${tileId}`;
+            const R = TILE_SIZE * 3.75; // ~75 units, pointy-top hex matching tile shape
+
+            // Per-tile clipPath inside the tile group — coordinates are unambiguously tile-local
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+            clip.setAttribute('id', clipId);
+            const clipHex = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            clipHex.setAttribute('points', makeTileHexPoints(R));
+            clip.appendChild(clipHex);
+            defs.appendChild(clip);
+            tileGroup.appendChild(defs);
+
+            // Wrapper: clip acts as a fixed hex viewport; image moves freely inside it
+            const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            wrapper.setAttribute('class', 'tile-overlay');
+            wrapper.setAttribute('data-element', shrineType);
+            wrapper.setAttribute('clip-path', `url(#${clipId})`);
+
+            // Elemental tint layer (colored hex fill behind the image)
+            if (ELEMENT_TINTS[shrineType]) {
+                const tint = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                tint.setAttribute('points', makeTileHexPoints(R));
+                tint.setAttribute('fill', ELEMENT_TINTS[shrineType]);
+                tint.setAttribute('opacity', '0.22');
+                tint.setAttribute('stroke', 'none');
+                wrapper.appendChild(tint);
+            }
+
+            // Image layer — freely transforms within the clipped viewport
             const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-            img.setAttribute('class', 'tile-overlay');
-            img.setAttribute('data-element', shrineType);
             img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', settings.src);
             img.setAttribute('href', settings.src);
             img.setAttribute('x', -R);
             img.setAttribute('y', -R);
             img.setAttribute('width', R * 2);
             img.setAttribute('height', R * 2);
+            img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
             img.setAttribute('opacity', settings.opacity);
-            img.setAttribute('clip-path', 'url(#tile-hex-clip)');
             img.setAttribute('transform',
                 `translate(${settings.x},${settings.y}) rotate(${settings.rotation}) scale(${settings.scale})`);
-            img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
-            tileGroup.appendChild(img);
+
+            wrapper.appendChild(img);
+            tileGroup.appendChild(wrapper);
+        }
+
+        // Clone a tileGraphic group with fills removed — used to render hex lines on top of overlay
+        function createStrokeOnlyClone(tileGraphic) {
+            const clone = tileGraphic.cloneNode(true);
+            clone.setAttribute('class', 'tile-overlay-lines');
+            clone.querySelectorAll('polygon').forEach(p => {
+                p.setAttribute('fill', 'none');
+                p.style.fill = 'none';
+            });
+            return clone;
         }
 
         function refreshAllTileOverlays() {
-            document.querySelectorAll('.tile-overlay').forEach(el => el.remove());
+            document.querySelectorAll('.tile-overlay, .tile-overlay-lines').forEach(el => el.remove());
+            // Also remove per-tile clip defs
+            document.querySelectorAll('[id^="tile-overlay-clip-"]').forEach(el => el.closest('defs')?.remove());
             if (typeof placedTiles !== 'undefined') {
                 placedTiles.forEach(tile => {
                     if (!tile.flipped && tile.shrineType && tile.element) {
+                        // Re-insert in correct order: overlay → stroke clone → shrine marker
+                        const shrineMarker = tile.element.querySelector('.shrine-marker');
+                        const tileGraphic = tile.element.querySelector('g[transform^="rotate"]');
                         addTileOverlay(tile.element, tile.shrineType);
+                        if (tileGraphic) {
+                            const strokeClone = createStrokeOnlyClone(tileGraphic);
+                            tile.element.insertBefore(strokeClone, shrineMarker);
+                        }
                     }
                 });
             }
@@ -4444,10 +4484,11 @@
             const tileGraphic = createTileGroup(TILE_SIZE, tile.rotation, false);
             tileGroup.appendChild(tileGraphic);
 
-            // Add shrine marker
+            // Layer order: base fills → overlay image → hex lines → shrine symbol
+            addTileOverlay(tileGroup, tile.shrineType);
+            tileGroup.appendChild(createStrokeOnlyClone(tileGraphic));
             const shrineMarker = createShrineMarker(tile.shrineType);
             tileGroup.appendChild(shrineMarker);
-            addTileOverlay(tileGroup, tile.shrineType);
 
             tileGroup.addEventListener('mousedown', (e) => {
                 if (!tileMoveMode) return;
@@ -4531,9 +4572,11 @@
             const tileGraphic = createTileGroup(TILE_SIZE, tile.rotation, false);
             tileGroup.appendChild(tileGraphic);
 
+            // Layer order: base fills → overlay image → hex lines → shrine symbol
+            addTileOverlay(tileGroup, shrineType);
+            tileGroup.appendChild(createStrokeOnlyClone(tileGraphic));
             const shrineMarker = createShrineMarker(shrineType);
             tileGroup.appendChild(shrineMarker);
-            addTileOverlay(tileGroup, shrineType);
 
             tileGroup.addEventListener('mousedown', (e) => {
                 if (!tileMoveMode) return;
