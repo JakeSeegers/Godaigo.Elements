@@ -1168,9 +1168,25 @@
                     }
                 )
                 .subscribe();
-            
+
             // Initial update
             updatePlayerList();
+
+            // Fallback: poll once after subscription is established in case we missed
+            // the status='playing' update while the Realtime channel was connecting
+            setTimeout(async () => {
+                if (!currentGameId) return;
+                if (document.getElementById('game-layout')?.classList.contains('active')) return;
+                const { data: room } = await supabase
+                    .from('game_room')
+                    .select('status')
+                    .eq('id', currentGameId)
+                    .single();
+                if (room?.status === 'playing') {
+                    console.log('🔄 Fallback poll: detected game already started — joining now');
+                    handleGameStart();
+                }
+            }, 2000);
         }
 
         // Update player list display
