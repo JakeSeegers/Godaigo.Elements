@@ -3158,20 +3158,23 @@ document.getElementById('undo-move').onclick = function() {
                 const sliders = {
                     x:        makeOverlaySlider('X',       -80,  80,  1,    'x'),
                     y:        makeOverlaySlider('Y',       -80,  80,  1,    'y'),
-                    rotation: makeOverlaySlider('Rotate',  0,    360, 1,    'rotation'),
-                    scale:    makeOverlaySlider('Scale',   0.1,  3,   0.05, 'scale'),
-                    opacity:  makeOverlaySlider('Opacity', 0,    1,   0.01, 'opacity'),
+                    rotation:    makeOverlaySlider('Rotate',  0,   360, 1,    'rotation'),
+                    scale:       makeOverlaySlider('Scale',   0.1, 3,   0.05, 'scale'),
+                    opacity:     makeOverlaySlider('Opacity', 0,   1,   0.01, 'opacity'),
+                    tintOpacity: makeOverlaySlider('Tint',    0,   1,   0.01, 'tintOpacity'),
                 };
 
                 function refreshOverlayControls() {
                     const s = window.tileOverlaySettings?.[selectedEl];
                     if (!s) return;
                     srcInput.value = s.src || '';
-                    sliders.x.slider.value = s.x;        sliders.x.val.textContent = s.x;
-                    sliders.y.slider.value = s.y;        sliders.y.val.textContent = s.y;
+                    sliders.x.slider.value = s.x;               sliders.x.val.textContent = s.x;
+                    sliders.y.slider.value = s.y;               sliders.y.val.textContent = s.y;
                     sliders.rotation.slider.value = s.rotation; sliders.rotation.val.textContent = s.rotation;
-                    sliders.scale.slider.value = s.scale; sliders.scale.val.textContent = s.scale.toFixed(2);
-                    sliders.opacity.slider.value = s.opacity; sliders.opacity.val.textContent = s.opacity.toFixed(2);
+                    sliders.scale.slider.value = s.scale;       sliders.scale.val.textContent = s.scale.toFixed(2);
+                    sliders.opacity.slider.value = s.opacity;   sliders.opacity.val.textContent = s.opacity.toFixed(2);
+                    const tint = s.tintOpacity ?? 0.22;
+                    sliders.tintOpacity.slider.value = tint;    sliders.tintOpacity.val.textContent = tint.toFixed(2);
                 }
                 refreshOverlayControls();
 

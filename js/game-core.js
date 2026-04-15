@@ -4351,12 +4351,12 @@
         // Settings are stored in window.tileOverlaySettings and persist across reveals.
 
         window.tileOverlaySettings = window.tileOverlaySettings || {
-            earth:    { src: 'images/Tiles/pixelearth.png',    x: 0, y: 0,   rotation: 60,  scale: 1.05, opacity: 0.41 },
-            fire:     { src: 'images/Tiles/pixelfire.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6  },
-            water:    { src: 'images/Tiles/pixelwater.png',    x: 0, y: 0,   rotation: 233, scale: 1.25, opacity: 0.49 },
-            wind:     { src: 'images/Tiles/pixelwind.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6  },
-            void:     { src: 'images/Tiles/pixelvoid.png',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6  },
-            catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -38, rotation: 0,   scale: 1,    opacity: 0.6  },
+            earth:    { src: 'images/Tiles/pixelearth.png',    x: 0, y: 0,   rotation: 60,  scale: 1.05, opacity: 0.41, tintOpacity: 0.22 },
+            fire:     { src: 'images/Tiles/pixelfire.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
+            water:    { src: 'images/Tiles/pixelwater.png',    x: 0, y: 0,   rotation: 233, scale: 1.25, opacity: 0.49, tintOpacity: 0.22 },
+            wind:     { src: 'images/Tiles/pixelwind.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
+            void:     { src: 'images/Tiles/pixelvoid.png',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
+            catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -38, rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 0.22 },
         };
 
         const ELEMENT_TINTS = {
@@ -4380,7 +4380,7 @@
 
             const tileId = tileGroup.getAttribute('data-tile-id');
             const clipId = `tile-overlay-clip-${tileId}`;
-            const R = TILE_SIZE * 3.75; // ~75 units, pointy-top hex matching tile shape
+            const R = TILE_SIZE * 4.1; // ~82 units — slightly beyond tile edge for full coverage
 
             // Per-tile clipPath inside the tile group — coordinates are unambiguously tile-local
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -4403,7 +4403,7 @@
                 const tint = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                 tint.setAttribute('points', makeTileHexPoints(R));
                 tint.setAttribute('fill', ELEMENT_TINTS[shrineType]);
-                tint.setAttribute('opacity', '0.22');
+                tint.setAttribute('opacity', settings.tintOpacity ?? 0.22);
                 tint.setAttribute('stroke', 'none');
                 wrapper.appendChild(tint);
             }
