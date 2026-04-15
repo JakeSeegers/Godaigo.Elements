@@ -227,7 +227,7 @@
 }
 
 .board-container {
-    background: var(--bg-panel);
+    background: transparent;
     border-radius: var(--radius-lg);
     padding: var(--space-md);
     box-shadow: 0 0 40px rgba(0,0,0,0.5);
