@@ -564,7 +564,7 @@
 
                 // Check active area limit
                 if (scrolls.active.size >= this.MAX_ACTIVE_SIZE) {
-                    updateStatus(`Active area full! Max ${this.MAX_ACTIVE_SIZE} scrolls. Move one back to hand first.`);
+                    updateStatus(`Active area full! Max ${this.MAX_ACTIVE_SIZE} scrolls. Move one to active or common area first.`);
                     return false;
                 }
 
@@ -1847,7 +1847,7 @@
                         scrolls.active.delete(scrollName);
                     }
 
-                    // Add to lamplight caster's hand
+                    // Add to lamplight caster's hand — bypasses hand size limit intentionally
                     const lamplightCasterIndex = redirect.redirectToPlayerIndex;
                     this.ensurePlayerScrollsStructure(lamplightCasterIndex);
                     this.playerScrolls[lamplightCasterIndex].hand.add(scrollName);
@@ -1855,7 +1855,18 @@
                     // Clear the pending redirect
                     this.scrollEffects.pendingHandRedirect = null;
 
-                    updateStatus('Unbidden Lamplight sent the scroll to your hand!');
+                    // If hand is now over the limit, trigger cascade prompt so player resolves it
+                    const lamplightScrolls = this.playerScrolls[lamplightCasterIndex];
+                    if (lamplightScrolls.hand.size > this.MAX_HAND_SIZE) {
+                        const scrollInfo = this.getScrollInfo ? this.getScrollInfo(scrollName) : null;
+                        const canCascadeToActive = lamplightScrolls.active.size < this.MAX_ACTIVE_SIZE;
+                        updateStatus(`Unbidden Lamplight sent "${scrollName}" to your hand — hand is over the limit. Cascade a scroll before ending your turn!`);
+                        if (lamplightCasterIndex === (isMultiplayer ? myPlayerIndex : activePlayerIndex)) {
+                            this.showCascadePrompt(scrollName, scrollInfo, null, canCascadeToActive);
+                        }
+                    } else {
+                        updateStatus('Unbidden Lamplight sent the scroll to your hand!');
+                    }
                 } else if (forceToCommonArea) {
                     // Explicit request to send to common area
                     if (scrolls.active.has(scrollName)) {
