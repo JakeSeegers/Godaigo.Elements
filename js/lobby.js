@@ -2868,6 +2868,15 @@
                 if (typeof turnNumber === 'number' && lastReceivedTurnNumber !== turnNumber) {
                     console.warn(`⚠️ DESYNC CORRECTED: Local turn was ${lastReceivedTurnNumber}, host says ${turnNumber}`);
                     lastReceivedTurnNumber = turnNumber;
+
+                    // If it's now our turn, reset AP — the normal turn-change broadcast
+                    // that does this was missed due to the reconnect
+                    if (playerIndex === myPlayerIndex) {
+                        console.warn('⚠️ DESYNC: Resetting AP for recovered turn');
+                        currentAP = maxAP;
+                        if (typeof refreshVoidAP === 'function') refreshVoidAP();
+                        if (typeof updateAPDisplay === 'function') updateAPDisplay();
+                    }
                 }
 
                 if (turnStartedAt && Math.abs(turnStartedAtMs - turnStartedAt) > 2000) {
