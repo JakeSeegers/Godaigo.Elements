@@ -4356,7 +4356,7 @@
             water:    { src: 'images/Tiles/pixelwater.png',    x: 0, y: 0,   rotation: 233, scale: 1.25, opacity: 0.49, tintOpacity: 0.22 },
             wind:     { src: 'images/Tiles/pixelwind.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
             void:     { src: 'images/Tiles/pixelvoid.png',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
-            catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -38, rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 0.22 },
+            catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -1,  rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 0.22 },
         };
 
         const ELEMENT_TINTS = {
@@ -4380,7 +4380,7 @@
 
             const tileId = tileGroup.getAttribute('data-tile-id');
             const clipId = `tile-overlay-clip-${tileId}`;
-            const R = TILE_SIZE * 4.1; // ~82 units — slightly beyond tile edge for full coverage
+            const R = TILE_SIZE * 4.0; // 80 units — matches tile boundary for clean hex crop
 
             // Per-tile clipPath inside the tile group — coordinates are unambiguously tile-local
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -4438,15 +4438,17 @@
 
         function refreshAllTileOverlays() {
             document.querySelectorAll('.tile-overlay, .tile-overlay-lines').forEach(el => el.remove());
-            // Also remove per-tile clip defs
             document.querySelectorAll('[id^="tile-overlay-clip-"]').forEach(el => el.closest('defs')?.remove());
             if (typeof placedTiles !== 'undefined') {
                 placedTiles.forEach(tile => {
                     if (!tile.flipped && tile.shrineType && tile.element) {
-                        // Re-insert in correct order: overlay → stroke clone → shrine marker
                         const shrineMarker = tile.element.querySelector('.shrine-marker');
                         const tileGraphic = tile.element.querySelector('g[transform^="rotate"]');
+                        // addTileOverlay appends to end; move overlay before shrineMarker to get correct order:
+                        // tileGraphic → overlay → strokeClone → shrineMarker
                         addTileOverlay(tile.element, tile.shrineType);
+                        const overlay = tile.element.querySelector('.tile-overlay');
+                        if (overlay && shrineMarker) tile.element.insertBefore(overlay, shrineMarker);
                         if (tileGraphic) {
                             const strokeClone = createStrokeOnlyClone(tileGraphic);
                             tile.element.insertBefore(strokeClone, shrineMarker);
