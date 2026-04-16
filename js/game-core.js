@@ -4002,7 +4002,8 @@
             shrineImg.setAttribute('y', '-8');
             shrineImg.setAttribute('width', '16');
             shrineImg.setAttribute('height', '16');
-            shrineImg.style.mixBlendMode = 'screen';
+            // Catacomb symbol is not bright enough for screen blend — use normal so it's visible
+            shrineImg.style.mixBlendMode = shrineType === 'catacomb' ? 'normal' : 'screen';
             g.appendChild(shrineImg);
 
             return g;
@@ -4369,7 +4370,7 @@
             water:    { src: 'images/Tiles/pixelwater.png',    x: 0, y: 0,   rotation: 233, scale: 1.25, opacity: 0.49, tintOpacity: 0.22 },
             wind:     { src: 'images/Tiles/pixelwind.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
             void:     { src: 'images/Tiles/pixelvoid.png',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
-            catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -1,  rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 0.22 },
+            catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -1,  rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 1.0 },
         };
 
         const ELEMENT_TINTS = {

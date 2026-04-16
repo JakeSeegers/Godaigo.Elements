@@ -2855,10 +2855,15 @@ const ScrollEffects = {
                 });
             }
 
-            // Run the reflected scroll's ability with full context
+            // Run the reflected scroll's ability with full context.
+            // On non-caster clients, pass psychicRemoteClient=true so interactive scrolls
+            // (e.g. Shifting Sands tile-swap) skip their UI — the caster's client handles
+            // selection and syncs state via broadcast.
+            const isReflectCaster = (typeof myPlayerIndex === 'undefined' || myPlayerIndex === null || myPlayerIndex === playerIndex);
             const result = self.execute(scrollName, playerIndex, {
                 spell: definition,
                 scrollName,
+                psychicRemoteClient: !isReflectCaster,
                 onComplete: () => {
                     // Restore activePlayerIndex after interactive selection resolves
                     if (originalActivePlayer !== null && typeof activePlayerIndex !== 'undefined') {

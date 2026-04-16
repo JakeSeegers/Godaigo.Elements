@@ -2636,6 +2636,13 @@
                         tile2.element.setAttribute('transform', `translate(${tile2.x}, ${tile2.y}) rotate(${tile2.rotation || 0})`);
                     }
 
+                    // Safety: clear any stuck tile-swap selectionMode on this client —
+                    // the authoritative swap just arrived via broadcast, so no local selection needed.
+                    if (spellSystem?.scrollEffects?.selectionMode?.type === 'tile-swap') {
+                        spellSystem.scrollEffects.selectionMode.cleanup?.();
+                        spellSystem.scrollEffects.selectionMode = null;
+                    }
+
                     updateStatus('Tiles were swapped by Shifting Sands!');
                 }
             });
