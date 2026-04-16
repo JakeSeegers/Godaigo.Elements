@@ -3612,27 +3612,50 @@ const ScrollEffects = {
         return entry ? entry.newElement : (tile.shrineType || null);
     },
 
-    // Add visual indicator: tile looks like the chosen element (symbol + color)
+    // Add visual indicator: tile looks like the chosen element (symbol image + color)
     applyWanderingRiverIndicator(tile, newElement) {
         if (!tile || !tile.element) return;
-        const stoneTypes = (typeof STONE_TYPES !== 'undefined') ? STONE_TYPES : { earth: { color: '#69d83a', symbol: '▲' }, water: { color: '#5894f4', symbol: '◯' }, fire: { color: '#ed1b43', symbol: '♦' }, wind: { color: '#ffce00', symbol: '≋' }, void: { color: '#9458f4', symbol: '✺' }, catacomb: { color: '#8b4513', symbol: '🔅' } };
-        const info = stoneTypes[newElement] || { color: '#888', symbol: newElement.charAt(0).toUpperCase() };
+        const stoneTypes = (typeof STONE_TYPES !== 'undefined') ? STONE_TYPES : {};
+        const info = stoneTypes[newElement] || { color: '#888', img: null };
         tile.element.classList.add('wandering-river-transformed', 'wandering-river-' + newElement);
         tile.element.setAttribute('data-wandering-river-element', newElement);
+        // Also update data-shrine so the elemental hover tint applies
+        tile.element.setAttribute('data-shrine', newElement);
+
         let label = tile.element.querySelector('.wandering-river-label');
         if (label) label.remove();
-        label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        label.setAttribute('class', 'wandering-river-label');
-        label.setAttribute('x', 0);
-        label.setAttribute('y', -8);
-        label.setAttribute('text-anchor', 'middle');
-        label.setAttribute('dominant-baseline', 'middle');
-        label.setAttribute('fill', info.color);
-        label.setAttribute('font-size', '16');
-        label.setAttribute('font-weight', 'bold');
-        label.setAttribute('stroke', '#000');
-        label.setAttribute('stroke-width', '1');
-        label.textContent = info.symbol;
+
+        // Use the updated stone symbol image instead of a text character
+        const imgSrc = info.img || null;
+        if (imgSrc) {
+            label = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            label.setAttribute('class', 'wandering-river-label');
+            // Circular background in element color
+            const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            bg.setAttribute('cx', '0'); bg.setAttribute('cy', '-8');
+            bg.setAttribute('r', '9');
+            bg.setAttribute('fill', info.color);
+            bg.setAttribute('opacity', '0.7');
+            bg.setAttribute('stroke', '#000'); bg.setAttribute('stroke-width', '1');
+            label.appendChild(bg);
+            const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            img.setAttribute('href', imgSrc);
+            img.setAttribute('x', '-9'); img.setAttribute('y', '-17');
+            img.setAttribute('width', '18'); img.setAttribute('height', '18');
+            img.style.mixBlendMode = newElement === 'catacomb' ? 'normal' : 'screen';
+            label.appendChild(img);
+        } else {
+            // Fallback: text symbol
+            label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            label.setAttribute('class', 'wandering-river-label');
+            label.setAttribute('x', 0); label.setAttribute('y', -8);
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('dominant-baseline', 'middle');
+            label.setAttribute('fill', info.color);
+            label.setAttribute('font-size', '16'); label.setAttribute('font-weight', 'bold');
+            label.setAttribute('stroke', '#000'); label.setAttribute('stroke-width', '1');
+            label.textContent = newElement.charAt(0).toUpperCase();
+        }
         tile.element.appendChild(label);
     },
 
@@ -3645,6 +3668,12 @@ const ScrollEffects = {
         tile.element.removeAttribute('data-wandering-river-element');
         const label = tile.element.querySelector('.wandering-river-label');
         if (label) label.remove();
+        // Restore data-shrine to the tile's actual element
+        if (tile.shrineType && tile.shrineType !== 'player') {
+            tile.element.setAttribute('data-shrine', tile.shrineType);
+        } else {
+            tile.element.removeAttribute('data-shrine');
+        }
     },
 
     // Clear Wandering River buffs for a player when their next turn starts
