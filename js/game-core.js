@@ -4036,6 +4036,12 @@
                 }
             }
 
+            // Tag revealed tiles with shrine type so CSS hover matches element color.
+            // Hidden (flipped) tiles stay untagged — their element is unknown to the player.
+            if (!flipped && shrineType !== 'player') {
+                tileGroup.setAttribute('data-shrine', shrineType);
+            }
+
             // Check if this is the player tile
             if (shrineType === 'player') {
                 isPlayerTile = true;
@@ -4495,6 +4501,7 @@
             const tileGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             tileGroup.setAttribute('class', 'placed-tile');
             tileGroup.setAttribute('data-tile-id', tileId);
+            tileGroup.setAttribute('data-shrine', tile.shrineType);
             tileGroup.setAttribute('transform', `translate(${tile.x}, ${tile.y})`);
 
             const tileGraphic = createTileGroup(TILE_SIZE, tile.rotation, false);
@@ -4583,6 +4590,7 @@
             const tileGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             tileGroup.setAttribute('class', 'placed-tile');
             tileGroup.setAttribute('data-tile-id', tileId);
+            tileGroup.setAttribute('data-shrine', shrineType);
             tileGroup.setAttribute('transform', `translate(${tile.x}, ${tile.y})`);
 
             const tileGraphic = createTileGroup(TILE_SIZE, tile.rotation, false);

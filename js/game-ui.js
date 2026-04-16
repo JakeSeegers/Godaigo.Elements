@@ -3229,7 +3229,60 @@ document.getElementById('undo-move').onclick = function() {
                 overlaySection.appendChild(overlayBody);
                 panel.appendChild(overlaySection);
 
-                panel.appendChild(makeBtn('✕ Close', () => panel.remove()));
+                // ── Inspect Tool ─────────────────────────────────────────────
+                const inspectSection = document.createElement('div');
+                inspectSection.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';
+
+                let inspectActive = false;
+                let inspectListener = null;
+                const inspectOut = document.createElement('div');
+                inspectOut.style.cssText = 'display:none;font-size:10px;color:#6ef;background:#111;border:1px solid #444;border-radius:4px;padding:5px 7px;white-space:pre;font-family:monospace;line-height:1.5;';
+
+                const inspectBtn = makeBtn('🔍 Inspect Tile: OFF', () => {
+                    inspectActive = !inspectActive;
+                    inspectBtn.textContent = inspectActive ? '🔍 Inspect Tile: ON' : '🔍 Inspect Tile: OFF';
+                    inspectBtn.style.color = inspectActive ? '#6ef' : '#eee';
+                    inspectOut.style.display = inspectActive ? 'block' : 'none';
+
+                    if (inspectListener) {
+                        document.removeEventListener('click', inspectListener, true);
+                        inspectListener = null;
+                    }
+                    if (inspectActive) {
+                        inspectListener = (e) => {
+                            const tileEl = e.target.closest('[data-tile-id]');
+                            if (!tileEl) return;
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const tileId = parseInt(tileEl.getAttribute('data-tile-id'));
+                            const tile = (typeof placedTiles !== 'undefined') ? placedTiles.find(t => t.id === tileId) : null;
+                            if (!tile) { inspectOut.textContent = `tile id=${tileId} not found`; return; }
+                            const lines = [
+                                `id:        ${tile.id}`,
+                                `shrine:    ${tile.shrineType || '(hidden)'}`,
+                                `flipped:   ${tile.flipped}`,
+                                `pos:       x=${tile.x?.toFixed(1)}, y=${tile.y?.toFixed(1)}`,
+                                `rotation:  ${tile.rotation ?? 0}`,
+                                `isPlayer:  ${tile.isPlayerTile || false}`,
+                            ];
+                            const overlay = window.tileOverlaySettings?.[tile.shrineType];
+                            if (overlay) {
+                                lines.push(`overlay:   x=${overlay.x} y=${overlay.y} r=${overlay.rotation} s=${overlay.scale}`);
+                                lines.push(`           op=${overlay.opacity} tint=${overlay.tintOpacity}`);
+                            }
+                            inspectOut.textContent = lines.join('\n');
+                        };
+                        document.addEventListener('click', inspectListener, true);
+                    }
+                });
+                inspectSection.appendChild(inspectBtn);
+                inspectSection.appendChild(inspectOut);
+                panel.appendChild(inspectSection);
+
+                panel.appendChild(makeBtn('✕ Close', () => {
+                    if (inspectListener) document.removeEventListener('click', inspectListener, true);
+                    panel.remove();
+                }));
 
                 document.body.appendChild(panel);
             }
