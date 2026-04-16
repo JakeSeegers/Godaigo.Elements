@@ -5102,7 +5102,7 @@ const ScrollEffects = {
         });
 
         const titleEl = document.createElement('h3');
-        titleEl.textContent = '⛏️ Excavate';
+        titleEl.textContent = 'Excavate';
         titleEl.style.marginBottom = '10px';
         titleEl.style.color = '#8b4513';
         modal.appendChild(titleEl);

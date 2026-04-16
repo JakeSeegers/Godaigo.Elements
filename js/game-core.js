@@ -1868,11 +1868,13 @@
                         updateStatus('Unbidden Lamplight sent the scroll to your hand!');
                     }
                 } else if (forceToCommonArea) {
-                    // Explicit request to send to common area
+                    // Explicit request to send to common area.
+                    // Guard: only discard if the scroll is still in active — if Lamplight already
+                    // redirected it to hand, the scroll is gone from active and we must not override.
                     if (scrolls.active.has(scrollName)) {
                         scrolls.active.delete(scrollName);
+                        this.discardToCommonArea(scrollName);
                     }
-                    this.discardToCommonArea(scrollName);
                 }
                 // Otherwise, scroll remains in player's active area - NO auto-discard!
 

@@ -269,10 +269,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     spellSystem.ensurePlayerScrollsStructure(counterCasterIdx);
                     const counterScrolls = spellSystem.playerScrolls[counterCasterIdx];
                     if (shouldForceCommon) {
+                        // Guard: only discard if scroll is still in active — Lamplight may have
+                        // already redirected it to hand, in which case we must not override.
                         if (counterScrolls.active.has(scrollName)) {
                             counterScrolls.active.delete(scrollName);
+                            spellSystem.discardToCommonArea(scrollName);
                         }
-                        spellSystem.discardToCommonArea(scrollName);
                     }
                     spellSystem.updateScrollCount();
                     if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();

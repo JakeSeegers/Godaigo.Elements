@@ -1833,10 +1833,7 @@
                             updateStoneCountDisplay(draggedStoneType);
                             syncPlayerState();
                         }
-
-                        if (isMultiplayer && stoneId) {
-                            broadcastStonePlace(stoneId, stonePos.x, stonePos.y, draggedStoneType);
-                        }
+                        // Note: placeStone already calls broadcastGameAction('stone-place', ...) internally.
                     } else if (draggedStoneId !== null) {
                         playerPool[draggedStoneType]++;
                         updateStoneCountDisplay(draggedStoneType);

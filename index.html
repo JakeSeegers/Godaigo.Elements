@@ -604,36 +604,36 @@
                 name: 'Earth', color: '#69d83a', darkColor: '#3a7820',
                 rank: 5, cost: 5,
                 img: 'images/mountainsymbol.png' + v,
-                ability: 'Immune to elemental transmutation. The heaviest stone — costs the most AP to place and captures for maximum value.',
+                ability: 'Cannot be walked through.',
                 interaction: null
             },
             {
                 name: 'Water', color: '#5894f4', darkColor: '#315286',
                 rank: 4, cost: 4,
                 img: 'images/watersymbol.png' + v,
-                ability: 'Adopts the element of an adjacent stone for scoring. Can be transformed into any element by the Control the Current scroll.',
-                interaction: 'Interacts with: Control the Current (Water V)'
+                ability: 'Adopts the ability of an adjacent Earth or Wind stone.',
+                interaction: null
             },
             {
                 name: 'Fire', color: '#ed1b43', darkColor: '#830f25',
                 rank: 3, cost: 3,
                 img: 'images/firesymbol.png' + v,
-                ability: 'A mid-weight offensive stone. Adjacent void stones nullify it — the fire stone loses its element identity entirely.',
+                ability: 'Stones other than Void or Fire are destroyed if adjacent to them.',
                 interaction: 'Countered by: Void stones'
             },
             {
                 name: 'Wind', color: '#ffce00', darkColor: '#8e7300',
                 rank: 2, cost: 2,
                 img: 'images/windsymbol.png' + v,
-                ability: 'Lightweight and cheap to place. Good for claiming territory and shielding higher-ranked stones from capture.',
+                ability: 'Costs zero AP to walk through.',
                 interaction: null
             },
             {
                 name: 'Void', color: '#9458f4', darkColor: '#533186',
                 rank: 1, cost: 1,
                 img: 'images/voidsymbol.png' + v,
-                ability: 'The lightest stone. Actively suppresses adjacent fire stones — nullifying their element and removing their scoring bonus.',
-                interaction: 'Counters: Fire stones'
+                ability: 'Nullifies the effects of adjacent stones. Can be spent as action points from your inventory.',
+                interaction: 'Counters: adjacent stone effects'
             }
         ];
 
