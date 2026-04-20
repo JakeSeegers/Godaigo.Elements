@@ -339,6 +339,7 @@
             if (error) { setBrowserStatus('Could not join: ' + error.message); return false; }
             myPlayerId = data.id;
             localReadyState = false;
+            updateReadyButton(false);
             currentGameId = gameId;  // must be set BEFORE subscribeToLobby so filters use the correct room ID
             isMultiplayer = true;
             // Determine host: first player by creation time
@@ -633,6 +634,8 @@
 
                 myPlayerId = data.id;
                 isMultiplayer = true;
+                localReadyState = false;
+                updateReadyButton(false);
 
                 // After insertion, check if we're the first player (host)
                 // The host is simply the player with the oldest created_at timestamp
@@ -948,6 +951,21 @@
             document.body.appendChild(overlay);
         }
 
+        // Update the ready button to reflect current state clearly
+        function updateReadyButton(isReady) {
+            const readyButton = document.getElementById('ready-button');
+            if (!readyButton) return;
+            if (isReady) {
+                readyButton.textContent = '✓ Ready';
+                readyButton.style.background = '#4CAF50';
+                readyButton.title = 'Click to cancel ready';
+            } else {
+                readyButton.textContent = 'Not Ready';
+                readyButton.style.background = '#f44336';
+                readyButton.title = 'Click to mark yourself ready';
+            }
+        }
+
         // Toggle ready status
         async function toggleReady() {
             if (!myPlayerId) return;
@@ -964,16 +982,7 @@
                 if (error) throw error;
 
                 localReadyState = newReadyState;
-
-                // Update button
-                const readyButton = document.getElementById('ready-button');
-                if (newReadyState) {
-                    readyButton.textContent = 'Not Ready';
-                    readyButton.style.background = '#f44336';
-                } else {
-                    readyButton.textContent = "I'm Ready!";
-                    readyButton.style.background = '#4CAF50';
-                }
+                updateReadyButton(newReadyState);
 
             } catch (error) {
                 console.error('Error toggling ready:', error);
