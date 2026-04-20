@@ -1400,56 +1400,6 @@
             }
         }
 
-        // Check if game should start (DEPRECATED - now host-controlled)
-        async function checkGameStart() {
-            try {
-                const { data: players, error } = await supabase
-                    .from('players')
-                    .select('*');
-                
-                if (error) throw error;
-                
-                // Need at least 2 players, max 5
-                if (players.length < 2 || players.length > 5) return;
-                
-                // Check if all ready
-                const allReady = players.every(p => p.is_ready);
-                if (!allReady) return;
-                
-                console.log('🎮 All players ready! Starting game...');
-                
-                // Randomly assign player indices and colors
-                const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
-                const shuffledIndices = [...Array(players.length).keys()].sort(() => Math.random() - 0.5);
-                
-                // Update game room status
-                const { error: roomError } = await supabase
-                    .from('game_room')
-                    .update({ status: 'playing', current_turn_index: 0 })
-                    .eq('id', 1);
-                
-                if (roomError) throw roomError;
-                
-                // Assign colors and indices to players
-                for (let i = 0; i < players.length; i++) {
-                    const player = players[i];
-                    const assignedIndex = shuffledIndices[i];
-                    const assignedColor = colorRankOrder[assignedIndex];
-                    
-                    await supabase
-                        .from('players')
-                        .update({ 
-                            player_index: assignedIndex, 
-                            color: assignedColor 
-                        })
-                        .eq('id', player.id);
-                }
-                
-            } catch (error) {
-                console.error('Error checking game start:', error);
-            }
-        }
-
         // Handle game start
         async function handleGameStart() {
             // Guard against duplicate calls (host's direct call + Realtime subscription racing)
