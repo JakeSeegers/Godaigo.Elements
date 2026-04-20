@@ -567,6 +567,13 @@
             }
 
             e.preventDefault();
+
+            // Clean up any pre-existing ghost (prevents orphaned stamps if drag starts mid-drag)
+            if (ghostStone) {
+                ghostStone.remove();
+                ghostStone = null;
+            }
+
             isDraggingFromDeck = true;
             isDraggingStone = true;
             draggedStoneId = null;
@@ -1194,49 +1201,54 @@
                 const screenY = e.clientY - rect.top;
                 const world = screenToWorld(screenX, screenY);
 
-                const stonePos = findValidStonePosition(world.x, world.y);
-                if (stonePos.valid) {
-                    if (draggedStoneId === null) {
-                        placeStone(stonePos.x, stonePos.y, draggedStoneType);
-                        console.log(`📤 Placing stone from deck: type=${draggedStoneType}, before=${stoneCounts[draggedStoneType]}`);
-                        stoneCounts[draggedStoneType]--;
-                        console.log(`📤 After decrement: ${draggedStoneType}=${stoneCounts[draggedStoneType]}, playerPool.${draggedStoneType}=${playerPool[draggedStoneType]}`);
-                        updateStoneCount(draggedStoneType);
-
-                        // Sync resources after placing stone
-                        syncPlayerState();
-                        updateStatus('Placed ' + draggedStoneType + ' stone');
-                    } else {
-                        placeMovedStone(stonePos.x, stonePos.y, draggedStoneType, draggedStoneId);
-                        if (isMultiplayer) {
-                            broadcastGameAction('stone-move', {
-                                stoneId: draggedStoneId,
-                                x: stonePos.x,
-                                y: stonePos.y,
-                                stoneType: draggedStoneType
-                            });
-                        }
-                        updateStatus('Moved ' + draggedStoneType + ' stone');
-                    }
-                } else {
-                    if (draggedStoneId !== null) {
-                        // Was a placed stone, couldn't place back
-                        if (draggedStoneOriginalPos) {
-                            placeMovedStone(draggedStoneOriginalPos.x, draggedStoneOriginalPos.y, draggedStoneType, draggedStoneId);
-                            updateStatus('Invalid placement! Stone returned to original spot.');
-                        } else {
-                            returnStoneToPool(draggedStoneType);
-                        }
-                    }
-                }
-
+                // Remove ghost FIRST — prevents orphaned ghost stamps if anything below throws
                 ghostStone.remove();
                 ghostStone = null;
                 isDraggingStone = false;
+                snapIndicator.classList.remove('active');
+
+                const capturedStoneId = draggedStoneId;
+                const capturedStoneType = draggedStoneType;
+                const capturedOriginalPos = draggedStoneOriginalPos;
                 draggedStoneId = null;
                 draggedStoneType = null;
                 draggedStoneOriginalPos = null;
-                snapIndicator.classList.remove('active');
+
+                const stonePos = findValidStonePosition(world.x, world.y);
+                if (stonePos.valid) {
+                    if (capturedStoneId === null) {
+                        placeStone(stonePos.x, stonePos.y, capturedStoneType);
+                        console.log(`📤 Placing stone from deck: type=${capturedStoneType}, before=${stoneCounts[capturedStoneType]}`);
+                        stoneCounts[capturedStoneType]--;
+                        console.log(`📤 After decrement: ${capturedStoneType}=${stoneCounts[capturedStoneType]}, playerPool.${capturedStoneType}=${playerPool[capturedStoneType]}`);
+                        updateStoneCount(capturedStoneType);
+
+                        // Sync resources after placing stone
+                        syncPlayerState();
+                        updateStatus('Placed ' + capturedStoneType + ' stone');
+                    } else {
+                        placeMovedStone(stonePos.x, stonePos.y, capturedStoneType, capturedStoneId);
+                        if (isMultiplayer) {
+                            broadcastGameAction('stone-move', {
+                                stoneId: capturedStoneId,
+                                x: stonePos.x,
+                                y: stonePos.y,
+                                stoneType: capturedStoneType
+                            });
+                        }
+                        updateStatus('Moved ' + capturedStoneType + ' stone');
+                    }
+                } else {
+                    if (capturedStoneId !== null) {
+                        // Was a placed stone, couldn't place back
+                        if (capturedOriginalPos) {
+                            placeMovedStone(capturedOriginalPos.x, capturedOriginalPos.y, capturedStoneType, capturedStoneId);
+                            updateStatus('Invalid placement! Stone returned to original spot.');
+                        } else {
+                            returnStoneToPool(capturedStoneType);
+                        }
+                    }
+                }
             } else if (isDraggingPlayer && ghostPlayer) {
                 const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
                 const rect = boardSvg.getBoundingClientRect();
@@ -1824,27 +1836,32 @@
                     draggedTileOriginalPos = null;
                     snapIndicator.classList.remove('active');
                 } else if (isDraggingStone && ghostStone) {
-                    const stonePos = findValidStonePosition(world.x, world.y);
-                    if (stonePos.valid) {
-                        const stoneId = placeStone(stonePos.x, stonePos.y, draggedStoneType);
-
-                        if (draggedStoneId === null) {
-                            playerPool[draggedStoneType]--;
-                            updateStoneCountDisplay(draggedStoneType);
-                            syncPlayerState();
-                        }
-                        // Note: placeStone already calls broadcastGameAction('stone-place', ...) internally.
-                    } else if (draggedStoneId !== null) {
-                        playerPool[draggedStoneType]++;
-                        updateStoneCountDisplay(draggedStoneType);
-                        syncPlayerState();
-                    }
-
+                    // Remove ghost FIRST — prevents orphaned ghost stamps if anything below throws
                     viewport.removeChild(ghostStone);
                     ghostStone = null;
                     isDraggingStone = false;
-                    draggedStoneId = null;
                     snapIndicator.classList.remove('active');
+
+                    const capturedStoneId = draggedStoneId;
+                    const capturedStoneType = draggedStoneType;
+                    draggedStoneId = null;
+                    draggedStoneType = null;
+
+                    const stonePos = findValidStonePosition(world.x, world.y);
+                    if (stonePos.valid) {
+                        placeStone(stonePos.x, stonePos.y, capturedStoneType);
+
+                        if (capturedStoneId === null) {
+                            playerPool[capturedStoneType]--;
+                            updateStoneCountDisplay(capturedStoneType);
+                            syncPlayerState();
+                        }
+                        // Note: placeStone already calls broadcastGameAction('stone-place', ...) internally.
+                    } else if (capturedStoneId !== null) {
+                        playerPool[capturedStoneType]++;
+                        updateStoneCountDisplay(capturedStoneType);
+                        syncPlayerState();
+                    }
                 } else if (isDraggingPlayer && ghostPlayer) {
                     const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
                     const playerPos = findNearestHexPosition(world.x, world.y);

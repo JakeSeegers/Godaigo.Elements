@@ -7001,6 +7001,12 @@ function clearPlayerPath() {
 
             console.log(`✅ Starting drag for stone id=${stoneId}, type=${stone.type} (adjacent to player)`);
 
+            // Clean up any pre-existing ghost (prevents orphaned stamps)
+            if (ghostStone) {
+                ghostStone.remove();
+                ghostStone = null;
+            }
+
             isDraggingStone = true;
             draggedStoneId = stoneId;
             draggedStoneType = stone.type;
