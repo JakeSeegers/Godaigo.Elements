@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Dungeon Generator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d0d12;
+    color: #e0e0e0;
+    font-family: monospace;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+  #sidebar {
+    width: 190px;
+    background: #13131a;
+    border-right: 1px solid #222230;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    flex-shrink: 0;
+  }
+  h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #b05828;
+    margin-bottom: 2px;
+  }
+  .btn {
+    background: #1a1a28;
+    border: 1px solid #33334a;
+    color: #bbb;
+    padding: 7px 11px;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 11px;
+    text-align: left;
+    transition: background .12s, border-color .12s;
+    width: 100%;
+  }
+  .btn:hover:not(:disabled) { background: #252540; border-color: #b05828; }
+  .btn:disabled { opacity: 0.35; cursor: default; }
+  .legend { font-size: 10px; color: #555; }
+  .legend-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 1px; flex-shrink: 0; }
+  #log {
+    flex: 1; overflow-y: auto; font-size: 10px; color: #666;
+    line-height: 1.55; border-top: 1px solid #222230; padding-top: 7px; min-height: 0;
+  }
+  #log .entry { margin-bottom: 1px; }
+  #log .roll  { color: #b05828; }
+  #log .type  { color: #aaa; font-weight: bold; }
+  #canvas-wrap { flex: 1; overflow: hidden; cursor: grab; }
+  #canvas-wrap.panning { cursor: grabbing; }
+  svg { width: 100%; height: 100%; display: block; }
+  @keyframes pulse { from { opacity:.25 } to { opacity:.75 } }
+
+  /* ── Tile info panel ── */
+  #tile-panel {
+    position: fixed;
+    top: 14px; right: 14px;
+    width: 272px;
+    background: #0c0c15;
+    border: 1px solid #2a2a42;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,.75);
+    z-index: 30;
+    display: none;
+  }
+  #tile-panel.visible {
+    display: block;
+    animation: panelIn .13s ease;
+  }
+  @keyframes panelIn {
+    from { opacity:0; transform: translateY(-5px); }
+    to   { opacity:1; transform: none; }
+  }
+  .tp-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 13px 9px;
+    background: #111120;
+    border-bottom: 1px solid #1e1e30;
+  }
+  .tp-title-wrap { display: flex; align-items: center; gap: 8px; }
+  .tp-icon  { font-size: 17px; }
+  .tp-type  {
+    font-family: monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 2px; font-weight: bold;
+  }
+  .tp-close {
+    background: none; border: none; color: #444; cursor: pointer;
+    font-size: 20px; line-height: 1; padding: 0 3px; font-family: monospace;
+  }
+  .tp-close:hover { color: #bbb; }
+  .tp-body {
+    padding: 11px 13px 13px;
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .feat {
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 6px 8px;
+    border-left: 3px solid;
+    background: rgba(255,255,255,.02);
+    border-radius: 0 3px 3px 0;
+  }
+  .feat-label {
+    font-family: monospace; font-size: 9px;
+    text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold;
+    opacity: .8;
+  }
+  .feat-text {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 12.5px; color: #ccc; line-height: 1.45;
+  }
+  .feat-sub {
+    font-family: monospace; font-size: 10px; color: #777; font-style: italic;
+  }
+  .feat-cursed {
+    font-family: monospace; font-size: 8.5px; color: #b03030;
+    text-transform: uppercase; letter-spacing: 1px; font-weight: bold;
+  }
+  .tp-empty {
+    font-family: monospace; font-size: 10px; color: #333;
+    text-align: center; padding: 8px 0;
+  }
+
+  /* ── Fog mode ── */
+  .btn-fog-on  { border-color: #b05828 !important; color: #b05828 !important; }
+  .sep { border-top: 1px solid #1e1e2e; margin: 2px 0; }
+
+  /* ── Mobile sidebar ── */
+  @media (max-width: 500px) {
+    #sidebar { width: 160px; padding: 10px; }
+    .legend  { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h2>Dungeon Gen</h2>
+  <button class="btn" id="btn-gen" onclick="startGeneration()">Generate</button>
+  <button class="btn" id="btn-fog" onclick="toggleFogMode()">☁ Fog: OFF</button>
+  <button class="btn" onclick="clearAll()">Clear</button>
+  <div class="sep"></div>
+  <button class="btn" onclick="exportDungeon()">↓ Export JSON</button>
+  <button class="btn" onclick="document.getElementById('import-input').click()">↑ Import JSON</button>
+  <input type="file" id="import-input" accept=".json" style="display:none" onchange="importDungeon(this.files[0]);this.value=''">
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#2e4a68"></div>Start</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a1c1c"></div>Dead End</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a271a"></div>Corridor</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#162438"></div>Fork</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#22183e"></div>Junction (3)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#302a0a"></div>Secret Door</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#382210"></div>Stairway ↑</div>
+  </div>
+  <div id="log"></div>
+</div>
+
+<div id="canvas-wrap" id="wrap">
+  <div id="tile-panel"></div>
+  <svg id="svg">
+    <g id="vp">
+      <g id="layer-fill"></g>
+      <g id="layer-walls"></g>
+      <g id="layer-labels"></g>
+      <g id="layer-features"></g>
+      <g id="layer-fog"></g>
+    </g>
+  </svg>
+</div>
+
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+const SIZE     = 42;   // hex grid radius (center to vertex) ≈ 1" at 72px/in
+const WALL_W   = 6;    // wall stroke width
+const WALL_CLR = '#06060c';
+const STEP_MS  = 70;
+
+const PPI      = 72;               // world units per inch
+const MAP_W    = 36 * PPI;         // 2592 world units wide
+const MAP_H    = 24 * PPI;         // 1728 world units tall
+
+const FILL = {
+  start:    '#2e4a68',
+  deadend:  '#3a1c1c',
+  corridor: '#1a271a',
+  fork:     '#162438',
+  junction: '#22183e',
+  secret:   '#302a0a',
+  stairway: '#382210',
+  frontier: '#18181e',
+};
+const LABEL = {
+  start:'★', deadend:'✕', corridor:'—', fork:'Y',
+  junction:'+', secret:'S', stairway:'↑', frontier:'?'
+};
+
+// Axial directions, pointy-top. Index d → neighbor offset.
+// Face f (edge between vertex f and f+1) faces direction (6-f)%6.
+const DIRS = [
+  {q:1,r:0},{q:1,r:-1},{q:0,r:-1},
+  {q:-1,r:0},{q:-1,r:1},{q:0,r:1}
+];
+
+// ─── SVG refs ─────────────────────────────────────────────────────────────────
+const SVG      = document.getElementById('svg');
+const vp       = document.getElementById('vp');
+const lFill    = document.getElementById('layer-fill');
+const lWalls   = document.getElementById('layer-walls');
+const lLabels  = document.getElementById('layer-labels');
+const wrap     = document.querySelector('#canvas-wrap');
+
+// ─── Viewport ─────────────────────────────────────────────────────────────────
+let panX = 0, panY = 0, zoom = 1;
+let panning = false, panStart = null, panMoved = false;
+
+function initVP() {
+  const r = SVG.getBoundingClientRect();
+  // Fit the map boundary into view with padding
+  zoom = Math.min(r.width / MAP_W, r.height / MAP_H) * 0.88;
+  panX = r.width  / 2;
+  panY = r.height / 2;
+  applyVP();
+  drawBoundary();
+}
+
+function drawBoundary() {
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', -MAP_W / 2);
+  rect.setAttribute('y', -MAP_H / 2);
+  rect.setAttribute('width',  MAP_W);
+  rect.setAttribute('height', MAP_H);
+  rect.setAttribute('fill', 'none');
+  rect.setAttribute('stroke', '#4a4a6a');
+  rect.setAttribute('stroke-width', 3 / zoom); // stay visually thin at any zoom
+  rect.setAttribute('stroke-dasharray', `${12/zoom} ${8/zoom}`);
+  document.getElementById('layer-fill').before(rect); // behind everything in vp
+  // Re-draw at correct stroke width after zoom changes
+  SVG.addEventListener('wheel', () => {
+    rect.setAttribute('stroke-width', 3 / zoom);
+    rect.setAttribute('stroke-dasharray', `${12/zoom} ${8/zoom}`);
+  });
+}
+function applyVP() {
+  vp.setAttribute('transform', `translate(${panX},${panY}) scale(${zoom})`);
+}
+SVG.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY < 0 ? 1.12 : 1/1.12;
+  const rect = SVG.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  panX = mx - (mx - panX) * f;
+  panY = my - (my - panY) * f;
+  zoom = Math.max(0.08, Math.min(zoom * f, 12));
+  applyVP();
+}, { passive: false });
+SVG.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  panning = true; panMoved = false;
+  panStart = { x: e.clientX - panX, y: e.clientY - panY, ox: e.clientX, oy: e.clientY };
+  wrap.classList.add('panning');
+});
+window.addEventListener('mousemove', e => {
+  if (!panning) return;
+  const dx = e.clientX - panStart.ox, dy = e.clientY - panStart.oy;
+  if (Math.abs(dx) > 4 || Math.abs(dy) > 4) panMoved = true;
+  panX = e.clientX - panStart.x; panY = e.clientY - panStart.y; applyVP();
+});
+window.addEventListener('mouseup', () => { panning = false; wrap.classList.remove('panning'); });
+
+// ─── Hex math ─────────────────────────────────────────────────────────────────
+function hexToPixel(q, r) {
+  return { x: SIZE*(Math.sqrt(3)*q + Math.sqrt(3)/2*r), y: SIZE*(1.5*r) };
+}
+function verts(cx, cy) {
+  return Array.from({length:6}, (_, i) => {
+    const a = Math.PI/3*i - Math.PI/6;
+    return { x: cx + SIZE*Math.cos(a), y: cy + SIZE*Math.sin(a) };
+  });
+}
+function key(q, r)        { return `${q},${r}`; }
+function nbrs(q, r)       { return DIRS.map(d => ({q:q+d.q, r:r+d.r})); }
+function dirTo(aq,ar,bq,br) { return DIRS.findIndex(d => d.q===bq-aq && d.r===br-ar); }
+function opp(d)            { return (d+3)%6; }
+
+// Face index → direction index: face f faces direction (6-f)%6
+// Direction index → face index: dir d = face (6-d)%6
+function faceOfDir(d) { return (6-d)%6; }
+
+// ─── Tables ───────────────────────────────────────────────────────────────────
+const TRAP_TRIGGERS = [
+  ['Blow','Break','Burn','Choice','Countdown','Darkness'],
+  ['Drain','Eat','Insert','Kill','Knock','Light'],
+  ['Magic','Melody','Noise','Open','Phrase','Pour'],
+  ['Press','Proximity','Pull','Read','Reflect','Release'],
+  ['Remove','Retrieve','Rudeness','Shut','Sit','Sleep'],
+  ['Slide','Touch','Turn','Unbalance','Unearth','Write'],
+];
+const TRAP_EFFECTS = [
+  ['Acid pool','Adhesive','Alarm','Armor melts','Bear trap','Blinding spray'],
+  ['Blunt pendulum','Boiling tar','Collapsing floor','Crocodile pit','Crushing walls','Deep pit'],
+  ['Falling cage','Falling ceiling','Fills with sand','Flooding','Giant magnet','Hard vacuum'],
+  ['Lava flow','Lightning','Living statues','Missile fire','Monster freed','Net trap'],
+  ['Pendulum blade','Poison gas','Poison needle','Quicksand','Rage gas','Rolling boulder'],
+  ['Room freezes','Room on fire','Sleeping gas','Spiked pit','Tombs open','Wall spikes'],
+];
+// ─── Item tables ──────────────────────────────────────────────────────────────
+const WORN_ITEMS = [
+  ['Belt','Blouse','Boots','Bracelet','Breastplate','Brigandine'],
+  ['Leather armor','Locket','Mail Shirt','Mask','Necklace','Padded armor'],
+  ['Cincture','Cloak','Coat','Dress','Earing','Eyepatch'],
+  ['Plate mail','Ring','Robe','Sandals','Scarf','Shirt'],
+  ['Gauntlets','Glove','Gown','Hat','Helmet','Hose'],
+  ['Shoes','Skirt','Slippers','Socks','Trousers','Veil'],
+];
+const WEAPON_ITEMS = [
+  ['Arming sword','Backsword','Battleaxe','Blowpipe','Claymore','Club'],
+  ['Longbow','Longsword','Mace','Maul','Morningstar','Pike'],
+  ['Crossbow','Cutlass','Dagger','Flail','Flanged mace','Glaive'],
+  ['Scimitar','Shortbow','Sickle','Sling','Spear','Staff'],
+  ['Halberd','Hammer','Hatchet','Horsebow','Hunting knife','Lance'],
+  ['Stake','Stiletto','Throwing axe','Warhammer','Warpick','Whip'],
+];
+const TOOL_ITEMS = [
+  ['Acid flask','Bear trap','Bellows','Bolt-cutters','Chain','Chisel'],
+  ['Lens','Lock/key','Lockpicks','Manacles','Metal file','Mortar/pestle'],
+  ['Crowbar','Door ram','Ear trumpet','Fire oil','Fishing hook','Goggles'],
+  ['Needle','Pickaxe','Pitchfork','Pliers','Pole','Pulleys'],
+  ['Grappling hook','Grease','Hacksaw','Hammer','Hand drill','Lantern'],
+  ['Rope','Scissors','Shovel','Spikes','Steel wire','Tongs'],
+];
+const TREASURE_ITEMS = [
+  ['Alchemy recipe','Amulet','Astrolabe','Blueprints','Calligraphy','Carpet'],
+  ['Compass','Contract','Crown','Crystal','Deed','Embroidery'],
+  ['Fine china','Fine liquor','Instrument','Magical book','Microscope','Music box'],
+  ['Orrery','Painting','Perfume','Prayer book','Printing block','Rare textile'],
+  ['Royal robes','Saint\'s relic','Scrimshaw','Sextant','Sheet music','Signet ring'],
+  ['Silverware','Spices','Spyglass','Tapestry','Telescope','Treasure map'],
+];
+const MISC_ITEMS = [
+  ['Bowl','Brass bell','Brooch','Carved figurine','Cup','Deck of cards'],
+  ['Long fork','Numbered key','Oil lamp','Old doll','Paint pot','Pencil'],
+  ['Drawing','Foreign coin','Game piece','Glass eye','Glass jar','Hair comb'],
+  ['Purse','Quill pen','Salve','Scissors','Scroll','Sealed letter'],
+  ['Handkerchief','Hinged box','Hourglass','Human tooth','Hunting horn','Loaded dice'],
+  ['Sewing needle','Shaving razor','Silver button','Skull','Tobacco pipe','Wine bottle'],
+];
+const BOOK_SUBJECTS = [
+  ['Alchemy','Art','Astrology','Blackmail','Charts & maps','Conspiracies'],
+  ['Lost empires','Lost places','Love poems','Monsters','Mythology','Odd customs'],
+  ['Cookbook','Criminals','Divination','Etiquette','Fashion','Genealogy'],
+  ['Oratory','Propaganda','Prophecies','Siegecraft','Songs','State secrets'],
+  ['Hagiography','History','Journal','Language','Laws','Letters'],
+  ['Sword fighting','Theology','Treasures','War chronicle','Who\'s who','Witch-hunting'],
+];
+const POTIONS = [
+  ['Animal-form','Body swap','Camouflage','Control animals','Control element','Cure affliction'],
+  ['Detect evil','Detect gold','Detect hidden','Direction sense','Element-form','Element-skin'],
+  ['Extra arm','Flight','Ghost-speech','Heat vision','Insanity','Invulnerable'],
+  ['Item-form','Magic immunity','Mirror image','Monster Ability','Monster Feature','Monster Trait'],
+  ['Mutation','Night vision','Random spell','Restore health','Speed','Stretchy'],
+  ['Super-jump','Super-strength','Telekinesis','Tongues','Water-breathing','Water-walking'],
+];
+const MAGICAL_INGREDIENTS = [
+  ['Ancient liquor','Animal','Blind eye','Boiled cat','Book page','Bottled fog'],
+  ['Coffin nail','Corpse\'s hair','Crossroad dust','Cultist entrails','Edible Plant','Exotic spice'],
+  ['Killer\'s hand','King\'s tooth','Last breath','Liar\'s tongue','Lightning bolt','Lodestone'],
+  ['Monster\'s vow','Monster Feature','Newborn\'s cry','Oil portrait','Phys. Element','Poisonous Plant'],
+  ['Pyre ember','Queen bee','Queen\'s blood','Ship\'s barnacle','Star-metal','Thief\'s finger'],
+  ['Tomb flower','Potion','Val. Material','Wedding ring','Widow\'s tears','Wizard skull'],
+];
+const VALUABLE_MATERIALS = [
+  ['Alabaster','Bloodstone','Ebony','Amber','Bone China','Emerald'],
+  ['Aquamarine','Chalcedony','Fire Agate','Azurite','Cinnabar','Garnet'],
+  ['Beryl','Coral','Gold','Black Pearl','Diamond','Ivory'],
+  ['Jade','Onyx','Sapphire','Jasper','Opal','Serpentine'],
+  ['Jet','Pearl','Silver','Lapis Lazuli','Platinum','Star Iron'],
+  ['Malachite','Porcelain','Topaz','Moonstone','Ruby','Turquoise'],
+];
+const TREASURE_TRAITS = [
+  ['Altered','Cultural value','Element','Ancient','Cursed','Embellished'],
+  ['Blessed','Damaged','Encoded','Bulky','Disguised','Exotic'],
+  ['Compact','Draws enemies','Extra-planar','Consumable','Effect','Famous'],
+  ['Forbidden','Intelligent','Political value','Fragile','Masterwork','Religious value'],
+  ['Heavy','Military value','Repaired','Immovable','Non-human','Royal'],
+  ['Impracticable','Owned','Toxic','Indestructible','Partial','Vile'],
+];
+
+const ITEM_CATS = [WORN_ITEMS, WEAPON_ITEMS, TOOL_ITEMS, TREASURE_ITEMS, MISC_ITEMS,
+                   BOOK_SUBJECTS, POTIONS, MAGICAL_INGREDIENTS, VALUABLE_MATERIALS];
+const ITEM_CAT_NAMES = ['Worn','Weapon','Tool','Treasure','Misc','Book','Potion','Ingredient','Material'];
+
+function rollD10Cat() {
+  let r; do { r = Math.floor(Math.random()*10)+1; } while (r===10); return r;
+}
+function rollItem() {
+  let cat = rollD10Cat();
+  let cursed = false;
+  if (cat === 1) { cursed = true; cat = rollD10Cat(); }
+  const item  = rollTable(ITEM_CATS[cat-1]);
+  const trait = rollTable(TREASURE_TRAITS);
+  return { item, trait, cursed, catName: ITEM_CAT_NAMES[cat-1] };
+}
+
+const ROOM_DETAILS = [
+  ['Bas-relief','Blood trail','Bones','Chains','Chalk marks','Claw marks'],
+  ['Corpses','Cracked beams','Crumbling walls','Decaying food','Decaying nest','Dripping water'],
+  ['Fading murals','Faint breeze','Faint footsteps','Fallen pillars','Fungus','Furniture'],
+  ['Graffiti','Mosaics','Recent repairs','Rotting books','Rubble','Shed skin'],
+  ['Slime trails','Spider webs','Stalactites','Stench','Smoke stains','Thick dust'],
+  ['Torn clothes','Tree roots','Unusual smell','Vibrations','Vines','Whispers'],
+];
+const HAZARDS = [
+  ['Acid drip','Bloodsuckers','Cave-in','Choking dust','Crude oil','Crystal shards'],
+  ['Deafening noise','Dense fog','Ensnaring vines','Fallen floor','Flooding','Freezing'],
+  ['Geysers','Magma','Magnetic field','Mud flow','Narrow ledge','Narrow passage'],
+  ['Poison goo','Poison plants','Precipice','Quicksand','Radiation','Rockslide'],
+  ['Rotten ceiling','Rotten floor','Sinkhole','Slippery slope','Spider webs','Spores'],
+  ['Steam vents','Strong winds','Tar pit','Tight passage','Toppling object','Toxic fumes'],
+];
+const REWARDS = [
+  ['Ancient lore','Animal ally','Army','Blessing','Blueprints','Cultural artifact'],
+  ['Enemy weakness','Faction ally','Forewarning','Guide','Holy relic','Influential ally'],
+  ['Instructions','Jewels','Key','Lost formula','Machine','Magic item'],
+  ['Magical ally','Map','Marital ally','Masterpiece','Monster ally','Oracle'],
+  ['Piles of loot','Planar portal','Prophecy','Renown','Spell','Transformation'],
+  ['Transport','Treasure Item','Uncovered plot','Val. Material','Vision','Weapon'],
+];
+
+function rollTable(tbl) {
+  return tbl[Math.floor(Math.random()*6)][Math.floor(Math.random()*6)];
+}
+
+// ─── Encounter table  [name, type, cr, weight, rarity] ───────────────────────
+// Source: encounter_table.csv  — weights = e^(-0.30·CR), used for weighted categorical sampling
+const ENCOUNTER_TABLE=[
+["Acolyte","humanoid",1,0.7408,"Common"],
+["Aerial Servant","elemental",16,0.00823,"Very Rare"],
+["Ankheg","monstrosity",4,0.3012,"Uncommon"],
+["Ant, Giant","beast",2,0.5488,"Common"],
+["Ape, Carnivorous","beast",5,0.2231,"Uncommon"],
+["Ape, Gorilla","beast",4,0.3012,"Uncommon"],
+["Ape, White","beast",4,0.3012,"Uncommon"],
+["Axe Beak","beast",3,0.4066,"Common"],
+["Baboon","beast",1,0.7408,"Common"],
+["Badger","beast",1,0.7408,"Common"],
+["Baluchitherium","beast",14,0.01500,"Very Rare"],
+["Barracuda","beast",2,0.5488,"Common"],
+["Basilisk","monstrosity",7,0.1225,"Rare"],
+["Bat, Normal","beast",0.125,0.9632,"Very Common"],
+["Bat, Giant","beast",2,0.5488,"Common"],
+["Bear, Black","beast",4,0.3012,"Uncommon"],
+["Bear, Brown","beast",6,0.1653,"Uncommon"],
+["Bear, Cave","beast",7,0.1225,"Rare"],
+["Bear, Grizzly","beast",5,0.2231,"Uncommon"],
+["Bear, Polar","beast",6,0.1653,"Uncommon"],
+["Beaver, Giant","beast",4,0.3012,"Uncommon"],
+["Beetle, Bombardier","beast",2,0.5488,"Common"],
+["Beetle, Boring","beast",5,0.2231,"Uncommon"],
+["Beetle, Fire","beast",1,0.7408,"Common"],
+["Beetle, Oil","beast",2,0.5488,"Common"],
+["Beetle, Rhinoceros","beast",12,0.02732,"Very Rare"],
+["Beetle, Stag","beast",7,0.1225,"Rare"],
+["Beetle, Tiger","beast",3,0.4066,"Common"],
+["Beetle, Water","beast",4,0.3012,"Uncommon"],
+["Beholder","aberration",12,0.02732,"Very Rare"],
+["Black Pudding","ooze",10,0.04979,"Rare"],
+["Blink Dog","fey",4,0.3012,"Uncommon"],
+["Boar, Wild","beast",3,0.4066,"Common"],
+["Boar, Warthog","beast",3,0.4066,"Common"],
+["Boar, Giant","beast",7,0.1225,"Rare"],
+["Brain Mole","beast",0.125,0.9632,"Very Common"],
+["Brownie","fey",0.125,0.9632,"Very Common"],
+["Buffalo","beast",5,0.2231,"Uncommon"],
+["Bugbear","humanoid",3,0.4066,"Common"],
+["Bulette","monstrosity",9,0.06721,"Rare"],
+["Bull","beast",4,0.3012,"Uncommon"],
+["Camel, Wild","beast",3,0.4066,"Common"],
+["Carrion Crawler","monstrosity",4,0.3012,"Uncommon"],
+["Cat, Mountain Lion","beast",3,0.4066,"Common"],
+["Cat, Panther","beast",4,0.3012,"Uncommon"],
+["Cat, Lion","beast",6,0.1653,"Uncommon"],
+["Cat, Tiger","beast",6,0.1653,"Uncommon"],
+["Cat, Sabre-Tooth Tiger","beast",8,0.09072,"Rare"],
+["Catoblepas","monstrosity",7,0.1225,"Rare"],
+["Cattle, Wild","beast",0.125,0.9632,"Very Common"],
+["Cave Locust","beast",2,0.5488,"Common"],
+["Centaur","monstrosity",4,0.3012,"Uncommon"],
+["Centipede, Giant","beast",0.125,0.9632,"Very Common"],
+["Chimera","monstrosity",9,0.06721,"Rare"],
+["Cockatrice","monstrosity",6,0.1653,"Uncommon"],
+["Couatl","celestial",5,0.2231,"Uncommon"],
+["Crab, Giant","beast",3,0.4066,"Common"],
+["Crayfish, Giant","beast",4,0.3012,"Uncommon"],
+["Crocodile, Normal","beast",3,0.4066,"Common"],
+["Crocodile, Giant","beast",7,0.1225,"Rare"],
+["Demon, Manes","fiend",2,0.5488,"Common"],
+["Demon, Vrock","fiend",8,0.09072,"Rare"],
+["Demon, Hezrou","fiend",9,0.06721,"Rare"],
+["Demon, Glabrezu","fiend",10,0.04979,"Rare"],
+["Demon, Nalfeshnee","fiend",12,0.02732,"Very Rare"],
+["Demon, Marilith","fiend",9,0.06721,"Rare"],
+["Demon, Balor","fiend",10,0.04979,"Rare"],
+["Demon, Succubus","fiend",7,0.1225,"Rare"],
+["Demon, Jubilex","fiend",20,0.002479,"Legendary"],
+["Demon, Yeenoghu","fiend",22,0.001360,"Legendary"],
+["Demon, Orcus","fiend",26,0.0004097,"Legendary"],
+["Demon, Demogorgon","fiend",42,3.372e-6,"Legendary"],
+["Devil, Lemure","fiend",4,0.3012,"Uncommon"],
+["Devil, Horned","fiend",6,0.1653,"Uncommon"],
+["Devil, Barbed","fiend",8,0.09072,"Rare"],
+["Devil, Bone","fiend",9,0.06721,"Rare"],
+["Devil, Erinyes","fiend",6,0.1653,"Uncommon"],
+["Devil, Ice","fiend",12,0.02732,"Very Rare"],
+["Devil, Pit Fiend","fiend",14,0.01500,"Very Rare"],
+["Devil, Geryon","fiend",28,0.0002249,"Legendary"],
+["Devil, Dispater","fiend",31,9.142e-5,"Legendary"],
+["Devil, Baalzebul","fiend",35,2.754e-5,"Legendary"],
+["Devil, Asmodeus","fiend",42,3.372e-6,"Legendary"],
+["Dinosaur, Anatosaurus","beast",12,0.02732,"Very Rare"],
+["Dinosaur, Ankylosaurus","beast",9,0.06721,"Rare"],
+["Dinosaur, Antrodemus","beast",15,0.01111,"Very Rare"],
+["Dinosaur, Apatosaurus","beast",30,0.0001234,"Legendary"],
+["Dinosaur, Archelon","beast",7,0.1225,"Rare"],
+["Dinosaur, Brachiosaurus","beast",36,2.040e-5,"Legendary"],
+["Dinosaur, Camarasaurus","beast",20,0.002479,"Legendary"],
+["Dinosaur, Ceratosaurus","beast",8,0.09072,"Rare"],
+["Dinosaur, Cetiosaurus","beast",24,0.0007466,"Legendary"],
+["Dinosaur, Dinichtys","beast",10,0.04979,"Rare"],
+["Dinosaur, Diplodocus","beast",24,0.0007466,"Legendary"],
+["Dinosaur, Elasmosaurus","beast",15,0.01111,"Very Rare"],
+["Dinosaur, Gorgosaurus","beast",13,0.02024,"Very Rare"],
+["Dinosaur, Iguanodon","beast",6,0.1653,"Uncommon"],
+["Dinosaur, Lambeosaurus","beast",12,0.02732,"Very Rare"],
+["Dinosaur, Megalosaurus","beast",12,0.02732,"Very Rare"],
+["Dinosaur, Monoclonius","beast",8,0.09072,"Rare"],
+["Dinosaur, Mosasaurus","beast",12,0.02732,"Very Rare"],
+["Dinosaur, Paleoscincus","beast",9,0.06721,"Rare"],
+["Dinosaur, Pentaceratops","beast",12,0.02732,"Very Rare"],
+["Dinosaur, Plateosaurus","beast",8,0.09072,"Rare"],
+["Dinosaur, Plesiosaurus","beast",20,0.002479,"Legendary"],
+["Dinosaur, Pteranodon","beast",3,0.4066,"Common"],
+["Dinosaur, Stegosaurus","beast",18,0.004517,"Very Rare"],
+["Dinosaur, Styracosaurus","beast",10,0.04979,"Rare"],
+["Dinosaur, Teratosaurus","beast",10,0.04979,"Rare"],
+["Dinosaur, Triceratops","beast",16,0.00823,"Very Rare"],
+["Dinosaur, Tyrannosaurus Rex","beast",18,0.004517,"Very Rare"],
+["Dragon, White","dragon",6,0.1653,"Uncommon"],
+["Dragon, Black","dragon",7,0.1225,"Rare"],
+["Dragon, Green","dragon",8,0.09072,"Rare"],
+["Dragon, Blue","dragon",9,0.06721,"Rare"],
+["Dragon, Red","dragon",10,0.04979,"Rare"],
+["Dragon, Brass","dragon",7,0.1225,"Rare"],
+["Dragon, Copper","dragon",8,0.09072,"Rare"],
+["Dragon, Bronze","dragon",9,0.06721,"Rare"],
+["Dragon, Silver","dragon",11,0.03688,"Rare"],
+["Dragon, Gold","dragon",11,0.03688,"Rare"],
+["Dragon, Chromatic (Tiamat)","dragon",18,0.004517,"Very Rare"],
+["Dragon, Platinum (Bahamut)","dragon",23,0.001008,"Legendary"],
+["Dragon Turtle","dragon",14,0.01500,"Very Rare"],
+["Dragonne","dragon",9,0.06721,"Rare"],
+["Displacer Beast","monstrosity",6,0.1653,"Uncommon"],
+["Djinni","elemental",7,0.1225,"Rare"],
+["Dog, Wild","beast",1,0.7408,"Common"],
+["Dog, War","beast",2,0.5488,"Common"],
+["Dolphin","beast",2,0.5488,"Common"],
+["Doppelganger","monstrosity",4,0.3012,"Uncommon"],
+["Driver Ant","beast",4,0.3012,"Uncommon"],
+["Dryad","fey",2,0.5488,"Common"],
+["Dwarf","humanoid",1,0.7408,"Common"],
+["Eagle, Giant","beast",4,0.3012,"Uncommon"],
+["Ear Seeker","beast",0.125,0.9632,"Very Common"],
+["Eel, Electric","beast",2,0.5488,"Common"],
+["Eel, Giant","beast",5,0.2231,"Uncommon"],
+["Eel, Weed","beast",2,0.5488,"Common"],
+["Efreeti","elemental",10,0.04979,"Rare"],
+["Elemental, Air","elemental",8,0.09072,"Rare"],
+["Elemental, Earth","elemental",8,0.09072,"Rare"],
+["Elemental, Fire","elemental",8,0.09072,"Rare"],
+["Elemental, Water","elemental",8,0.09072,"Rare"],
+["Elephant, Asiatic","beast",10,0.04979,"Rare"],
+["Elephant, African","beast",11,0.03688,"Rare"],
+["Elf","humanoid",1,0.7408,"Common"],
+["Ettin","giant",10,0.04979,"Rare"],
+["Eye, Floating","aberration",0.125,0.9632,"Very Common"],
+["Eye of the Deep","aberration",11,0.03688,"Rare"],
+["Frog, Giant","beast",2,0.5488,"Common"],
+["Fungi, Violet","plant",3,0.4066,"Common"],
+["Gargoyle","monstrosity",4,0.3012,"Uncommon"],
+["Gas Spore","plant",0.125,0.9632,"Very Common"],
+["Gelatinous Cube","ooze",5,0.2231,"Uncommon"],
+["Ghost","undead",11,0.03688,"Rare"],
+["Ghoul","undead",3,0.4066,"Common"],
+["Giant, Hill","giant",8,0.09072,"Rare"],
+["Giant, Stone","giant",9,0.06721,"Rare"],
+["Giant, Frost","giant",10,0.04979,"Rare"],
+["Giant, Fire","giant",11,0.03688,"Rare"],
+["Giant, Cloud","giant",12,0.02732,"Very Rare"],
+["Giant, Storm","giant",15,0.01111,"Very Rare"],
+["Gnoll","humanoid",2,0.5488,"Common"],
+["Gnome","humanoid",1,0.7408,"Common"],
+["Goat, Giant","beast",3,0.4066,"Common"],
+["Goblin","humanoid",1,0.7408,"Common"],
+["Golem, Clay","construct",11,0.03688,"Rare"],
+["Golem, Flesh","construct",9,0.06721,"Rare"],
+["Golem, Stone","construct",13,0.02024,"Very Rare"],
+["Golem, Iron","construct",17,0.006097,"Very Rare"],
+["Gorgon","monstrosity",9,0.06721,"Rare"],
+["Grey Ooze","ooze",3,0.4066,"Common"],
+["Green Slime","ooze",2,0.5488,"Common"],
+["Griffon","monstrosity",7,0.1225,"Rare"],
+["Halfling","humanoid",1,0.7408,"Common"],
+["Harpy","monstrosity",3,0.4066,"Common"],
+["Hell Hound","fiend",5,0.2231,"Uncommon"],
+["Hippogriff","monstrosity",3,0.4066,"Common"],
+["Hobgoblin","humanoid",1,0.7408,"Common"],
+["Homunculus","construct",6,0.1653,"Uncommon"],
+["Horse, Riding","beast",2,0.5488,"Common"],
+["Horse, Wild","beast",2,0.5488,"Common"],
+["Horse, Draft","beast",3,0.4066,"Common"],
+["Horse, War","beast",3,0.4066,"Common"],
+["Hydra","dragon",8,0.09072,"Rare"],
+["Imp","fiend",2,0.5488,"Common"],
+["Insect Swarm","swarm",4,0.3012,"Uncommon"],
+["Invisible Stalker","elemental",8,0.09072,"Rare"],
+["Jackal","beast",1,0.7408,"Common"],
+["Jaguar","beast",4,0.3012,"Uncommon"],
+["Kobold","humanoid",0.25,0.9277,"Very Common"],
+["Lamia","monstrosity",9,0.06721,"Rare"],
+["Larva","fiend",1,0.7408,"Common"],
+["Leech, Giant","beast",5,0.2231,"Uncommon"],
+["Leucrotta","monstrosity",6,0.1653,"Uncommon"],
+["Lich","undead",14,0.01500,"Very Rare"],
+["Lizard, Giant","beast",3,0.4066,"Common"],
+["Lizard Man","humanoid",2,0.5488,"Common"],
+["Werebear","monstrosity",10,0.04979,"Rare"],
+["Wereboar","monstrosity",5,0.2231,"Uncommon"],
+["Wererat","monstrosity",3,0.4066,"Common"],
+["Werewolf","monstrosity",4,0.3012,"Uncommon"],
+["Lynx, Giant","beast",2,0.5488,"Common"],
+["Mage","humanoid",2,0.5488,"Common"],
+["Man-at-Arms, Light","humanoid",2,0.5488,"Common"],
+["Man-at-Arms, Heavy","humanoid",3,0.4066,"Common"],
+["Man-at-Arms, Mounted","humanoid",3,0.4066,"Common"],
+["Manticore","monstrosity",6,0.1653,"Uncommon"],
+["Mastodon","beast",12,0.02732,"Very Rare"],
+["Medusa","monstrosity",7,0.1225,"Rare"],
+["Merman","humanoid",1,0.7408,"Common"],
+["Mimic","monstrosity",8,0.09072,"Rare"],
+["Mind Flayer","aberration",8,0.09072,"Rare"],
+["Minotaur","monstrosity",6,0.1653,"Uncommon"],
+["Mold, Brown","plant",1,0.7408,"Common"],
+["Mold, Yellow","plant",3,0.4066,"Common"],
+["Mule","beast",3,0.4066,"Common"],
+["Mummy","undead",6,0.1653,"Uncommon"],
+["Night Hag","fiend",8,0.09072,"Rare"],
+["Nightmare","fiend",6,0.1653,"Uncommon"],
+["Nixie","fey",1,0.7408,"Common"],
+["Nymph","fey",3,0.4066,"Common"],
+["Ochre Jelly","ooze",6,0.1653,"Uncommon"],
+["Ogre","giant",4,0.3012,"Uncommon"],
+["Ogre Mage","giant",6,0.1653,"Uncommon"],
+["Orc","humanoid",1,0.7408,"Common"],
+["Otyugh","aberration",7,0.1225,"Rare"],
+["Owl, Giant","beast",4,0.3012,"Uncommon"],
+["Owlbear","monstrosity",5,0.2231,"Uncommon"],
+["Pegasus","celestial",4,0.3012,"Uncommon"],
+["Peryton","monstrosity",5,0.2231,"Uncommon"],
+["Piercer","monstrosity",2,0.5488,"Common"],
+["Pike, Giant","beast",4,0.3012,"Uncommon"],
+["Pixie","fey",1,0.7408,"Common"],
+["Porcupine, Giant","beast",6,0.1653,"Uncommon"],
+["Priest","humanoid",2,0.5488,"Common"],
+["Pseudo-Dragon","dragon",2,0.5488,"Common"],
+["Purple Worm","monstrosity",16,0.00823,"Very Rare"],
+["Quasit","fiend",3,0.4066,"Common"],
+["Rakshasa","fiend",7,0.1225,"Rare"],
+["Ram, Giant","beast",4,0.3012,"Uncommon"],
+["Rat, Giant","beast",1,0.7408,"Common"],
+["Ray, Sting","beast",2,0.5488,"Common"],
+["Remorhaz","monstrosity",11,0.03688,"Rare"],
+["Rhinoceros","beast",8,0.09072,"Rare"],
+["Roc","beast",18,0.004517,"Very Rare"],
+["Roper","aberration",11,0.03688,"Rare"],
+["Rot Grub","beast",1,0.7408,"Common"],
+["Rust Monster","monstrosity",5,0.2231,"Uncommon"],
+["Sahuagin","humanoid",2,0.5488,"Common"],
+["Salamander","elemental",7,0.1225,"Rare"],
+["Satyr","fey",5,0.2231,"Uncommon"],
+["Scorpion, Giant","beast",6,0.1653,"Uncommon"],
+["Sea Hag","fiend",3,0.4066,"Common"],
+["Sea Lion","monstrosity",6,0.1653,"Uncommon"],
+["Shadow","undead",3,0.4066,"Common"],
+["Shambling Mound","plant",9,0.06721,"Rare"],
+["Shark","beast",5,0.2231,"Uncommon"],
+["Shrieker","plant",3,0.4066,"Common"],
+["Skeleton","undead",2,0.5488,"Common"],
+["Slug, Giant","beast",12,0.02732,"Very Rare"],
+["Snake, Giant Constrictor","beast",6,0.1653,"Uncommon"],
+["Snake, Giant Sea","beast",8,0.09072,"Rare"],
+["Snake, Giant Spitting","beast",4,0.3012,"Uncommon"],
+["Specter","undead",8,0.09072,"Rare"],
+["Sphinx","monstrosity",13,0.02024,"Very Rare"],
+["Spider, Giant","beast",5,0.2231,"Uncommon"],
+["Spider, Phase","monstrosity",5,0.2231,"Uncommon"],
+["Sprite","fey",1,0.7408,"Common"],
+["Squid, Giant","beast",12,0.02732,"Very Rare"],
+["Stag","beast",3,0.4066,"Common"],
+["Stirge","monstrosity",1,0.7408,"Common"],
+["Strangle Weed","plant",3,0.4066,"Common"],
+["Thought Eater","aberration",4,0.3012,"Uncommon"],
+["Titan","celestial",20,0.002479,"Legendary"],
+["Trader","humanoid",1,0.7408,"Common"],
+["Trapper","monstrosity",12,0.02732,"Very Rare"],
+["Treant","plant",8,0.09072,"Rare"],
+["Triton","humanoid",3,0.4066,"Common"],
+["Troglodyte","humanoid",2,0.5488,"Common"],
+["Troll","giant",7,0.1225,"Rare"],
+["Turtle, Giant Sea","beast",15,0.01111,"Very Rare"],
+["Umber Hulk","monstrosity",8,0.09072,"Rare"],
+["Unicorn","celestial",4,0.3012,"Uncommon"],
+["Vampire","undead",9,0.06721,"Rare"],
+["Wasp, Giant","beast",5,0.2231,"Uncommon"],
+["Whale","beast",15,0.01111,"Very Rare"],
+["Wight","undead",5,0.2231,"Uncommon"],
+["Will-o-Wisp","aberration",9,0.06721,"Rare"],
+["Wolf","beast",2,0.5488,"Common"],
+["Wolf, Dire","beast",3,0.4066,"Common"],
+["Wolverine, Giant","beast",4,0.3012,"Uncommon"],
+["Wraith","undead",6,0.1653,"Uncommon"],
+["Wyvern","dragon",8,0.09072,"Rare"],
+["Xorn","aberration",7,0.1225,"Rare"],
+["Yeti","monstrosity",6,0.1653,"Uncommon"],
+["Zombie","undead",2,0.5488,"Common"],
+];
+// At most one encounter per room:
+//   1. Roll flat gate R — if miss, no encounter.
+//   2. If hit, draw one creature by weight = exp(−λw · CR).
+// Tune ENC_R for density; tune ENC_LW to shift the CR distribution.
+const ENC_R  = 0.25;   // per-room encounter rate
+const ENC_LW = 0.30;   // weight decay constant (higher → high-CR creatures rarer)
+
+function encWeight(cr) { return Math.exp(-ENC_LW * cr); }
+
+// Lazy total weight — computed once, reused every roll
+let _encTotalW = null;
+function encTotalW() {
+  if (_encTotalW === null)
+    _encTotalW = ENCOUNTER_TABLE.reduce((s, r) => s + encWeight(r[2]), 0);
+  return _encTotalW;
+}
+
+function rollEncounter() {
+  if (Math.random() >= ENC_R) return null;        // flat gate
+  let x = Math.random() * encTotalW();
+  for (const r of ENCOUNTER_TABLE) {
+    x -= encWeight(r[2]);
+    if (x <= 0) return { name: r[0], type: r[1], cr: r[2], rarity: r[4] };
+  }
+  const r = ENCOUNTER_TABLE[ENCOUNTER_TABLE.length - 1];
+  return { name: r[0], type: r[1], cr: r[2], rarity: r[4] };
+}
+
+const featureMap      = new Map(); // key → feature object
+const featureElements = new Map(); // key → SVG group element
+
+function assignFeature(q, r, typeKey) {
+  if (typeKey === 'stairway' || typeKey === 'start') return;
+  const k = key(q, r);
+  const feature = { trap: null, hazard: null, reward: null, item: null, encounter: null };
+
+  if (typeKey === 'secret') {
+    feature.reward = rollTable(REWARDS);
+    addLog(`&nbsp;&nbsp;✦ ${feature.reward}`);
+  } else {
+    if (Math.random() < 0.25) {
+      feature.trap = { trigger: rollTable(TRAP_TRIGGERS), effect: rollTable(TRAP_EFFECTS) };
+      addLog(`&nbsp;&nbsp;⚠ ${feature.trap.trigger} → ${feature.trap.effect}`);
+    }
+    if (Math.random() < 1/6) {
+      feature.hazard = rollTable(HAZARDS);
+      addLog(`&nbsp;&nbsp;☠ ${feature.hazard}`);
+    }
+  }
+
+  if (Math.random() < 0.25) {
+    feature.item = rollItem();
+    const cursedTag = feature.item.cursed ? ' (cursed)' : '';
+    addLog(`&nbsp;&nbsp;⚔ ${feature.item.trait} ${feature.item.item}${cursedTag} [${feature.item.catName}]`);
+  }
+
+  const enc = rollEncounter();
+  if (enc) {
+    feature.encounter = enc;
+    addLog(`&nbsp;&nbsp;⚡ ${enc.name} (CR ${enc.cr})`);
+  }
+
+  feature.detail = rollTable(ROOM_DETAILS);
+  addLog(`&nbsp;&nbsp;◆ ${feature.detail}`);
+
+  featureMap.set(k, feature);
+  drawFeature(q, r, feature);
+}
+
+function featureText(q, r, feature) {
+  const {x, y} = hexToPixel(q, r);
+  const icons = [];
+  if (feature.reward) icons.push({ sym:'✦', col:'#c0a020' });
+  if (feature.trap)   icons.push({ sym:'⚠', col:'#c04020' });
+  if (feature.hazard) icons.push({ sym:'☠', col:'#8040c0' });
+  if (feature.item)      icons.push({ sym:'⚔', col: feature.item.cursed ? '#c03030' : '#a0a020' });
+  if (feature.encounter) icons.push({ sym:'⚡', col:'#4a80c8' });
+  if (feature.detail)    icons.push({ sym:'◆', col:'#506050' });
+
+  const g = ns('g');
+  g.setAttribute('pointer-events', 'none');
+  if (!icons.length) return g;
+
+  const n = icons.length;
+  const spacing = Math.min(SIZE * 0.3, SIZE * 0.68 / n);
+  const startX = x - spacing * (n - 1) / 2;
+  const iy = y + SIZE * 0.44;
+
+  icons.forEach((ic, i) => {
+    const t = ns('text');
+    t.setAttribute('x', startX + i * spacing);
+    t.setAttribute('y', iy);
+    t.setAttribute('font-size', SIZE * 0.21);
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('dominant-baseline', 'middle');
+    t.setAttribute('fill', ic.col);
+    t.textContent = ic.sym;
+    g.appendChild(t);
+  });
+  return g;
+}
+
+function drawFeature(q, r, feature) {
+  const k = key(q, r);
+  const old = featureElements.get(k);
+  if (old) old.remove();
+  const el = featureText(q, r, feature);
+  document.getElementById('layer-features').appendChild(el);
+  featureElements.set(k, el);
+}
+
+// ─── Door system ──────────────────────────────────────────────────────────────
+const DOOR_TYPES  = ['weak', 'moderate', 'sturdy'];
+const DOOR_COLORS = { weak: '#7a3a18', moderate: '#5a6878', sturdy: '#a08020' };
+const doorMap = new Map(); // canonical edge key → door type or null
+
+function edgeKey(q1, r1, q2, r2) {
+  const a = key(q1,r1), b = key(q2,r2);
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function getDoor(q, r, dirIdx) {
+  const nq = q + DIRS[dirIdx].q, nr = r + DIRS[dirIdx].r;
+  const ek = edgeKey(q, r, nq, nr);
+  if (!doorMap.has(ek)) {
+    const type = Math.random() < 0.25
+      ? DOOR_TYPES[Math.floor(Math.random() * 3)]
+      : null;
+    doorMap.set(ek, type);
+  }
+  return doorMap.get(ek);
+}
+
+// ─── SVG helpers ──────────────────────────────────────────────────────────────
+function ns(tag) { return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+
+function drawFill(q, r, typeKey) {
+  const {x,y} = hexToPixel(q,r);
+  const v = verts(x,y);
+  const el = ns('polygon');
+  el.setAttribute('points', v.map(p=>`${p.x},${p.y}`).join(' '));
+  el.setAttribute('fill', FILL[typeKey] || FILL.frontier);
+  if (typeKey === 'frontier') el.style.animation = 'pulse .9s ease-in-out infinite alternate';
+  return el;
+}
+
+function drawWalls(q, r, openDirs) {
+  const {x,y} = hexToPixel(q,r);
+  const v = verts(x,y);
+  const g = ns('g');
+  for (let f = 0; f < 6; f++) {
+    const fDir = (6-f)%6;
+    const v1 = v[f], v2 = v[(f+1)%6];
+    if (openDirs && openDirs.has(fDir)) {
+      // Open face — check for door
+      const door = getDoor(q, r, fDir);
+      if (door) {
+        const mx = (v1.x+v2.x)/2, my = (v1.y+v2.y)/2;
+        const dx = v2.x-v1.x, dy = v2.y-v1.y;
+        const len = Math.sqrt(dx*dx+dy*dy);
+        const nx = dx/len, ny = dy/len;
+        const dl = len * 0.45;
+        const bar = ns('line');
+        bar.setAttribute('x1', mx - nx*dl/2); bar.setAttribute('y1', my - ny*dl/2);
+        bar.setAttribute('x2', mx + nx*dl/2); bar.setAttribute('y2', my + ny*dl/2);
+        bar.setAttribute('stroke', DOOR_COLORS[door]);
+        bar.setAttribute('stroke-width', SIZE * 0.18);
+        bar.setAttribute('stroke-linecap', 'round');
+        g.appendChild(bar);
+      }
+      continue;
+    }
+    const ln = ns('line');
+    ln.setAttribute('x1', v1.x); ln.setAttribute('y1', v1.y);
+    ln.setAttribute('x2', v2.x); ln.setAttribute('y2', v2.y);
+    ln.setAttribute('stroke', WALL_CLR);
+    ln.setAttribute('stroke-width', WALL_W);
+    ln.setAttribute('stroke-linecap', 'square');
+    g.appendChild(ln);
+  }
+  return g;
+}
+
+function drawLabel(q, r, typeKey) {
+  const {x,y} = hexToPixel(q,r);
+  const el = ns('text');
+  el.setAttribute('x', x); el.setAttribute('y', y);
+  el.setAttribute('font-family', 'monospace');
+  el.setAttribute('font-size', SIZE*0.38);
+  el.setAttribute('fill', '#ffffff99');
+  el.setAttribute('text-anchor', 'middle');
+  el.setAttribute('dominant-baseline', 'middle');
+  el.setAttribute('pointer-events', 'none');
+  el.textContent = LABEL[typeKey] || '?';
+  return el;
+}
+
+// ─── Placement ────────────────────────────────────────────────────────────────
+// Each entry: { q, r, typeKey, openDirs, elFill, elWalls, elLabel }
+const placed = new Map();
+
+function placeHex(q, r, typeKey, openDirs) {
+  const k = key(q,r);
+  const old = placed.get(k);
+  if (old) {
+    old.elFill?.remove(); old.elWalls?.remove(); old.elLabel?.remove();
+  }
+  const elFill  = drawFill(q, r, typeKey);
+  const elWalls = drawWalls(q, r, openDirs);
+  const elLabel = drawLabel(q, r, typeKey);
+  elFill.style.cursor = 'pointer';
+  elFill.addEventListener('click', () => { if (!panMoved) showPanel(q, r); });
+  lFill.appendChild(elFill);
+  lWalls.appendChild(elWalls);
+  lLabels.appendChild(elLabel);
+  placed.set(k, {q, r, typeKey, openDirs, elFill, elWalls, elLabel});
+}
+
+// ─── Generation state ─────────────────────────────────────────────────────────
+let frontier    = []; // [{q,r,fromQ,fromR}]
+let generating  = false;
+let stepTimer   = null;
+
+// ─── Fog state ────────────────────────────────────────────────────────────────
+let fogMode        = false;
+const revealedSet  = new Set(); // keys of tiles the player has seen
+const fogFrontierSet = new Set(); // keys of tiles adjacent to revealed via open face
+const fogPolygons  = new Map(); // key → fog SVG group
+
+function isFree(q, r) { return !placed.has(key(q,r)); }
+
+function isInBounds(q, r) {
+  const {x, y} = hexToPixel(q, r);
+  return Math.abs(x) <= MAP_W / 2 - SIZE && Math.abs(y) <= MAP_H / 2 - SIZE;
+}
+
+function pushFrontier(q, r, fromQ, fromR) {
+  if (!isFree(q, r) || !isInBounds(q, r)) return;
+  placeHex(q, r, 'frontier', null);
+  frontier.push({q, r, fromQ, fromR});
+}
+
+function d(n) { return Math.floor(Math.random()*n)+1; }
+function shuffle(a) {
+  const b=[...a];
+  for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}
+  return b;
+}
+
+let typesRolled = new Set();
+
+function stairwayReady() {
+  return [1,2,3,4,5].every(t => typesRolled.has(t));
+}
+
+function rollType() {
+  const roll = Math.floor(Math.random() * 6) + 1;
+  if (roll === 6 && !stairwayReady()) return Math.floor(Math.random() * 5) + 1;
+  return roll;
+}
+
+// Non-adjacent exit dirs for a corridor: ≥2 steps from entryDir in face-space.
+// In direction-index space this is also ≥2 steps: (e+2)%6, (e+3)%6, (e+4)%6.
+function corridorExits(entryDir, q, r) {
+  return [(entryDir+2)%6,(entryDir+3)%6,(entryDir+4)%6]
+    .filter(d => isFree(q+DIRS[d].q, r+DIRS[d].r));
+}
+
+// Build and place a corridor chain starting at (q,r) with the given entryDir.
+// Pushes one frontier room at the end.
+function placeCorridorFrom(q, r, entryDir, len) {
+  if (!isInBounds(q, r)) return;
+  if (len === undefined) len = d(4);
+  const chain = [{q, r, entryDir, exitDir:null}];
+  let cq=q, cr=r, prevEntry=entryDir;
+
+  for (let i=1; i<len; i++) {
+    const exits = corridorExits(prevEntry, cq, cr);
+    if (!exits.length) break;
+    const exitDir = exits[Math.floor(Math.random()*exits.length)];
+    chain[chain.length-1].exitDir = exitDir;
+    const nq=cq+DIRS[exitDir].q, nr=cr+DIRS[exitDir].r;
+    if (!isFree(nq,nr) || !isInBounds(nq,nr)) break;
+    const nextEntry = opp(exitDir);
+    chain.push({q:nq, r:nr, entryDir:nextEntry, exitDir:null});
+    // Reserve position so subsequent tiles don't collide with it
+    placed.set(key(nq,nr), {q:nq,r:nr,typeKey:'_reserved',openDirs:null,elFill:null,elWalls:null,elLabel:null});
+    cq=nq; cr=nr; prevEntry=nextEntry;
+  }
+
+  const last = chain[chain.length-1];
+  const roomExits = corridorExits(last.entryDir, last.q, last.r);
+  const roomExitDir = roomExits.length ? roomExits[Math.floor(Math.random()*roomExits.length)] : null;
+  if (roomExitDir!==null) last.exitDir = roomExitDir;
+
+  for (const tile of chain) {
+    const open = new Set([tile.entryDir]);
+    if (tile.exitDir!==null) open.add(tile.exitDir);
+    placeHex(tile.q, tile.r, 'corridor', open);
+  }
+  assignFeature(q, r, 'corridor');
+
+  if (roomExitDir!==null) {
+    const rq=last.q+DIRS[roomExitDir].q, rr=last.r+DIRS[roomExitDir].r;
+    if (isFree(rq,rr) && isInBounds(rq,rr)) {
+      if (Math.random() < 0.25) {
+        placeJunction(rq, rr, opp(roomExitDir), new Set([opp(roomExitDir)]));
+      } else {
+        pushFrontier(rq, rr, last.q, last.r);
+      }
+    }
+  }
+}
+
+function placeJunction(q, r, entryDir, openDirs) {
+  if (!isInBounds(q, r)) return;
+  if (!openDirs) openDirs = new Set([entryDir]);
+  const forward  = opp(entryDir);
+  const leftDir  = (forward+1)%6;
+  const rightDir = (forward+5)%6;
+  const exits = [leftDir, rightDir].filter(exitD => {
+    const nq=q+DIRS[exitD].q, nr=r+DIRS[exitD].r;
+    return isFree(nq, nr) && isInBounds(nq, nr);
+  });
+  exits.forEach(exitD => openDirs.add(exitD));
+  placeHex(q, r, 'junction', openDirs);
+  assignFeature(q, r, 'junction');
+  exits.forEach(exitD => {
+    const nq=q+DIRS[exitD].q, nr=r+DIRS[exitD].r;
+    placeCorridorFrom(nq, nr, opp(exitD));
+  });
+}
+
+// Free neighbor dirs, optionally excluding one
+function freeExits(q, r, excludeDir) {
+  return DIRS.map((_,i)=>i)
+    .filter(i => i!==excludeDir && isFree(q+DIRS[i].q, r+DIRS[i].r));
+}
+
+const TYPE_KEY = {1:'deadend',2:'corridor',3:'fork',4:'junction',5:'secret',6:'stairway'};
+
+// ─── Main loop ────────────────────────────────────────────────────────────────
+// processStep: do one frontier item. Returns false when generation is complete.
+function processStep() {
+  if (!frontier.length) return false;
+
+  const {q, r, fromQ, fromR} = frontier.shift();
+  const roll    = rollType();
+  const typeKey = TYPE_KEY[roll];
+  typesRolled.add(roll);
+
+  const entryDir = dirTo(q, r, fromQ, fromR);
+  const openDirs = new Set([entryDir]);
+
+  addLog(`<span class="roll">[${roll}]</span> <span class="type">${typeKey}</span>`);
+
+  if (roll === 6) {
+    placeHex(q, r, typeKey, openDirs);
+    for (const f of frontier) {
+      const h = placed.get(key(f.q,f.r));
+      if (h && h.typeKey==='frontier') {
+        h.elFill?.remove(); h.elWalls?.remove(); h.elLabel?.remove();
+        placed.delete(key(f.q,f.r));
+      }
+    }
+    frontier = [];
+    return false;
+  }
+
+  if (roll===1 || roll===5) {
+    placeHex(q, r, typeKey, openDirs);
+    assignFeature(q, r, typeKey);
+  } else if (roll===2) {
+    const len = d(4);
+    addLog(`&nbsp;&nbsp;↳ ${len} tiles`);
+    placeCorridorFrom(q, r, entryDir, len);
+  } else if (roll===3) {
+    placeHex(q, r, typeKey, openDirs);
+    assignFeature(q, r, typeKey);
+  } else if (roll===4) {
+    placeJunction(q, r, entryDir, openDirs);
+  }
+
+  return frontier.length > 0;
+}
+
+function processOne() {
+  if (!processStep()) { done(); return; }
+  stepTimer = setTimeout(processOne, STEP_MS);
+}
+
+// ─── Tile info panel ──────────────────────────────────────────────────────────
+const TYPE_DISPLAY = {
+  start:    { label:'Start',        color:'#5a8ab8', icon:'★' },
+  deadend:  { label:'Dead End',     color:'#a04040', icon:'✕' },
+  corridor: { label:'Corridor',     color:'#3a6040', icon:'—' },
+  fork:     { label:'Room',         color:'#3a60a0', icon:'Y' },
+  junction: { label:'Junction',     color:'#6048a0', icon:'+' },
+  secret:   { label:'Secret Room',  color:'#9a8030', icon:'S' },
+  stairway: { label:'Stairway ↑',   color:'#b06830', icon:'↑' },
+  frontier: { label:'Unknown',      color:'#444',    icon:'?' },
+};
+
+function showPanel(q, r) {
+  const entry   = placed.get(key(q, r));
+  if (!entry) return;
+  const feature = featureMap.get(key(q, r));
+  const td      = TYPE_DISPLAY[entry.typeKey] || TYPE_DISPLAY.frontier;
+  const panel   = document.getElementById('tile-panel');
+
+  let body = '';
+
+  if (!feature) {
+    body = '<div class="tp-empty">No features</div>';
+  } else {
+    if (feature.reward) body += `
+      <div class="feat" style="border-color:#c0a020">
+        <span class="feat-label" style="color:#c0a020">✦ Reward</span>
+        <span class="feat-text">${feature.reward}</span>
+      </div>`;
+    if (feature.trap) body += `
+      <div class="feat" style="border-color:#c04020">
+        <span class="feat-label" style="color:#c04020">⚠ Trap</span>
+        <span class="feat-text">${feature.trap.trigger}</span>
+        <span class="feat-sub">→ ${feature.trap.effect}</span>
+      </div>`;
+    if (feature.hazard) body += `
+      <div class="feat" style="border-color:#8040c0">
+        <span class="feat-label" style="color:#8040c0">☠ Hazard</span>
+        <span class="feat-text">${feature.hazard}</span>
+      </div>`;
+    if (feature.item) body += `
+      <div class="feat" style="border-color:${feature.item.cursed ? '#b03030' : '#a0a020'}">
+        <span class="feat-label" style="color:${feature.item.cursed ? '#b03030' : '#a0a020'}">⚔ Item</span>
+        ${feature.item.cursed ? '<span class="feat-cursed">★ Cursed</span>' : ''}
+        <span class="feat-text">${feature.item.trait} ${feature.item.item}</span>
+        <span class="feat-sub">${feature.item.catName}</span>
+      </div>`;
+    if (feature.encounter) body += `
+      <div class="feat" style="border-color:#3a5888">
+        <span class="feat-label" style="color:#4a80c8">⚡ Encounter</span>
+        <span class="feat-text">${feature.encounter.name}</span>
+        <span class="feat-sub">${feature.encounter.type} · CR ${feature.encounter.cr} · ${feature.encounter.rarity}</span>
+      </div>`;
+    if (feature.detail) body += `
+      <div class="feat" style="border-color:#3a5040">
+        <span class="feat-label" style="color:#607060">◆ Detail</span>
+        <span class="feat-text">${feature.detail}</span>
+      </div>`;
+  }
+
+  panel.innerHTML = `
+    <div class="tp-head">
+      <div class="tp-title-wrap">
+        <span class="tp-icon" style="color:${td.color}">${td.icon}</span>
+        <span class="tp-type" style="color:${td.color}">${td.label}</span>
+      </div>
+      <button class="tp-close" onclick="document.getElementById('tile-panel').classList.remove('visible')">×</button>
+    </div>
+    <div class="tp-body">${body}</div>`;
+
+  panel.classList.remove('visible');
+  // Force reflow so animation replays each time
+  void panel.offsetWidth;
+  panel.classList.add('visible');
+}
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+function addLog(html) {
+  if (fogMode) return; // suppress roll log in fog mode (player can't see the future)
+  const logEl = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'entry'; div.innerHTML = html;
+  logEl.prepend(div);
+}
+
+// Run one attempt's hex placement synchronously (for fog mode)
+function runAttempt() {
+  const startDir = Math.floor(Math.random() * 6);
+  placeHex(0, 0, 'start', new Set([startDir]));
+  pushFrontier(DIRS[startDir].q, DIRS[startDir].r, 0, 0);
+  while (frontier.length) processStep();
+}
+
+// Wipe hex visuals + state for a fresh retry (doesn't touch UI log or panel)
+function resetVisuals() {
+  placed.clear(); frontier=[]; typesRolled.clear(); doorMap.clear();
+  featureMap.clear(); featureElements.clear();
+  revealedSet.clear(); fogFrontierSet.clear(); fogPolygons.clear();
+  const lFog = document.getElementById('layer-fog');
+  while (lFog.firstChild) lFog.firstChild.remove();
+  const lf = document.getElementById('layer-features');
+  while (lf.firstChild) lf.firstChild.remove();
+  [lFill,lWalls,lLabels].forEach(l=>{ while(l.firstChild) l.firstChild.remove(); });
+}
+
+function startGeneration() {
+  if (generating) return;
+  clearAll();
+  generating = true;
+  document.getElementById('btn-gen').disabled = true;
+
+  if (fogMode) {
+    // Generate entire dungeon synchronously, then apply fog
+    let attempts = 0;
+    do {
+      if (attempts > 0) resetVisuals();
+      runAttempt();
+      attempts++;
+    } while (!typesRolled.has(6) && attempts < 40);
+
+    if (!typesRolled.has(6)) {
+      const logEl = document.getElementById('log');
+      logEl.innerHTML = '<em style="color:#c04020">Could not place stairway — try again</em>';
+      generating = false;
+      document.getElementById('btn-gen').disabled = false;
+      return;
+    }
+    generating = false;
+    document.getElementById('btn-gen').disabled = false;
+    applyFog();
+    return;
+  }
+
+  // Normal animated mode
+  const startDir = Math.floor(Math.random() * 6);
+  placeHex(0, 0, 'start', new Set([startDir]));
+  addLog('<span class="type">Start</span>');
+  pushFrontier(DIRS[startDir].q, DIRS[startDir].r, 0, 0);
+  stepTimer = setTimeout(processOne, STEP_MS);
+}
+
+function done() {
+  if (!typesRolled.has(6)) {
+    addLog('<em style="color:#666">No stairway — retrying…</em>');
+    generating = false;
+    startGeneration();
+    return;
+  }
+  generating = false;
+  document.getElementById('btn-gen').disabled = false;
+  addLog('<strong style="color:#b05828">— Done —</strong>');
+}
+
+function clearAll() {
+  if (stepTimer) clearTimeout(stepTimer);
+  stepTimer = null; generating = false;
+  document.getElementById('tile-panel').classList.remove('visible');
+  resetVisuals();
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('btn-gen').disabled = false;
+}
+
+// ─── Fog mode ─────────────────────────────────────────────────────────────────
+function toggleFogMode() {
+  fogMode = !fogMode;
+  const btn = document.getElementById('btn-fog');
+  btn.textContent = fogMode ? '★ Fog: ON' : '☁ Fog: OFF';
+  btn.classList.toggle('btn-fog-on', fogMode);
+}
+
+function drawFogTile(q, r, isFrontier) {
+  const k = key(q, r);
+  const old = fogPolygons.get(k);
+  if (old) old.remove();
+
+  const {x, y} = hexToPixel(q, r);
+  const v = verts(x, y);
+  const pts = v.map(p=>`${p.x},${p.y}`).join(' ');
+  const lFog = document.getElementById('layer-fog');
+  const g = ns('g');
+
+  const bg = ns('polygon');
+  bg.setAttribute('points', pts);
+  bg.setAttribute('fill', isFrontier ? '#111122' : '#0c0c12');
+  g.appendChild(bg);
+
+  if (isFrontier) {
+    const border = ns('polygon');
+    border.setAttribute('points', pts);
+    border.setAttribute('fill', 'none');
+    border.setAttribute('stroke', '#282848');
+    border.setAttribute('stroke-width', 2.5);
+    g.appendChild(border);
+
+    const qmark = ns('text');
+    qmark.setAttribute('x', x); qmark.setAttribute('y', y);
+    qmark.setAttribute('font-family', 'monospace');
+    qmark.setAttribute('font-size', SIZE * 0.38);
+    qmark.setAttribute('fill', '#2a2a55');
+    qmark.setAttribute('text-anchor', 'middle');
+    qmark.setAttribute('dominant-baseline', 'middle');
+    qmark.setAttribute('pointer-events', 'none');
+    qmark.style.animation = 'pulse 1.1s ease-in-out infinite alternate';
+    qmark.textContent = '?';
+    g.appendChild(qmark);
+
+    g.style.cursor = 'pointer';
+    g.addEventListener('click', () => { if (!panMoved) revealHex(q, r); });
+  }
+
+  lFog.appendChild(g);
+  fogPolygons.set(k, g);
+}
+
+function revealHex(q, r) {
+  const k = key(q, r);
+  if (revealedSet.has(k)) { showPanel(q, r); return; }
+  revealedSet.add(k);
+  fogFrontierSet.delete(k);
+
+  // Remove fog overlay
+  const fogEl = fogPolygons.get(k);
+  if (fogEl) { fogEl.remove(); fogPolygons.delete(k); }
+
+  // Show panel for this tile
+  showPanel(q, r);
+
+  // Expand fog frontier along open faces
+  const entry = placed.get(k);
+  if (!entry || !entry.openDirs) return;
+  for (const dir of entry.openDirs) {
+    const nq = q + DIRS[dir].q, nr = r + DIRS[dir].r;
+    const nk = key(nq, nr);
+    if (revealedSet.has(nk) || fogFrontierSet.has(nk)) continue;
+    const ne = placed.get(nk);
+    if (!ne || ne.typeKey === '_reserved' || ne.typeKey === 'frontier') continue;
+    fogFrontierSet.add(nk);
+    drawFogTile(nq, nr, true);
+  }
+}
+
+function applyFog() {
+  const startKey = key(0, 0);
+  for (const [k, entry] of placed) {
+    if (entry.typeKey === '_reserved' || entry.typeKey === 'frontier') continue;
+    if (k === startKey) continue;
+    drawFogTile(entry.q, entry.r, false);
+  }
+  revealHex(0, 0); // reveals start and sets up its frontier neighbors
+}
+
+// ─── Export / Import ──────────────────────────────────────────────────────────
+function exportDungeon() {
+  const data = { version: 1, placed: [], features: [], doors: [] };
+  for (const [k, entry] of placed) {
+    if (entry.typeKey === '_reserved' || entry.typeKey === 'frontier') continue;
+    data.placed.push({
+      q: entry.q, r: entry.r,
+      typeKey: entry.typeKey,
+      openDirs: entry.openDirs ? [...entry.openDirs] : []
+    });
+  }
+  for (const [k, feat] of featureMap) data.features.push({ k, feat });
+  for (const [k, type] of doorMap)    data.doors.push({ k, type });
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'dungeon.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importDungeon(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      clearAll();
+      // Restore doors first so getDoor returns correct values during placeHex
+      (data.doors || []).forEach(({k, type}) => doorMap.set(k, type));
+      // Place hexes
+      (data.placed || []).forEach(({q, r, typeKey, openDirs}) => {
+        const od = openDirs && openDirs.length ? new Set(openDirs) : null;
+        placeHex(q, r, typeKey, od);
+      });
+      // Restore features
+      (data.features || []).forEach(({k, feat}) => {
+        featureMap.set(k, feat);
+        const [q, r] = k.split(',').map(Number);
+        drawFeature(q, r, feat);
+      });
+      const logEl = document.getElementById('log');
+      logEl.innerHTML = '<strong style="color:#b05828">— Imported —</strong>';
+      if (fogMode) applyFog();
+    } catch(err) {
+      const logEl = document.getElementById('log');
+      logEl.innerHTML = `<em style="color:#c04020">Import failed: ${err.message}</em>`;
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ─── Touch events (mobile) ────────────────────────────────────────────────────
+let lastTouchDist = null;
+
+function getTouchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+SVG.addEventListener('touchstart', e => {
+  e.preventDefault();
+  panMoved = false;
+  if (e.touches.length === 1) {
+    panning = true;
+    lastTouchDist = null;
+    panStart = {
+      x: e.touches[0].clientX - panX,
+      y: e.touches[0].clientY - panY,
+      ox: e.touches[0].clientX,
+      oy: e.touches[0].clientY
+    };
+  } else if (e.touches.length === 2) {
+    panning = false;
+    lastTouchDist = getTouchDist(e.touches);
+  }
+}, { passive: false });
+
+SVG.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && panning) {
+    const dx = e.touches[0].clientX - panStart.ox;
+    const dy = e.touches[0].clientY - panStart.oy;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) panMoved = true;
+    panX = e.touches[0].clientX - panStart.x;
+    panY = e.touches[0].clientY - panStart.y;
+    applyVP();
+  } else if (e.touches.length === 2 && lastTouchDist !== null) {
+    const dist = getTouchDist(e.touches);
+    const f = dist / lastTouchDist;
+    const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    const rect = SVG.getBoundingClientRect();
+    const mx = cx - rect.left, my = cy - rect.top;
+    panX = mx - (mx - panX) * f;
+    panY = my - (my - panY) * f;
+    zoom = Math.max(0.08, Math.min(zoom * f, 12));
+    applyVP();
+    lastTouchDist = dist;
+    panMoved = true;
+  }
+}, { passive: false });
+
+SVG.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (e.touches.length < 2) lastTouchDist = null;
+  if (e.touches.length === 0) {
+    panning = false;
+  } else if (e.touches.length === 1) {
+    // Transition from pinch back to single-finger pan
+    panStart = {
+      x: e.touches[0].clientX - panX,
+      y: e.touches[0].clientY - panY,
+      ox: e.touches[0].clientX,
+      oy: e.touches[0].clientY
+    };
+    panning = true;
+  }
+}, { passive: false });
+
+window.addEventListener('load', initVP);
+</script>
+</body>
+</html>
