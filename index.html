@@ -42,6 +42,13 @@
             </div>
             <div id="auth-error" class="auth-error" style="display:none;"></div>
             <div id="auth-loading" class="auth-loading" style="display:none;">Signing in...</div>
+
+            <!-- Tutorial entry — no account required -->
+            <div class="auth-tutorial-divider">or</div>
+            <button class="auth-btn-tutorial" onclick="TutorialMode.start()">
+                ▶ Play Tutorial
+                <span class="auth-btn-tutorial-sub">No account needed</span>
+            </button>
         </div>
     </div>
 
@@ -565,6 +572,7 @@
 
     <!-- JavaScript -->
     <script src="js/tutorial.js" charset="UTF-8"></script>
+    <script src="js/tutorial-mode.js" charset="UTF-8"></script>
     <!-- Scroll System (load before main.js) -->
     <script src="js/scrolls/scroll-definitions.js" charset="UTF-8"></script>
     <script src="js/scrolls/effects/scroll-effects.js" charset="UTF-8"></script>

@@ -90,8 +90,6 @@
                         e.preventDefault();
                         if (typeof window !== 'undefined' && window.SHOW_SCROLL_DECK_BROWSER) {
                             showScrollDeckBrowser(element);
-                        } else {
-                            updateStatus('Scroll deck browser is disabled. Use showScrollDeckBrowserUI() to enable.');
                         }
                     });
 
@@ -99,8 +97,6 @@
                     card.addEventListener('click', (e) => {
                         if (typeof window !== 'undefined' && window.SHOW_SCROLL_DECK_BROWSER) {
                             showScrollDeckBrowser(element);
-                        } else {
-                            updateStatus('Scroll deck browser is disabled. Use showScrollDeckBrowserUI() to enable.');
                         }
                     });
                 }
@@ -1327,10 +1323,20 @@
                     // CAN end turn on: void (or empty hex)
                     const cannotEndTurnHere = stoneAtFinal && stoneAtFinal.type !== 'void';
 
+                    // Tutorial gate: only allow movement to the designated hex(es)
+                    const tutorialBlocked = window.isTutorialMode && window.tutorialAllowedHexes &&
+                        ![...window.tutorialAllowedHexes].some(key => {
+                            const [ax, ay] = key.split(',').map(Number);
+                            return Math.abs(ax - finalPos.x) < 70 && Math.abs(ay - finalPos.y) < 70;
+                        });
+
                     if (cannotEndTurnHere) {
                         console.log(`❌ Movement rejected: Cannot end turn on ${stoneAtFinal.type} stone at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)})`);
                         placePlayer(startPos.x, startPos.y);
                         updateStatus('Cannot end movement on a ' + stoneAtFinal.type + ' stone!');
+                    } else if (tutorialBlocked) {
+                        placePlayer(startPos.x, startPos.y);
+                        if (window.TutorialMode) window.TutorialMode.showMovementHint();
                     } else if (moveCheck.canMove && totalCost <= getTotalAP()) {
                         console.log(`✅ Movement successful: ${playerPath.length - 1} hexes, cost ${totalCost} AP`);
                         // Store the last move for undo
@@ -1340,6 +1346,10 @@
                             apCost: totalCost
                         };
                         placePlayer(finalPos.x, finalPos.y);
+                        // Notify tutorial that the player has moved
+                        if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
+                            window.TutorialMode.onPlayerMoved(finalPos.x, finalPos.y);
+                        }
                         // Update Steam Vents alternation state before spending AP
                         if (typeof commitSteamVentsState === 'function') commitSteamVentsState(playerPath);
                         spendAP(totalCost); // Use void AP first, then regular AP

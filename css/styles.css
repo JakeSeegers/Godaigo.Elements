@@ -1607,6 +1607,16 @@ svg {
    TUTORIAL MODAL SYSTEM
    ========================================== */
 
+/* Animated highlight ring drawn on the SVG board during tutorial */
+@keyframes tutorial-ring-pulse {
+    0%   { stroke-opacity: 1;    r: 58; }
+    50%  { stroke-opacity: 0.45; r: 66; }
+    100% { stroke-opacity: 1;    r: 58; }
+}
+.tutorial-highlight-ring {
+    animation: tutorial-ring-pulse 1.4s ease-in-out infinite;
+}
+
 .tutorial-modal {
     position: fixed;
     top: 0; left: 0;
@@ -2844,6 +2854,52 @@ label, .hud-ap-label, .hud-ap-value {
     font-size: 22px;
     color: var(--accent-gold);
     text-align: center;
+}
+
+/* Tutorial divider + button on auth screen */
+.auth-tutorial-divider {
+    text-align: center;
+    color: var(--text-muted, #666);
+    font-family: var(--font-terminal);
+    font-size: 18px;
+    margin: 14px 0 10px;
+    position: relative;
+}
+.auth-tutorial-divider::before,
+.auth-tutorial-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: var(--border-subtle, #444);
+}
+.auth-tutorial-divider::before { left: 0; }
+.auth-tutorial-divider::after  { right: 0; }
+
+.auth-btn-tutorial {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 12px 16px;
+    font-family: var(--font-terminal);
+    font-size: 24px;
+    background: #1e3a1e;
+    color: #69d83a;
+    border: 2px solid #69d83a;
+    border-radius: var(--radius-sm, 4px);
+    box-shadow: 3px 3px 0 #000;
+    cursor: crosshair;
+    transition: transform 0.05s, box-shadow 0.05s, background 0.15s;
+}
+.auth-btn-tutorial:hover   { background: #254d25; }
+.auth-btn-tutorial:active  { transform: translate(3px,3px); box-shadow: none; transition: none; }
+.auth-btn-tutorial-sub {
+    font-size: 13px;
+    opacity: 0.65;
+    font-family: var(--font-ui, sans-serif);
 }
 
 

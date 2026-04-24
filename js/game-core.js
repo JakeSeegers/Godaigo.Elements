@@ -2761,6 +2761,17 @@
         }
 
         function initializeDeck(numPlayers = 1, seed = null) {
+            // Tutorial mode: use a fixed deck order so earth lands at the center position
+            if (window.tutorialDeckOverride) {
+                tileDeck = [...window.tutorialDeckOverride];
+                window.tutorialDeckOverride = null;
+                deckIndex = 0;
+                const countEl = document.getElementById('deck-count');
+                if (countEl) countEl.textContent = `0/${tileDeck.length}`;
+                console.log('🎓 Tutorial deck applied:', tileDeck.join(', '));
+                return;
+            }
+
             const shrineTypes = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
             const tilesPerType = numPlayers; // 1 of each type per player
 
@@ -4540,6 +4551,11 @@
                 addAP(1);
             }
 
+            // Tutorial hook: let tutorial pre-arrange the scroll deck before we draw
+            if (window.isTutorialMode && window.TutorialMode?.onTileRevealed) {
+                window.TutorialMode.onTileRevealed(tile, spellSystem);
+            }
+
             // Scroll discovery: use effective element (Wandering River) so transformed tiles give the chosen element's scroll
             const effectiveType = spellSystem.scrollEffects?.getEffectiveTileElement?.(tile) ?? tile.shrineType;
             const scrollInfo = spellSystem.onTileRevealed(effectiveType);
@@ -4584,6 +4600,9 @@
         // Expose placePlayer and movePlayerVisually for scroll effects (e.g. Take Flight)
         window.placePlayer = placePlayer;
         window.movePlayerVisually = movePlayerVisually;
+        // Expose placeTile and spellSystem for tutorial mode
+        window.placeTile  = placeTile;
+        window.spellSystem = spellSystem;
         // Expose tileMoveMode for scroll effects (e.g. Telekinesis)
         Object.defineProperty(window, 'tileMoveMode', {
             get() { return tileMoveMode; },
