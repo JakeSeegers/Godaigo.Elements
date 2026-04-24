@@ -427,30 +427,55 @@ const ScrollEffects = {
 
         /**
          * Water Scroll II - Refreshing Thought
-         * Discard a scroll to common area, draw a scroll of that type.
+         * Draw a Catacomb scroll.
          */
         WATER_SCROLL_2: {
             name: 'Refreshing Thought',
-            description: 'Discard a scroll to the common area, then draw a scroll of that element type.',
+            description: 'Draw a Catacomb scroll.',
             isCounter: false,
             priority: 2,
 
             execute(casterIndex, context, system) {
                 console.log(`💧 Refreshing Thought activated by player ${casterIndex}`);
 
-                // If triggered via Psychic on a non-caster client, skip interactive UI
-                if (context?.psychicRemoteClient) {
-                    console.log(`💧 Refreshing Thought: skipping discard UI on non-caster remote client`);
-                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                // Draw a catacomb scroll from the catacomb deck
+                let drawnScroll = null;
+                if (system.spellSystem && typeof system.spellSystem.drawFromDeck === 'function') {
+                    drawnScroll = system.spellSystem.drawFromDeck('catacomb');
                 }
 
-                // Enter scroll selection mode
-                system.enterScrollDiscardMode(casterIndex, 'refreshing-thought');
+                if (drawnScroll) {
+                    system.spellSystem.ensurePlayerScrollsStructure(casterIndex);
+                    system.spellSystem.playerScrolls[casterIndex].hand.add(drawnScroll);
+                    system.spellSystem.updateScrollCount();
+
+                    const drawnDef = system.spellSystem.patterns?.[drawnScroll];
+                    const drawnName = drawnDef?.name || drawnScroll;
+                    console.log(`💧 Refreshing Thought: drew ${drawnName} from catacomb deck`);
+
+                    // Broadcast in multiplayer so other clients update their deck/hand state
+                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                        broadcastGameAction('scroll-collected', {
+                            playerIndex: casterIndex,
+                            scrollName: drawnScroll,
+                            shrineType: 'catacomb'
+                        });
+                    }
+
+                    if (typeof updateScrollDeckUI === 'function') {
+                        try { updateScrollDeckUI(); } catch (e) {}
+                    }
+
+                    updateStatus(`Drew a Catacomb scroll: ${drawnName}!`);
+                } else {
+                    console.log(`💧 Refreshing Thought: no catacomb scrolls left in deck`);
+                    updateStatus('No Catacomb scrolls left in deck!');
+                }
 
                 return {
                     success: true,
-                    requiresSelection: true,
-                    message: 'Select a scroll to discard...'
+                    requiresSelection: false,
+                    message: drawnScroll ? `Drew a Catacomb scroll!` : 'No Catacomb scrolls left in deck.'
                 };
             }
         },
@@ -675,6 +700,17 @@ const ScrollEffects = {
                 if (context?.psychicRemoteClient) {
                     console.log(`🔥 Sacrificial Pyre: skipping sacrifice UI on non-caster remote client`);
                     return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
+                // Check if player has any scrolls in hand to sacrifice
+                const playerScrolls = system.spellSystem
+                    ? system.spellSystem.playerScrolls?.[casterIndex]
+                    : null;
+                if (!playerScrolls || playerScrolls.hand.size === 0) {
+                    console.log(`🔥 Sacrificial Pyre: no scrolls in hand — cancelling`);
+                    if (typeof updateStatus === 'function') updateStatus('No scrolls in hand to sacrifice!');
+                    // cancelled: true prevents win-condition tracking in applyScrollEffects
+                    return { success: false, requiresSelection: false, cancelled: true, message: 'No scrolls to sacrifice!' };
                 }
 
                 // Enter scroll selection mode for sacrificial activation
@@ -2303,7 +2339,7 @@ const ScrollEffects = {
             // Currently hidden -> reveal it
             if (typeof revealTile === 'function') {
                 revealTile(tile.id);
-                updateStatus(`Revealed ${tile.shrineType} shrine!`);
+                // revealTile() sets its own status (including AP bonus message for catacomb tiles)
             } else {
                 // Manual reveal
                 tile.flipped = false;
@@ -3361,50 +3397,6 @@ const ScrollEffects = {
         // Reset cursor
         stone.element.style.cursor = '';
         stone.element.style.pointerEvents = '';
-    },
-
-    // Water II - Refreshing Thought: Discard a scroll to draw another
-    enterScrollDiscardMode(casterIndex, mode) {
-        const self = this;
-
-        // Get player's scrolls
-        const playerScrolls = this.spellSystem?.playerScrolls?.[casterIndex];
-        if (!playerScrolls || playerScrolls.hand.size === 0) {
-            updateStatus('No scrolls to discard!');
-            return;
-        }
-
-        // Create scroll selection UI
-        const scrollArray = Array.from(playerScrolls.hand);
-        this.showScrollSelectionModal(scrollArray, 'Select a scroll to discard:', (selectedScroll) => {
-            // Get scroll element type
-            const scrollDef = this.spellSystem?.patterns?.[selectedScroll];
-            const element = scrollDef?.element;
-
-            // Remove from hand, add to common area using proper method
-            playerScrolls.hand.delete(selectedScroll);
-            if (this.spellSystem.discardToCommonArea) {
-                this.spellSystem.discardToCommonArea(selectedScroll);
-            }
-
-            // Draw a new scroll of the same element from the deck
-            let newScroll = null;
-            if (element && this.spellSystem?.scrollDecks?.[element]?.length > 0) {
-                newScroll = this.spellSystem.scrollDecks[element].pop();
-            }
-
-            if (newScroll) {
-                playerScrolls.hand.add(newScroll);
-                updateStatus(`Discarded ${scrollDef?.name || selectedScroll}. Drew a new ${element} scroll!`);
-            } else {
-                updateStatus(`Discarded ${scrollDef?.name || selectedScroll}. No ${element} scrolls left in deck!`);
-            }
-
-            // Update UI
-            if (this.spellSystem?.updateScrollCount) {
-                this.spellSystem.updateScrollCount();
-            }
-        });
     },
 
     // Water III - Inspiring Draught: Select 1 deck, draw 2 from it, add to hand, then show ALL scrolls

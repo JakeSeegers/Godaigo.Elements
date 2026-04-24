@@ -69,7 +69,7 @@ const EARTH_SCROLL_EFFECTS = {
 // Water scroll effect definitions
 const WATER_SCROLL_EFFECTS = {
     1: { name: 'Reflect', description: 'Duplicate the effect of the scroll that was last cast this turn.', isResponse: true },
-    2: { name: 'Refreshing Thought', description: 'Discard a scroll to the common area, then draw a scroll of that element type.' },
+    2: { name: 'Refreshing Thought', description: 'Draw a Catacomb scroll.' },
     3: { name: 'Inspiring Draught', description: 'Draw 2 scrolls from any decks, then put 1 back and shuffle that deck.' },
     4: { name: 'Wandering River', description: 'Select a tile. Until your next turn, that tile counts as any element type you choose.' },
     5: { name: 'Control the Current', description: 'Click adjacent water stones to transform them into any other element (free, no AP cost).' }

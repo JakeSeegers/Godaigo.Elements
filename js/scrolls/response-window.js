@@ -134,10 +134,16 @@ class ResponseWindowSystem {
         }
 
         // Quick check: can any non-caster player actually respond?
-        // Skip the response window entirely if no one has valid counter/response scrolls.
-        // This prevents the "waiting for players" screen from getting stuck when
-        // no opponent can respond (e.g. passes are lost or delayed in multiplayer).
-        if (!this.canAnyPlayerRespond(casterIndex)) {
+        // In SINGLE-PLAYER we skip the response window when no one can respond.
+        // In MULTIPLAYER we do NOT skip here — this check runs on the caster's client
+        // using its local snapshot of opponent scroll state, which can lag behind due
+        // to in-flight `scroll-move` broadcasts. Skipping would block valid Iron Stance
+        // counters that arrived just before the winning scroll was cast.
+        // Each non-caster client already checks their own state locally inside
+        // showResponseModalForOtherPlayer() and auto-passes instantly if they can't
+        // respond, so no one is ever stuck waiting.
+        const _inMultiplayer = typeof isMultiplayer !== 'undefined' && isMultiplayer;
+        if (!_inMultiplayer && !this.canAnyPlayerRespond(casterIndex)) {
             console.log('Response window skipped - no player can respond (no valid counter/response scrolls)');
             if (onComplete) onComplete({ skipped: true, responses: [] });
             return;

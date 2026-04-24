@@ -1655,6 +1655,11 @@
                         ['earth', 'water', 'fire', 'wind', 'void'].forEach(t => updateStoneCount(t));
 
                         // Track activated element(s) for win condition regardless of effect result
+                        // (but skip if the effect was cancelled, e.g. Sacrificial Pyre with empty hand)
+                        if (result.cancelled) {
+                            console.log(`📜 Effect cancelled — skipping win-condition tracking for ${name}`);
+                            return;
+                        }
                         if (spell.element === 'catacomb' && spell.patterns && spell.patterns[0]) {
                             // Catacomb scrolls activate each component element
                             const elements = new Set(spell.patterns[0].map(pos => pos.type));
@@ -4528,6 +4533,13 @@
             tile.flipped = false;
             tile.element = tileGroup;
 
+            // Catacomb tile reveal: refund 1 AP
+            const isCatacombReveal = tile.shrineType === 'catacomb';
+            if (isCatacombReveal) {
+                console.log(`⚡ Catacomb tile revealed — refunding 1 AP`);
+                addAP(1);
+            }
+
             // Scroll discovery: use effective element (Wandering River) so transformed tiles give the chosen element's scroll
             const effectiveType = spellSystem.scrollEffects?.getEffectiveTileElement?.(tile) ?? tile.shrineType;
             const scrollInfo = spellSystem.onTileRevealed(effectiveType);
@@ -4546,14 +4558,15 @@
                 }
             }
 
+            const apBonus = isCatacombReveal ? ' +1 AP!' : '';
             if (scrollInfo && ctaDrawn > 0) {
-                updateStatus(`Revealed ${effectiveType} shrine! Found ${scrollInfo.name}! Call to Adventure: +${ctaDrawn} ${effectiveType} stone${ctaDrawn > 1 ? 's' : ''}!`);
+                updateStatus(`Revealed ${effectiveType} shrine! Found ${scrollInfo.name}! Call to Adventure: +${ctaDrawn} ${effectiveType} stone${ctaDrawn > 1 ? 's' : ''}!${apBonus}`);
             } else if (scrollInfo) {
-                updateStatus(`Revealed ${effectiveType} shrine! Found ${scrollInfo.name}!`);
+                updateStatus(`Revealed ${effectiveType} shrine! Found ${scrollInfo.name}!${apBonus}`);
             } else if (ctaDrawn > 0) {
-                updateStatus(`Revealed ${effectiveType} shrine! Call to Adventure: +${ctaDrawn} ${effectiveType} stone${ctaDrawn > 1 ? 's' : ''}!`);
+                updateStatus(`Revealed ${effectiveType} shrine! Call to Adventure: +${ctaDrawn} ${effectiveType} stone${ctaDrawn > 1 ? 's' : ''}!${apBonus}`);
             } else {
-                updateStatus(`Revealed ${effectiveType} shrine!`);
+                updateStatus(`Revealed ${effectiveType} shrine!${apBonus}`);
             }
 
             // Re-apply Wandering River indicator on the new element (reveal replaced tile.element)

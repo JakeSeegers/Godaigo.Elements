@@ -256,6 +256,20 @@ document.addEventListener('DOMContentLoaded', () => {
                                     activatedElements: activatedElements
                                 });
                             }
+
+                            // Win-condition check for the counter-caster (e.g. Iron Stance is
+                            // Player B's 5th scroll). The caster's client (which runs resolveResponseStack)
+                            // doesn't receive its own scroll-effect broadcast (self: false), so we must
+                            // check here. The receiving client also checks via the scroll-effect handler.
+                            if (spellSystem.playerScrolls[counterCasterIdx].activated.size === 5) {
+                                console.log(`🏆 Win condition met for counter-caster player ${counterCasterIdx} (Iron Stance / counter scroll)`);
+                                if (typeof spellSystem.showLevelComplete === 'function') {
+                                    spellSystem.showLevelComplete(counterCasterIdx);
+                                }
+                                if (typeof handleGameOver === 'function') {
+                                    handleGameOver(counterCasterIdx);
+                                }
+                            }
                         }
                     }
                     // Check if the effect flagged this scroll to go to common area (e.g. Psychic)

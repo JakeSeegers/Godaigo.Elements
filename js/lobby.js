@@ -349,7 +349,13 @@
                 .eq('game_id', gameId)
                 .order('created_at', { ascending: true });
             isHost = all?.[0]?.id === myPlayerId;
+            // Host is implicitly ready — their action is clicking Start, not toggling ready
+            if (isHost) {
+                localReadyState = true;
+                await supabase.from('players').update({ is_ready: true }).eq('id', myPlayerId);
+            }
             document.getElementById('ready-controls').style.display = 'block';
+            updateReadyButton(localReadyState);
             subscribeToLobby();
             updateHeartbeat();
             startLobbyPoll();
@@ -647,11 +653,18 @@
                 // We're host if we're the first player (by creation time)
                 isHost = allPlayersAfterInsert && allPlayersAfterInsert[0].id === myPlayerId;
 
+                // Host is implicitly ready — their action is clicking Start, not toggling ready
+                if (isHost) {
+                    localReadyState = true;
+                    await supabase.from('players').update({ is_ready: true }).eq('id', myPlayerId);
+                }
+
                 console.log('✅ Joined lobby as:', username, 'ID:', myPlayerId, isHost ? '(HOST)' : '');
 
                 // Hide join form, show ready controls
                 document.getElementById('join-form').style.display = 'none';
                 document.getElementById('ready-controls').style.display = 'block';
+                updateReadyButton(localReadyState);
 
                 // Start listening for updates
                 subscribeToLobby();
@@ -955,6 +968,12 @@
         function updateReadyButton(isReady) {
             const readyButton = document.getElementById('ready-button');
             if (!readyButton) return;
+            // The host's action is starting the game, not toggling ready — hide it for them
+            if (isHost) {
+                readyButton.style.display = 'none';
+                return;
+            }
+            readyButton.style.display = '';
             if (isReady) {
                 readyButton.textContent = '✓ Ready';
                 readyButton.style.background = '#4CAF50';
@@ -1244,12 +1263,8 @@
                 const hostSettings = document.getElementById('host-settings');
                 const totalCount = players.length;
 
-                // Host must also click "I'm Ready!" before the Start Game button appears,
-                // so the game can't start while the host is AFK or not yet prepared.
-                const hostPlayerData = players.find(p => p.id === myPlayerId);
-                const hostIsReady = hostPlayerData?.is_ready ?? false;
-
-                if (isHost && totalCount >= 2 && totalCount <= 5 && hostIsReady) {
+                // Host settings (and Start button) appear as soon as there are enough players
+                if (isHost && totalCount >= 2 && totalCount <= 5) {
                     hostSettings.style.display = 'block';
                 } else {
                     hostSettings.style.display = 'none';
@@ -1264,11 +1279,11 @@
                 } else if (totalCount > 5) {
                     statusDiv.textContent = 'Too many players! Maximum is 5.';
                     statusDiv.style.color = '#f44336';
-                } else if (isHost && !hostIsReady) {
-                    statusDiv.textContent = `${totalCount} players in lobby. Click "I\'m Ready!" to reveal the Start button.`;
-                    statusDiv.style.color = '#FF9800';
+                } else if (isHost) {
+                    statusDiv.textContent = `${totalCount} players in lobby. Ready to start!`;
+                    statusDiv.style.color = '#4CAF50';
                 } else {
-                    statusDiv.textContent = `${totalCount} players in lobby. Host can start the game!`;
+                    statusDiv.textContent = `${totalCount} players in lobby. Waiting for host to start...`;
                     statusDiv.style.color = '#4CAF50';
                 }
                 
@@ -2535,29 +2550,23 @@
                                 console.log(`ℹ️ Skipping response effect for ${result.scrollName} (responder is player ${result.casterIndex}, I am ${myPlayerIndex})`);
                             }
                         } else if (result.result === 'countered-original') {
-                            // Counter scroll (like Psychic) — execute its effect on this
-                            // client so the counter-caster gets psychicPending / buffs set.
+                            // Counter scroll (like Psychic or Iron Stance) resolved on the non-caster client.
+                            //
+                            // DO NOT re-execute the counter scroll's effect here.
+                            // The flow is:
+                            //   1. Caster's client runs resolveResponseStack() → fires scroll-resolved event
+                            //   2. multiplayer-state.js listener executes the counter effect (e.g. Psychic)
+                            //      and broadcasts psychic-buff-applied / scroll-effect
+                            //   3. Non-caster clients receive those broadcasts and apply state (psychicPending, etc.)
+                            //
+                            // Re-executing here caused a double psychicPending entry for the counter-caster,
+                            // which made the stolen scroll fire TWICE on the counter-caster's next turn —
+                            // appearing as if the original caster's scroll ability was still activating.
                             console.log(`ℹ️ Processing remote counter scroll: ${result.scrollName}, counter-caster: ${result.casterIndex}`);
-                            if (spellSystem.scrollEffects) {
-                                const scrollDef = spellSystem.patterns?.[result.scrollName];
-                                const trigScroll = { ...payload.triggeringScroll };
-                                if (!trigScroll.definition && trigScroll.name) {
-                                    trigScroll.definition = spellSystem.patterns?.[trigScroll.name];
-                                }
-                                spellSystem.scrollEffects.execute(result.scrollName, result.casterIndex, {
-                                    spell: scrollDef,
-                                    scrollName: result.scrollName,
-                                    triggeringScroll: trigScroll
-                                });
-                                // Clear pendingForceCommonArea — the caster's client
-                                // already called discardToCommonArea and broadcast the
-                                // common-area-update, so we must NOT call it again here.
-                                if (spellSystem.scrollEffects.pendingForceCommonArea?.scrollName === result.scrollName) {
-                                    delete spellSystem.scrollEffects.pendingForceCommonArea;
-                                }
-                            }
+
                             // If this is MY counter scroll, remove it from my active scrolls.
-                            // (The common area update arrives separately via common-area-update broadcast.)
+                            // Psychic goes to common area (arrives via common-area-update broadcast from caster).
+                            // Iron Stance stays in active (nothing to remove).
                             if (result.casterIndex === myPlayerIndex) {
                                 spellSystem.ensurePlayerScrollsStructure(myPlayerIndex);
                                 const myScrolls = spellSystem.playerScrolls[myPlayerIndex];
