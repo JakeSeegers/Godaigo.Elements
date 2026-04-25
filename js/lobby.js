@@ -3436,7 +3436,7 @@
                         <image href="${STONE_TYPES[type].img}" x="8" y="8" width="24" height="24" style="mix-blend-mode:screen"/>
                     </svg>
                     <div class="stone-count">${playerPool[type]}/${stoneCapacity}</div>
-                    <div class="source-count">${stoneCounts[type]}/${Object.keys(shuffledDeck).filter(key => shuffledDeck[key].stoneType === type).length}</div>
+                    <div class="source-count">${stoneCounts[type]}/25</div>
                 `;
 
                 stoneItem.addEventListener('touchstart', (e) => {

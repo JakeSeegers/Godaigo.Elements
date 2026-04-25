@@ -326,6 +326,22 @@ const TutorialMode = (function () {
     // ── Board setup ───────────────────────────────────────────────────────────
 
     function start() {
+        // ── HELLO WORLD TEST ─────────────────────────────────────────────────────
+        const hw = document.createElement('div');
+        hw.style.cssText = [
+            'position:fixed','top:50%','left:50%',
+            'transform:translate(-50%,-50%)',
+            'background:#222','color:#fff',
+            'border:3px solid #d9b08c',
+            'padding:40px 60px','font-size:28px',
+            'z-index:99999','border-radius:8px',
+            'font-family:monospace','text-align:center'
+        ].join(';');
+        hw.innerHTML = 'Hello World<br><small style="font-size:14px;color:#aaa">tutorial-mode.js is running</small>';
+        document.body.appendChild(hw);
+        setTimeout(() => hw.remove(), 3000);
+        // ─────────────────────────────────────────────────────────────────────────
+
         window.isTutorialMode       = true;
         window.tutorialDeckOverride = [...TUTORIAL_DECK];
         earthRevealed = false;
@@ -333,10 +349,9 @@ const TutorialMode = (function () {
 
         const sg = window.startGame || (typeof startGame !== 'undefined' ? startGame : null);
         if (typeof sg === 'function') {
-            sg(1);
+            try { sg(1); } catch(e) { console.error('TutorialMode: startGame() threw:', e); }
         } else {
             console.error('TutorialMode: startGame() not found — cannot launch tutorial.');
-            return;
         }
         // Give the game a moment to finish rendering the board before placing tutorial pieces
         setTimeout(setupBoard, 400);
