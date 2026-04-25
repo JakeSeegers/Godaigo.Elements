@@ -1617,6 +1617,49 @@ svg {
     animation: tutorial-ring-pulse 1.4s ease-in-out infinite;
 }
 
+/* ── Spotlight system ──────────────────────────────────── */
+
+/* Full-screen dim that blocks all clicks except on the spotlit element */
+.tutorial-blocking-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.62);
+    z-index: 2490;
+    pointer-events: all;
+}
+
+/* The spotlit element floats above the overlay and pulses */
+@keyframes tutorial-spotlight-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px #d9b08c, 0 0 18px 4px rgba(217,176,140,0.5); }
+    50%       { box-shadow: 0 0 0 3px #d9b08c, 0 0 30px 8px rgba(217,176,140,0.8); }
+}
+.tutorial-spotlight {
+    position: relative !important;
+    z-index: 2510 !important;
+    pointer-events: all !important;
+    border-radius: 4px;
+    animation: tutorial-spotlight-pulse 1.4s ease-in-out infinite;
+}
+
+/* Corner-positioned modal (no overlay, floats over board) */
+.tutorial-modal.tutorial-corner {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    background: none;
+    pointer-events: none;
+    z-index: 2520;
+}
+.tutorial-modal.tutorial-corner .tutorial-content {
+    pointer-events: all;
+    background: var(--bg-panel, #2a2a2a);
+    border: 2px solid var(--accent-gold, #d9b08c);
+    border-radius: 8px;
+    padding: 18px 22px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+}
+
 .tutorial-modal {
     position: fixed;
     top: 0; left: 0;
