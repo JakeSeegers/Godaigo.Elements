@@ -3288,7 +3288,10 @@
             updateIsMobile();
             window.addEventListener('resize', updateIsMobile);
             try { window.matchMedia('(max-width: 768px)').addEventListener('change', updateIsMobile); } catch (e) {}
-}
+        }
+
+        // Expose startGame globally so tutorial-mode.js can call it without auth
+        window.startGame = startGame;
 
         // Mobile UI initialization and tab switching
         function initializeMobileUI() {

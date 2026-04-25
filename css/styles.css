@@ -1624,7 +1624,7 @@ svg {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.62);
-    z-index: 2490;
+    z-index: 8600;
     pointer-events: all;
 }
 
@@ -1635,7 +1635,7 @@ svg {
 }
 .tutorial-spotlight {
     position: relative !important;
-    z-index: 2510 !important;
+    z-index: 8620 !important;
     pointer-events: all !important;
     border-radius: 4px;
     animation: tutorial-spotlight-pulse 1.4s ease-in-out infinite;
@@ -1649,7 +1649,7 @@ svg {
     display: flex;
     background: none;
     pointer-events: none;
-    z-index: 2520;
+    z-index: 8640;
 }
 .tutorial-modal.tutorial-corner .tutorial-content {
     pointer-events: all;
@@ -1668,7 +1668,7 @@ svg {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 2500;
+    z-index: 8610;
     opacity: 0;
     transition: opacity 0.25s ease;
 }
@@ -1729,6 +1729,23 @@ svg {
 
 .tutorial-header h3 {
     margin-top: 8px;
+}
+
+.tmode-exit {
+    background: none;
+    border: none;
+    color: var(--text-muted, #666);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    line-height: 1;
+    margin-left: auto;
+    transition: color 0.15s, background 0.15s;
+}
+.tmode-exit:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.08);
 }
 
 .tutorial-close {

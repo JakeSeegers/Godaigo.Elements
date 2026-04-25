@@ -331,35 +331,43 @@ const TutorialMode = (function () {
         earthRevealed = false;
         currentStep   = -1;
 
-        if (typeof startGame === 'function') {
-            startGame(1);
+        const sg = window.startGame || (typeof startGame !== 'undefined' ? startGame : null);
+        if (typeof sg === 'function') {
+            sg(1);
         } else {
-            console.error('TutorialMode: startGame() not found');
+            console.error('TutorialMode: startGame() not found — cannot launch tutorial.');
             return;
         }
-        setTimeout(setupBoard, 200);
+        // Give the game a moment to finish rendering the board before placing tutorial pieces
+        setTimeout(setupBoard, 400);
     }
 
     function setupBoard() {
-        if (typeof window.placeTile !== 'function') {
-            console.error('TutorialMode: window.placeTile not exposed');
-            return;
+        // Always show the first modal step regardless of board-setup success
+        try {
+            if (typeof window.placeTile !== 'function') {
+                console.warn('TutorialMode: window.placeTile not available — skipping pawn placement.');
+            } else {
+                // Auto-place player pawn and a cosmetic opponent pawn
+                window.placeTile(PLAYER_POS.x, PLAYER_POS.y, 0, false, 'player', true, true);
+                window.placeTile(ENEMY_POS.x,  ENEMY_POS.y,  0, false, 'player', true, true);
+            }
+
+            // Hide the player-tile panel — auto-placement means they don't need to drag
+            ['new-player-tile-deck', 'player-tile-deck'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+
+            // Prime earth deck so the player always draws Earth V from the earth shrine
+            primeEarthDeck(window.spellSystem);
+
+            if (typeof fitBoardToView === 'function') fitBoardToView();
+        } catch (err) {
+            console.error('TutorialMode: board setup error (non-fatal):', err);
         }
 
-        // Auto-place pawns (bypass the drag-from-panel flow)
-        window.placeTile(PLAYER_POS.x, PLAYER_POS.y, 0, false, 'player', true, true);
-        window.placeTile(ENEMY_POS.x,  ENEMY_POS.y,  0, false, 'player', true, true);
-
-        // Hide the player-tile panel — placement is done
-        ['new-player-tile-deck', 'player-tile-deck'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
-        });
-
-        // Prime earth deck so player always draws Earth V
-        primeEarthDeck(window.spellSystem);
-
-        if (typeof fitBoardToView === 'function') fitBoardToView();
+        // Show first tutorial step — this must always run
         showStep(0);
     }
 
@@ -469,6 +477,7 @@ const TutorialMode = (function () {
                 <div class="tutorial-header">
                     <span class="tutorial-step-label">Step ${currentStep + 1} of ${STEPS.length}</span>
                     <h3 class="tutorial-title">${step.title}</h3>
+                    <button class="tmode-exit" title="Exit tutorial">✕</button>
                 </div>
                 <div class="tutorial-body">${step.content}</div>
                 <div class="tutorial-footer"
@@ -479,10 +488,15 @@ const TutorialMode = (function () {
 
         document.body.appendChild(overlay);
         modalEl = overlay;
+        // Force opacity to 1 immediately; also add the class for the CSS transition
+        overlay.style.opacity = '1';
         requestAnimationFrame(() => overlay.classList.add('tutorial-visible'));
 
         const btn = overlay.querySelector('.tmode-next');
         if (btn) btn.addEventListener('click', advance);
+
+        const exitBtn = overlay.querySelector('.tmode-exit');
+        if (exitBtn) exitBtn.addEventListener('click', finish);
     }
 
     function closeModal() {
