@@ -75,16 +75,18 @@ const TutorialMode = (function () {
         // ── 1 ─────────────────────────────────────────────────────────────────
         {
             id: 'tile-placed',
-            title: 'Your Starting Tile',
-            content: `In a normal game you'd drag your <strong>Player Tile</strong> from the left panel and snap it next to two existing tiles to build the board.
+            title: 'Place Your Starting Tile',
+            content: `See the <strong>hexagonal tile in the left panel?</strong> That's your Player Tile.
                 <div style="margin-top:10px;">
-                    For this tutorial your tile has been <strong>placed automatically</strong> — you're the <strong style="color:#9b59b6;">purple pawn</strong>. The yellow pawn is your opponent.
+                    <strong>Drag it onto the board</strong> and snap it next to the edge of two existing tiles. You'll see a ghost tile showing where it'll land.
                 </div>
                 <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    In multiplayer, turn order is randomly assigned, so you might have to wait for others to place their tiles before you can act.
+                    In multiplayer, turn order is randomly assigned — you may have to wait for others first.
                 </div>`,
-            action: 'read',
-            nextLabel: 'Got it'
+            action: 'place-tile',   // advance fires via onPlayerTilePlaced() hook
+            nextLabel: null,
+            spotlight: '#new-player-tile-deck',
+            modalPos: 'corner'
         },
 
         // ── 2 ─────────────────────────────────────────────────────────────────
@@ -326,22 +328,6 @@ const TutorialMode = (function () {
     // ── Board setup ───────────────────────────────────────────────────────────
 
     function start() {
-        // ── HELLO WORLD TEST ─────────────────────────────────────────────────────
-        const hw = document.createElement('div');
-        hw.style.cssText = [
-            'position:fixed','top:50%','left:50%',
-            'transform:translate(-50%,-50%)',
-            'background:#222','color:#fff',
-            'border:3px solid #d9b08c',
-            'padding:40px 60px','font-size:28px',
-            'z-index:99999','border-radius:8px',
-            'font-family:monospace','text-align:center'
-        ].join(';');
-        hw.innerHTML = 'Hello World<br><small style="font-size:14px;color:#aaa">tutorial-mode.js is running</small>';
-        document.body.appendChild(hw);
-        setTimeout(() => hw.remove(), 3000);
-        // ─────────────────────────────────────────────────────────────────────────
-
         window.isTutorialMode       = true;
         window.tutorialDeckOverride = [...TUTORIAL_DECK];
         earthRevealed = false;
@@ -353,37 +339,25 @@ const TutorialMode = (function () {
         } else {
             console.error('TutorialMode: startGame() not found — cannot launch tutorial.');
         }
-        // Give the game a moment to finish rendering the board before placing tutorial pieces
+        // Give the game a moment to finish rendering before showing step 0
         setTimeout(setupBoard, 400);
     }
 
     function setupBoard() {
-        // Always show the first modal step regardless of board-setup success
         try {
-            if (typeof window.placeTile !== 'function') {
-                console.warn('TutorialMode: window.placeTile not available — skipping pawn placement.');
-            } else {
-                // Auto-place player pawn and a cosmetic opponent pawn
-                window.placeTile(PLAYER_POS.x, PLAYER_POS.y, 0, false, 'player', true, true);
-                window.placeTile(ENEMY_POS.x,  ENEMY_POS.y,  0, false, 'player', true, true);
-            }
-
-            // Hide the player-tile panel — auto-placement means they don't need to drag
-            ['new-player-tile-deck', 'player-tile-deck'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.style.display = 'none';
-            });
-
             // Prime earth deck so the player always draws Earth V from the earth shrine
             primeEarthDeck(window.spellSystem);
-
             if (typeof fitBoardToView === 'function') fitBoardToView();
         } catch (err) {
             console.error('TutorialMode: board setup error (non-fatal):', err);
         }
-
-        // Show first tutorial step — this must always run
         showStep(0);
+    }
+
+    /** Called from game-core.js placeTile() when the local player drops their tile. */
+    function onPlayerTilePlaced() {
+        if (currentStep !== 1) return;   // step 1 = 'tile-placed'
+        setTimeout(() => showStep(2), 600);
     }
 
     function primeEarthDeck(ss) {
@@ -396,22 +370,29 @@ const TutorialMode = (function () {
 
     // ── Spotlight system ──────────────────────────────────────────────────────
 
-    function showSpotlight(selector) {
+    /**
+     * Highlight a UI element.
+     * blocking=true  → also add a full-screen dim overlay that eats all clicks
+     *                  (use for action:'click' steps so only the target is interactive)
+     * blocking=false → just glow the element; board + pawns stay fully interactive
+     *                  (use for action:'move' and action:'place-tile' steps)
+     */
+    function showSpotlight(selector, blocking) {
         clearSpotlight();
         const el = selector ? document.querySelector(selector) : null;
         if (!el) return;
 
-        // Full-screen blocking overlay (sits below the spotlit element)
-        const ov = document.createElement('div');
-        ov.id        = 'tutorial-blocking-overlay';
-        ov.className = 'tutorial-blocking-overlay';
-        // Clicking the overlay itself shows a hint
-        ov.addEventListener('click', () => {
-            if (typeof updateStatus === 'function')
-                updateStatus('Click the highlighted element to continue the tutorial.');
-        });
-        document.body.appendChild(ov);
-        overlayEl = ov;
+        if (blocking) {
+            const ov = document.createElement('div');
+            ov.id        = 'tutorial-blocking-overlay';
+            ov.className = 'tutorial-blocking-overlay';
+            ov.addEventListener('click', () => {
+                if (typeof updateStatus === 'function')
+                    updateStatus('Click the highlighted element to continue the tutorial.');
+            });
+            document.body.appendChild(ov);
+            overlayEl = ov;
+        }
 
         el.classList.add('tutorial-spotlight');
         spotlightEl = el;
@@ -477,10 +458,15 @@ const TutorialMode = (function () {
             ? 'pointer-events:all; max-width:380px; border:2px solid var(--accent-gold,#d9b08c);'
             : 'max-width:460px;';
 
-        const footerHTML = (step.action !== 'move' && step.action !== 'click' && step.nextLabel)
+        const actionHints = {
+            'move':       'Drag your pawn to the glowing tile to continue…',
+            'click':      'Click the highlighted element to continue…',
+            'place-tile': 'Drag your player tile onto the board to continue…',
+        };
+        const footerHTML = (step.nextLabel && !actionHints[step.action])
             ? `<button class="tmode-next">${step.nextLabel}</button>`
-            : step.action === 'click'
-                ? `<span style="color:#aaa;font-size:13px;font-style:italic;">Click the highlighted element to continue…</span>`
+            : step.action in actionHints
+                ? `<span style="color:#aaa;font-size:13px;font-style:italic;">${actionHints[step.action]}</span>`
                 : `<span style="color:#aaa;font-size:13px;font-style:italic;">Complete the action above to continue…</span>`;
 
         const overlay = document.createElement('div');
@@ -542,9 +528,12 @@ const TutorialMode = (function () {
             ]);
         }
 
-        // Spotlight an HTML element
+        // Spotlight an HTML element.
+        // Only block all other interaction for 'click' steps — move/place-tile steps
+        // need the board to stay interactive so the player can drag pawns/tiles.
         if (step.spotlight) {
-            showSpotlight(step.spotlight);
+            const blocking = (step.action === 'click');
+            showSpotlight(step.spotlight, blocking);
             if (step.action === 'click') {
                 attachClickAdvance(step.spotlight);
             }
@@ -599,7 +588,7 @@ const TutorialMode = (function () {
     // ── Public API ────────────────────────────────────────────────────────────
     return {
         start, advance, finish,
-        onTileRevealed, onPlayerMoved, showMovementHint,
+        onTileRevealed, onPlayerMoved, onPlayerTilePlaced, showMovementHint,
         get currentStep() { return currentStep; }
     };
 })();

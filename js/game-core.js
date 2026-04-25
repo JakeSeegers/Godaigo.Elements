@@ -4288,6 +4288,12 @@
                 } else {
                     updateStatus(`Player ${tilePlayerIndex + 1} tile placed!`);
                 }
+
+                // Tutorial hook: advance when the local player places their tile on the board
+                if (!skipMultiplayerLogic &&
+                        window.isTutorialMode && window.TutorialMode?.onPlayerTilePlaced) {
+                    window.TutorialMode.onPlayerTilePlaced();
+                }
             }
 
             return tileId;
