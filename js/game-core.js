@@ -4516,6 +4516,12 @@
                 shrineType: tile.shrineType
             });
 
+            // Tutorial pre-reveal hook: runs BEFORE the visual is built so the
+            // tutorial can override tile.shrineType and the visual + scroll both reflect it.
+            if (window.isTutorialMode && window.TutorialMode?.onTilePreReveal) {
+                window.TutorialMode.onTilePreReveal(tile);
+            }
+
             // Remove the old tile element
             tile.element.remove();
 

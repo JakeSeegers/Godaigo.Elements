@@ -37,7 +37,7 @@ const TutorialMode = (function () {
     let overlayEl         = null;   // blocking dim overlay
     let spotlightEl       = null;   // currently spotlit DOM element
     let spotlightHandler  = null;   // {el, fn} for click-to-advance cleanup
-    let earthRevealed     = false;
+    let earthRevealed     = false;  // tracks whether the first tile reveal has been processed
 
     // ── Step definitions ──────────────────────────────────────────────────────
     // action:
@@ -109,18 +109,17 @@ const TutorialMode = (function () {
         // ── 3 ─────────────────────────────────────────────────────────────────
         {
             id: 'move-pawn',
-            title: 'Move Your Pawn',
-            content: `<strong>Drag your purple pawn</strong> onto the glowing <strong style="color:#69d83a;">Earth tile</strong> to reveal it.
+            title: 'Explore the Board',
+            content: `<strong>Drag your pawn</strong> to move it across the board.
                 <div style="margin-top:10px;">
-                    Check the <strong>AP counter</strong> (top-right). Each hex you drag through costs <strong>1 Action Point</strong>. You start every turn with 5 AP.
+                    Each hex you travel costs <strong>1 Action Point</strong> (see the counter top-right). You start every turn with 5 AP.
                 </div>
-                <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    Drag further and you can cross multiple tiles in one move — landing on an unflipped tile flips it over.
+                <div style="margin-top:10px;">
+                    All the tiles are hidden right now — <strong>step onto any face-down tile to flip it</strong> and reveal what elemental shrine is underneath!
                 </div>`,
-            action: 'move',   // gated by tutorialAllowedHexes + onPlayerMoved
+            action: 'explore',  // advances via onTilePreReveal / onTileRevealed hooks
             nextLabel: null,
-            boardRing: true,
-            spotlight: '#hud-ap-value',
+            spotlight: '#hud-ap-value',   // glows the AP counter as a hint, no blocking
             modalPos: 'corner'
         },
 
@@ -460,6 +459,7 @@ const TutorialMode = (function () {
 
         const actionHints = {
             'move':       'Drag your pawn to the glowing tile to continue…',
+            'explore':    'Drag your pawn onto any face-down tile to flip it…',
             'click':      'Click the highlighted element to continue…',
             'place-tile': 'Drag your player tile onto the board to continue…',
         };
@@ -563,32 +563,41 @@ const TutorialMode = (function () {
 
     // ── Hooks called from game code ───────────────────────────────────────────
 
-    /** Called from game-core.js revealTile() before the scroll is drawn. */
-    function onTileRevealed(tile, spellSystem) {
-        if (tile.shrineType !== 'earth' || earthRevealed) return;
-        earthRevealed = true;
-        primeEarthDeck(spellSystem);
+    /**
+     * Called from game-core.js BEFORE tile visuals are built.
+     * We can override tile.shrineType here and the visual + scroll will both reflect it.
+     */
+    function onTilePreReveal(tile) {
+        if (currentStep !== 3 || earthRevealed) return;
+        // Force the first tile the player steps on to be Earth — regardless of
+        // where they placed their player tile or which direction they moved.
+        tile.shrineType = 'earth';
+        primeEarthDeck(window.spellSystem);
     }
 
-    /** Called from game-ui.js after a successful pawn move. */
-    function onPlayerMoved(toX, toY) {
-        if (currentStep !== 3) return;  // step 3 = 'move-pawn'
-        const dist = Math.hypot(toX - EARTH_POS.x, toY - EARTH_POS.y);
-        if (dist < 70) {
-            setTimeout(() => showStep(4), 900); // let tile-reveal animate first
-        }
+    /**
+     * Called from game-core.js AFTER tile visuals are built and the scroll is drawn.
+     * We advance the tutorial here so the scroll is already in the player's hand.
+     */
+    function onTileRevealed(tile, spellSystem) {
+        if (currentStep !== 3 || earthRevealed) return;
+        earthRevealed = true;
+        setTimeout(() => showStep(4), 900); // let the flip animation finish
     }
+
+    /** Called from game-ui.js after a successful pawn move (no-op in current flow). */
+    function onPlayerMoved(toX, toY) { /* advancement now handled by onTileRevealed */ }
 
     /** Called from game-ui.js when tutorial blocks an out-of-bounds drop. */
     function showMovementHint() {
-        if (currentStep === 3 && typeof updateStatus === 'function')
-            updateStatus('Tutorial: drag your pawn to the glowing Earth tile to continue!');
+        if (typeof updateStatus === 'function')
+            updateStatus('Tutorial: drag your pawn onto a face-down tile to continue!');
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
     return {
         start, advance, finish,
-        onTileRevealed, onPlayerMoved, onPlayerTilePlaced, showMovementHint,
+        onTilePreReveal, onTileRevealed, onPlayerMoved, onPlayerTilePlaced, showMovementHint,
         get currentStep() { return currentStep; }
     };
 })();
