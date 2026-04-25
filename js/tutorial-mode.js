@@ -557,8 +557,9 @@ const TutorialMode = (function () {
         removeBoardRing();
         window.isTutorialMode       = false;
         window.tutorialAllowedHexes = null;
-        if (typeof updateStatus === 'function')
-            updateStatus('Tutorial complete! Enjoy the game!');
+        // Reload returns the player to the auth/lobby screen cleanly.
+        // The tutorial dirtied the game state so there's nothing to preserve.
+        window.location.reload();
     }
 
     // ── Hooks called from game code ───────────────────────────────────────────
