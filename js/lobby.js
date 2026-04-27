@@ -3234,10 +3234,6 @@
             // Initialize opponent panel
             updateOpponentPanel();
 
-            // Tutorial: show welcome overview
-            if (typeof tutorialSystem !== 'undefined') {
-                tutorialSystem.showStep('welcome');
-            }
         }
 
 
