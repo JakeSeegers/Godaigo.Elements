@@ -38,6 +38,7 @@ const TutorialMode = (function () {
     let spotlightEl       = null;   // currently spotlit DOM element
     let spotlightHandler  = null;   // {el, fn} for click-to-advance cleanup
     let earthRevealed     = false;  // tracks whether the first tile reveal has been processed
+    let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
 
     // ── Step definitions ──────────────────────────────────────────────────────
     // action:
@@ -369,7 +370,22 @@ const TutorialMode = (function () {
         } catch (err) {
             console.error('TutorialMode: board setup error (non-fatal):', err);
         }
+        showExitButton();
         showStep(0);
+    }
+
+    function showExitButton() {
+        if (exitBtnEl) return;
+        const btn = document.createElement('button');
+        btn.className = 'tmode-exit-persistent';
+        btn.textContent = 'Exit Tutorial';
+        btn.addEventListener('click', finish);
+        document.body.appendChild(btn);
+        exitBtnEl = btn;
+    }
+
+    function hideExitButton() {
+        if (exitBtnEl) { exitBtnEl.remove(); exitBtnEl = null; }
     }
 
     /** Called from game-core.js placeTile() when the local player drops their tile. */
@@ -498,7 +514,6 @@ const TutorialMode = (function () {
                 <div class="tutorial-header">
                     <span class="tutorial-step-label">Step ${currentStep + 1} of ${STEPS.length}</span>
                     <h3 class="tutorial-title">${step.title}</h3>
-                    <button class="tmode-exit" title="Exit tutorial">✕</button>
                 </div>
                 <div class="tutorial-body">${step.content}</div>
                 <div class="tutorial-footer"
@@ -515,9 +530,6 @@ const TutorialMode = (function () {
 
         const btn = overlay.querySelector('.tmode-next');
         if (btn) btn.addEventListener('click', advance);
-
-        const exitBtn = overlay.querySelector('.tmode-exit');
-        if (exitBtn) exitBtn.addEventListener('click', finish);
     }
 
     function closeModal() {
@@ -579,6 +591,7 @@ const TutorialMode = (function () {
         closeModal();
         clearSpotlight();
         removeBoardRing();
+        hideExitButton();
         window.isTutorialMode       = false;
         window.tutorialAllowedHexes = null;
         // Reload returns the player to the auth/lobby screen cleanly.

@@ -1750,6 +1750,28 @@ svg {
     background: rgba(230,199,156,0.12);
 }
 
+/* Persistent exit button — fixed to bottom-left, always on top of tutorial overlays */
+.tmode-exit-persistent {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 8650;
+    padding: 8px 18px;
+    background: rgba(20, 20, 20, 0.92);
+    border: 1px solid #555;
+    color: #bbb;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    pointer-events: all;
+}
+.tmode-exit-persistent:hover {
+    color: #fff;
+    border-color: #e6c79c;
+    background: rgba(230,199,156,0.12);
+}
+
 .tutorial-close {
     background: none;
     border: none;
