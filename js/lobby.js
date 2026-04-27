@@ -3239,8 +3239,8 @@
 
         // Start game with selected number of players (local mode)
         function startGame(numPlayers) {
-            // Clear the board first
-            clearBoard();
+            // Clear the board first (skip confirmation — startGame is always intentional)
+            clearBoard(true);
 
             // Reset color assignments for this game
             gameSessionColors.clear();
