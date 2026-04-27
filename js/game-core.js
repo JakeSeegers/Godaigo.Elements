@@ -1670,9 +1670,18 @@
                                 }
                             });
                         } else {
-                            this.getPlayerScrolls(false).activated.add(spell.element);
-                            if (typeof window.gami?.onElementActivated === 'function') {
-                                window.gami.onElementActivated(spell.element, Array.from(this.getPlayerScrolls(false).activated));
+                            // Source pool guard: if the shared element source pool is fully depleted,
+                            // the scroll fires but cannot count toward the win condition — there are
+                            // no remaining stones of this element for anyone to use.
+                            const elementSourcePool = window.stonePools?.[spell.element] ?? 1;
+                            if (elementSourcePool > 0) {
+                                this.getPlayerScrolls(false).activated.add(spell.element);
+                                if (typeof window.gami?.onElementActivated === 'function') {
+                                    window.gami.onElementActivated(spell.element, Array.from(this.getPlayerScrolls(false).activated));
+                                }
+                            } else {
+                                updateStatus(`The ${spell.element} shrine source is depleted — scroll effect cast, but win condition not met.`);
+                                console.warn(`📜 Win condition skipped for ${spell.element}: source pool is empty.`);
                             }
                         }
                         updatePlayerElementSymbols(activePlayerIndex);
@@ -1744,10 +1753,16 @@
                     );
                     updateStoneCount(spell.element);
 
-                    // Track activated element for win condition (for active player)
-                    this.getPlayerScrolls(false).activated.add(spell.element);
+                    // Track activated element for win condition — source pool guard applies here too
+                    const elementSourcePoolDefault = window.stonePools?.[spell.element] ?? 1;
+                    if (elementSourcePoolDefault > 0) {
+                        this.getPlayerScrolls(false).activated.add(spell.element);
+                        updateStatus(`Spell cast! Added +${spell.level} ${spell.element} stones!`);
+                    } else {
+                        updateStatus(`The ${spell.element} shrine source is depleted — scroll effect cast, but win condition not met.`);
+                        console.warn(`📜 Win condition skipped for ${spell.element}: source pool is empty (default path).`);
+                    }
                     updatePlayerElementSymbols(activePlayerIndex);
-                    updateStatus(`Spell cast! Added +${spell.level} ${spell.element} stones!`);
                 }
 
                 // Broadcast spell cast in multiplayer

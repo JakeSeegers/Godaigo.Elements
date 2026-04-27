@@ -174,8 +174,8 @@ const TutorialMode = (function () {
             title: 'Your Scroll Inventory',
             content: `Inside you'll see your <strong>Hand</strong> (hidden from opponents, except the element type) and your <strong>Active Area</strong> (visible to everyone).
                 <div style="margin-top:10px;">
-                    To prepare a scroll for casting, click it and press <strong>Active</strong> to move it to the Active Area.
-                    Scrolls <em>can't</em> go back from Active to Hand.
+                    Each area holds <strong>max 2 scrolls</strong>. To prepare a scroll for casting, click it and press <strong>Active</strong> to move it to the Active Area.
+                    Scrolls are a <em>one-way street</em> — you can move them Active → Common, but never back to Hand.
                 </div>
                 <div style="margin-top:10px; color:#aaa; font-size:13px;">
                     Any scroll moved to the <strong>Common Area</strong> (overflow from your active area) is usable by <em>any player</em>. If another player drops a scroll of the same element there, the old one returns to the bottom of that deck.
