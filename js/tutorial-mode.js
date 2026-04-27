@@ -138,7 +138,26 @@ const TutorialMode = (function () {
             nextLabel: 'Show me my scrolls'
         },
 
-        // ── 5 ─────────────────────────────────────────────────────────────────
+        // ── 5 (NEW) ───────────────────────────────────────────────────────────
+        {
+            id: 'earth-shrine',
+            title: 'Collect Earth Stones',
+            content: `You're standing on the Earth shrine — the glowing green tile.
+                <div style="margin-top:10px;">
+                    Click <strong>End Turn</strong> to absorb <strong style="color:#69d83a;">5 Earth stones</strong> from the shrine. You'll use these to build the casting pattern for your scroll.
+                </div>
+                <div style="margin-top:10px; color:#aaa; font-size:13px;">
+                    Each shrine has a limited source pool: Earth 5, Water 4, Fire 3, Wind 2, Void 1 — max 25 total shared across all players.
+                </div>`,
+            action: 'end-turn',   // advances via onEndTurn() hook
+            nextLabel: null,
+            boardRing: true,
+            freeMove: true,       // show ring but don't restrict pawn movement
+            spotlight: '#end-turn',
+            modalPos: 'corner'
+        },
+
+        // ── 6 ─────────────────────────────────────────────────────────────────
         {
             id: 'open-scrolls',
             title: 'Scrolls Panel',
@@ -462,6 +481,7 @@ const TutorialMode = (function () {
             'explore':    'Drag your pawn onto any face-down tile to flip it…',
             'click':      'Click the highlighted element to continue…',
             'place-tile': 'Drag your player tile onto the board to continue…',
+            'end-turn':   'Walk to the glowing shrine centre, then click End Turn…',
         };
         const footerHTML = (step.nextLabel && !actionHints[step.action])
             ? `<button class="tmode-next">${step.nextLabel}</button>`
@@ -520,12 +540,16 @@ const TutorialMode = (function () {
         removeBoardRing();
         window.tutorialAllowedHexes = null;
 
-        // Board ring on move step
+        // Board ring on move step. freeMove:true shows the ring without
+        // restricting the pawn — used for the shrine step where the player
+        // may need to navigate back from wherever they ended up.
         if (step.boardRing) {
             showBoardRing(EARTH_POS.x, EARTH_POS.y);
-            window.tutorialAllowedHexes = new Set([
-                `${Math.round(EARTH_POS.x)},${Math.round(EARTH_POS.y)}`
-            ]);
+            if (!step.freeMove) {
+                window.tutorialAllowedHexes = new Set([
+                    `${Math.round(EARTH_POS.x)},${Math.round(EARTH_POS.y)}`
+                ]);
+            }
         }
 
         // Spotlight an HTML element.
@@ -586,8 +610,37 @@ const TutorialMode = (function () {
         setTimeout(() => showStep(4), 900); // let the flip animation finish
     }
 
-    /** Called from game-ui.js after a successful pawn move (no-op in current flow). */
-    function onPlayerMoved(toX, toY) { /* advancement now handled by onTileRevealed */ }
+    /** Called from game-ui.js after a successful pawn move. */
+    function onPlayerMoved(toX, toY) {
+        // During the shrine step, hint the player when they reach the Earth centre.
+        const SHRINE_STEP = STEPS.findIndex(s => s.id === 'earth-shrine');
+        if (currentStep === SHRINE_STEP) {
+            const atShrine = Math.round(toX) === Math.round(EARTH_POS.x) &&
+                             Math.round(toY) === Math.round(EARTH_POS.y);
+            if (atShrine && typeof updateStatus === 'function') {
+                updateStatus("You're at the Earth shrine! Click End Turn to collect 5 stones.");
+            }
+        }
+    }
+
+    /**
+     * Called from game-ui.js after shrine stone replenishment when the player
+     * clicks End Turn. pos is the player's current {x, y} position.
+     */
+    function onEndTurn(pos) {
+        const SHRINE_STEP = STEPS.findIndex(s => s.id === 'earth-shrine');
+        if (currentStep !== SHRINE_STEP) return;
+        const atShrine = pos &&
+            Math.round(pos.x) === Math.round(EARTH_POS.x) &&
+            Math.round(pos.y) === Math.round(EARTH_POS.y);
+        if (atShrine) {
+            // Give the stone animation a moment to play before advancing
+            setTimeout(() => showStep(SHRINE_STEP + 1), 900);
+        } else {
+            if (typeof updateStatus === 'function')
+                updateStatus('Walk to the glowing Earth shrine centre first, then click End Turn.');
+        }
+    }
 
     /** Called from game-ui.js when tutorial blocks an out-of-bounds drop. */
     function showMovementHint() {
@@ -598,7 +651,7 @@ const TutorialMode = (function () {
     // ── Public API ────────────────────────────────────────────────────────────
     return {
         start, advance, finish,
-        onTilePreReveal, onTileRevealed, onPlayerMoved, onPlayerTilePlaced, showMovementHint,
+        onTilePreReveal, onTileRevealed, onPlayerMoved, onPlayerTilePlaced, onEndTurn, showMovementHint,
         get currentStep() { return currentStep; }
     };
 })();

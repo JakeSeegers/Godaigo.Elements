@@ -2290,6 +2290,12 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
+            // Tutorial hook — fires after shrine stone collection so the tutorial
+            // can detect which shrine the player just ended their turn on.
+            if (window.isTutorialMode && window.TutorialMode?.onEndTurn) {
+                window.TutorialMode.onEndTurn(playerPosition);
+            }
+
             // Cancel any active selection mode (tile swap/flip in progress)
             if (spellSystem && spellSystem.scrollEffects) {
                 spellSystem.scrollEffects.cancelSelectionMode();
