@@ -1,8 +1,8 @@
 # Project State: Godaigo Tutorial Improvements
 
 **Project:** GTUT
-**Last updated:** 2026-04-27
-**Current position:** Phase 1 — Earth Shrine Wiring
+**Last updated:** 2026-04-28
+**Current position:** Phase 5 — Plan 01 complete, Plan 02 next
 
 ---
 
@@ -21,6 +21,11 @@
 | 5 | Kinesthetic Tutorial Redesign | `planned` — 3 plans ready to execute |
 
 ## Session Log
+
+### 2026-04-28 — Session 3 (Phase 5 Plan 01)
+- Added four tutorial hook call-sites: onStonePlaced, onStoneBroken, onSpellCast, onScrollMoved
+- HOOK-01, HOOK-02, HOOK-03, HOOK-04 complete
+- Commits: 3ad097b (stone hooks), 6918f2d (spell/scroll hooks)
 
 ### 2026-04-27 — Session 1
 - GSD initialized for GTUT project
@@ -46,6 +51,6 @@
 
 - Branch: `4.10.progresscheck`
 - Dev server: `npx serve -p 3333`
-- Critical missing piece: `onEndTurn` hook in `game-core.js` `endTurn()` function
-- Earth shrine position constant: `EARTH_POS` (check tutorial-mode.js for exact value)
-- After Phase 1, run full browser playthrough before starting Phase 2
+- Phase 5 Plan 01 complete: hooks wired (onStonePlaced, onStoneBroken, onSpellCast, onScrollMoved)
+- Next: Phase 5 Plan 02 — kinesthetic STEPS redesign, handlers, pattern polling, hint timers
+- All hook call-sites guarded by `window.isTutorialMode &&` with optional-chaining
