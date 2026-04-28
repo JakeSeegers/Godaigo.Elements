@@ -181,8 +181,8 @@ const TutorialMode = (function () {
                     <li><strong>Common Area</strong> — shared pool any player can cast from</li>
                 </ul>
                 <div style="margin-top:8px;">
-                    Each area holds <strong>max 2 scrolls</strong>. Hand cards have a <strong>"Move to Active Area"</strong> button to ready them for casting. Active Area cards have a <strong>"Move to Common Area"</strong> button.
-                    Scrolls are a <em>one-way street</em> — Active → Common only, never back to Hand.
+                    Each area holds <strong>max 2 scrolls</strong>. Hand cards can be sent to the <strong>Active Area</strong> or directly to the <strong>Common Area</strong>. Active Area cards can only move to the <strong>Common Area</strong>.
+                    Scrolls are a <em>one-way street</em> — never back to Hand.
                 </div>
                 <div style="margin-top:8px; color:#aaa; font-size:13px;">
                     A scroll in the <strong>Common Area</strong> can be cast by <em>any player</em>. If another player drops a scroll of the same element there, the old one returns to the bottom of that deck.
