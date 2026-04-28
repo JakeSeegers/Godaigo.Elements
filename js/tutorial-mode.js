@@ -2,7 +2,7 @@
  * Tutorial Mode for Godaigo — Interactive Guided Tutorial
  *
  * Features:
- *  - Auto-builds a scripted board (earth tile at centre, player + enemy pawns placed)
+ *  - Auto-builds a scripted board (earth tile at center, player + enemy pawns placed)
  *  - 14-step walkthrough using the official voice-recorded transcript
  *  - Spotlight system: dims everything and highlights one UI element at a time
  *  - Movement gating: restricts the pawn to the tutorial destination
@@ -24,7 +24,7 @@ const TutorialMode = (function () {
     const S = 80, SQ3 = Math.sqrt(3);
     const hp = (q, r) => ({ x: S * SQ3 * (q + r / 2), y: S * 1.5 * r });
 
-    const EARTH_POS  = hp( 0,  0);  // centre of spiral → earth tile
+    const EARTH_POS  = hp( 0,  0);  // center of spiral → earth tile
     const PLAYER_POS = hp( 1,  0);  // east  → player pawn start
     const ENEMY_POS  = hp(-1,  2);  // south → opponent pawn (cosmetic only)
 
@@ -136,19 +136,19 @@ const TutorialMode = (function () {
                     Your hand holds up to <strong>2 scrolls</strong>. Your active area also holds up to 2 — and scrolls are a <em>one-way street</em> (active → common only, never back to hand).
                 </div>`,
             action: 'read',
-            nextLabel: 'Open my scrolls'
+            nextLabel: 'Got it'
         },
 
-        // ── 5 (NEW) ───────────────────────────────────────────────────────────
+        // ── 5 ────────────────────────────────────────────────────────────────
         {
             id: 'earth-shrine',
             title: 'Collect Earth Stones',
-            content: `You're standing on the Earth shrine — the glowing green tile.
+            content: `You flipped an <strong style="color:#69d83a;">Earth tile</strong>! The glowing center hex is the <strong>Earth shrine</strong>.
                 <div style="margin-top:10px;">
-                    Click <strong>End Turn</strong> to absorb <strong style="color:#69d83a;">5 Earth stones</strong> from the shrine. You'll use these to build the casting pattern for your scroll.
+                    <strong>Walk your pawn to the center of the tile</strong>, then click <strong>End Turn</strong> to collect <strong style="color:#69d83a;">5 Earth stones</strong>. You'll use these to build the casting pattern for your scroll.
                 </div>
                 <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    Each shrine has a limited source pool: Earth 5, Water 4, Fire 3, Wind 2, Void 1 — max 25 total shared across all players.
+                    Elemental stones come from shared <strong>Source Pools</strong>. There are 25 of each stone type available across all players — once they're gone, no one can draw more of that type.
                 </div>`,
             action: 'end-turn',   // advances via onEndTurn() hook
             nextLabel: null,
@@ -199,7 +199,7 @@ const TutorialMode = (function () {
                     To activate a scroll you need to:
                     <ol style="margin:8px 0; padding-left:18px; line-height:2;">
                         <li>Have the scroll in your <strong>Active Area</strong> or the Common Area</li>
-                        <li>Stand in the <strong>centre of the pattern</strong> shown on the scroll</li>
+                        <li>Stand in the <strong>center of the pattern</strong> shown on the scroll</li>
                         <li>Build that pattern with <strong>elemental stones</strong> on the board</li>
                         <li>Spend <strong>2 AP</strong> and click <strong>Cast Spell</strong></li>
                     </ol>
@@ -212,7 +212,7 @@ const TutorialMode = (function () {
         {
             id: 'getting-stones',
             title: 'Getting Elemental Stones',
-            content: `You get stones by <strong>ending your turn</strong> on the <em>centre</em> of an elemental shrine.
+            content: `You get stones by <strong>ending your turn</strong> on the <em>center</em> of an elemental shrine.
                 <div style="margin-top:10px;">
                     Stone yield by shrine rank:
                     <div style="margin:8px 0; line-height:2.2;">
@@ -278,7 +278,7 @@ const TutorialMode = (function () {
         {
             id: 'casting',
             title: 'Casting a Scroll',
-            content: `Once you've built the stone pattern and you're standing in its <strong>centre</strong>:
+            content: `Once you've built the stone pattern and you're standing in its <strong>center</strong>:
                 <ol style="margin:8px 0; padding-left:18px; line-height:2;">
                     <li>Have the scroll in your <strong>Active Area</strong> (or the Common Area)</li>
                     <li>Press <strong>Cast Spell</strong> in the dock — or click the glowing <strong>Cast ✦</strong> button on the scroll card when its pattern matches</li>
@@ -302,7 +302,7 @@ const TutorialMode = (function () {
             content: `Catacomb tiles are <strong>non-elemental</strong>. Flipping one gives you <strong>+1 AP</strong> and a <strong>Catacomb scroll</strong>.
                 <div style="margin-top:10px;">
                     Catacomb scrolls are <strong>dual-type</strong> — activating one counts toward <em>two</em> of your win conditions at once.
-                    They also let you <strong>move for free</strong> between the centres of other catacomb tiles.
+                    They also let you <strong>move for free</strong> between the centers of other catacomb tiles.
                 </div>
                 <div style="margin-top:10px; color:#aaa; font-size:13px;">
                     Note: ending your turn <em>on</em> a catacomb tile gives no elemental stones — only the AP and scroll from flipping it.
@@ -318,7 +318,7 @@ const TutorialMode = (function () {
             content: `Quick reference for the on-screen controls:
                 <ul style="margin:10px 0; padding-left:18px; line-height:2.1;">
                     <li><strong>AP pips</strong> (top bar, right) — five orange squares; each one = 1 remaining action point</li>
-                    <li><strong>Shrine dots</strong> (top bar, centre) — five coloured dots that light up as you activate scrolls toward your win condition</li>
+                    <li><strong>Shrine dots</strong> (top bar, center) — five coloured dots that light up as you activate scrolls toward your win condition</li>
                     <li><strong>Players panel</strong> (right) — see opponents' scroll types, stones, active scrolls, and win progress</li>
                     <li><strong>Hand / Active / Common Area</strong> (dock) — open each scroll panel independently; counts show how many scrolls you hold</li>
                     <li><strong>Cast Spell</strong> (dock) — casts the best matching scroll from your Active Area or the Common Area</li>
@@ -503,7 +503,7 @@ const TutorialMode = (function () {
             'explore':    'Drag your pawn onto any face-down tile to flip it…',
             'click':      'Click the highlighted element to continue…',
             'place-tile': 'Drag your player tile onto the board to continue…',
-            'end-turn':   'Walk to the glowing shrine centre, then click End Turn…',
+            'end-turn':   'Walk to the glowing shrine center, then click End Turn…',
         };
         const footerHTML = (step.nextLabel && !actionHints[step.action])
             ? `<button class="tmode-next">${step.nextLabel}</button>`
@@ -631,13 +631,13 @@ const TutorialMode = (function () {
 
     /** Called from game-ui.js after a successful pawn move. */
     function onPlayerMoved(toX, toY) {
-        // During the shrine step, hint the player when they reach the Earth centre.
+        // During the shrine step, hint the player when they reach the Earth center.
         const SHRINE_STEP = STEPS.findIndex(s => s.id === 'earth-shrine');
         if (currentStep === SHRINE_STEP) {
             const atShrine = Math.round(toX) === Math.round(EARTH_POS.x) &&
                              Math.round(toY) === Math.round(EARTH_POS.y);
             if (atShrine && typeof updateStatus === 'function') {
-                updateStatus("You're at the Earth shrine! Click End Turn to collect 5 stones.");
+                updateStatus("You're at the Earth shrine center! Click End Turn to collect 5 stones.");
             }
         }
     }
@@ -649,15 +649,18 @@ const TutorialMode = (function () {
     function onEndTurn(pos) {
         const SHRINE_STEP = STEPS.findIndex(s => s.id === 'earth-shrine');
         if (currentStep !== SHRINE_STEP) return;
-        const atShrine = pos &&
-            Math.round(pos.x) === Math.round(EARTH_POS.x) &&
-            Math.round(pos.y) === Math.round(EARTH_POS.y);
-        if (atShrine) {
+        // Use a distance check — pawn positions have floating-point pixel values,
+        // so an exact coordinate match (===) reliably fails even when the player
+        // is visually standing on the shrine center.
+        const dist = pos
+            ? Math.sqrt(Math.pow(pos.x - EARTH_POS.x, 2) + Math.pow(pos.y - EARTH_POS.y, 2))
+            : Infinity;
+        if (dist < 20) {
             // Give the stone animation a moment to play before advancing
             setTimeout(() => showStep(SHRINE_STEP + 1), 900);
         } else {
             if (typeof updateStatus === 'function')
-                updateStatus('Walk to the glowing Earth shrine centre first, then click End Turn.');
+                updateStatus('Walk to the glowing Earth shrine center first, then click End Turn.');
         }
     }
 
