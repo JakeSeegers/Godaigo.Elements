@@ -181,7 +181,7 @@ const TutorialMode = (function () {
                     <li><strong>Common Area</strong> — shared pool any player can cast from</li>
                 </ul>
                 <div style="margin-top:8px;">
-                    Each area holds <strong>max 2 scrolls</strong>. On each card you'll see a <strong>"Move to Active Area"</strong> button to ready it for casting.
+                    Each area holds <strong>max 2 scrolls</strong>. Hand cards have a <strong>"Move to Active Area"</strong> button to ready them for casting. Active Area cards have a <strong>"Move to Common Area"</strong> button.
                     Scrolls are a <em>one-way street</em> — Active → Common only, never back to Hand.
                 </div>
                 <div style="margin-top:8px; color:#aaa; font-size:13px;">
