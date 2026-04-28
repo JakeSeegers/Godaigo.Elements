@@ -474,6 +474,7 @@
             // Update AP
             const hudApValue = document.getElementById('hud-ap-value');
             if (hudApValue) hudApValue.textContent = currentAP;
+            updateApPips(currentAP);
 
             // Update Void AP display
             const hudVoidAp = document.getElementById('hud-void-ap');
@@ -534,9 +535,69 @@
                         ? colorMap[activeColorKey]
                         : '#d9b08c';
                 }
+                // Update shrine dots for current player
+                if (typeof activePlayerIndex !== 'undefined') {
+                    updateShrineDots(activePlayerIndex);
+                }
+                // Update dock
+                updateDockPlayers();
+                updateDockStones();
             } catch (e) {
                 // Variables not ready yet
             }
+        }
+
+        function updateDockStones() {
+            ['earth', 'water', 'fire', 'wind', 'void'].forEach(el => {
+                const chipEl = document.getElementById('dock-' + el + '-count');
+                if (!chipEl) return;
+                try {
+                    const pool = (typeof sourcePool !== 'undefined') ? sourcePool : (window.stonePools ?? {});
+                    chipEl.textContent = pool[el] ?? '--';
+                } catch (e) { /* not ready */ }
+            });
+        }
+
+        function updateDockPlayers() {
+            const container = document.getElementById('dock-players');
+            if (!container) return;
+            try {
+                const pList = (typeof allPlayersData !== 'undefined' && allPlayersData?.length)
+                    ? allPlayersData
+                    : null;
+                if (!pList) return;
+                container.innerHTML = '';
+                const colorMap = { purple:'#9458f4', yellow:'#ffce00', red:'#ed1b43', blue:'#5894f4', green:'#69d83a' };
+                pList.forEach(p => {
+                    const idx = p.player_index ?? 0;
+                    const isActive = idx === (typeof activePlayerIndex !== 'undefined' ? activePlayerIndex : 0);
+                    const card = document.createElement('div');
+                    card.className = 'dock-player-card' + (isActive ? ' active-player' : '');
+                    const color = colorMap[p.color] || '#888';
+                    const apText = isActive ? ((typeof currentAP !== 'undefined' ? currentAP : '?') + 'AP') : '';
+                    card.innerHTML = `<span class="dock-player-dot" style="background:${color};"></span><span class="dock-player-name">${p.username || ('P' + (idx + 1))}</span>${apText ? `<span class="dock-player-ap">${apText}</span>` : ''}`;
+                    container.appendChild(card);
+                });
+            } catch (e) { /* not ready */ }
+        }
+
+        function updateShrineDots(playerIndex) {
+            try {
+                const scrollData = window.spellSystem?.playerScrolls?.[playerIndex];
+                const activated = scrollData?.activated ?? new Set();
+                ['earth', 'water', 'fire', 'wind', 'void'].forEach(el => {
+                    const dot = document.getElementById('shrine-dot-' + el);
+                    if (!dot) return;
+                    dot.classList.toggle('complete', activated.has(el));
+                });
+            } catch (e) { /* spellSystem not ready */ }
+        }
+
+        function updateApPips(apValue) {
+            document.querySelectorAll('.ap-pip').forEach(pip => {
+                const n = parseInt(pip.dataset.pip, 10);
+                pip.classList.toggle('filled', n <= apValue);
+            });
         }
 
         function setupStoneDragFromCard(card, element) {
@@ -2381,6 +2442,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         if (activePlayerIndex === myPlayerIndex) {
                             currentAP = 5;
                             document.getElementById('ap-count').textContent = currentAP;
+                            updateApPips(currentAP);
                             refreshVoidAP();
                             syncPlayerState();
                         }
@@ -2404,6 +2466,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         // Single player: AP resets for next turn
                         currentAP = 5;
                         document.getElementById('ap-count').textContent = currentAP;
+                        updateApPips(currentAP);
                         refreshVoidAP();
                         updateStatus('Turn ended. AP restored.');
                     }
@@ -2498,6 +2561,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 if (activePlayerIndex === myPlayerIndex) {
                     currentAP = 5;
                     document.getElementById('ap-count').textContent = currentAP;
+                    updateApPips(currentAP);
                     refreshVoidAP();
                     syncPlayerState();
                 }
@@ -2551,6 +2615,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 // AP resets at start of new turn
                 currentAP = 5;
                 document.getElementById('ap-count').textContent = currentAP;
+                updateApPips(currentAP);
                 refreshVoidAP();
                 updateStatus('Turn ended. AP restored.');
                 isEndingTurn = false;

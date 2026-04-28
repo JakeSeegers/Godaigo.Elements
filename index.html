@@ -13,7 +13,7 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
     <!-- CSS -->
@@ -269,7 +269,24 @@
                 </div>
             </div>
 
+            <div class="hud-section center">
+                <div class="hud-shrine-progress" id="hud-shrine-progress" title="Shrine progress">
+                    <span class="shrine-dot" id="shrine-dot-earth" data-element="earth" title="Earth"></span>
+                    <span class="shrine-dot" id="shrine-dot-water" data-element="water" title="Water"></span>
+                    <span class="shrine-dot" id="shrine-dot-fire"  data-element="fire"  title="Fire"></span>
+                    <span class="shrine-dot" id="shrine-dot-wind"  data-element="wind"  title="Wind"></span>
+                    <span class="shrine-dot" id="shrine-dot-void"  data-element="void"  title="Void"></span>
+                </div>
+            </div>
+
 <div class="hud-section right">
+                <div class="hud-ap-pips" id="hud-ap-pips" title="Action Points">
+                    <span class="ap-pip" data-pip="1"></span>
+                    <span class="ap-pip" data-pip="2"></span>
+                    <span class="ap-pip" data-pip="3"></span>
+                    <span class="ap-pip" data-pip="4"></span>
+                    <span class="ap-pip" data-pip="5"></span>
+                </div>
                 <div class="hud-ap" title="Action Points">
                     <span class="hud-ap-value" id="hud-ap-value">5</span>
                     <span class="hud-ap-label">AP</span>
@@ -422,22 +439,42 @@
             </div>
         </div>
 
-        <!-- BOTTOM ACTION BAR -->
-        <div class="action-bar">
-            <div class="action-group">
+        <!-- BOTTOM DOCK -->
+        <div class="dock-bar">
+            <!-- Left zone: stone source pool chips -->
+            <div class="dock-stones">
+                <div class="dock-stone-chip" data-element="earth">
+                    <span class="dock-chip-symbol">E</span>
+                    <span class="dock-chip-count" id="dock-earth-count">--</span>
+                </div>
+                <div class="dock-stone-chip" data-element="water">
+                    <span class="dock-chip-symbol">W</span>
+                    <span class="dock-chip-count" id="dock-water-count">--</span>
+                </div>
+                <div class="dock-stone-chip" data-element="fire">
+                    <span class="dock-chip-symbol">F</span>
+                    <span class="dock-chip-count" id="dock-fire-count">--</span>
+                </div>
+                <div class="dock-stone-chip" data-element="wind">
+                    <span class="dock-chip-symbol">A</span>
+                    <span class="dock-chip-count" id="dock-wind-count">--</span>
+                </div>
+                <div class="dock-stone-chip" data-element="void">
+                    <span class="dock-chip-symbol">V</span>
+                    <span class="dock-chip-count" id="dock-void-count">--</span>
+                </div>
+            </div>
+
+            <!-- Center zone: player roster cards -->
+            <div class="dock-players" id="dock-players">
+                <!-- Populated by JS: one .dock-player-card per player -->
+            </div>
+
+            <!-- Right zone: action buttons -->
+            <div class="dock-actions">
                 <button id="scroll-inventory">Scrolls (<span id="scroll-count">0</span>)</button>
                 <button id="cast-spell" class="primary">Cast Spell</button>
-            </div>
-
-            <div class="action-divider"></div>
-
-            <div class="action-group">
                 <button id="undo-move">Undo Step</button>
-            </div>
-
-            <div class="action-divider"></div>
-
-            <div class="action-group">
                 <button id="leave-game" class="danger" style="display: none;">Leave</button>
             </div>
         </div>

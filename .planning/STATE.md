@@ -35,6 +35,11 @@
 - Added freeMove flag to boardRing system so shrine step doesn't lock movement
 - WIRE-01, WIRE-02, WIRE-03 complete — commit b37e010
 
+## Accumulated Context
+
+### Roadmap Evolution
+- Phase 4 added: HUD, Dock and Typography Redesign — v3 mockup design language port (shrine dots, AP pips, dock stone chips, Space Grotesk/JetBrains Mono fonts)
+
 ## Key Context for Next Session
 
 - Branch: `4.10.progresscheck`
