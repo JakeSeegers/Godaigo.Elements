@@ -1,8 +1,8 @@
 # Roadmap: Godaigo Tutorial Improvements
 
 **Project:** GTUT — Godaigo Tutorial Improvements + UI Redesign
-**Phases:** 4
-**Requirements mapped:** 11 / 11 ✓ (tutorial) + UI phase TBD
+**Phases:** 5
+**Requirements mapped:** 11 / 11 ✓ (tutorial) + UI phase TBD + 16 kinesthetic requirements (Phase 5)
 **Created:** 2026-04-27
 
 ---
@@ -101,6 +101,40 @@
 
 Plans:
 - [ ] TBD (run /gsd-plan-phase 4 to break down)
+
+---
+
+## Phase 5: Kinesthetic Tutorial Redesign
+
+**Goal:** Rewrite the tutorial so every step requires the player to physically perform the action before advancing — no read-only steps. Add scripted opponent AI scenarios (earth-stone trap, re-trap), stone placement puzzles, Avalanche casting requirement, Wind stone escape, and Fire stone counter. Add missing hooks in game-core.js/game-ui.js for stone placed, stone broken, scroll moved, and spell cast events.
+
+**Requirements:** KINE-01, KINE-02, KINE-03, KINE-04, KINE-05, KINE-06, KINE-07, KINE-08, KINE-09, KINE-10, HOOK-01, HOOK-02, HOOK-03, HOOK-04, HINT-01, HINT-02
+
+**Depends on:** Phase 4
+
+**Files in scope:**
+- `js/tutorial-mode.js` — redesign STEPS array, add action-gated logic, scripted AI, hint system
+- `js/game-core.js` — add `onStonePlaced`, `onStoneBroken`, `onSpellCast` hooks
+- `js/scroll-panels.js` — wire `onScrollMoved` hook from "Move to Active Area" / "Move to Common Area" buttons
+
+**Success criteria:**
+1. Zero tutorial steps use `action: 'read'` — every step has a verifiable player action gate
+2. Stone placement step advances only after player drags ≥1 Earth stone adjacent to pawn
+3. Avalanche casting step advances only after player builds the pattern and casts the scroll
+4. Scripted opponent AI places earth ring after player casts Avalanche (visible on board)
+5. Tutorial advances past trap step only after player right-clicks to break an earth stone
+6. Wind stone step advances after player places a Wind stone near the second trap
+7. Fire stone step advances after player places Fire adjacent to an Earth stone
+8. `game-core.js` fires `TutorialMode.onStonePlaced` and `TutorialMode.onStoneBroken` hooks
+9. `onSpellCast` fires in `executeSpell()` when `window.isTutorialMode` is true
+10. `onScrollMoved` fires from scroll panel "Move to Active/Common" buttons during tutorial
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Hook call-sites in game-core.js and scroll-panels.js (wave 1)
+- [ ] 05-02-PLAN.md — Kinesthetic STEPS redesign, new handlers, pattern polling, hint timers (wave 2)
+- [ ] 05-03-PLAN.md — Scripted opponent AI trap/escape sequence, five new STEPS (wave 2, parallel with 05-02)
 
 ---
 
