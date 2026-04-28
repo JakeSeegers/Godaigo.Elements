@@ -7126,10 +7126,6 @@ function clearPlayerPath() {
             const newSourceEl = document.getElementById('new-' + type + '-source');
             if (newSourceEl) newSourceEl.textContent = sourcePool[type] + '/' + (sourcePoolCapacity[type] ?? 25);
 
-            // Update dock stone chip for this element
-            const dockChipEl = document.getElementById('dock-' + type + '-count');
-            if (dockChipEl) dockChipEl.textContent = sourcePool[type] ?? '--';
-
             // Refresh Players panel so self-card stone counts stay in sync
             if (typeof updateOpponentPanel === 'function') updateOpponentPanel();
 

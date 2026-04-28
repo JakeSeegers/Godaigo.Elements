@@ -541,21 +541,9 @@
                 }
                 // Update dock
                 updateDockPlayers();
-                updateDockStones();
             } catch (e) {
                 // Variables not ready yet
             }
-        }
-
-        function updateDockStones() {
-            ['earth', 'water', 'fire', 'wind', 'void'].forEach(el => {
-                const chipEl = document.getElementById('dock-' + el + '-count');
-                if (!chipEl) return;
-                try {
-                    const pool = (typeof sourcePool !== 'undefined') ? sourcePool : (window.stonePools ?? {});
-                    chipEl.textContent = pool[el] ?? '--';
-                } catch (e) { /* not ready */ }
-            });
         }
 
         function updateDockPlayers() {
