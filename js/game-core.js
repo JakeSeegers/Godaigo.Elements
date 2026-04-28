@@ -2726,6 +2726,11 @@
                 placedStones.splice(index, 1);
             }
 
+            // Tutorial hook — fires after stone confirmed removed
+            if (window.isTutorialMode && window.TutorialMode?.onStoneBroken) {
+                window.TutorialMode.onStoneBroken(stone.type, stone.x, stone.y);
+            }
+
             // Return stone to source pool
             returnStoneToPool(stone.type);
 
@@ -6411,6 +6416,11 @@ function clearPlayerPath() {
                 type: type,
                 element: stoneGroup
             });
+
+            // Tutorial hook — fires after stone added to placedStones
+            if (window.isTutorialMode && window.TutorialMode?.onStonePlaced) {
+                window.TutorialMode.onStonePlaced(type, x, y);
+            }
 
             // Track for Burning Motivation: grant AP per stone placed (until end of turn, stacks)
             if (typeof spellSystem !== 'undefined' && spellSystem.scrollEffects) {
