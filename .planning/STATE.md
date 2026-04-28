@@ -8,7 +8,7 @@
 
 ## Current Phase
 
-**MILESTONE COMPLETE** — all 3 phases shipped.
+**Active Phase:** Phase 5 — Kinesthetic Tutorial Redesign (planned, ready to execute)
 
 ## Phase Status
 
@@ -17,6 +17,8 @@
 | 1 | Earth Shrine Wiring | `complete` ✓ |
 | 2 | Bug Fixes, E2E Verification & Copy | `complete` ✓ |
 | 3 | Dead Code Cleanup | `complete` ✓ |
+| 4 | HUD, Dock and Typography Redesign | `planned` — 3 plans (TBD) |
+| 5 | Kinesthetic Tutorial Redesign | `planned` — 3 plans ready to execute |
 
 ## Session Log
 

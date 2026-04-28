@@ -134,7 +134,7 @@ Plans:
 Plans:
 - [ ] 05-01-PLAN.md — Hook call-sites in game-core.js and scroll-panels.js (wave 1)
 - [ ] 05-02-PLAN.md — Kinesthetic STEPS redesign, new handlers, pattern polling, hint timers (wave 2)
-- [ ] 05-03-PLAN.md — Scripted opponent AI trap/escape sequence, five new STEPS (wave 2, parallel with 05-02)
+- [ ] 05-03-PLAN.md — Scripted opponent AI trap/escape sequence, five new STEPS (wave 3, depends on 05-02)
 
 ---
 
