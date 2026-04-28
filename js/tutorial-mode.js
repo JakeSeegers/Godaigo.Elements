@@ -39,6 +39,7 @@ const TutorialMode = (function () {
     let spotlightHandler  = null;   // {el, fn} for click-to-advance cleanup
     let earthRevealed     = false;  // tracks whether the first tile reveal has been processed
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
+    let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
 
     // ── Step definitions ──────────────────────────────────────────────────────
     // action:
@@ -423,6 +424,23 @@ const TutorialMode = (function () {
         if (!el) return;
 
         if (blocking) {
+            // The overlay sits at z-index 8600 at the document root.
+            // If the spotlit element lives inside a positioned ancestor that has its
+            // own stacking context (e.g. .dock-bar at z-index 50), the element's own
+            // z-index:8620 is scoped inside that context and stays visually beneath
+            // the overlay.  Fix: walk up the ancestor chain and temporarily lift any
+            // stacking-context ancestor above the overlay.
+            liftedAncestors = [];
+            let node = el.parentElement;
+            while (node && node !== document.body) {
+                const zi = window.getComputedStyle(node).zIndex;
+                if (zi !== 'auto' && parseInt(zi, 10) < 8650) {
+                    liftedAncestors.push({ node, original: node.style.zIndex });
+                    node.style.zIndex = '8650';
+                }
+                node = node.parentElement;
+            }
+
             const ov = document.createElement('div');
             ov.id        = 'tutorial-blocking-overlay';
             ov.className = 'tutorial-blocking-overlay';
@@ -444,6 +462,10 @@ const TutorialMode = (function () {
             spotlightEl = null;
         }
         if (overlayEl) { overlayEl.remove(); overlayEl = null; }
+
+        // Restore any ancestors whose z-index was temporarily raised
+        liftedAncestors.forEach(({ node, original }) => { node.style.zIndex = original; });
+        liftedAncestors = [];
 
         // Remove any leftover click listener
         if (spotlightHandler) {
