@@ -41,6 +41,10 @@ const TutorialMode = (function () {
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
     let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
 
+    // ── New kinesthetic state ─────────────────────────────────────────────────
+    let patternPollInterval  = null;   // setInterval for checkPattern polling
+    let hintTimer            = null;   // setTimeout for 15-second inactivity hint
+
     // ── Step definitions ──────────────────────────────────────────────────────
     // action:
     //   'read'  – Next/Continue button advances
@@ -577,6 +581,8 @@ const TutorialMode = (function () {
 
         // Clear previous decorations
         clearSpotlight();
+        clearPatternPoll();
+        clearHintTimer();
         removeBoardRing();
         window.tutorialAllowedHexes = null;
 
@@ -692,10 +698,78 @@ const TutorialMode = (function () {
             updateStatus('Tutorial: drag your pawn onto a face-down tile to continue!');
     }
 
+    function clearHintTimer() {
+        if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+    }
+
+    function startHintTimer(message) {
+        clearHintTimer();
+        hintTimer = setTimeout(() => {
+            if (typeof updateStatus === 'function') updateStatus(message);
+        }, 15000);
+    }
+
+    function clearPatternPoll() {
+        if (patternPollInterval) { clearInterval(patternPollInterval); patternPollInterval = null; }
+    }
+
+    /** Called from game-core.js after a stone is placed on the board. */
+    function onStonePlaced(stoneType, x, y) {
+        const step = STEPS[currentStep];
+        if (!step) return;
+        if (step.action === 'stone-placed' && (!step.stoneType || step.stoneType === stoneType)) {
+            clearHintTimer();
+            clearPatternPoll();
+            setTimeout(advance, 400);
+        } else if (step.action === 'stone-placed-wind' && stoneType === 'wind') {
+            clearHintTimer();
+            setTimeout(advance, 400);
+        } else if (step.action === 'stone-placed-fire' && stoneType === 'fire') {
+            clearHintTimer();
+            setTimeout(advance, 400);
+        }
+    }
+
+    /** Called from game-core.js after a stone is broken/removed from the board. */
+    function onStoneBroken(stoneType, x, y) {
+        const step = STEPS[currentStep];
+        if (!step) return;
+        if (step.action === 'stone-broken') {
+            clearHintTimer();
+            clearPatternPoll();
+            setTimeout(advance, 400);
+        }
+    }
+
+    /** Called from scroll-panels.js when player moves a scroll between areas. */
+    function onScrollMoved(scrollName, fromArea, toArea) {
+        const step = STEPS[currentStep];
+        if (!step) return;
+        if (step.action === 'scroll-moved') {
+            // Gate: must be moving TO active area to satisfy this step
+            if (toArea === 'active') {
+                clearHintTimer();
+                setTimeout(advance, 400);
+            }
+        }
+    }
+
+    /** Called from game-core.js when a spell is successfully cast. */
+    function onSpellCast(scrollName) {
+        const step = STEPS[currentStep];
+        if (!step) return;
+        if (step.action === 'spell-cast') {
+            clearHintTimer();
+            clearPatternPoll();
+            setTimeout(advance, 600);
+        }
+    }
+
     // ── Public API ────────────────────────────────────────────────────────────
     return {
         start, advance, finish,
         onTilePreReveal, onTileRevealed, onPlayerMoved, onPlayerTilePlaced, onEndTurn, showMovementHint,
+        onStonePlaced, onStoneBroken, onScrollMoved, onSpellCast,
         get currentStep() { return currentStep; }
     };
 })();
