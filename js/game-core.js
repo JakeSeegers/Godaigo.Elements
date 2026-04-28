@@ -2372,6 +2372,11 @@
                 } catch (e) {
                     // Ignore - UI not ready yet
                 }
+
+                // Refresh floating scroll panels so new scrolls appear immediately
+                try {
+                    if (window.ScrollPanelSystem) window.ScrollPanelSystem.refresh();
+                } catch (e) {}
             }
         }
 

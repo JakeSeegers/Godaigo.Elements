@@ -296,6 +296,8 @@
             overlay.appendChild(box);
             document.body.appendChild(overlay);
         }
+        // Expose globally so scroll-panels.js can call it
+        window.showScrollInfoPopup = showScrollInfoPopup;
 
         // Show details for a common area scroll
         function showCommonAreaScrollDetails(scrollName, scrollInfo, element) {
@@ -2653,9 +2655,9 @@ document.getElementById('undo-move').onclick = function() {
             lastMove = null;
         };
 
-        document.getElementById('scroll-inventory').onclick = function() {
-            spellSystem.showInventory();
-        };
+        // scroll-inventory replaced by panel-btn-hand/active/common in scroll-panels.js
+        const _legacyScrollBtn = document.getElementById('scroll-inventory');
+        if (_legacyScrollBtn) _legacyScrollBtn.onclick = () => spellSystem.showInventory();
 
         document.getElementById('cast-spell').onclick = function() {
             if (!canTakeAction()) {

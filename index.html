@@ -441,18 +441,23 @@
 
         <!-- BOTTOM DOCK -->
         <div class="dock-bar">
-            <!-- Center zone: player roster cards -->
+            <!-- Left zone: player roster -->
             <div class="dock-players" id="dock-players">
-                <!-- Populated by JS: one .dock-player-card per player -->
+                <!-- Populated by JS -->
             </div>
 
-            <!-- Right zone: action buttons -->
+            <!-- Center zone: action buttons -->
             <div class="dock-actions">
-                <button id="scroll-inventory">Scrolls (<span id="scroll-count">0</span>)</button>
+                <button id="panel-btn-hand">Hand&thinsp;(<span id="hand-count">0</span>)</button>
+                <button id="panel-btn-active">Active&thinsp;(<span id="active-count">0</span>)</button>
+                <button id="panel-btn-common">Common Area</button>
                 <button id="cast-spell" class="primary">Cast Spell</button>
                 <button id="undo-move">Undo Step</button>
                 <button id="leave-game" class="danger" style="display: none;">Leave</button>
             </div>
+
+            <!-- Right spacer — balances the left player roster so actions stay centered -->
+            <div class="dock-right-spacer" aria-hidden="true"></div>
         </div>
     </div>
 
@@ -591,6 +596,7 @@
     <script src="js/multiplayer-state.js" charset="UTF-8"></script>
     <script src="js/game-core.js" charset="UTF-8"></script>
     <script src="js/game-ui.js" charset="UTF-8"></script>
+    <script src="js/scroll-panels.js" charset="UTF-8"></script>
     <script src="js/parallax.js" charset="UTF-8"></script>
     <script src="js/gamification.js" charset="UTF-8"></script>
     <script src="js/crt-overlay.js" charset="UTF-8"></script>

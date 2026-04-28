@@ -136,7 +136,7 @@ const TutorialMode = (function () {
                     Your hand holds up to <strong>2 scrolls</strong>. Your active area also holds up to 2 — and scrolls are a <em>one-way street</em> (active → common only, never back to hand).
                 </div>`,
             action: 'read',
-            nextLabel: 'Show me my scrolls'
+            nextLabel: 'Open my scrolls'
         },
 
         // ── 5 (NEW) ───────────────────────────────────────────────────────────
@@ -161,25 +161,30 @@ const TutorialMode = (function () {
         // ── 6 ─────────────────────────────────────────────────────────────────
         {
             id: 'open-scrolls',
-            title: 'Scrolls Panel',
-            content: `Click the <strong>Scrolls</strong> button to open your scroll inventory.`,
+            title: 'Open Your Hand',
+            content: `Click the <strong>Hand</strong> button in the dock to open your scroll hand panel.`,
             action: 'click',
-            spotlight: '#scroll-inventory',
+            spotlight: '#panel-btn-hand',
             nextLabel: null,   // auto-advances on click
             modalPos: 'corner'
         },
 
-        // ── 6 ─────────────────────────────────────────────────────────────────
+        // ── 7 ─────────────────────────────────────────────────────────────────
         {
             id: 'scrolls-explained',
-            title: 'Your Scroll Inventory',
-            content: `Inside you'll see your <strong>Hand</strong> (hidden from opponents, except the element type) and your <strong>Active Area</strong> (visible to everyone).
-                <div style="margin-top:10px;">
-                    Each area holds <strong>max 2 scrolls</strong>. To prepare a scroll for casting, click it and press <strong>Active</strong> to move it to the Active Area.
-                    Scrolls are a <em>one-way street</em> — you can move them Active → Common, but never back to Hand.
+            title: 'Three Scroll Panels',
+            content: `Your scrolls are split across <strong>three floating panels</strong> — open each one from the dock buttons:
+                <ul style="margin:10px 0; padding-left:18px; line-height:2.1;">
+                    <li><strong>Hand</strong> — private; opponents only see the element type</li>
+                    <li><strong>Active</strong> — face-up, visible to all; scrolls here can be cast</li>
+                    <li><strong>Common Area</strong> — shared pool any player can cast from</li>
+                </ul>
+                <div style="margin-top:8px;">
+                    Each area holds <strong>max 2 scrolls</strong>. On each card you'll see a <strong>"Move to Active Area"</strong> button to ready it for casting.
+                    Scrolls are a <em>one-way street</em> — Active → Common only, never back to Hand.
                 </div>
-                <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    Any scroll moved to the <strong>Common Area</strong> (overflow from your active area) is usable by <em>any player</em>. If another player drops a scroll of the same element there, the old one returns to the bottom of that deck.
+                <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                    A scroll in the <strong>Common Area</strong> can be cast by <em>any player</em>. If another player drops a scroll of the same element there, the old one returns to the bottom of that deck.
                 </div>`,
             action: 'read',
             nextLabel: 'Continue'
@@ -275,11 +280,11 @@ const TutorialMode = (function () {
             title: 'Casting a Scroll',
             content: `Once you've built the stone pattern and you're standing in its <strong>centre</strong>:
                 <ol style="margin:8px 0; padding-left:18px; line-height:2;">
-                    <li>Have the scroll in your <strong>Active Area</strong></li>
-                    <li>Press <strong>Cast Spell (2 AP)</strong></li>
+                    <li>Have the scroll in your <strong>Active Area</strong> (or the Common Area)</li>
+                    <li>Press <strong>Cast Spell</strong> in the dock — or click the glowing <strong>Cast ✦</strong> button on the scroll card when its pattern matches</li>
                 </ol>
                 <div style="margin-top:8px;">
-                    After casting, opponents get a brief <strong>response window</strong> — they can spend 2 AP to play a counter or reaction scroll if they have one ready.
+                    Casting costs <strong>2 AP</strong>. After casting, opponents get a brief <strong>response window</strong> — they can spend 2 AP to play a counter or reaction scroll if they have one ready.
                 </div>
                 <div style="margin-top:8px; color:#aaa; font-size:13px;">
                     The <strong>Level 1</strong> scroll of each element is a <em>Response Scroll</em> — you can only play it in response to another player's action, on their turn.
@@ -309,22 +314,23 @@ const TutorialMode = (function () {
         // ── 13 ────────────────────────────────────────────────────────────────
         {
             id: 'hud',
-            title: 'The HUD',
+            title: 'The HUD & Dock',
             content: `Quick reference for the on-screen controls:
                 <ul style="margin:10px 0; padding-left:18px; line-height:2.1;">
-                    <li><strong>AP counter</strong> (top-right) — your remaining action points</li>
+                    <li><strong>AP pips</strong> (top bar, right) — five orange squares; each one = 1 remaining action point</li>
+                    <li><strong>Shrine dots</strong> (top bar, centre) — five coloured dots that light up as you activate scrolls toward your win condition</li>
                     <li><strong>Players panel</strong> (right) — see opponents' scroll types, stones, active scrolls, and win progress</li>
-                    <li><strong>End Turn</strong> — ends your turn; your AP resets to 5 at the start of your next turn</li>
+                    <li><strong>Hand / Active / Common Area</strong> (dock) — open each scroll panel independently; counts show how many scrolls you hold</li>
+                    <li><strong>Cast Spell</strong> (dock) — casts the best matching scroll from your Active Area or the Common Area</li>
                     <li><strong>Undo Step</strong> — undoes your last single movement step</li>
-                    <li><strong>Elemental Reference</strong> — stone abilities at a glance</li>
-                    <li><strong>Scroll Reference</strong> — every scroll in the game</li>
+                    <li><strong>End Turn</strong> (top bar) — ends your turn; AP resets to 5 next turn</li>
                 </ul>
                 <div style="color:#aaa; font-size:13px;">
                     Save some AP before ending your turn — you can spend it on <strong>Response Scrolls</strong> during opponents' turns!
                 </div>`,
             action: 'read',
             nextLabel: "I'm ready!",
-            spotlight: '#hud-ap-value',
+            spotlight: '#hud-ap-pips',
             modalPos: 'corner'
         },
 

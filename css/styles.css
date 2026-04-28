@@ -1068,25 +1068,29 @@ body {
    ============================================ */
 .dock-bar {
     grid-area: dock;
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;  /* left roster | center buttons | right spacer */
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 0 16px;
+    gap: 12px;
+    padding: 0 20px;
     background: var(--bg-panel);
     border-top: 2px solid var(--border-subtle);
     z-index: var(--z-hud);
-    height: 68px;
+    height: 72px;
     box-sizing: border-box;
 }
 
-/* Player roster cards in dock */
+/* Right spacer mirrors the left roster width so actions stay centred */
+.dock-right-spacer {
+    /* same flex behaviour as .dock-players — flex:1 is handled by grid col 1fr */
+}
+
+/* Player roster cards in dock — left column */
 .dock-players {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 1;
-    justify-content: center;
+    justify-content: flex-start;
     overflow: hidden;
 }
 
@@ -1133,47 +1137,57 @@ body {
     flex-shrink: 0;
 }
 
-/* Dock action buttons */
+/* Dock action buttons — center column */
 .dock-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
+    justify-content: center;
+    gap: 10px;
 }
 
 .dock-actions button {
     font-family: var(--font-sans);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 5px 10px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-secondary);
-    border-radius: 3px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 22px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--text-primary);
+    border-radius: 6px;
     cursor: pointer;
     white-space: nowrap;
-    transition: border-color 0.15s, color 0.15s;
+    letter-spacing: 0.3px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
 .dock-actions button:hover {
+    background: rgba(255,255,255,0.12);
     border-color: var(--accent-gold);
-    color: var(--text-primary);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(217,176,140,0.2);
 }
 
 .dock-actions button.primary {
     background: var(--accent-orange);
     border-color: var(--accent-orange-hover);
     color: #fff;
-    font-weight: 600;
+    font-size: 14px;
+    padding: 11px 28px;
+    box-shadow: 0 2px 12px rgba(205,133,63,0.35);
 }
 
 .dock-actions button.primary:hover {
     background: var(--accent-orange-hover);
+    box-shadow: 0 4px 20px rgba(205,133,63,0.55);
 }
 
 .dock-actions button.danger {
     border-color: #c0392b;
     color: #e74c3c;
+}
+.dock-actions button.danger:hover {
+    background: rgba(192,57,43,0.15);
+    border-color: #e74c3c;
 }
 
 /* Button styles */
@@ -3317,5 +3331,409 @@ label, .hud-ap-label, .hud-ap-value {
     max-width: 580px;
     max-height: 80vh;
     overflow-y: auto;
+}
+
+/* ============================================
+   FLOATING SCROLL PANELS (.fsp)
+   ============================================ */
+
+.fsp {
+    position: fixed;
+    display: none;           /* shown via openPanel() */
+    flex-direction: column;
+    min-width: 180px;
+    min-height: 60px;
+    background: var(--bg-panel, #1d1831);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(148,88,244,0.08);
+    z-index: 800;
+    overflow: hidden;
+    font-family: var(--font-sans);
+    transition: box-shadow 0.2s ease;
+}
+.fsp:hover {
+    box-shadow: 0 12px 40px rgba(0,0,0,0.8), 0 0 0 1px rgba(148,88,244,0.18);
+}
+
+/* ---- Header ---- */
+.fsp-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    cursor: grab;
+    user-select: none;
+    flex-shrink: 0;
+}
+.fsp-header:active { cursor: grabbing; }
+
+.fsp-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: #e0d8f8;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fsp-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #888;
+    background: rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 1px 6px;
+    flex-shrink: 0;
+    transition: background 0.2s, color 0.2s;
+}
+
+/* Over-capacity: header gets a soft red glow */
+.fsp-header.fsp-over-capacity {
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.7),
+                inset 0 0 12px rgba(220, 38, 38, 0.15);
+    animation: fsp-capacity-pulse 1.6s ease-in-out infinite;
+}
+.fsp-header.fsp-over-capacity .fsp-badge {
+    background: rgba(220, 38, 38, 0.25);
+    color: #f87171;
+}
+
+@keyframes fsp-capacity-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(220,38,38,0.7), inset 0 0 12px rgba(220,38,38,0.15); }
+    50%       { box-shadow: 0 0 0 3px rgba(220,38,38,0.9), inset 0 0 20px rgba(220,38,38,0.28); }
+}
+
+/* ---- Header buttons ---- */
+.fsp-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: #777;
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1;
+    padding: 3px 6px;
+    cursor: pointer;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+.fsp-btn:hover {
+    color: #e0d8f8;
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.15);
+}
+
+
+/* ---- Body ---- */
+.fsp-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    /* Custom scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148,88,244,0.4) transparent;
+}
+.fsp-body::-webkit-scrollbar { width: 4px; }
+.fsp-body::-webkit-scrollbar-track { background: transparent; }
+.fsp-body::-webkit-scrollbar-thumb { background: rgba(148,88,244,0.4); border-radius: 2px; }
+
+.fsp-empty {
+    color: #555;
+    font-size: 12px;
+    text-align: center;
+    padding: 20px 8px;
+    font-style: italic;
+}
+
+/* ---- Resize handle ---- */
+.fsp-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    opacity: 0.4;
+    transition: opacity 0.15s;
+    /* Diagonal grip lines */
+    background-image: linear-gradient(
+        135deg,
+        transparent 30%,
+        rgba(255,255,255,0.4) 30%, rgba(255,255,255,0.4) 40%,
+        transparent 40%,
+        transparent 60%,
+        rgba(255,255,255,0.4) 60%, rgba(255,255,255,0.4) 70%,
+        transparent 70%
+    );
+}
+.fsp-resize-handle:hover { opacity: 0.9; }
+
+
+/* ---- Scroll card ---- */
+.fsp-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-left: 3px solid var(--el-color, #888);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: background 0.15s, box-shadow 0.15s;
+    flex-shrink: 0;
+}
+.fsp-card:hover {
+    background: rgba(255,255,255,0.06);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5), 0 0 0 1px var(--el-color, #888)22;
+}
+
+/* Card header: icon + title block + optional tag */
+.fsp-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 8px 9px 6px;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--el-color, #888) 14%, transparent), transparent 70%);
+    cursor: pointer;
+}
+.fsp-card-header:hover { filter: brightness(1.08); }
+
+.fsp-card-icon {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    flex-shrink: 0;
+    margin-top: 1px;
+    opacity: 0.85;
+    mix-blend-mode: screen;
+}
+
+.fsp-card-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.fsp-card-name {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8e0ff;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fsp-card-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--el-color, #888);
+    letter-spacing: 0.5px;
+    opacity: 0.85;
+    text-transform: uppercase;
+}
+
+/* Counter / Response badges */
+.fsp-card-tag {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 1px;
+}
+.fsp-tag-counter {
+    background: rgba(220, 38, 38, 0.2);
+    color: #f87171;
+    border: 1px solid rgba(220, 38, 38, 0.4);
+}
+.fsp-tag-response {
+    background: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+/* Description */
+.fsp-card-desc {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: #c0b8d8;
+    line-height: 1.55;
+    padding: 0 10px 8px;
+}
+
+/* Stone pattern — scale the ~230px createPatternVisual output down to ~106px */
+.fsp-card-pattern {
+    width: 106px;
+    height: 106px;
+    overflow: hidden;
+    margin: 0 auto 8px;
+    border-radius: 5px;
+    flex-shrink: 0;
+    position: relative;
+}
+.fsp-card-pattern > div {
+    transform: scale(0.46);
+    transform-origin: top left;
+    pointer-events: none;
+    margin-top: 0 !important;
+}
+
+/* Action buttons row */
+.fsp-card-actions {
+    display: flex;
+    gap: 5px;
+    padding: 0 9px 8px;
+}
+
+.fsp-card-btn {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 500;
+    padding: 4px 9px;
+    border-radius: 4px;
+    border: 1px solid rgba(148,88,244,0.35);
+    background: rgba(148,88,244,0.15);
+    color: #c4b5f8;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+.fsp-card-btn:hover {
+    background: rgba(148,88,244,0.35);
+    border-color: rgba(148,88,244,0.65);
+    color: #e8e0ff;
+}
+
+.fsp-card-btn-alt {
+    background: rgba(255,255,255,0.05);
+    color: #888;
+    border-color: rgba(255,255,255,0.12);
+}
+.fsp-card-btn-alt:hover {
+    background: rgba(255,255,255,0.12);
+    color: #bbb;
+    border-color: rgba(255,255,255,0.25);
+}
+
+/* Cast button — dim when pattern doesn't match, bright when it does */
+.fsp-card-btn-cast {
+    font-weight: 600;
+    letter-spacing: 0.4px;
+}
+.fsp-cast-dim {
+    background: rgba(255,255,255,0.04);
+    color: #666;
+    border-color: rgba(255,255,255,0.1);
+    cursor: pointer;
+}
+.fsp-cast-dim:hover {
+    background: rgba(255,255,255,0.08);
+    color: #999;
+}
+.fsp-cast-ready {
+    background: rgba(237,27,67,0.2);
+    color: #f87171;
+    border-color: rgba(237,27,67,0.5);
+    box-shadow: 0 0 8px rgba(237,27,67,0.3);
+    animation: fsp-cast-pulse 1.8s ease-in-out infinite;
+}
+.fsp-cast-ready:hover {
+    background: rgba(237,27,67,0.35);
+    border-color: rgba(237,27,67,0.75);
+    box-shadow: 0 0 14px rgba(237,27,67,0.5);
+}
+@keyframes fsp-cast-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(237,27,67,0.3); }
+    50%       { box-shadow: 0 0 16px rgba(237,27,67,0.6); }
+}
+
+/* Dock panel buttons — lit when their panel is open */
+.fsp-dock-btn-open {
+    background: rgba(148,88,244,0.2) !important;
+    border-color: rgba(148,88,244,0.55) !important;
+    color: #c4b5f8 !important;
+}
+
+/* ---- Hover preview card (floats outside the panel, no overflow clipping) ---- */
+.fsp-card-preview {
+    position: fixed;
+    z-index: 1500;
+    width: 480px;                  /* ~250% of the 300px panel card */
+    pointer-events: auto;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #15112a;           /* slightly deeper than bg-panel for contrast */
+    border: 1px solid rgba(255,255,255,0.16);
+    border-left: 6px solid var(--el-color, #888);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.92),
+                0 0 0 1px rgba(255,255,255,0.07),
+                0 0 48px color-mix(in srgb, var(--el-color, #888) 35%, transparent);
+    animation: fsp-preview-in 0.14s cubic-bezier(0.25,0.46,0.45,0.94);
+}
+@keyframes fsp-preview-in {
+    from { opacity: 0; transform: scale(0.92) translateY(6px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+.fsp-card-preview .fsp-card {
+    border: none !important;
+    border-left: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    margin: 0;
+    padding: 0;
+}
+.fsp-card-preview .fsp-card-header {
+    padding: 18px 20px 12px;
+    gap: 12px;
+}
+.fsp-card-preview .fsp-card-icon {
+    width: 36px;
+    height: 36px;
+}
+.fsp-card-preview .fsp-card-name {
+    font-size: 26px;
+}
+.fsp-card-preview .fsp-card-meta {
+    font-size: 14px;
+    opacity: 1;
+}
+.fsp-card-preview .fsp-card-tag {
+    font-size: 11px;
+    padding: 3px 8px;
+}
+.fsp-card-preview .fsp-card-desc {
+    font-size: 17px;
+    color: #d4cce8;
+    padding: 2px 20px 14px;
+    line-height: 1.65;
+}
+/* Pattern at 250%: 106px * 2.5 = 265px; scale = 265/230 ≈ 1.15 */
+.fsp-card-preview .fsp-card-pattern {
+    width: 265px;
+    height: 265px;
+    margin: 4px auto 16px;
+}
+.fsp-card-preview .fsp-card-pattern > div {
+    transform: scale(1.15);
+    transform-origin: top left;
+}
+/* No action buttons in the preview */
+.fsp-card-preview .fsp-card-actions {
+    display: none !important;
 }
 
