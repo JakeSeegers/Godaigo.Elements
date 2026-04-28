@@ -307,6 +307,9 @@ const ScrollPanelSystem = (() => {
                     e.stopPropagation();
                     const dest = document.getElementById('fsp-active');
                     if (dest) animateCardMove(card, dest);
+                    if (window.isTutorialMode && window.TutorialMode?.onScrollMoved) {
+                        window.TutorialMode.onScrollMoved(scrollName, 'hand', 'active');
+                    }
                     setTimeout(() => { sp.moveToActive(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toActive);
@@ -319,6 +322,9 @@ const ScrollPanelSystem = (() => {
                     e.stopPropagation();
                     const dest = document.getElementById('fsp-common');
                     if (dest) animateCardMove(card, dest);
+                    if (window.isTutorialMode && window.TutorialMode?.onScrollMoved) {
+                        window.TutorialMode.onScrollMoved(scrollName, 'hand', 'common');
+                    }
                     setTimeout(() => { sp.discardScroll(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toCommon);
@@ -333,6 +339,9 @@ const ScrollPanelSystem = (() => {
                     e.stopPropagation();
                     const dest = document.getElementById('fsp-common');
                     if (dest) animateCardMove(card, dest);
+                    if (window.isTutorialMode && window.TutorialMode?.onScrollMoved) {
+                        window.TutorialMode.onScrollMoved(scrollName, 'active', 'common');
+                    }
                     setTimeout(() => { sp.discardScroll(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toCommon);

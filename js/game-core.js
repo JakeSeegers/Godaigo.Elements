@@ -1553,6 +1553,11 @@
                     });
                 }
 
+                // Tutorial hook — fires when a spell is successfully cast
+                if (window.isTutorialMode && window.TutorialMode?.onSpellCast) {
+                    window.TutorialMode.onSpellCast(name);
+                }
+
                 const scrollData = { name, spell, fromCommonArea, casterIndex: activePlayerIndex };
 
                 // Open response window when 2+ players so the react phase always runs (others can respond or pass)
