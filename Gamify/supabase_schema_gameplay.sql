@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS badges (
     id          VARCHAR(50)  PRIMARY KEY,
     name        VARCHAR(255) NOT NULL,
     description TEXT,
-    icon        VARCHAR(10)  DEFAULT '🏆',
+    icon        VARCHAR(10)  DEFAULT '',
     criteria    JSONB,
     xp_reward   INTEGER      DEFAULT 0,
     gold_reward INTEGER      DEFAULT 0,
@@ -94,60 +94,60 @@ CREATE OR REPLACE FUNCTION update_user_xp(
     p_description TEXT DEFAULT 'XP awarded'
 ) RETURNS JSONB AS $$
 DECLARE
-    current_xp    INTEGER;
-    current_level INTEGER;
-    new_xp        INTEGER;
-    new_level     INTEGER;
-    level_mult    INTEGER := 1000;
-    result        JSONB;
+    v_current_xp    INTEGER;
+    v_current_level INTEGER;
+    v_new_xp        INTEGER;
+    v_new_level     INTEGER;
+    v_level_mult    INTEGER := 1000;
+    v_result        JSONB;
 BEGIN
     SELECT total_xp, current_level
-    INTO   current_xp, current_level
+    INTO   v_current_xp, v_current_level
     FROM   user_profiles
     WHERE  user_id = p_user_id;
 
-    IF current_xp IS NULL THEN
+    IF v_current_xp IS NULL THEN
         INSERT INTO user_profiles (user_id, display_name, total_xp, current_level)
         VALUES (p_user_id, 'Player', p_xp_points, 1)
         ON CONFLICT (user_id) DO UPDATE
             SET total_xp      = user_profiles.total_xp + p_xp_points,
-                current_level = FLOOR((user_profiles.total_xp + p_xp_points) / level_mult) + 1,
+                current_level = FLOOR((user_profiles.total_xp + p_xp_points) / v_level_mult) + 1,
                 updated_at    = NOW();
-        current_xp    := 0;
-        current_level := 1;
+        v_current_xp    := 0;
+        v_current_level := 1;
     END IF;
 
-    new_xp    := current_xp + p_xp_points;
-    new_level := FLOOR(new_xp / level_mult) + 1;
+    v_new_xp    := v_current_xp + p_xp_points;
+    v_new_level := FLOOR(v_new_xp / v_level_mult) + 1;
 
     UPDATE user_profiles
-    SET    total_xp      = new_xp,
-           current_level = new_level,
+    SET    total_xp      = v_new_xp,
+           current_level = v_new_level,
            updated_at    = NOW()
     WHERE  user_id = p_user_id;
 
     INSERT INTO user_activities (user_id, activity_type, xp_awarded, description)
     VALUES (p_user_id, 'xp_awarded', p_xp_points, p_description);
 
-    IF new_level > current_level THEN
+    IF v_new_level > v_current_level THEN
         UPDATE user_profiles
-        SET    gold = gold + (50 * (new_level - current_level))
+        SET    gold = gold + (50 * (v_new_level - v_current_level))
         WHERE  user_id = p_user_id;
 
         INSERT INTO user_activities (user_id, activity_type, gold_awarded, description)
-        VALUES (p_user_id, 'level_up', 50 * (new_level - current_level),
-                'Level up bonus: reached level ' || new_level);
+        VALUES (p_user_id, 'level_up', 50 * (v_new_level - v_current_level),
+                'Level up bonus: reached level ' || v_new_level);
     END IF;
 
-    result := jsonb_build_object(
+    v_result := jsonb_build_object(
         'success',    true,
-        'old_level',  current_level,
-        'new_level',  new_level,
+        'old_level',  v_current_level,
+        'new_level',  v_new_level,
         'xp_awarded', p_xp_points,
-        'total_xp',   new_xp,
-        'leveled_up', new_level > current_level
+        'total_xp',   v_new_xp,
+        'leveled_up', v_new_level > v_current_level
     );
-    RETURN result;
+    RETURN v_result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -343,61 +343,53 @@ GRANT EXECUTE ON FUNCTION check_badge_criteria TO authenticated;
 -- SEED DATA — GAMEPLAY BADGES
 -- =============================================================
 
-INSERT INTO badges (id, name, description, icon, criteria, xp_reward, gold_reward, rarity) VALUES
+INSERT INTO badges (id, name, description, criteria, xp_reward, gold_reward, rarity) VALUES
 
 ('first_steps',
  'First Steps',
  'Complete your first game.',
- '🌱',
  '{"type": "first_time", "activity_type": "game_complete"}',
  50, 10, 'common'),
 
 ('first_victory',
  'First Victory',
  'Win your first game.',
- '🏆',
  '{"type": "first_time", "activity_type": "game_win"}',
  100, 25, 'common'),
 
 ('scroll_apprentice',
  'Scroll Apprentice',
  'Cast 10 scrolls total.',
- '📜',
  '{"type": "activity_count", "activity_type": "scroll_cast", "count": 10}',
  50, 10, 'common'),
 
 ('scroll_adept',
  'Scroll Adept',
  'Cast 50 scrolls total.',
- '📖',
  '{"type": "activity_count", "activity_type": "scroll_cast", "count": 50}',
  100, 25, 'rare'),
 
 ('veteran',
  'Veteran',
  'Complete 10 games.',
- '⚔️',
  '{"type": "activity_count", "activity_type": "game_complete", "count": 10}',
  100, 20, 'rare'),
 
 ('champion',
  'Champion',
  'Win 5 games.',
- '🥇',
  '{"type": "activity_count", "activity_type": "game_win", "count": 5}',
  200, 50, 'epic'),
 
 ('master',
  'Master',
  'Win 10 games.',
- '👑',
  '{"type": "activity_count", "activity_type": "game_win", "count": 10}',
  300, 100, 'legendary'),
 
 ('dedicated',
  'Dedicated',
  'Log in on 7 different days.',
- '🔥',
  '{"type": "activity_count", "activity_type": "daily_login", "count": 7}',
  100, 25, 'rare')
 

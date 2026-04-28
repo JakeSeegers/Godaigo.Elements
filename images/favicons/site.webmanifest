@@ -1,0 +1,28 @@
+{
+  "name": "Godaigo Elements",
+  "short_name": "Godaigo",
+  "description": "A hex-tile strategy board game of elemental scrolls and stone placement.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "favicon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "favicon-256x256.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    },
+    {
+      "src": "favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

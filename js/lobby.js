@@ -58,6 +58,7 @@
 
         async function authSignOut() {
             await supabase.auth.signOut();
+            if (window.crtOverlay) window.crtOverlay.loadForUser(null);
             document.getElementById('multiplayer-lobby').style.display = 'none';
             document.getElementById('auth-screen').style.display = 'block';
             document.getElementById('auth-bar').style.display = 'none';
@@ -106,6 +107,11 @@
                     window.loadMainLeaderboard?.();
                 });
             }
+
+            // Load CRT settings for this user
+            if (window.crtOverlay) {
+                window.crtOverlay.loadForUser(user.id);
+            }
         }
 
         function showAuthError(msg) {
@@ -133,6 +139,7 @@
         let isJoining = false; // Prevent double-joins
 
         let lobbyUsername = ''; // Username from auth — set in onAuthSuccess, read everywhere instead of the hidden input
+        let localReadyState = false; // Tracked locally to avoid re-reading from DB in toggleReady
 
         // ========================================
         // GAME BROWSER & ROOM MANAGEMENT
@@ -203,11 +210,11 @@
             const roomNameRaw = document.getElementById('room-name-input')?.value.trim();
             const roomName = roomNameRaw || (username + "'s Game");
 
-            // --- One room at a time: check if this username is already in a waiting room ---
-            setBrowserStatus('Checking for existing rooms…');
+            // --- Auto-clean stale player entries for this username ---
+            const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
             const { data: existingPlayers } = await supabase
                 .from('players')
-                .select('game_id')
+                .select('id, game_id, created_at')
                 .eq('username', username);
             if (existingPlayers?.length) {
                 const gameIds = existingPlayers.map(p => p.game_id).filter(Boolean);
@@ -218,8 +225,17 @@
                         .in('id', gameIds)
                         .eq('status', 'waiting');
                     if (waitingRooms?.length) {
-                        setBrowserStatus('You\'re already in a waiting room. Leave it first before creating a new one.');
-                        return;
+                        // Only auto-clean entries older than 2 minutes (stale sessions)
+                        const staleIds = existingPlayers
+                            .filter(p => p.created_at < twoMinutesAgo)
+                            .map(p => p.id);
+                        if (staleIds.length) {
+                            await supabase.from('players').delete().in('id', staleIds);
+                            console.log('🧹 Auto-cleaned stale player entries:', staleIds);
+                        } else {
+                            setBrowserStatus('You\'re already in a waiting room. Leave it first before creating a new one.');
+                            return;
+                        }
                     }
                 }
             }
@@ -287,14 +303,33 @@
         // --- Shared join helper ---
 
         async function joinRoomAsPlayer(gameId, username) {
-            // Check username uniqueness within this room
+            // Auto-clean stale entries for this username; block only if last_seen is recent (active session)
+            // A player is considered active if their heartbeat fired within the last 90 seconds.
+            // last_seen may be NULL for a brand-new row that hasn't heartbeated yet — treat NULL as stale
+            // unless the row was created within the last 30 seconds (to avoid stomping a fresh join).
+            const ninetySecondsAgo = new Date(Date.now() - 90 * 1000).toISOString();
+            const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
             const { data: existing } = await supabase
                 .from('players')
-                .select('username')
+                .select('id, username, created_at, last_seen')
                 .eq('game_id', gameId);
-            if (existing?.some(p => p.username === username)) {
-                setBrowserStatus('That username is already taken in this room');
-                return false;
+            const match = existing?.filter(p => p.username === username) || [];
+            if (match.length) {
+                const stale = match.filter(p => {
+                    // Active = last_seen is recent, OR row is brand-new (< 30s) with no last_seen yet
+                    if (p.last_seen && p.last_seen > ninetySecondsAgo) return false; // active
+                    if (!p.last_seen && p.created_at > thirtySecondsAgo) return false; // brand-new
+                    return true; // stale
+                });
+                const active = match.filter(p => !stale.includes(p));
+                if (stale.length) {
+                    await supabase.from('players').delete().in('id', stale.map(p => p.id));
+                    console.log('🧹 Auto-cleaned stale entry for', username);
+                }
+                if (active.length) {
+                    setBrowserStatus('That username is already in this room');
+                    return false;
+                }
             }
             const { data, error } = await supabase
                 .from('players')
@@ -303,6 +338,8 @@
                 .single();
             if (error) { setBrowserStatus('Could not join: ' + error.message); return false; }
             myPlayerId = data.id;
+            localReadyState = false;
+            updateReadyButton(false);
             currentGameId = gameId;  // must be set BEFORE subscribeToLobby so filters use the correct room ID
             isMultiplayer = true;
             // Determine host: first player by creation time
@@ -312,7 +349,13 @@
                 .eq('game_id', gameId)
                 .order('created_at', { ascending: true });
             isHost = all?.[0]?.id === myPlayerId;
+            // Host is implicitly ready — their action is clicking Start, not toggling ready
+            if (isHost) {
+                localReadyState = true;
+                await supabase.from('players').update({ is_ready: true }).eq('id', myPlayerId);
+            }
             document.getElementById('ready-controls').style.display = 'block';
+            updateReadyButton(localReadyState);
             subscribeToLobby();
             updateHeartbeat();
             startLobbyPoll();
@@ -326,6 +369,13 @@
         async function leaveRoom() {
             const leavingRoomId = currentGameId; // capture before we null it out
             const leavingAsHost = isHost;
+
+            // If we're mid-game, reset game state first before returning to lobby
+            const gameContainer = document.querySelector('.game-container');
+            const inGame = gameContainer && gameContainer.style.display !== 'none';
+            if (inGame && typeof resetToLobby === 'function') {
+                resetToLobby();
+            }
 
             if (myPlayerId) {
                 await supabase.from('players').delete().eq('id', myPlayerId);
@@ -367,6 +417,18 @@
             const refreshBtn = document.getElementById('refresh-browser-btn');
             if (refreshBtn) refreshBtn.textContent = '…';
 
+            // Sweep stale players from waiting rooms (disconnected without clean logout)
+            const staleTime = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+            const { data: waitingRooms } = await supabase
+                .from('game_room').select('id').eq('status', 'waiting');
+            if (waitingRooms?.length) {
+                await supabase
+                    .from('players')
+                    .delete()
+                    .in('game_id', waitingRooms.map(r => r.id))
+                    .lt('last_seen', staleTime);
+            }
+
             const { data: rooms } = await supabase
                 .from('game_room')
                 .select('id,host_name,created_at')
@@ -393,10 +455,29 @@
             const counts = {};
             (players || []).forEach(p => { counts[p.game_id] = (counts[p.game_id] || 0) + 1; });
 
-            list.innerHTML = rooms.map(r => `
+            // Auto-delete ghost rooms (exist in game_room but have no players)
+            // Only delete rooms older than 60s to avoid racing with a player who is mid-join
+            const sixtySecondsAgo = new Date(Date.now() - 60 * 1000).toISOString();
+            const ghostIds = rooms
+                .filter(r => !counts[r.id] && r.created_at < sixtySecondsAgo)
+                .map(r => r.id);
+            if (ghostIds.length) {
+                supabase.from('game_room').delete().in('id', ghostIds).then(() => {
+                    console.log('🗑️ Cleaned up', ghostIds.length, 'empty ghost room(s):', ghostIds);
+                });
+            }
+
+            // Only show rooms that actually have players in them
+            const liveRooms = rooms.filter(r => (counts[r.id] || 0) > 0);
+            if (!liveRooms.length) {
+                list.innerHTML = '<p style="color:#666;font-style:italic;text-align:center;padding:20px 0;margin:0;">No public games open. Host one!</p>';
+                return;
+            }
+
+            list.innerHTML = liveRooms.map(r => `
                 <div class="game-room-card" onclick="joinPublicGame(${r.id})">
                     <div class="game-room-host">${_esc(r.host_name || 'Unnamed Game')}</div>
-                    <div class="game-room-count">${counts[r.id] || 0} / 5</div>
+                    <div class="game-room-count">${counts[r.id]} / 5</div>
                     <button class="game-room-join-btn">Join</button>
                 </div>`).join('');
         }
@@ -417,6 +498,38 @@
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+        }
+
+        // ── Retro dialog helpers ──────────────────────────────────
+        /**
+         * Show a retro-styled confirm dialog.
+         * onOk is called if the player clicks OK; nothing happens on Cancel.
+         */
+        function showRetroConfirm(title, lines, onOk) {
+            const id = 'retro-confirm-overlay';
+            if (document.getElementById(id)) return; // prevent duplicates
+
+            const bodyLines = lines.map(l => `<div class="retro-dlg-line">${l}</div>`).join('');
+            const el = document.createElement('div');
+            el.id        = id;
+            el.className = 'retro-dlg-overlay';
+            el.innerHTML = `
+                <div class="retro-dlg-box">
+                    <div class="retro-dlg-title">${title}</div>
+                    <div class="retro-dlg-body">${bodyLines}</div>
+                    <div class="retro-dlg-btns">
+                        <button class="retro-dlg-btn ok"     id="retro-confirm-ok">OK</button>
+                        <button class="retro-dlg-btn cancel" id="retro-confirm-cancel">Cancel</button>
+                    </div>
+                </div>`;
+
+            document.body.appendChild(el);
+
+            document.getElementById('retro-confirm-ok').onclick = () => {
+                el.remove();
+                onOk();
+            };
+            document.getElementById('retro-confirm-cancel').onclick = () => el.remove();
         }
 
         // ========================================
@@ -484,7 +597,7 @@
 
                     if (activePlayers && activePlayers.length > 0) {
                         // Game is in progress with real players — don't nuke it
-                        alert('⚠️ A game is currently in progress with other players.\n\nPlease wait for it to finish, or use "Reset Lobby" to force-clear.');
+                        alert('A game is currently in progress with other players.\n\nPlease wait for it to finish, or use "Reset Lobby" to force-clear.');
                         isJoining = false;
                         joinButton.disabled = false;
                         usernameInput.disabled = false;
@@ -527,6 +640,8 @@
 
                 myPlayerId = data.id;
                 isMultiplayer = true;
+                localReadyState = false;
+                updateReadyButton(false);
 
                 // After insertion, check if we're the first player (host)
                 // The host is simply the player with the oldest created_at timestamp
@@ -538,11 +653,18 @@
                 // We're host if we're the first player (by creation time)
                 isHost = allPlayersAfterInsert && allPlayersAfterInsert[0].id === myPlayerId;
 
+                // Host is implicitly ready — their action is clicking Start, not toggling ready
+                if (isHost) {
+                    localReadyState = true;
+                    await supabase.from('players').update({ is_ready: true }).eq('id', myPlayerId);
+                }
+
                 console.log('✅ Joined lobby as:', username, 'ID:', myPlayerId, isHost ? '(HOST)' : '');
 
                 // Hide join form, show ready controls
                 document.getElementById('join-form').style.display = 'none';
                 document.getElementById('ready-controls').style.display = 'block';
+                updateReadyButton(localReadyState);
 
                 // Start listening for updates
                 subscribeToLobby();
@@ -563,12 +685,17 @@
         }
 
         // Leave the current game
-        async function leaveGame() {
+        function leaveGame() {
             if (!myPlayerId) return;
 
-            const confirmed = confirm('⚠️ Leave Game?\n\nYou will be removed from this game and cannot rejoin.\n\nAre you sure?');
-            if (!confirmed) return;
+            showRetroConfirm(
+                'Leave Game?',
+                ['You will be removed from this game', 'and cannot rejoin.'],
+                _doLeaveGame
+            );
+        }
 
+        async function _doLeaveGame() {
             try {
                 console.log('👋 Leaving game...');
 
@@ -586,8 +713,7 @@
                 isHost = false;
                 isMultiplayer = false;
 
-                // Stop activity monitoring
-                stopTurnTimerMonitoring();
+                // Stop polling and subscriptions
                 stopLobbyPoll();
 
                 // Unsubscribe from channels
@@ -604,37 +730,37 @@
                     gameChannel = null;
                 }
 
-                // Reset UI
-                document.getElementById('ready-controls').style.display = 'none';
-                document.getElementById('leave-game').style.display = 'none';
+                // Reset UI state
+                const readyCtrl = document.getElementById('ready-controls');
+                if (readyCtrl) readyCtrl.style.display = 'none';
                 currentGameId = null;
                 currentJoinCode = null;
 
-                // Hide game, show lobby
-                document.querySelector('.game-container').style.display = 'none';
-                document.getElementById('multiplayer-lobby').style.display = 'block';
+                // resetToLobby handles: clearBoard, stopTurnTimerMonitoring,
+                // hiding game-layout, showing lobby-wrapper, hiding leave/end-turn buttons
+                resetToLobby();
 
-                // Clear the board
-                clearBoard(true);
-
-                // Return to game browser
+                // Return to game browser panel
                 showGameBrowser();
 
                 console.log('✅ Left game successfully');
-                alert('You have left the game.');
 
             } catch (error) {
                 console.error('Error leaving game:', error);
-                alert('Failed to leave game: ' + error.message);
+                showRetroConfirm('Leave Failed', [error.message], () => {});
             }
         }
 
         // Reset the entire lobby (clear all players and reset game room)
-        async function resetLobby() {
-            const confirmed = confirm('⚠️ Reset Lobby?\n\nThis will:\n- Remove all players from the lobby\n- Reset the game room to waiting state\n- Clear the board if game has started\n\nAre you sure?');
+        function resetLobby() {
+            showRetroConfirm(
+                'Reset Lobby?',
+                ['Remove all players', 'Reset room to waiting state', 'Clear the board'],
+                _doResetLobby
+            );
+        }
 
-            if (!confirmed) return;
-
+        async function _doResetLobby() {
             try {
                 console.log('📄 Resetting lobby...');
 
@@ -696,13 +822,17 @@
                 showGameBrowser();
 
                 console.log('✅ Lobby reset complete!');
-                alert('✅ Lobby has been reset! You can now host or join again.');
+                alert('Lobby has been reset! You can now host or join again.');
 
             } catch (error) {
                 console.error('Error resetting lobby:', error);
                 alert('Failed to reset lobby: ' + error.message);
             }
         }
+
+        // Guard: XP is awarded once per game session — prevents double-award from
+        // multiple handleGameOver calls (game-core direct + broadcast echo + DB subscription)
+        let _gameOverXpAwarded = false;
 
         // Handle game over - mark game as finished and show win screen
         async function handleGameOver(winnerPlayerIndex, winType = 'scrolls') {
@@ -711,14 +841,23 @@
             try {
                 console.log('🏆 Game Over! Winner:', winnerPlayerIndex, 'Type:', winType);
 
-                // Show win screen immediately for the winner
-                showGameOverToAll(winnerPlayerIndex, winType);
-
-                // Award gamification XP for this game result
-                if (window.gami?.userId) {
+                // Award gamification XP FIRST — before showing the overlay — so the async RPC
+                // completes before any page reload triggered by "Return to Lobby" can cancel it
+                if (!_gameOverXpAwarded) {
+                    _gameOverXpAwarded = true;
                     const isWinner = (winnerPlayerIndex === myPlayerIndex);
-                    window.gami.onGameComplete(isWinner, totalPlayers);
+                    console.log(`[XP] Attempting to award XP — isWinner=${isWinner}, userId=${window.gami?.userId}, totalPlayers=${totalPlayers}`);
+                    if (window.gami?.userId) {
+                        await window.gami.onGameComplete(isWinner, totalPlayers);
+                    } else {
+                        console.warn('[XP] gami.userId not set — XP skipped. gami object:', window.gami);
+                    }
+                } else {
+                    console.log('[XP] handleGameOver called again — XP already awarded this session, skipping.');
                 }
+
+                // Show win screen after XP is secured
+                showGameOverToAll(winnerPlayerIndex, winType);
 
                 // Update game room status to 'finished' and store winner index
                 const { error } = await supabase
@@ -747,76 +886,65 @@
                 return; // Don't show duplicate
             }
 
-            const notification = document.createElement('div');
-            notification.id = 'game-over-notification';
-            Object.assign(notification.style, {
-                position: 'fixed', left: '50%', top: '50%',
-                transform: 'translate(-50%, -50%)',
-                backgroundColor: '#2c3e50', padding: '40px',
-                borderRadius: '15px', boxShadow: '0 0 30px rgba(0,0,0,0.8)',
-                zIndex: '1000', color: 'white', textAlign: 'center', minWidth: '500px',
-                border: '3px solid gold'
-            });
+            const overlay = document.createElement('div');
+            overlay.id = 'game-over-notification';
+            overlay.className = 'game-over-overlay';
 
-            const title = document.createElement('h1');
+            const box = document.createElement('div');
+            box.className = 'game-over-box';
+
+            const title = document.createElement('div');
             title.textContent = 'GAME OVER';
-            title.style.marginTop = '0';
-            title.style.color = 'gold';
-            title.style.fontSize = '42px';
-            title.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
-            notification.appendChild(title);
+            title.className = 'game-over-title';
+            box.appendChild(title);
 
-            // Show which player won using the new getPlayerColorName function
             const winnerName = getPlayerColorName(winnerPlayerIndex);
-
             const playerName = document.createElement('div');
             playerName.textContent = `${winnerName} wins!`;
-            playerName.style.fontSize = '28px';
-            playerName.style.fontWeight = 'bold';
-            playerName.style.color = 'gold';
-            playerName.style.marginBottom = '10px';
-            notification.appendChild(playerName);
+            playerName.className = 'game-over-winner';
+            playerName.style.color = '#d9b08c';
+            box.appendChild(playerName);
 
             const msg = document.createElement('div');
-            if (winType === 'last_standing') {
-                msg.textContent = 'Every other player left. You win!';
-            } else {
-                msg.textContent = 'All five elements have been mastered!';
-            }
-            msg.style.fontSize = '24px';
-            msg.style.marginBottom = '10px';
-            notification.appendChild(msg);
+            msg.textContent = winType === 'last_standing'
+                ? 'Every other player left. You win!'
+                : 'All five elements have been mastered!';
+            msg.className = 'game-over-msg';
+            box.appendChild(msg);
 
-            // Only show elements if won by collecting scrolls
             if (winType === 'scrolls') {
                 const elements = document.createElement('div');
-                elements.style.fontSize = '32px';
-                elements.style.margin = '20px 0';
-                elements.innerHTML = '▲ ◯ ♦ ≋ ✺';
-                notification.appendChild(elements);
+                elements.className = 'game-over-elements';
+                elements.innerHTML = ['earth','water','fire','wind','void'].map(el =>
+                    `<img src="images/${el === 'earth' ? 'mountainsymbol' : el === 'water' ? 'watersymbol' : el === 'fire' ? 'firesymbol' : el === 'wind' ? 'windsymbol' : 'voidsymbol'}.png" class="element-icon-sm" alt="${el}">`
+                ).join(' ');
+                box.appendChild(elements);
             }
 
             const subtitle = document.createElement('div');
             subtitle.textContent = 'The path of balance is complete.';
-            subtitle.style.fontSize = '16px';
-            subtitle.style.fontStyle = 'italic';
-            subtitle.style.color = '#bdc3c7';
-            subtitle.style.marginBottom = '20px';
-            notification.appendChild(subtitle);
+            subtitle.className = 'game-over-subtitle';
+            box.appendChild(subtitle);
+
+            // XP reward line — shown after onGameComplete resolves
+            const xpLine = document.createElement('div');
+            xpLine.id = 'game-over-xp-line';
+            xpLine.style.cssText = `
+                font-family: var(--font-pixel, monospace); font-size: 9px;
+                color: #f0c040; letter-spacing: 1px; margin: 8px 0 4px;
+                min-height: 16px;
+            `;
+            const isWinner = (winnerPlayerIndex === myPlayerIndex);
+            const n = Math.max(2, totalPlayers || 2);
+            const xpAmt = isWinner ? 75 + (n - 1) * 25 : 20 + (n - 1) * 10;
+            xpLine.textContent = isWinner ? `+${xpAmt} XP  —  VICTORY` : `+${xpAmt} XP  —  GAME COMPLETE`;
+            box.appendChild(xpLine);
 
             const lobbyBtn = document.createElement('button');
             lobbyBtn.textContent = 'Return to Lobby';
-            lobbyBtn.style.padding = '12px 24px';
-            lobbyBtn.style.fontSize = '16px';
-            lobbyBtn.style.backgroundColor = 'gold';
-            lobbyBtn.style.color = '#2c3e50';
-            lobbyBtn.style.border = 'none';
-            lobbyBtn.style.borderRadius = '5px';
-            lobbyBtn.style.cursor = 'pointer';
-            lobbyBtn.style.fontWeight = 'bold';
+            lobbyBtn.className = 'retro-dlg-btn ok';
             lobbyBtn.onclick = async () => {
                 try {
-                    // Clean up: delete all players in this room and reset this game room
                     const roomId = currentGameId;
                     if (roomId) {
                         const { data: allP } = await supabase.from('players').select('id').eq('game_id', roomId);
@@ -830,43 +958,51 @@
                 }
                 window.location.reload();
             };
-            notification.appendChild(lobbyBtn);
+            box.appendChild(lobbyBtn);
 
-            document.body.appendChild(notification);
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+        }
+
+        // Update the ready button to reflect current state clearly
+        function updateReadyButton(isReady) {
+            const readyButton = document.getElementById('ready-button');
+            if (!readyButton) return;
+            // The host's action is starting the game, not toggling ready — hide it for them
+            if (isHost) {
+                readyButton.style.display = 'none';
+                return;
+            }
+            readyButton.style.display = '';
+            if (isReady) {
+                readyButton.textContent = '✓ Ready';
+                readyButton.style.background = '#4CAF50';
+                readyButton.title = 'Click to cancel ready';
+            } else {
+                readyButton.textContent = 'Not Ready';
+                readyButton.style.background = '#f44336';
+                readyButton.title = 'Click to mark yourself ready';
+            }
         }
 
         // Toggle ready status
         async function toggleReady() {
             if (!myPlayerId) return;
-            
+
             try {
-                // Get current ready state
-                const { data: currentPlayer } = await supabase
-                    .from('players')
-                    .select('is_ready')
-                    .eq('id', myPlayerId)
-                    .single();
-                
-                const newReadyState = !currentPlayer.is_ready;
-                
+                const newReadyState = !localReadyState;
+
                 // Update ready state
                 const { error } = await supabase
                     .from('players')
                     .update({ is_ready: newReadyState })
                     .eq('id', myPlayerId);
-                
+
                 if (error) throw error;
-                
-                // Update button
-                const readyButton = document.getElementById('ready-button');
-                if (newReadyState) {
-                    readyButton.textContent = 'Not Ready';
-                    readyButton.style.background = '#f44336';
-                } else {
-                    readyButton.textContent = "I'm Ready!";
-                    readyButton.style.background = '#4CAF50';
-                }
-                
+
+                localReadyState = newReadyState;
+                updateReadyButton(newReadyState);
+
             } catch (error) {
                 console.error('Error toggling ready:', error);
             }
@@ -928,7 +1064,7 @@
                             }
 
                             // Show alert and reload the page to fully reset
-                            alert('⚠️ You were kicked from the game (timeout). The page will refresh.');
+                            alert('You were kicked from the game (timeout). The page will refresh.');
 
                             // Reload the page to return to a clean state
                             setTimeout(() => {
@@ -952,7 +1088,7 @@
                             if (room && room.status === 'playing') {
                                 const leftPlayer = allPlayersData.find(p => p.id === payload.old.id);
                                 const playerName = leftPlayer ? getPlayerColorName(leftPlayer.player_index) : 'A player';
-                                updateStatus(`👋 ${playerName} left the game`);
+                                updateStatus(`${playerName} left the game`);
 
                                 // Check if I'm the only player left (scoped to this room)
                             const { data: remainingPlayers } = await supabase
@@ -1060,9 +1196,25 @@
                     }
                 )
                 .subscribe();
-            
+
             // Initial update
             updatePlayerList();
+
+            // Fallback: poll once after subscription is established in case we missed
+            // the status='playing' update while the Realtime channel was connecting
+            setTimeout(async () => {
+                if (!currentGameId) return;
+                if (document.getElementById('game-layout')?.classList.contains('active')) return;
+                const { data: room } = await supabase
+                    .from('game_room')
+                    .select('status')
+                    .eq('id', currentGameId)
+                    .single();
+                if (room?.status === 'playing') {
+                    console.log('🔄 Fallback poll: detected game already started — joining now');
+                    handleGameStart();
+                }
+            }, 2000);
         }
 
         // Update player list display
@@ -1089,7 +1241,7 @@
                     const readyColor = p.is_ready ? '#4CAF50' : '#999';
                     const meLabel = isMe ? ' <span style="color: #ffd700;">(You)</span>' : '';
                     // First player in the list (index 0) is the host
-                    const hostLabel = index === 0 ? ' <span style="color: #FF9800;">👑 Host</span>' : '';
+                    const hostLabel = index === 0 ? ' <span style="color: #FF9800;">Host</span>' : '';
                     // Apply local player's equipped name colour; other players keep default
                     const nameStyle = isMe
                         ? (window.cosmeticsSystem?.getNameColorStyle() || '')
@@ -1111,12 +1263,8 @@
                 const hostSettings = document.getElementById('host-settings');
                 const totalCount = players.length;
 
-                // Host must also click "I'm Ready!" before the Start Game button appears,
-                // so the game can't start while the host is AFK or not yet prepared.
-                const hostPlayerData = players.find(p => p.id === myPlayerId);
-                const hostIsReady = hostPlayerData?.is_ready ?? false;
-
-                if (isHost && totalCount >= 2 && totalCount <= 5 && hostIsReady) {
+                // Host settings (and Start button) appear as soon as there are enough players
+                if (isHost && totalCount >= 2 && totalCount <= 5) {
                     hostSettings.style.display = 'block';
                 } else {
                     hostSettings.style.display = 'none';
@@ -1131,11 +1279,11 @@
                 } else if (totalCount > 5) {
                     statusDiv.textContent = 'Too many players! Maximum is 5.';
                     statusDiv.style.color = '#f44336';
-                } else if (isHost && !hostIsReady) {
-                    statusDiv.textContent = `${totalCount} players in lobby. Click "I\'m Ready!" to reveal the Start button.`;
-                    statusDiv.style.color = '#FF9800';
+                } else if (isHost) {
+                    statusDiv.textContent = `${totalCount} players in lobby. Ready to start!`;
+                    statusDiv.style.color = '#4CAF50';
                 } else {
-                    statusDiv.textContent = `${totalCount} players in lobby. Host can start the game!`;
+                    statusDiv.textContent = `${totalCount} players in lobby. Waiting for host to start...`;
                     statusDiv.style.color = '#4CAF50';
                 }
                 
@@ -1267,56 +1415,6 @@
             }
         }
 
-        // Check if game should start (DEPRECATED - now host-controlled)
-        async function checkGameStart() {
-            try {
-                const { data: players, error } = await supabase
-                    .from('players')
-                    .select('*');
-                
-                if (error) throw error;
-                
-                // Need at least 2 players, max 5
-                if (players.length < 2 || players.length > 5) return;
-                
-                // Check if all ready
-                const allReady = players.every(p => p.is_ready);
-                if (!allReady) return;
-                
-                console.log('🎮 All players ready! Starting game...');
-                
-                // Randomly assign player indices and colors
-                const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
-                const shuffledIndices = [...Array(players.length).keys()].sort(() => Math.random() - 0.5);
-                
-                // Update game room status
-                const { error: roomError } = await supabase
-                    .from('game_room')
-                    .update({ status: 'playing', current_turn_index: 0 })
-                    .eq('id', 1);
-                
-                if (roomError) throw roomError;
-                
-                // Assign colors and indices to players
-                for (let i = 0; i < players.length; i++) {
-                    const player = players[i];
-                    const assignedIndex = shuffledIndices[i];
-                    const assignedColor = colorRankOrder[assignedIndex];
-                    
-                    await supabase
-                        .from('players')
-                        .update({ 
-                            player_index: assignedIndex, 
-                            color: assignedColor 
-                        })
-                        .eq('id', player.id);
-                }
-                
-            } catch (error) {
-                console.error('Error checking game start:', error);
-            }
-        }
-
         // Handle game start
         async function handleGameStart() {
             // Guard against duplicate calls (host's direct call + Realtime subscription racing)
@@ -1433,27 +1531,22 @@
             }
         }
 
-        // Update heartbeat (keep player active)
+        // Update heartbeat (keep player active while in waiting room only)
+        let _heartbeatInterval = null;
         function updateHeartbeat() {
             if (!myPlayerId) return;
-
-            // REMOVED: Automatic heartbeat was preventing timeout kicks
-            // Players' last_seen is updated only when they make moves via recordActivity()
-            // This allows the inactivity timeout to properly detect and kick inactive players
-
-            // setInterval(async () => {
-            //     // Don't update if we're no longer in the lobby
-            //     if (!myPlayerId) return;
-
-            //     try {
-            //         await supabase
-            //             .from('players')
-            //             .update({ last_seen: new Date().toISOString() })
-            //             .eq('id', myPlayerId);
-            //     } catch (error) {
-            //         console.error('Heartbeat error:', error);
-            //     }
-            // }, 30000); // Every 30 seconds
+            if (_heartbeatInterval) clearInterval(_heartbeatInterval);
+            _heartbeatInterval = setInterval(async () => {
+                if (!myPlayerId) { clearInterval(_heartbeatInterval); return; }
+                // Skip heartbeat during active game — in-game inactivity timeout uses last_seen
+                if (document.getElementById('game-layout')?.classList.contains('active')) return;
+                try {
+                    await supabase
+                        .from('players')
+                        .update({ last_seen: new Date().toISOString() })
+                        .eq('id', myPlayerId);
+                } catch (e) { /* ignore */ }
+            }, 30000); // Every 30 seconds
         }
 
         // Clean up on page unload (synchronous to ensure it completes)
@@ -1513,36 +1606,6 @@
             }
         }
 
-        // Auto-detect and clean up stale lobby state on page load
-        (async function checkLobbyStateOnLoad() {
-            try {
-                const { data: room } = await supabase
-                    .from('game_room')
-                    .select('status')
-                    .eq('id', 1)
-                    .single();
-
-                if (room && (room.status === 'playing' || room.status === 'finished')) {
-                    // Check if any players are actually still in the game
-                    const { data: players } = await supabase
-                        .from('players')
-                        .select('id');
-
-                    if (!players || players.length === 0) {
-                        // Abandoned game — auto-reset so next joiner gets a clean lobby
-                        console.log('🧹 Stale game detected (no players) — auto-resetting lobby');
-                        await supabase
-                            .from('game_room')
-                            .update({ status: 'waiting', current_turn_index: 0 })
-                            .eq('id', 1);
-                    } else {
-                        console.log(`ℹ️ Game in progress with ${players.length} player(s)`);
-                    }
-                }
-            } catch (err) {
-                console.error('Lobby state check error:', err);
-            }
-        })();
 
         // Secret keyboard sequence "reset" to reveal the Reset Lobby button
         (function() {
@@ -1756,7 +1819,7 @@
                     if (payload.turnNumber > expectedTurn) {
                         // We missed some turns! Log warning
                         console.warn(`⚠️ DESYNC DETECTED: Expected turn ${expectedTurn}, received turn ${payload.turnNumber}. Missed ${payload.turnNumber - expectedTurn} turn(s).`);
-                        updateStatus(`⚠️ Turn sync issue detected - auto-correcting...`);
+                        updateStatus(`Turn sync issue detected - auto-correcting...`);
                     } else if (payload.turnNumber < lastReceivedTurnNumber) {
                         // Received an old turn? Ignore it
                         console.warn(`⚠️ Received outdated turn ${payload.turnNumber} (current: ${lastReceivedTurnNumber}). Ignoring.`);
@@ -1859,10 +1922,10 @@
                 }
 
                 if (isMyTurn()) {
-                    updateStatus(`✅ All tiles placed! It's your turn!`);
+                    updateStatus(`All tiles placed! It's your turn!`);
                 } else {
                     const firstPlayerColorName = getPlayerColorName(activePlayerIndex);
-                    updateStatus(`✅ All tiles placed! Waiting for ${firstPlayerColorName}'s turn...`);
+                    updateStatus(`All tiles placed! Waiting for ${firstPlayerColorName}'s turn...`);
                 }
 
                 // Ensure standard turn UI becomes visible after placement phase
@@ -1896,9 +1959,9 @@
                 // Show notification
                 const playerName = getPlayerColorName(playerIndex);
                 if (isCatacomb) {
-                    updateStatus(`✨ ${playerName} cast ${spellName}! Activated: ${elements.join(', ')}`);
+                    updateStatus(`${playerName} cast ${spellName}! Activated: ${elements.join(', ')}`);
                 } else {
-                    updateStatus(`✨ ${playerName} cast ${spellName}! Activated ${element} (level ${level})`);
+                    updateStatus(`${playerName} cast ${spellName}! Activated ${element} (level ${level})`);
                 }
             });
 
@@ -1927,14 +1990,26 @@
                 // Show notification
                 const playerName = getPlayerColorName(playerIndex);
                 const activatedStr = activatedElements ? activatedElements.join(', ') : element;
-                updateStatus(`✨ ${playerName} used ${effectName}! Activated: ${activatedStr}`);
+                updateStatus(`${playerName} used ${effectName}! Activated: ${activatedStr}`);
 
                 // Check win condition — all 5 elements activated
                 if (spellSystem.playerScrolls[playerIndex].activated.size === 5) {
                     console.log(`🏆 Win condition met for player ${playerIndex} (detected via scroll-effect broadcast)`);
-                    spellSystem.showLevelComplete(playerIndex);
+                    // For the winner's own echo: showLevelComplete already ran locally and
+                    // showGameOverToAll is guarded by #game-over-notification. Safe to call again.
+                    // For observers: handleGameOver → showGameOverToAll shows the win screen.
                     handleGameOver(playerIndex);
                 }
+            });
+
+            // Simplify applied by opponent
+            gameChannel.on('broadcast', { event: 'simplify-applied' }, ({ payload }) => {
+                const { playerIndex } = payload;
+                if (spellSystem?.scrollEffects) {
+                    spellSystem.scrollEffects.activeBuffs.simplify = { expiresThisTurn: true, playerIndex };
+                }
+                const playerName = getPlayerColorName(playerIndex);
+                updateStatus(`Simplify: ${playerName}'s scrolls cost 1 AP to cast until their next turn.`);
             });
 
             // Reflect triggered at start of turn: run the reflected scroll's effect and update activated elements.
@@ -2171,7 +2246,7 @@
                 spellSystem.updateScrollCount();
 
                 const playerName = getPlayerColorName(playerIndex);
-                updateStatus(`📜 ${playerName} collected a ${shrineType} scroll!`);
+                updateStatus(`${playerName} collected a ${shrineType} scroll!`);
                 updateOpponentPanel();
                 if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
             });
@@ -2201,7 +2276,7 @@
                 spellSystem.updateScrollCount();
 
                 const playerName = getPlayerColorName(playerIndex);
-                updateStatus(`📜 ${playerName} used Scholar's Insight to search the ${element} deck!`);
+                updateStatus(`${playerName} used Scholar's Insight to search the ${element} deck!`);
                 updateOpponentPanel();
                 if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
             });
@@ -2475,29 +2550,23 @@
                                 console.log(`ℹ️ Skipping response effect for ${result.scrollName} (responder is player ${result.casterIndex}, I am ${myPlayerIndex})`);
                             }
                         } else if (result.result === 'countered-original') {
-                            // Counter scroll (like Psychic) — execute its effect on this
-                            // client so the counter-caster gets psychicPending / buffs set.
+                            // Counter scroll (like Psychic or Iron Stance) resolved on the non-caster client.
+                            //
+                            // DO NOT re-execute the counter scroll's effect here.
+                            // The flow is:
+                            //   1. Caster's client runs resolveResponseStack() → fires scroll-resolved event
+                            //   2. multiplayer-state.js listener executes the counter effect (e.g. Psychic)
+                            //      and broadcasts psychic-buff-applied / scroll-effect
+                            //   3. Non-caster clients receive those broadcasts and apply state (psychicPending, etc.)
+                            //
+                            // Re-executing here caused a double psychicPending entry for the counter-caster,
+                            // which made the stolen scroll fire TWICE on the counter-caster's next turn —
+                            // appearing as if the original caster's scroll ability was still activating.
                             console.log(`ℹ️ Processing remote counter scroll: ${result.scrollName}, counter-caster: ${result.casterIndex}`);
-                            if (spellSystem.scrollEffects) {
-                                const scrollDef = spellSystem.patterns?.[result.scrollName];
-                                const trigScroll = { ...payload.triggeringScroll };
-                                if (!trigScroll.definition && trigScroll.name) {
-                                    trigScroll.definition = spellSystem.patterns?.[trigScroll.name];
-                                }
-                                spellSystem.scrollEffects.execute(result.scrollName, result.casterIndex, {
-                                    spell: scrollDef,
-                                    scrollName: result.scrollName,
-                                    triggeringScroll: trigScroll
-                                });
-                                // Clear pendingForceCommonArea — the caster's client
-                                // already called discardToCommonArea and broadcast the
-                                // common-area-update, so we must NOT call it again here.
-                                if (spellSystem.scrollEffects.pendingForceCommonArea?.scrollName === result.scrollName) {
-                                    delete spellSystem.scrollEffects.pendingForceCommonArea;
-                                }
-                            }
+
                             // If this is MY counter scroll, remove it from my active scrolls.
-                            // (The common area update arrives separately via common-area-update broadcast.)
+                            // Psychic goes to common area (arrives via common-area-update broadcast from caster).
+                            // Iron Stance stays in active (nothing to remove).
                             if (result.casterIndex === myPlayerIndex) {
                                 spellSystem.ensurePlayerScrollsStructure(myPlayerIndex);
                                 const myScrolls = spellSystem.playerScrolls[myPlayerIndex];
@@ -2533,6 +2602,13 @@
                     }
                     if (tile2.element) {
                         tile2.element.setAttribute('transform', `translate(${tile2.x}, ${tile2.y}) rotate(${tile2.rotation || 0})`);
+                    }
+
+                    // Safety: clear any stuck tile-swap selectionMode on this client —
+                    // the authoritative swap just arrived via broadcast, so no local selection needed.
+                    if (spellSystem?.scrollEffects?.selectionMode?.type === 'tile-swap') {
+                        spellSystem.scrollEffects.selectionMode.cleanup?.();
+                        spellSystem.scrollEffects.selectionMode = null;
                     }
 
                     updateStatus('Tiles were swapped by Shifting Sands!');
@@ -2670,13 +2746,24 @@
             });
 
             // Listen for scroll-used: handles scroll disposition on remote clients
-            // Specifically needed for scrolls like Arson that force themselves to common area
+            // Only handles forceToCommonArea=true (e.g. Arson forcing itself into the common area).
+            // fromCommonArea=true events are intentionally ignored — common area scrolls are permanent
+            // shared resources and stay after being cast; they're only replaced by a new scroll of the
+            // same element type being discarded to the common area.
             gameChannel.on('broadcast', { event: 'scroll-used' }, ({ payload }) => {
                 const { playerIndex, scrollName, fromCommonArea, forceToCommonArea } = payload;
-                if (!forceToCommonArea) return; // Only act when a scroll forces itself to common area
                 if (playerIndex === myPlayerIndex) return; // Caster already handled it locally
 
                 spellSystem.ensurePlayerScrollsStructure(playerIndex);
+
+                if (fromCommonArea) {
+                    // Common area scrolls persist after casting — nothing to clear
+                    return;
+                }
+
+                if (!forceToCommonArea) return; // Nothing to do for normal active-area disposition
+
+                // forceToCommonArea=true: scroll pushed itself to common area (e.g. Arson)
                 const playerScrolls = spellSystem.playerScrolls[playerIndex];
                 if (playerScrolls && playerScrolls.active.has(scrollName)) {
                     playerScrolls.active.delete(scrollName);
@@ -2772,6 +2859,15 @@
                 if (typeof turnNumber === 'number' && lastReceivedTurnNumber !== turnNumber) {
                     console.warn(`⚠️ DESYNC CORRECTED: Local turn was ${lastReceivedTurnNumber}, host says ${turnNumber}`);
                     lastReceivedTurnNumber = turnNumber;
+
+                    // If it's now our turn, reset AP — the normal turn-change broadcast
+                    // that does this was missed due to the reconnect
+                    if (playerIndex === myPlayerIndex) {
+                        console.warn('⚠️ DESYNC: Resetting AP for recovered turn');
+                        currentAP = maxAP;
+                        if (typeof refreshVoidAP === 'function') refreshVoidAP();
+                        if (typeof updateAPDisplay === 'function') updateAPDisplay();
+                    }
                 }
 
                 if (turnStartedAt && Math.abs(turnStartedAtMs - turnStartedAt) > 2000) {
@@ -2786,6 +2882,16 @@
 
                 if (!commonArea || typeof spellSystem === 'undefined') return;
 
+                // Build a set of scrolls already in local play (hand or active).
+                // If the host's broadcast still shows a scroll in the common area but we have
+                // it in a player's hand/active, the host state is stale — do NOT restore it.
+                const inLocalPlay = new Set();
+                for (const p of spellSystem.playerScrolls) {
+                    if (!p) continue;
+                    p.hand.forEach(s => inLocalPlay.add(s));
+                    p.active.forEach(s => inLocalPlay.add(s));
+                }
+
                 // Compare and auto-correct any differences
                 let corrected = false;
                 Object.keys(commonArea).forEach(element => {
@@ -2793,6 +2899,11 @@
                     const localScroll = spellSystem.commonArea[element];
 
                     if (hostScroll !== localScroll) {
+                        // Don't restore a scroll that's already been drawn into play locally
+                        if (hostScroll && inLocalPlay.has(hostScroll)) {
+                            console.log(`[common-area-sync] Skipping restore of ${hostScroll} in ${element} — already in local play`);
+                            return;
+                        }
                         console.warn(`⚠️ COMMON AREA DESYNC CORRECTED: ${element} slot was "${localScroll}", host says "${hostScroll}"`);
                         spellSystem.commonArea[element] = hostScroll;
                         corrected = true;
@@ -3042,6 +3153,14 @@
 
         // Start multiplayer game
         function startMultiplayerGame(allPlayers, sharedDeckSeed = null) {
+            // Reset all per-game resources so leftover state from a previous session doesn't carry over
+            if (typeof window.resetGameResources === 'function') {
+                window.resetGameResources();
+            }
+
+            // Reset XP dedup flag so the next game can award XP fresh
+            _gameOverXpAwarded = false;
+
             // Clear the board first (skip confirmation in multiplayer)
             clearBoard(true);
 
@@ -3107,25 +3226,21 @@
 
             // Show appropriate message based on turn order
             if (myPlayer.player_index === 0) {
-                updateStatus(`🎮 You are Player ${myPlayer.player_index + 1} (${playerColor})! It's your turn - drag your player tile to the board to start.`);
+                updateStatus(`You are Player ${myPlayer.player_index + 1} (${playerColor}). Drag your player tile to the board to start!`);
             } else {
-                updateStatus(`⏳ You are Player ${myPlayer.player_index + 1} (${playerColor}). Waiting for other players to place their tiles...`);
+                updateStatus(`You are Player ${myPlayer.player_index + 1} (${playerColor}). Waiting for other players to place their tiles...`);
             }
 
             // Initialize opponent panel
             updateOpponentPanel();
 
-            // Tutorial: show welcome overview
-            if (typeof tutorialSystem !== 'undefined') {
-                tutorialSystem.showStep('welcome');
-            }
         }
 
 
         // Start game with selected number of players (local mode)
         function startGame(numPlayers) {
-            // Clear the board first
-            clearBoard();
+            // Clear the board first (skip confirmation — startGame is always intentional)
+            clearBoard(true);
 
             // Reset color assignments for this game
             gameSessionColors.clear();
@@ -3169,7 +3284,10 @@
             updateIsMobile();
             window.addEventListener('resize', updateIsMobile);
             try { window.matchMedia('(max-width: 768px)').addEventListener('change', updateIsMobile); } catch (e) {}
-}
+        }
+
+        // Expose startGame globally so tutorial-mode.js can call it without auth
+        window.startGame = startGame;
 
         // Mobile UI initialization and tab switching
         function initializeMobileUI() {
@@ -3311,10 +3429,10 @@
                 stoneItem.innerHTML = `
                     <svg width="40" height="40">
                         <circle cx="20" cy="20" r="12" fill="${STONE_TYPES[type].color}" class="stone-piece"/>
-                        <text x="20" y="20" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="14" font-weight="bold">${STONE_TYPES[type].symbol}</text>
+                        <image href="${STONE_TYPES[type].img}" x="8" y="8" width="24" height="24" style="mix-blend-mode:screen"/>
                     </svg>
                     <div class="stone-count">${playerPool[type]}/${stoneCapacity}</div>
-                    <div class="source-count">${stoneCounts[type]}/${Object.keys(shuffledDeck).filter(key => shuffledDeck[key].stoneType === type).length}</div>
+                    <div class="source-count">${stoneCounts[type]}/25</div>
                 `;
 
                 stoneItem.addEventListener('touchstart', (e) => {
@@ -3343,18 +3461,16 @@
                     circle.setAttribute('class', 'stone-piece');
                     circle.setAttribute('fill', STONE_TYPES[type].color);
 
-                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    text.setAttribute('x', 0);
-                    text.setAttribute('y', 0);
-                    text.setAttribute('text-anchor', 'middle');
-                    text.setAttribute('dominant-baseline', 'middle');
-                    text.setAttribute('fill', '#fff');
-                    text.setAttribute('font-size', '14');
-                    text.setAttribute('font-weight', 'bold');
-                    text.textContent = STONE_TYPES[type].symbol;
+                    const ghostImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                    ghostImg.setAttribute('href', STONE_TYPES[type].img);
+                    ghostImg.setAttribute('x', -STONE_SIZE);
+                    ghostImg.setAttribute('y', -STONE_SIZE);
+                    ghostImg.setAttribute('width', STONE_SIZE * 2);
+                    ghostImg.setAttribute('height', STONE_SIZE * 2);
+                    ghostImg.style.mixBlendMode = 'screen';
 
                     ghostStone.appendChild(circle);
-                    ghostStone.appendChild(text);
+                    ghostStone.appendChild(ghostImg);
                     viewport.appendChild(ghostStone);
                 }, { passive: false });
 

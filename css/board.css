@@ -39,6 +39,12 @@ svg {
     stroke: #3498db;
     stroke-width: 4;
 }
+.placed-tile[data-shrine="earth"]:hover .hex-tile   { stroke: #69d83a; stroke-width: 4; }
+.placed-tile[data-shrine="water"]:hover .hex-tile   { stroke: #5894f4; stroke-width: 4; }
+.placed-tile[data-shrine="fire"]:hover .hex-tile    { stroke: #ed1b43; stroke-width: 4; }
+.placed-tile[data-shrine="wind"]:hover .hex-tile    { stroke: #ffce00; stroke-width: 4; }
+.placed-tile[data-shrine="void"]:hover .hex-tile    { stroke: #9458f4; stroke-width: 4; }
+.placed-tile[data-shrine="catacomb"]:hover .hex-tile { stroke: #c8a870; stroke-width: 4; }
 
 /* Wandering River: tile shows chosen element (symbol + color) until caster's next turn */
 .placed-tile.wandering-river-transformed .hex-tile,

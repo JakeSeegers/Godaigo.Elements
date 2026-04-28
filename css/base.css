@@ -9,12 +9,18 @@ body {
     margin: 0;
     padding: 0;
     background: var(--bg-dark);
-    font-family: 'Segoe UI', 'Courier New', monospace;
+    font-family: var(--font-terminal);
+    font-size: 32px;
     color: var(--text-primary);
     user-select: none;
     overflow: hidden;
+    cursor: crosshair;
 
     filter: contrast(1.2) brightness(1.1);
+}
+
+img, svg {
+    image-rendering: pixelated;
 }
 
 /* Hide scrollbars but allow scrolling */
@@ -51,32 +57,4 @@ body {
     50% { opacity: 0.7; }
 }
 
-/* ============================================
-   CRT EFFECT (Retro Overlay)
-   ============================================ */
-body::after {
-    content: "";
-    pointer-events: none;
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    background: repeating-linear-gradient(
-        to bottom,
-        rgba(0,0,0,0.4),
-        rgba(0,0,0,0.4) 3px,
-        transparent 3px,
-        transparent 6px
-    );
-}
-body::before {
-    content: "";
-    pointer-events: none;
-    position: fixed;
-    inset: 0;
-    z-index: 9998;
-    background: radial-gradient(
-        ellipse at center,
-        transparent 60%,
-        rgba(0, 0, 0, 0.25) 100%
-    );
-}
+/* CRT effects handled by js/crt-overlay.js canvas */

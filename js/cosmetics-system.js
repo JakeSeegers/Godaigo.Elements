@@ -107,10 +107,10 @@
         panelEl.id = 'cosmetics-panel';
         panelEl.innerHTML = `
             <div class="cos-header">
-                <span class="cos-title">🎨 Name Colours</span>
+                <span class="cos-title">Name Colours</span>
                 <button class="cos-close" onclick="window.cosmeticsSystem.closePanel()">✕</button>
             </div>
-            <div class="cos-gold-bar">💰 <span id="cos-gold-amt">—</span>g</div>
+            <div class="cos-gold-bar"><span id="cos-gold-amt">—</span>g</div>
             <div class="cos-body" id="cos-body"></div>
         `;
         document.body.appendChild(panelEl);
@@ -145,7 +145,7 @@
             } else {
                 actionHTML = `<button class="cos-btn cos-buy-btn ${canAfford ? '' : 'cos-cant-afford'}"
                     onclick="window.cosmeticsSystem.handleBuy('${item.id}')">
-                    💰 ${item.cost}g
+                    ${item.cost}g
                 </button>`;
             }
 
