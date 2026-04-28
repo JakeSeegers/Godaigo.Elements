@@ -55,301 +55,221 @@ const TutorialMode = (function () {
     // boardRing: true = show pulsing ring on earth tile
     // modalPos:  'center' (default) | 'corner' (bottom-right, used when spotlight is active)
     const STEPS = [
-        // ── 0 ─────────────────────────────────────────────────────────────────
+        // ── 0  welcome (read — only intro step permitted as read-only) ─────────
         {
             id: 'welcome',
             title: 'Welcome to Godaigo!',
             content: `Hi, welcome to the tutorial for <strong>Godaigo: Secret of the Five Elements</strong>. Thanks for playing!
-                <div style="margin-top:12px;">
-                    Your goal is to <strong>master all 5 elements</strong> by finding and activating one scroll of each type.
-                </div>
-                <div style="margin-top:14px; display:flex; justify-content:center; gap:14px; font-size:18px; flex-wrap:wrap; line-height:2.2;">
-                    <span style="color:#69d83a;">⬡ Earth</span>
-                    <span style="color:#5894f4;">⬡ Water</span>
-                    <span style="color:#ed1b43;">⬡ Fire</span>
-                    <span style="color:#ffce00;">⬡ Wind</span>
-                    <span style="color:#9458f4;">⬡ Void</span>
-                </div>
-                <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    Be the first player to activate all five to win — and escape the mystical island!
-                </div>`,
+            <div style="margin-top:12px;">
+                Your goal is to <strong>master all 5 elements</strong> by finding and activating one scroll of each type.
+            </div>
+            <div style="margin-top:14px; display:flex; justify-content:center; gap:14px; font-size:18px; flex-wrap:wrap; line-height:2.2;">
+                <span style="color:#69d83a;">⬡ Earth</span>
+                <span style="color:#5894f4;">⬡ Water</span>
+                <span style="color:#ed1b43;">⬡ Fire</span>
+                <span style="color:#ffce00;">⬡ Wind</span>
+                <span style="color:#9458f4;">⬡ Void</span>
+            </div>
+            <div style="margin-top:10px; color:#aaa; font-size:13px;">
+                Be the first player to activate all five to win — and escape the mystical island!
+            </div>`,
             action: 'read',
             nextLabel: "Let's Go!",
             modalPos: 'center'
         },
-
-        // ── 1 ─────────────────────────────────────────────────────────────────
+        // ── 1  place tile (action-gated: onPlayerTilePlaced) ──────────────────
         {
             id: 'tile-placed',
             title: 'Place Your Starting Tile',
             content: `See the <strong>hexagonal tile in the left panel?</strong> That's your Player Tile.
-                <div style="margin-top:10px;">
-                    <strong>Drag it onto the board</strong> and snap it next to the edge of two existing tiles. You'll see a ghost tile showing where it'll land.
-                </div>
-                <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    In multiplayer, turn order is randomly assigned — you may have to wait for others first.
-                </div>`,
-            action: 'place-tile',   // advance fires via onPlayerTilePlaced() hook
+            <div style="margin-top:10px;">
+                <strong>Drag it onto the board</strong> and snap it next to the edge of two existing tiles. You'll see a ghost tile showing where it'll land.
+            </div>`,
+            action: 'place-tile',
             nextLabel: null,
             spotlight: '#new-player-tile-deck',
             modalPos: 'corner'
         },
-
-        // ── 2 ─────────────────────────────────────────────────────────────────
+        // ── 2  camera (brief read — no sensible action gate for controls intro) ─
         {
             id: 'camera',
             title: 'Camera Controls',
             content: `A few handy controls before you start moving:
-                <ul style="margin:10px 0; padding-left:18px; line-height:2;">
-                    <li><strong>Scroll wheel</strong> — zoom in / out</li>
-                    <li><strong>Right-click drag</strong> — pan the board</li>
-                    <li><strong>Right-click drag outside tiles</strong> — rotate the board</li>
-                </ul>
-                <div style="color:#aaa; font-size:13px;">
-                    You can always zoom and pan during your turn — it never costs AP.
-                </div>`,
+            <ul style="margin:10px 0; padding-left:18px; line-height:2;">
+                <li><strong>Scroll wheel</strong> — zoom in / out</li>
+                <li><strong>Right-click drag</strong> — pan the board</li>
+                <li><strong>Right-click drag outside tiles</strong> — rotate the board</li>
+            </ul>
+            <div style="color:#aaa; font-size:13px;">
+                Try zooming now — it never costs AP.
+            </div>`,
             action: 'read',
             nextLabel: 'Got it'
         },
-
-        // ── 3 ─────────────────────────────────────────────────────────────────
+        // ── 3  explore / flip tile (action-gated: onTileRevealed) ────────────
         {
             id: 'move-pawn',
             title: 'Explore the Board',
             content: `<strong>Drag your pawn</strong> to move it across the board.
-                <div style="margin-top:10px;">
-                    Each hex you travel costs <strong>1 Action Point</strong> (see the counter top-right). You start every turn with 5 AP.
-                </div>
-                <div style="margin-top:10px;">
-                    All the tiles are hidden right now — <strong>step onto any face-down tile to flip it</strong> and reveal what elemental shrine is underneath!
-                </div>`,
-            action: 'explore',  // advances via onTilePreReveal / onTileRevealed hooks
+            <div style="margin-top:10px;">
+                Each hex costs <strong>1 Action Point</strong>. You start every turn with 5 AP.
+            </div>
+            <div style="margin-top:10px;">
+                All the tiles are hidden — <strong>step onto any face-down tile to flip it</strong> and reveal the shrine underneath!
+            </div>`,
+            action: 'explore',
             nextLabel: null,
-            spotlight: '#hud-ap-value',   // glows the AP counter as a hint, no blocking
+            spotlight: '#hud-ap-value',
             modalPos: 'corner'
         },
-
-        // ── 4 ─────────────────────────────────────────────────────────────────
+        // ── 4  scroll found (action-gated: click to open hand) ───────────────
         {
             id: 'scroll-found',
             title: 'You Found a Scroll!',
-            content: `When you flip a tile, a scroll is revealed and added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll — one of the most powerful.
-                <div style="margin-top:10px;">
-                    This is the <strong>primary way to get scrolls</strong>. Other methods exist, but flipping hidden tiles is the main one.
-                </div>
-                <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    Your hand holds up to <strong>2 scrolls</strong>. Your active area also holds up to 2 — and scrolls are a <em>one-way street</em> (active → common only, never back to hand).
-                </div>`,
-            action: 'read',
-            nextLabel: 'Got it'
+            content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll.
+            <div style="margin-top:10px;">
+                <strong>Open your Hand panel</strong> now by clicking the <strong>Hand</strong> button in the dock below.
+            </div>`,
+            action: 'click',
+            spotlight: '#panel-btn-hand',
+            nextLabel: null,
+            modalPos: 'corner'
         },
-
-        // ── 5 ────────────────────────────────────────────────────────────────
+        // ── 5  earth shrine (action-gated: onEndTurn at EARTH_POS) ───────────
         {
             id: 'earth-shrine',
             title: 'Collect Earth Stones',
-            content: `You flipped an <strong style="color:#69d83a;">Earth tile</strong>! The glowing center hex is the <strong>Earth shrine</strong>.
-                <div style="margin-top:10px;">
-                    <strong>Walk your pawn to the center of the tile</strong>, then click <strong>End Turn</strong> to collect <strong style="color:#69d83a;">5 Earth stones</strong>. You'll use these to build the casting pattern for your scroll.
-                </div>
-                <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    Elemental stones come from shared <strong>Source Pools</strong>. There are 25 of each stone type available across all players — once they're gone, no one can draw more of that type.
-                </div>`,
-            action: 'end-turn',   // advances via onEndTurn() hook
+            content: `You flipped an <strong style="color:#69d83a;">Earth tile</strong>! The glowing center is the <strong>Earth shrine</strong>.
+            <div style="margin-top:10px;">
+                <strong>Walk your pawn to the glowing center</strong>, then click <strong>End Turn</strong> to collect <strong style="color:#69d83a;">5 Earth stones</strong>.
+            </div>
+            <div style="margin-top:10px; color:#aaa; font-size:13px;">
+                Stones come from shared <strong>Source Pools</strong> — 25 of each type max.
+            </div>`,
+            action: 'end-turn',
             nextLabel: null,
             boardRing: true,
-            freeMove: true,       // show ring but don't restrict pawn movement
+            freeMove: true,
             spotlight: '#end-turn',
             modalPos: 'corner'
         },
-
-        // ── 6 ─────────────────────────────────────────────────────────────────
+        // ── 6  open scrolls hand panel (action-gated: click) ─────────────────
         {
             id: 'open-scrolls',
             title: 'Open Your Hand',
             content: `Click the <strong>Hand</strong> button in the dock to open your scroll hand panel.`,
             action: 'click',
             spotlight: '#panel-btn-hand',
-            nextLabel: null,   // auto-advances on click
+            nextLabel: null,
             modalPos: 'corner'
         },
-
-        // ── 7 ─────────────────────────────────────────────────────────────────
+        // ── 7  move scroll to active area (action-gated: onScrollMoved hand→active) ─
         {
             id: 'scrolls-explained',
-            title: 'Three Scroll Panels',
-            content: `Your scrolls are split across <strong>three floating panels</strong> — open each one from the dock buttons:
-                <ul style="margin:10px 0; padding-left:18px; line-height:2.1;">
-                    <li><strong>Hand</strong> — private; opponents only see the element type</li>
-                    <li><strong>Active</strong> — face-up, visible to all; scrolls here can be cast</li>
-                    <li><strong>Common Area</strong> — shared pool any player can cast from</li>
-                </ul>
-                <div style="margin-top:8px;">
-                    Each area holds <strong>max 2 scrolls</strong>. Hand cards can be sent to the <strong>Active Area</strong> or directly to the <strong>Common Area</strong>. Active Area cards can only move to the <strong>Common Area</strong>.
-                    Scrolls are a <em>one-way street</em> — never back to Hand.
-                </div>
-                <div style="margin-top:8px; color:#aaa; font-size:13px;">
-                    A scroll in the <strong>Common Area</strong> can be cast by <em>any player</em>. If another player drops a scroll of the same element there, the old one returns to the bottom of that deck.
-                </div>`,
-            action: 'read',
-            nextLabel: 'Continue'
+            title: 'Move Scroll to Active Area',
+            content: `Your scrolls are split across three panels:
+            <ul style="margin:10px 0; padding-left:18px; line-height:2.1;">
+                <li><strong>Hand</strong> — private; max 2 scrolls</li>
+                <li><strong>Active</strong> — face-up, visible to all; scrolls here can be cast</li>
+                <li><strong>Common Area</strong> — shared pool any player can cast from</li>
+            </ul>
+            <div style="margin-top:8px;">
+                <strong>Click "Move to Active Area"</strong> on your Avalanche scroll to get it ready to cast.
+            </div>`,
+            action: 'scroll-moved',
+            nextLabel: null,
+            modalPos: 'corner'
         },
-
-        // ── 7 ─────────────────────────────────────────────────────────────────
+        // ── 8  how to win (brief read then action-gated into pattern step) ────
         {
             id: 'how-to-win',
             title: 'How to Win',
-            content: `To win you must <strong>activate a scroll of each elemental type</strong> (Earth, Water, Fire, Wind, and Void).
-                <div style="margin-top:10px;">
-                    To activate a scroll you need to:
-                    <ol style="margin:8px 0; padding-left:18px; line-height:2;">
-                        <li>Have the scroll in your <strong>Active Area</strong> or the Common Area</li>
-                        <li>Stand in the <strong>center of the pattern</strong> shown on the scroll</li>
-                        <li>Build that pattern with <strong>elemental stones</strong> on the board</li>
-                        <li>Spend <strong>2 AP</strong> and click <strong>Cast Spell</strong></li>
-                    </ol>
-                </div>`,
+            content: `To win, <strong>activate a scroll of each element</strong> (Earth, Water, Fire, Wind, Void).
+            <div style="margin-top:10px;">
+                To cast a scroll you need to:
+                <ol style="margin:8px 0; padding-left:18px; line-height:2;">
+                    <li>Have it in your <strong>Active Area</strong></li>
+                    <li>Stand in the <strong>center</strong> of the pattern</li>
+                    <li>Build the pattern with <strong>stones</strong> on the board</li>
+                    <li>Spend <strong>2 AP</strong> and click <strong>Cast Spell</strong></li>
+                </ol>
+            </div>`,
             action: 'read',
-            nextLabel: 'How do I get stones?'
+            nextLabel: "Let's try it!"
         },
-
-        // ── 8 ─────────────────────────────────────────────────────────────────
+        // ── 9  place earth stone (action-gated: onStonePlaced('earth')) ───────
         {
-            id: 'getting-stones',
-            title: 'Getting Elemental Stones',
-            content: `You get stones by <strong>ending your turn</strong> on the <em>center</em> of an elemental shrine.
-                <div style="margin-top:10px;">
-                    Stone yield by shrine rank:
-                    <div style="margin:8px 0; line-height:2.2;">
-                        <span style="color:#69d83a;">⬡ Earth → 5 stones</span> &nbsp;
-                        <span style="color:#5894f4;">⬡ Water → 4</span> &nbsp;
-                        <span style="color:#ed1b43;">⬡ Fire → 3</span> &nbsp;
-                        <span style="color:#ffce00;">⬡ Wind → 2</span> &nbsp;
-                        <span style="color:#9458f4;">⬡ Void → 1</span>
-                    </div>
-                </div>
-                <div style="color:#aaa; font-size:13px;">
-                    Stone counts can't exceed <strong>25 per type</strong> across all players — the pool is shared.
-                    Stones are placed for free adjacent to your pawn (no AP cost).
-                </div>`,
-            action: 'read',
-            nextLabel: 'Got it',
-            spotlight: '#end-turn',
+            id: 'place-stone',
+            title: 'Place an Earth Stone',
+            content: `You have <strong style="color:#69d83a;">5 Earth stones</strong> in your pool (bottom dock).
+            <div style="margin-top:10px;">
+                <strong>Drag an Earth stone</strong> from the dock and drop it on a hex <em>adjacent</em> to your pawn.
+                Placing stones is free — no AP cost.
+            </div>`,
+            action: 'stone-placed',
+            stoneType: 'earth',
+            nextLabel: null,
             modalPos: 'corner'
         },
-
-        // ── 9 ─────────────────────────────────────────────────────────────────
+        // ── 10  build the avalanche pattern (action-gated: checkPattern polling) ─
         {
-            id: 'stone-abilities',
-            title: 'Stone Abilities',
-            content: `Each stone type affects the board differently:
-                <ul style="margin:10px 0; padding-left:18px; line-height:2.1;">
-                    <li><strong style="color:#69d83a;">Earth</strong> — blocks movement entirely; you can't walk through it</li>
-                    <li><strong style="color:#5894f4;">Water</strong> — costs 2 AP to move through; adjacent to Earth it blocks, adjacent to Wind it flows freely</li>
-                    <li><strong style="color:#ed1b43;">Fire</strong> — destroys any adjacent stone (except Void and other Fire) when placed</li>
-                    <li><strong style="color:#ffce00;">Wind</strong> — movement costs 0 AP (free!)</li>
-                    <li><strong style="color:#9458f4;">Void</strong> — raises your AP maximum; nullifies all adjacent stones' effects</li>
-                </ul>
-                <div style="color:#aaa; font-size:13px;">
-                    <strong>Conflict by rank:</strong> Void &gt; Wind &gt; Fire &gt; Water &gt; Earth. Higher rank wins ties.
-                </div>`,
-            action: 'read',
-            nextLabel: 'Breaking stones'
+            id: 'build-pattern',
+            title: 'Build the Avalanche Pattern',
+            content: `The Avalanche scroll requires a pattern of <strong>4 Earth stones</strong> around your pawn.
+            <div style="margin-top:10px;">
+                Open the scroll card in your Active Area — you'll see the exact pattern layout.
+                <strong>Place the remaining stones</strong> to complete it.
+            </div>
+            <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                Once the pattern is complete, the "Cast ✦" button on the scroll card will glow.
+            </div>`,
+            action: 'pattern-built',
+            nextLabel: null,
+            modalPos: 'corner'
         },
-
-        // ── 10 ────────────────────────────────────────────────────────────────
+        // ── 11  cast avalanche (action-gated: onSpellCast) ────────────────────
         {
-            id: 'break-stones',
-            title: 'Breaking Stones',
-            content: `You can <strong>remove</strong> any stone from the board by <strong>right-clicking</strong> it.
-                <div style="margin-top:10px;">
-                    Breaking a stone costs <strong>AP equal to that stone's rank:</strong>
-                    <div style="margin:8px 0; line-height:2.2;">
-                        <span style="color:#69d83a;">Earth = 5 AP</span> &nbsp;·&nbsp;
-                        <span style="color:#5894f4;">Water = 4 AP</span> &nbsp;·&nbsp;
-                        <span style="color:#ed1b43;">Fire = 3 AP</span> &nbsp;·&nbsp;
-                        <span style="color:#ffce00;">Wind = 2 AP</span> &nbsp;·&nbsp;
-                        <span style="color:#9458f4;">Void = 1 AP</span>
-                    </div>
-                </div>
-                <div style="color:#aaa; font-size:13px;">
-                    Breaking is strategic — clear a path through Earth stones, dismantle an enemy's pattern, or destroy a Fire stone before it wrecks your setup.
-                </div>`,
-            action: 'read',
-            nextLabel: 'Noted!'
-        },
-
-        // ── 11 ────────────────────────────────────────────────────────────────
-        {
-            id: 'casting',
-            title: 'Casting a Scroll',
-            content: `Once you've built the stone pattern and you're standing in its <strong>center</strong>:
-                <ol style="margin:8px 0; padding-left:18px; line-height:2;">
-                    <li>Have the scroll in your <strong>Active Area</strong> (or the Common Area)</li>
-                    <li>Press <strong>Cast Spell</strong> in the dock — or click the glowing <strong>Cast ✦</strong> button on the scroll card when its pattern matches</li>
-                </ol>
-                <div style="margin-top:8px;">
-                    Casting costs <strong>2 AP</strong>. After casting, opponents get a brief <strong>response window</strong> — they can spend 2 AP to play a counter or reaction scroll if they have one ready.
-                </div>
-                <div style="margin-top:8px; color:#aaa; font-size:13px;">
-                    The <strong>Level 1</strong> scroll of each element is a <em>Response Scroll</em> — you can only play it in response to another player's action, on their turn.
-                </div>`,
-            action: 'read',
-            nextLabel: 'Continue',
+            id: 'cast-avalanche',
+            title: 'Cast Avalanche!',
+            content: `The pattern is complete! Now cast the scroll.
+            <div style="margin-top:10px;">
+                Click <strong>Cast Spell</strong> in the dock — or the glowing <strong>Cast ✦</strong> button on the Avalanche scroll card.
+            </div>
+            <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                Casting costs 2 AP. After casting, your Earth win-condition is fulfilled!
+            </div>`,
+            action: 'spell-cast',
+            nextLabel: null,
             spotlight: '#cast-spell',
             modalPos: 'corner'
         },
-
-        // ── 12 ────────────────────────────────────────────────────────────────
-        {
-            id: 'catacomb',
-            title: 'Catacomb Tiles',
-            content: `Catacomb tiles are <strong>non-elemental</strong>. Flipping one gives you <strong>+1 AP</strong> and a <strong>Catacomb scroll</strong>.
-                <div style="margin-top:10px;">
-                    Catacomb scrolls are <strong>dual-type</strong> — activating one counts toward <em>two</em> of your win conditions at once.
-                    They also let you <strong>move for free</strong> between the centers of other catacomb tiles.
-                </div>
-                <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    Note: ending your turn <em>on</em> a catacomb tile gives no elemental stones — only the AP and scroll from flipping it.
-                </div>`,
-            action: 'read',
-            nextLabel: 'Continue'
-        },
-
-        // ── 13 ────────────────────────────────────────────────────────────────
+        // ── 12  HUD reference (brief read) ───────────────────────────────────
         {
             id: 'hud',
             title: 'The HUD & Dock',
             content: `Quick reference for the on-screen controls:
-                <ul style="margin:10px 0; padding-left:18px; line-height:2.1;">
-                    <li><strong>AP pips</strong> (top bar, right) — five orange squares; each one = 1 remaining action point</li>
-                    <li><strong>Shrine dots</strong> (top bar, center) — five coloured dots that light up as you activate scrolls toward your win condition</li>
-                    <li><strong>Players panel</strong> (right) — see opponents' scroll types, stones, active scrolls, and win progress</li>
-                    <li><strong>Hand / Active / Common Area</strong> (dock) — open each scroll panel independently; counts show how many scrolls you hold</li>
-                    <li><strong>Cast Spell</strong> (dock) — casts the best matching scroll from your Active Area or the Common Area</li>
-                    <li><strong>Undo Step</strong> — undoes your last single movement step</li>
-                    <li><strong>End Turn</strong> (top bar) — ends your turn; AP resets to 5 next turn</li>
-                </ul>
-                <div style="color:#aaa; font-size:13px;">
-                    Save some AP before ending your turn — you can spend it on <strong>Response Scrolls</strong> during opponents' turns!
-                </div>`,
+            <ul style="margin:10px 0; padding-left:18px; line-height:2.1;">
+                <li><strong>AP pips</strong> — five orange squares; each = 1 remaining AP</li>
+                <li><strong>Shrine dots</strong> — light up as you activate scrolls</li>
+                <li><strong>Cast Spell</strong> — casts the best matching scroll from Active or Common Area</li>
+                <li><strong>End Turn</strong> — ends your turn; AP resets to 5 next turn</li>
+            </ul>`,
             action: 'read',
             nextLabel: "I'm ready!",
             spotlight: '#hud-ap-pips',
             modalPos: 'corner'
         },
-
-        // ── 14 ────────────────────────────────────────────────────────────────
+        // ── 13  finish ───────────────────────────────────────────────────────
         {
             id: 'finish',
             title: "You're Ready!",
             content: `That's the basics of Godaigo!
-                <div style="margin-top:12px;">
-                    Keep exploring — flip hidden tiles, collect scrolls, build stone patterns, and activate one scroll of each element to win.
-                </div>
-                <div style="margin-top:10px; color:#aaa; font-size:13px;">
-                    Good luck, adventurer. The mystical island awaits.
-                </div>`,
+            <div style="margin-top:12px;">
+                Keep exploring — flip hidden tiles, collect scrolls, build stone patterns, and activate one scroll of each element to win.
+            </div>
+            <div style="margin-top:10px; color:#aaa; font-size:13px;">
+                Good luck, adventurer. The mystical island awaits.
+            </div>`,
             action: 'read',
             nextLabel: 'Start Playing'
         }
@@ -525,11 +445,18 @@ const TutorialMode = (function () {
             : 'max-width:460px;';
 
         const actionHints = {
-            'move':       'Drag your pawn to the glowing tile to continue…',
-            'explore':    'Drag your pawn onto any face-down tile to flip it…',
-            'click':      'Click the highlighted element to continue…',
-            'place-tile': 'Drag your player tile onto the board to continue…',
-            'end-turn':   'Walk to the glowing shrine center, then click End Turn…',
+            'move':          'Drag your pawn to the glowing tile to continue…',
+            'explore':       'Drag your pawn onto any face-down tile to flip it…',
+            'click':         'Click the highlighted element to continue…',
+            'place-tile':    'Drag your player tile onto the board to continue…',
+            'end-turn':      'Walk to the glowing shrine center, then click End Turn…',
+            'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
+            'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
+            'pattern-built': 'Build the Avalanche pattern (4 Earth stones) around your pawn — see the scroll card for the layout…',
+            'spell-cast':    'Click "Cast Spell" in the dock (or the Cast ✦ button on the scroll card) to cast Avalanche…',
+            'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
+            'stone-placed-wind': 'Drag a Wind stone (yellow) from the pool and place it near the trap ring…',
+            'stone-placed-fire': 'Drag a Fire stone (red) from the pool and place it adjacent to an Earth stone…',
         };
         const footerHTML = (step.nextLabel && !actionHints[step.action])
             ? `<button class="tmode-next">${step.nextLabel}</button>`
@@ -610,6 +537,31 @@ const TutorialMode = (function () {
         }
 
         showModal(step);
+
+        // Start pattern polling for 'pattern-built' steps
+        if (step.action === 'pattern-built') {
+            patternPollInterval = setInterval(() => {
+                const ss = window.spellSystem;
+                if (ss && typeof ss.checkPattern === 'function' && ss.checkPattern('EARTH_SCROLL_5')) {
+                    clearPatternPoll();
+                    clearHintTimer();
+                    advance();
+                }
+            }, 500);
+            startHintTimer('Build the Avalanche pattern (4 Earth stones) around your pawn — see the scroll card for the layout…');
+        }
+        // Start hint timers for other action-gated steps
+        const hintMessages = {
+            'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
+            'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
+            'spell-cast':    'Click "Cast Spell" in the dock after placing the pattern…',
+            'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
+            'stone-placed-wind': 'Drag a Wind stone from the pool and drop it near the trap ring…',
+            'stone-placed-fire': 'Drag a Fire stone from the pool adjacent to an Earth stone…',
+        };
+        if (hintMessages[step.action]) {
+            startHintTimer(hintMessages[step.action]);
+        }
     }
 
     function advance() {
