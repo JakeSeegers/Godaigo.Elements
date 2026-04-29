@@ -510,6 +510,7 @@ const TutorialMode = (function () {
         clearSpotlight();
         clearPatternPoll();
         clearHintTimer();
+        removeOpponentSpeechBubble();
         removeBoardRing();
         window.tutorialAllowedHexes = null;
 
@@ -715,6 +716,129 @@ const TutorialMode = (function () {
             clearPatternPoll();
             setTimeout(advance, 600);
         }
+    }
+
+    // ── Scripted opponent AI ──────────────────────────────────────────────────
+
+    /**
+     * Place Earth stones in a ring around `centerX, centerY` (pixel coords).
+     * Uses placeStoneVisually so stones appear on board and are breakable,
+     * but no multiplayer broadcast occurs.
+     * centerX/centerY: SVG pixel coords of the hex to surround.
+     * callback: called after all stones are placed (for auto-advance).
+     */
+    function runScriptedOpponentTrap(centerX, centerY, callback) {
+        // Compute hex coords from pixel position
+        // hp(q,r) = {x: S*SQ3*(q+r/2), y: S*1.5*r}
+        // Inverse: r = centerY / (S*1.5),  q = centerX/(S*SQ3) - r/2
+        const r = centerY / (S * 1.5);
+        const q = centerX / (S * SQ3) - r / 2;
+        const centerQ = Math.round(q);
+        const centerR = Math.round(r);
+
+        // 6 hex neighbor offsets (pointy-top / offset-axial)
+        const neighborOffsets = [
+            { dq:  1, dr:  0 },
+            { dq:  0, dr:  1 },
+            { dq: -1, dr:  1 },
+            { dq: -1, dr:  0 },
+            { dq:  0, dr: -1 },
+            { dq:  1, dr: -1 }
+        ];
+
+        let delay = 0;
+        neighborOffsets.forEach(({ dq, dr }) => {
+            setTimeout(() => {
+                const nx = hp(centerQ + dq, centerR + dr).x;
+                const ny = hp(centerQ + dq, centerR + dr).y;
+                if (typeof window.placeStoneVisually === 'function') {
+                    window.placeStoneVisually(nx, ny, 'earth');
+                }
+            }, delay);
+            delay += 200;   // stagger by 200ms for visual drama
+        });
+
+        // Fire callback after all 6 stones placed + a small buffer
+        setTimeout(callback, delay + 400);
+    }
+
+    /**
+     * Second trap: same ring pattern but offset by one tile to the east (+1 hex in q).
+     * This places stones around (centerQ+1, centerR) rather than (centerQ, centerR).
+     */
+    function runScriptedOpponentRetrap(centerX, centerY, callback) {
+        // Shift the trap center one tile east
+        const r = centerY / (S * 1.5);
+        const q = centerX / (S * SQ3) - r / 2;
+        const centerQ = Math.round(q) + 1;   // +1 tile east
+        const centerR = Math.round(r);
+
+        const neighborOffsets = [
+            { dq:  1, dr:  0 },
+            { dq:  0, dr:  1 },
+            { dq: -1, dr:  1 },
+            { dq: -1, dr:  0 },
+            { dq:  0, dr: -1 },
+            { dq:  1, dr: -1 }
+        ];
+
+        let delay = 0;
+        neighborOffsets.forEach(({ dq, dr }) => {
+            setTimeout(() => {
+                const nx = hp(centerQ + dq, centerR + dr).x;
+                const ny = hp(centerQ + dq, centerR + dr).y;
+                if (typeof window.placeStoneVisually === 'function') {
+                    window.placeStoneVisually(nx, ny, 'earth');
+                }
+            }, delay);
+            delay += 200;
+        });
+
+        setTimeout(callback, delay + 400);
+    }
+
+    /**
+     * Show a speech bubble SVG text element above ENEMY_POS.
+     * Removes any existing bubble first.
+     * text: the string to display.
+     */
+    function showOpponentSpeechBubble(text) {
+        removeOpponentSpeechBubble();
+        const svg = document.getElementById('board');
+        if (!svg) return;
+        const vp = svg.querySelector('#viewport') || svg;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.id = 'tutorial-opponent-bubble';
+        g.setAttribute('transform', `translate(${ENEMY_POS.x}, ${ENEMY_POS.y - 55})`);
+
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', '-60');
+        rect.setAttribute('y', '-22');
+        rect.setAttribute('width', '120');
+        rect.setAttribute('height', '26');
+        rect.setAttribute('rx', '6');
+        rect.setAttribute('fill', '#2c1a3e');
+        rect.setAttribute('stroke', '#ed1b43');
+        rect.setAttribute('stroke-width', '1.5');
+        rect.style.pointerEvents = 'none';
+
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('dominant-baseline', 'middle');
+        t.setAttribute('fill', '#f3ecd8');
+        t.setAttribute('font-size', '11');
+        t.style.pointerEvents = 'none';
+        t.textContent = text;
+
+        g.appendChild(rect);
+        g.appendChild(t);
+        vp.appendChild(g);
+    }
+
+    function removeOpponentSpeechBubble() {
+        const el = document.getElementById('tutorial-opponent-bubble');
+        if (el) el.remove();
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
