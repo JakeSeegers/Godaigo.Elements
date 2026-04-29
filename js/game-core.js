@@ -4645,8 +4645,9 @@
         // Expose placeTile and spellSystem for tutorial mode
         window.placeTile  = placeTile;
         window.spellSystem = spellSystem;
-        // Expose placeStoneVisually for tutorial scripted AI trap sequence
+        // Expose placeStoneVisually and placedStones for tutorial scripted AI trap sequence
         window.placeStoneVisually = placeStoneVisually;
+        window.placedStones = placedStones;
         // Expose tileMoveMode for scroll effects (e.g. Telekinesis)
         Object.defineProperty(window, 'tileMoveMode', {
             get() { return tileMoveMode; },

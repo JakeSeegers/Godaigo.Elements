@@ -832,11 +832,22 @@ const TutorialMode = (function () {
             { dq:  1, dr: -1 }
         ];
 
+        // Only fill ring positions NOT already occupied by an earth stone
+        // (Avalanche places 2 of the 6 ring stones as part of its pattern)
+        const SNAP = 50; // pixel tolerance for matching existing stone coords
+        const existingEarth = Array.isArray(window.placedStones)
+            ? window.placedStones.filter(s => s.type === 'earth')
+            : [];
+
+        const emptySlots = neighborOffsets.filter(({ dq, dr }) => {
+            const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
+            return !existingEarth.some(s => Math.abs(s.x - nx) < SNAP && Math.abs(s.y - ny) < SNAP);
+        });
+
         let delay = 0;
-        neighborOffsets.forEach(({ dq, dr }) => {
+        emptySlots.forEach(({ dq, dr }) => {
             setTimeout(() => {
-                const nx = hp(centerQ + dq, centerR + dr).x;
-                const ny = hp(centerQ + dq, centerR + dr).y;
+                const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
                 if (typeof window.placeStoneVisually === 'function') {
                     window.placeStoneVisually(nx, ny, 'earth');
                 }
@@ -844,7 +855,7 @@ const TutorialMode = (function () {
             delay += 200;   // stagger by 200ms for visual drama
         });
 
-        // Fire callback after all 6 stones placed + a small buffer
+        // Fire callback after all gap stones placed + a small buffer
         setTimeout(callback, delay + 400);
     }
 
@@ -868,11 +879,21 @@ const TutorialMode = (function () {
             { dq:  1, dr: -1 }
         ];
 
+        // Only fill ring positions NOT already occupied by an earth stone
+        const SNAP = 50;
+        const existingEarth = Array.isArray(window.placedStones)
+            ? window.placedStones.filter(s => s.type === 'earth')
+            : [];
+
+        const emptySlots = neighborOffsets.filter(({ dq, dr }) => {
+            const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
+            return !existingEarth.some(s => Math.abs(s.x - nx) < SNAP && Math.abs(s.y - ny) < SNAP);
+        });
+
         let delay = 0;
-        neighborOffsets.forEach(({ dq, dr }) => {
+        emptySlots.forEach(({ dq, dr }) => {
             setTimeout(() => {
-                const nx = hp(centerQ + dq, centerR + dr).x;
-                const ny = hp(centerQ + dq, centerR + dr).y;
+                const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
                 if (typeof window.placeStoneVisually === 'function') {
                     window.placeStoneVisually(nx, ny, 'earth');
                 }
