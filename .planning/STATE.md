@@ -2,7 +2,7 @@
 
 **Project:** GTUT
 **Last updated:** 2026-04-28
-**Current position:** Phase 5 — Plan 01 complete, Plan 02 next
+**Current position:** Phase 5 — Plan 03 complete (all plans complete)
 
 ---
 
@@ -21,6 +21,13 @@
 | 5 | Kinesthetic Tutorial Redesign | `planned` — 3 plans ready to execute |
 
 ## Session Log
+
+### 2026-04-29 — Session 4 (Phase 5 Plan 03)
+- Added runScriptedOpponentTrap(), runScriptedOpponentRetrap(), showOpponentSpeechBubble() to tutorial-mode.js
+- Spliced 5 new STEPS (opponent-trap, break-trap, opponent-retrap, wind-escape, fire-counter) after cast-avalanche
+- Exposed window.placeStoneVisually in game-core.js window assignment block
+- KINE-06, KINE-07, KINE-08, KINE-09, KINE-10, HINT-02 complete
+- Commits: 3fe6ee1 (helpers + placeStoneVisually), 80d4fd8 (STEPS + AI trigger)
 
 ### 2026-04-28 — Session 3 (Phase 5 Plan 01)
 - Added four tutorial hook call-sites: onStonePlaced, onStoneBroken, onSpellCast, onScrollMoved
@@ -51,6 +58,7 @@
 
 - Branch: `4.10.progresscheck`
 - Dev server: `npx serve -p 3333`
-- Phase 5 Plan 01 complete: hooks wired (onStonePlaced, onStoneBroken, onSpellCast, onScrollMoved)
-- Next: Phase 5 Plan 02 — kinesthetic STEPS redesign, handlers, pattern polling, hint timers
-- All hook call-sites guarded by `window.isTutorialMode &&` with optional-chaining
+- Phase 5 complete: all 3 plans executed
+- Plan 01: hooks wired (onStonePlaced, onStoneBroken, onSpellCast, onScrollMoved)
+- Plan 02: kinesthetic STEPS redesign, handlers, pattern polling, hint timers (14 steps)
+- Plan 03: scripted AI trap sequence — 5 new STEPS (opponent-trap, break-trap, opponent-retrap, wind-escape, fire-counter); STEPS total = 19; window.placeStoneVisually exposed
