@@ -242,21 +242,6 @@ const TutorialMode = (function () {
             spotlight: '#cast-spell',
             modalPos: 'corner'
         },
-        // ── opponent-trap: scripted AI places ring, auto-advance after ring placed ─
-        {
-            id: 'opponent-trap',
-            title: 'Opponent Responds!',
-            content: `Your opponent sees your Avalanche cast and taunts you — the Earth stones you placed are now working against you!
-                <div style="margin-top:10px;">
-                    Earth stones block movement. You're hemmed in by your own cast.
-                </div>
-                <div style="margin-top:8px; color:#aaa; font-size:13px;">
-                    Continuing to the escape lesson…
-                </div>`,
-            action: 'scripted-ai',   // auto-advances after AI fires
-            nextLabel: null,
-            modalPos: 'corner'
-        },
         // ── break-trap: player must break one earth stone ─────────────────────────
         {
             id: 'break-trap',
@@ -610,10 +595,10 @@ const TutorialMode = (function () {
     function prepareStepEntry(stepId) {
         const ss = window.spellSystem;
         if (stepId === 'break-trap') {
-            // Top up to 5 AP so player can afford one Earth break (cost 5).
-            if (typeof window.addAP === 'function') window.addAP(5);
+            // Set AP to exactly 5 so player can afford one Earth break (cost 5).
+            if (ss) { ss.actionPoints = 5; if (typeof updateHUD === 'function') updateHUD(); }
         } else if (stepId === 'opponent-retrap') {
-            if (typeof window.addAP === 'function') window.addAP(3);
+            // No AP grant needed — player rests naturally to recover
         } else if (stepId === 'wind-escape') {
             if (ss?.playerPool && (ss.playerPool.wind || 0) < 1) {
                 ss.playerPool.wind = (ss.playerPool.wind || 0) + 2;

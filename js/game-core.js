@@ -2679,7 +2679,7 @@
 
             // Check if stone is adjacent to player
             if (!playerPosition) {
-                updateStatus('❌ No player on board!');
+                updateStatus('No player on board!');
                 console.log('❌ No player on board!');
                 return;
             }
@@ -2688,7 +2688,7 @@
             console.log(`🔨 Adjacency check: ${isAdj}`);
             
             if (!isAdj) {
-                updateStatus('❌ Stone must be adjacent to player to break!');
+                updateStatus('Stone must be adjacent to player to break!');
                 console.log('❌ Stone must be adjacent to player to break!');
                 return;
             }
@@ -2705,7 +2705,7 @@
             const breakCost = STONE_RANK[stone.type];
 
             if (!canAfford(breakCost)) {
-                updateStatus(`❌ Not enough AP! Need ${breakCost} AP to break ${stone.type} stone (have ${getTotalAP()} AP)`);
+                updateStatus(`Not enough AP! Need ${breakCost} AP to break ${stone.type} stone (have ${getTotalAP()} AP)`);
                 return;
             }
 
@@ -2745,7 +2745,7 @@
             updateAllWaterStoneVisuals();
             updateAllVoidNullificationVisuals();
 
-            updateStatus(`🔨 Broke ${stone.type} stone! Cost: ${breakCost} AP (${getTotalAP()} AP remaining)`);
+            updateStatus(`Broke ${stone.type} stone! Cost: ${breakCost} AP (${getTotalAP()} AP remaining)`);
             console.log(`🔨 Broke ${stone.type} stone (id=${stoneId}), cost=${breakCost} AP`);
         }
 
@@ -7071,12 +7071,12 @@ function clearPlayerPath() {
 
             // Check if stone is adjacent to player
             if (!playerPosition) {
-                updateStatus('❌ No player on board!');
+                updateStatus('No player on board!');
                 return;
             }
 
             if (!isAdjacentToPlayer(stone.x, stone.y)) {
-                updateStatus('❌ Can only move stones adjacent to player!');
+                updateStatus('Can only move stones adjacent to player!');
                 console.log(`❌ Cannot drag stone id=${stoneId}: not adjacent to player`);
                 return;
             }

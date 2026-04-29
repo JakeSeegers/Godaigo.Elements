@@ -432,7 +432,7 @@
 
             // Check hand limit
             if (scrolls.hand.size >= 4) {
-                updateStatus(`❌ Your hand is full (4 scrolls max)! Discard or use a scroll first.`);
+                updateStatus(`Your hand is full (4 scrolls max)! Discard or use a scroll first.`);
                 // Put scroll back
                 deck.splice(index, 0, scrollName);
                 return;
@@ -1116,7 +1116,7 @@
                         const last = (playerPath && playerPath.length) ? playerPath[playerPath.length - 1] : playerPosition;
                         ghostPlayer.setAttribute('transform', `translate(${last.x}, ${last.y})`);
                         snapIndicator.classList.remove('active');
-                        updateStatus('❌ Blocked by another player');
+                        updateStatus('Blocked by another player');
                         return;
                     }
 
@@ -2782,8 +2782,8 @@ document.getElementById('undo-move').onclick = function() {
 
             if (otherCatacombs.length === 0) {
                 const message = currentShrine.shrineType === 'catacomb'
-                    ? '🔅 Standing on catacomb shrine, but no valid destinations! (must be revealed and have no stone on center)'
-                    : '🔅 Freedom active, but no valid shrine destinations! (must be revealed and have no stone on center)';
+                    ? 'Standing on catacomb shrine, but no valid destinations! (must be revealed and have no stone on center)'
+                    : 'Freedom active, but no valid shrine destinations! (must be revealed and have no stone on center)';
                 updateStatus(message);
                 return;
             }
@@ -2818,7 +2818,7 @@ document.getElementById('undo-move').onclick = function() {
                     });
                     
                     if (hasStoneNow) {
-                        updateStatus('🔅 Cannot teleport there - a stone is blocking!');
+                        updateStatus('Cannot teleport there - a stone is blocking!');
                         updateCatacombIndicators();
                         return;
                     }
@@ -2831,14 +2831,14 @@ document.getElementById('undo-move').onclick = function() {
                     });
 
                     if (hasPlayerNow) {
-                        updateStatus('🔅 Cannot teleport there - another player is in the way!');
+                        updateStatus('Cannot teleport there - another player is in the way!');
                         updateCatacombIndicators();
                         return;
                     }
 
                     // Teleport player (no AP cost)
                     placePlayer(shrine.x, shrine.y);
-                    updateStatus(`🔅 Teleported to another catacomb shrine!`);
+                    updateStatus(`Teleported to another catacomb shrine!`);
 
                     // Broadcast teleport so other clients stay in sync
                     if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
@@ -2861,8 +2861,8 @@ document.getElementById('undo-move').onclick = function() {
             });
 
             const prompt = currentShrine.shrineType === 'catacomb'
-                ? '🔅 Standing on catacomb shrine. Click another revealed catacomb to teleport (free).'
-                : '🔅 Freedom active. Click another revealed shrine to teleport (free).';
+                ? 'Standing on catacomb shrine. Click another revealed catacomb to teleport (free).'
+                : 'Freedom active. Click another revealed shrine to teleport (free).';
             updateStatus(prompt);
         }
 
