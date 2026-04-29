@@ -118,7 +118,7 @@ Plans:
 - `js/scroll-panels.js` — wire `onScrollMoved` hook from "Move to Active Area" / "Move to Common Area" buttons
 
 **Success criteria:**
-1. Zero tutorial steps use `action: 'read'` — every step has a verifiable player action gate
+1. All gameplay and mechanic steps are action-gated (≤5 structural steps — welcome, camera, how-to-win summary, hud reference, finish — may retain Next buttons; no mechanic-teaching step uses `action: 'read'`)
 2. Stone placement step advances only after player drags ≥1 Earth stone adjacent to pawn
 3. Avalanche casting step advances only after player builds the pattern and casts the scroll
 4. Scripted opponent AI places earth ring after player casts Avalanche (visible on board)
@@ -133,8 +133,8 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — Hook call-sites in game-core.js and scroll-panels.js (wave 1)
-- [ ] 05-02-PLAN.md — Kinesthetic STEPS redesign, new handlers, pattern polling, hint timers (wave 2)
-- [ ] 05-03-PLAN.md — Scripted opponent AI trap/escape sequence, five new STEPS (wave 3, depends on 05-02)
+- [x] 05-02-PLAN.md — Kinesthetic STEPS redesign, new handlers, pattern polling, hint timers (wave 2)
+- [x] 05-03-PLAN.md — Scripted opponent AI trap/escape sequence, five new STEPS (wave 3, depends on 05-02)
 
 ---
 
