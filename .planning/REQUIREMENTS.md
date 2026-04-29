@@ -69,6 +69,24 @@
 - **V2-02**: "Skip tutorial" option on lobby screen for returning players
 - **V2-03**: Tutorial replay button available from main menu
 
+## Phase 6 QA Requirements
+
+### Trap Mechanics
+
+- [ ] **QA-TRAP-POS**: Scripted opponent trap stones land on the 6 hexes surrounding the player pawn (hex 1,0), not on adjacent shrine tiles — trap center hard-coded to (q=1,r=0) for first trap and (q=2,r=0) for retrap
+- [ ] **QA-TRAP-AP**: Player enters the break-trap step with at least 5 AP so they can afford one Earth break (cost 5 AP) without being stuck
+- [ ] **QA-TRAP-STONES**: Player has at least 1 Wind stone and 1 Fire stone when entering wind-escape and fire-counter steps respectively; at least 1 Earth stone remains on board for the fire-counter step
+
+### Action Gate Verification
+
+- [ ] **QA-GATE-VERIFY**: Each of steps 12–18 advances when and only when its required action is performed (stone-broken, stone-placed-wind, stone-placed-fire, read/next-button); no step silently dead-ends
+
+### Copy & Visual Cues
+
+- [ ] **QA-COPY-TRAP**: Step copy for opponent-retrap (step 14), wind-escape (step 15), and fire-counter (step 16) explicitly acknowledges that Wind/Fire stones have been added to the player's pool
+- [ ] **QA-SPOTLIGHT**: Break-trap step (step 13) shows a visible board ring (pulsing highlight) around the player's hex so the player knows which stones they can attack
+- [ ] **QA-E2E-12-18**: Full playthrough from step 12 (opponent-trap) through step 18 (finish) completes with zero JS console errors and no dead-ends
+
 ## Out of Scope
 
 | Feature | Reason |
@@ -93,3 +111,10 @@
 | COPY-01 | Phase 2 | Pending |
 | COPY-02 | Phase 2 | Pending |
 | CLEAN-01 | Phase 3 | Pending |
+| QA-TRAP-POS | Phase 6 | Pending |
+| QA-TRAP-AP | Phase 6 | Pending |
+| QA-TRAP-STONES | Phase 6 | Pending |
+| QA-GATE-VERIFY | Phase 6 | Pending |
+| QA-COPY-TRAP | Phase 6 | Pending |
+| QA-SPOTLIGHT | Phase 6 | Pending |
+| QA-E2E-12-18 | Phase 6 | Pending |

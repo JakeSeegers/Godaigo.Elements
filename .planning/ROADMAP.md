@@ -138,6 +138,26 @@ Plans:
 
 ---
 
+## Phase 6: Tutorial QA & Polish
+
+**Goal:** Full QA pass and bug-fix sweep of the kinesthetic tutorial from the opponent-trap step onwards (steps 14–19): fix scripted trap stone positioning, verify each action gate fires correctly, fix any dead-ends or confusing copy, and ensure smooth flow through break-trap, retrap, wind-escape, and fire-counter steps.
+
+**Requirements:** QA-TRAP-POS, QA-TRAP-AP, QA-TRAP-STONES, QA-GATE-VERIFY, QA-COPY-TRAP, QA-SPOTLIGHT, QA-E2E-12-18
+
+**Depends on:** Phase 5
+
+**Files in scope:**
+- `js/tutorial-mode.js` — trap positioning logic, step copy, action gate handlers
+- `js/game-core.js` — any hook or exposure fixes needed
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Fix trap geometry (hard-code centers) and grant AP/Wind/Fire stones at trap-sequence boundaries (wave 1)
+- [ ] 06-02-PLAN.md — Copy polish, break-trap board ring, static QA log, manual playthrough checkpoint (wave 2, depends on 06-01)
+
+---
+
 ## Milestone: Tutorial Complete
 
 After all 3 phases pass verification:
