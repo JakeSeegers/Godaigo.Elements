@@ -122,17 +122,16 @@ const TutorialMode = (function () {
             spotlight: '#hud-ap-value',
             modalPos: 'corner'
         },
-        // ── 4  scroll found (action-gated: click to open hand) ───────────────
+        // ── 4  scroll found (read-only) ───────────────────────────────────────
         {
             id: 'scroll-found',
             title: 'You Found a Scroll!',
-            content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll.
+            content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll — a powerful earth spell.
             <div style="margin-top:10px;">
-                <strong>Open your Hand panel</strong> now by clicking the <strong>Hand</strong> button in the dock below.
+                We'll use it soon. For now, let's collect some <strong style="color:#69d83a;">Earth stones</strong> to power it up.
             </div>`,
-            action: 'click',
-            spotlight: '#panel-btn-hand',
-            nextLabel: null,
+            action: 'read',
+            nextLabel: 'Got it!',
             modalPos: 'corner'
         },
         // ── 5  earth shrine (action-gated: onEndTurn at EARTH_POS) ───────────
@@ -261,10 +260,11 @@ const TutorialMode = (function () {
         // ── break-trap: player must break one earth stone ─────────────────────────
         {
             id: 'break-trap',
-            title: 'Break Free!',
-            content: `<strong>Right-click any Earth stone</strong> (from your Avalanche cast) to break it and open an escape path.
+            title: 'Stone Breaker',
+            content: `Sometimes you need to break a stone — to open a path, disrupt an opponent's pattern, or return it to the source pool.
                 <div style="margin-top:10px;">
-                    Breaking Earth costs <strong style="color:#69d83a;">5 AP</strong>. We've topped you up — you have enough.
+                    <strong>Right-click any Earth stone</strong> on the board to break it.
+                    Breaking costs <strong>AP equal to the stone's rank</strong> — Earth is rank 5, so it costs <strong style="color:#69d83a;">5 AP</strong>.
                 </div>
                 <div style="margin-top:8px; color:#aaa; font-size:13px;">
                     On touch devices: long-press the stone instead.
@@ -320,6 +320,24 @@ const TutorialMode = (function () {
                 </div>`,
             action: 'stone-placed-fire',
             nextLabel: null,
+            modalPos: 'corner'
+        },
+        // ── react-scrolls: explanation-only, no player action required ──────────
+        {
+            id: 'react-scrolls',
+            title: 'Reaction Scrolls',
+            content: `Some scrolls are <strong>Reaction scrolls</strong> — they activate on your <em>opponent's</em> turn, not yours.
+                <div style="margin-top:10px;">
+                    <strong>Level 1 reactions</strong> are the easiest to build and require the fewest stones. When multiple players try to react on the same turn, reactions resolve by <strong>element rank</strong> — Wind outranks Earth, for example.
+                </div>
+                <div style="margin-top:10px;">
+                    Only <strong>one reaction fires per turn</strong>. You cannot react to a reaction — once one resolves, the window closes.
+                </div>
+                <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                    Build a reaction scroll pattern in your Active Area before your opponent's turn to surprise them!
+                </div>`,
+            action: 'read',
+            nextLabel: 'Good to know!',
             modalPos: 'corner'
         },
         // ── 17  HUD reference (brief read) ───────────────────────────────────
