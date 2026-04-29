@@ -247,12 +247,12 @@ const TutorialMode = (function () {
         {
             id: 'opponent-trap',
             title: 'Opponent Responds!',
-            content: `Your opponent sees your powerful cast and <strong style="color:#ed1b43;">surrounds you with Earth stones</strong>!
+            content: `Your opponent sees your Avalanche cast and taunts you — the Earth stones you placed are now working against you!
                 <div style="margin-top:10px;">
-                    You're trapped. Earth stones block movement — you can't walk through them.
+                    Earth stones block movement. You're hemmed in by your own cast.
                 </div>
                 <div style="margin-top:8px; color:#aaa; font-size:13px;">
-                    Watch the ring drop into place. Then we'll show you how to escape.
+                    Continuing to the escape lesson…
                 </div>`,
             action: 'scripted-ai',   // auto-advances after AI fires
             nextLabel: null,
@@ -262,7 +262,7 @@ const TutorialMode = (function () {
         {
             id: 'break-trap',
             title: 'Break Free!',
-            content: `<strong>Right-click any Earth stone in the ring</strong> to break it.
+            content: `<strong>Right-click any Earth stone</strong> (from your Avalanche cast) to break it and open an escape path.
                 <div style="margin-top:10px;">
                     Breaking Earth costs <strong style="color:#69d83a;">5 AP</strong>. We've topped you up — you have enough.
                 </div>
@@ -280,12 +280,12 @@ const TutorialMode = (function () {
         {
             id: 'opponent-retrap',
             title: 'Second Trap!',
-            content: `Your opponent strikes again with a <strong style="color:#ed1b43;">second Earth ring</strong>, one tile east!
+            content: `Your opponent threatens to re-trap you — don't let them! It's time to fight back with a different element.
                 <div style="margin-top:10px;">
-                    You can't break through this one with raw AP. Time for a different element.
+                    Brute-forcing through Earth costs too much AP. Wind and Fire give you better options.
                 </div>
                 <div style="margin-top:8px; color:#aaa; font-size:13px;">
-                    We've added some Wind and Fire stones to your pool. Use them next.
+                    We've added Wind and Fire stones to your pool. Use them next.
                 </div>`,
             action: 'scripted-ai',
             nextLabel: null,
@@ -857,75 +857,29 @@ const TutorialMode = (function () {
     // ── Scripted opponent AI ──────────────────────────────────────────────────
 
     /**
-     * Place Earth stones in a ring around `centerX, centerY` (pixel coords).
-     * Uses placeStoneVisually so stones appear on board and are breakable,
-     * but no multiplayer broadcast occurs.
-     * centerX/centerY: SVG pixel coords of the hex to surround.
-     * callback: called after all stones are placed (for auto-advance).
+     * Scripted opponent trap — narrative pause, then auto-advance.
+     * Stone placement removed: coordinate-scale mismatch (S=80 vs TILE_SIZE=20)
+     * caused stones to land far off-board. Player's own Avalanche stones serve
+     * as the earth stones to break in the break-trap step.
      */
     function runScriptedOpponentTrap(centerX, centerY, callback) {
-        // Tutorial pins the player at PLAYER_POS = hp(1, 0). Hard-coding the
-        // ring center avoids round-trip errors caused by mixing small-hex (s=20)
-        // and large-hex (s=80) pixel grids when playerPosition is read.
-        // (params unused — tutorial pins player at hp(1,0))
-        const centerQ = 1;
-        const centerR = 0;
-        const neighborOffsets = [
-            { dq:  1, dr:  0 }, { dq:  0, dr:  1 }, { dq: -1, dr:  1 },
-            { dq: -1, dr:  0 }, { dq:  0, dr: -1 }, { dq:  1, dr: -1 }
-        ];
-        const SNAP = 50;
-        const existingEarth = Array.isArray(window.placedStones)
-            ? window.placedStones.filter(s => s.type === 'earth')
-            : [];
-        const emptySlots = neighborOffsets.filter(({ dq, dr }) => {
-            const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
-            return !existingEarth.some(s => Math.abs(s.x - nx) < SNAP && Math.abs(s.y - ny) < SNAP);
-        });
-        let delay = 0;
-        emptySlots.forEach(({ dq, dr }) => {
-            setTimeout(() => {
-                const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
-                if (typeof window.placeStoneVisually === 'function') {
-                    window.placeStoneVisually(nx, ny, 'earth');
-                }
-            }, delay);
-            delay += 200;
-        });
-        setTimeout(callback, delay + 400);
+        // Scripted stone placement removed — coordinate-scale mismatch between
+        // tutorial's S=80 pixel grid and game's TILE_SIZE=20 grid means computed
+        // positions land far off-board. The player's own Avalanche stones already
+        // provide earth stones to break in the break-trap step.
+        // Just pause briefly (opponent "thinking") then call callback.
+        setTimeout(callback, 1200);
     }
 
     /**
-     * Second trap: hard-coded one hex east of the first trap center (q=2, r=0).
-     * (params unused — center is fixed to avoid pixel-grid inversion errors)
+     * Scripted opponent retrap — narrative pause, then auto-advance.
+     * Stone placement removed for same reason as runScriptedOpponentTrap.
      */
     function runScriptedOpponentRetrap(centerX, centerY, callback) {
-        // Second trap is one hex east of the first (q=2, r=0).
-        const centerQ = 2;
-        const centerR = 0;
-        const neighborOffsets = [
-            { dq:  1, dr:  0 }, { dq:  0, dr:  1 }, { dq: -1, dr:  1 },
-            { dq: -1, dr:  0 }, { dq:  0, dr: -1 }, { dq:  1, dr: -1 }
-        ];
-        const SNAP = 50;
-        const existingEarth = Array.isArray(window.placedStones)
-            ? window.placedStones.filter(s => s.type === 'earth')
-            : [];
-        const emptySlots = neighborOffsets.filter(({ dq, dr }) => {
-            const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
-            return !existingEarth.some(s => Math.abs(s.x - nx) < SNAP && Math.abs(s.y - ny) < SNAP);
-        });
-        let delay = 0;
-        emptySlots.forEach(({ dq, dr }) => {
-            setTimeout(() => {
-                const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
-                if (typeof window.placeStoneVisually === 'function') {
-                    window.placeStoneVisually(nx, ny, 'earth');
-                }
-            }, delay);
-            delay += 200;
-        });
-        setTimeout(callback, delay + 400);
+        // Same as runScriptedOpponentTrap — scripted stone placement removed.
+        // Narrative text describes what the opponent "does", but no stones are
+        // dropped visually. Player must place their own Wind stone to advance.
+        setTimeout(callback, 1200);
     }
 
     /**
