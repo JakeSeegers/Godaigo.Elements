@@ -380,6 +380,10 @@ const TutorialMode = (function () {
         } catch (err) {
             console.error('TutorialMode: board setup error (non-fatal):', err);
         }
+        // Ensure End Turn button is visible — it starts as display:none in HTML
+        // and may have been re-hidden by lobby reset flows before the tutorial launched.
+        const etBtn = document.getElementById('end-turn');
+        if (etBtn) etBtn.style.display = '';
         showExitButton();
         showStep(0);
     }
