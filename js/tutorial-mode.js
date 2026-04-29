@@ -243,7 +243,72 @@ const TutorialMode = (function () {
             spotlight: '#cast-spell',
             modalPos: 'corner'
         },
-        // ── 12  HUD reference (brief read) ───────────────────────────────────
+        // ── opponent-trap: scripted AI places ring, auto-advance after ring placed ─
+        {
+            id: 'opponent-trap',
+            title: 'Opponent Responds!',
+            content: `Your opponent sees your powerful cast and <strong style="color:#ed1b43;">surrounds you with Earth stones</strong>!
+                <div style="margin-top:10px;">
+                    You're trapped. Earth stones block all movement — you can't walk through them.
+                </div>
+                <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                    Don't panic — you have options. Earth stones cost <strong>5 AP</strong> to break.
+                </div>`,
+            action: 'scripted-ai',   // auto-advances after AI fires
+            nextLabel: null,
+            modalPos: 'corner'
+        },
+        // ── break-trap: player must break one earth stone ─────────────────────────
+        {
+            id: 'break-trap',
+            title: 'Break Free!',
+            content: `<strong>Right-click an Earth stone</strong> to break it and escape the ring.
+                <div style="margin-top:10px;">
+                    Breaking Earth costs <strong style="color:#69d83a;">5 AP</strong>. You have enough — do it now.
+                </div>`,
+            action: 'stone-broken',
+            nextLabel: null,
+            modalPos: 'corner'
+        },
+        // ── retrap: scripted AI fires second trap, auto-advance ───────────────────
+        {
+            id: 'opponent-retrap',
+            title: 'Second Trap!',
+            content: `Your opponent strikes again with a <strong style="color:#ed1b43;">second Earth ring</strong>!
+                <div style="margin-top:10px;">
+                    This time you don't have enough AP to break through Earth. Try a different approach.
+                </div>`,
+            action: 'scripted-ai',
+            nextLabel: null,
+            modalPos: 'corner'
+        },
+        // ── wind-escape: player places a wind stone ───────────────────────────────
+        {
+            id: 'wind-escape',
+            title: 'Wind Stone — Free Move!',
+            content: `<strong style="color:#ffce00;">Wind stones</strong> make movement free (0 AP)!
+                <div style="margin-top:10px;">
+                    <strong>Drag a Wind stone</strong> from the pool and place it near the trap ring.
+                    Then you can step through it without spending AP.
+                </div>`,
+            action: 'stone-placed-wind',
+            nextLabel: null,
+            modalPos: 'corner'
+        },
+        // ── fire-counter: player places a fire stone adjacent to earth ────────────
+        {
+            id: 'fire-counter',
+            title: 'Fire Destroys Earth!',
+            content: `<strong style="color:#ed1b43;">Fire stones</strong> destroy adjacent stones when placed.
+                <div style="margin-top:10px;">
+                    <strong>Drag a Fire stone</strong> from the pool and drop it <em>adjacent to an Earth stone</em>.
+                    Watch the Earth stone disappear!
+                </div>`,
+            action: 'stone-placed-fire',
+            nextLabel: null,
+            modalPos: 'corner'
+        },
+        // ── 17  HUD reference (brief read) ───────────────────────────────────
         {
             id: 'hud',
             title: 'The HUD & Dock',
@@ -457,6 +522,7 @@ const TutorialMode = (function () {
             'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
             'stone-placed-wind': 'Drag a Wind stone (yellow) from the pool and place it near the trap ring…',
             'stone-placed-fire': 'Drag a Fire stone (red) from the pool and place it adjacent to an Earth stone…',
+            'scripted-ai':       'Watch the opponent\'s move…',
         };
         const footerHTML = (step.nextLabel && !actionHints[step.action])
             ? `<button class="tmode-next">${step.nextLabel}</button>`
@@ -562,6 +628,26 @@ const TutorialMode = (function () {
         };
         if (hintMessages[step.action]) {
             startHintTimer(hintMessages[step.action]);
+        }
+
+        // Scripted AI trigger for trap steps
+        if (step.action === 'scripted-ai') {
+            const pos = window.playerPosition || PLAYER_POS;
+            if (step.id === 'opponent-trap') {
+                showOpponentSpeechBubble('Hah! Trapped!');
+                setTimeout(() => {
+                    runScriptedOpponentTrap(pos.x, pos.y, () => {
+                        setTimeout(advance, 800);
+                    });
+                }, 1200);   // delay so player sees the modal before stones drop
+            } else if (step.id === 'opponent-retrap') {
+                showOpponentSpeechBubble("Can't escape twice!");
+                setTimeout(() => {
+                    runScriptedOpponentRetrap(pos.x, pos.y, () => {
+                        setTimeout(advance, 800);
+                    });
+                }, 1200);
+            }
         }
     }
 
