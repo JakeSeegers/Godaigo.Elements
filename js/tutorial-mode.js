@@ -567,10 +567,45 @@ const TutorialMode = (function () {
 
     // ── Step machine ──────────────────────────────────────────────────────────
 
+    /**
+     * Per-step resource grants for the trap sequence. Called from showStep BEFORE
+     * the modal renders so the modal text is accurate when the player reads it.
+     */
+    function prepareStepEntry(stepId) {
+        const ss = window.spellSystem;
+        if (stepId === 'break-trap') {
+            // Top up to 5 AP so player can afford one Earth break (cost 5).
+            if (typeof window.addAP === 'function') window.addAP(5);
+        } else if (stepId === 'opponent-retrap') {
+            if (typeof window.addAP === 'function') window.addAP(3);
+        } else if (stepId === 'wind-escape') {
+            if (ss?.playerPool && (ss.playerPool.wind || 0) < 1) {
+                ss.playerPool.wind = (ss.playerPool.wind || 0) + 2;
+                if (typeof updateHUD === 'function') updateHUD();
+                if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
+            }
+        } else if (stepId === 'fire-counter') {
+            if (ss?.playerPool && (ss.playerPool.fire || 0) < 1) {
+                ss.playerPool.fire = (ss.playerPool.fire || 0) + 2;
+                if (typeof updateHUD === 'function') updateHUD();
+                if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
+            }
+            // Safety net: ensure at least one earth stone remains on board
+            const hasEarth = Array.isArray(window.placedStones)
+                && window.placedStones.some(s => s.type === 'earth');
+            if (!hasEarth && typeof window.placeStoneVisually === 'function' && window.playerPosition) {
+                // Place an earth stone east of the player at hp(3, 0) to avoid pixel-grid issues
+                const { x: nx, y: ny } = hp(3, 0);
+                window.placeStoneVisually(nx, ny, 'earth');
+            }
+        }
+    }
+
     function showStep(index) {
         const step = STEPS[index];
         if (!step) return;
         currentStep = index;
+        prepareStepEntry(step.id);
 
         // Clear previous decorations
         clearSpotlight();
@@ -814,82 +849,24 @@ const TutorialMode = (function () {
      * callback: called after all stones are placed (for auto-advance).
      */
     function runScriptedOpponentTrap(centerX, centerY, callback) {
-        // Compute hex coords from pixel position
-        // hp(q,r) = {x: S*SQ3*(q+r/2), y: S*1.5*r}
-        // Inverse: r = centerY / (S*1.5),  q = centerX/(S*SQ3) - r/2
-        const r = centerY / (S * 1.5);
-        const q = centerX / (S * SQ3) - r / 2;
-        const centerQ = Math.round(q);
-        const centerR = Math.round(r);
-
-        // 6 hex neighbor offsets (pointy-top / offset-axial)
+        // Tutorial pins the player at PLAYER_POS = hp(1, 0). Hard-coding the
+        // ring center avoids round-trip errors caused by mixing small-hex (s=20)
+        // and large-hex (s=80) pixel grids when playerPosition is read.
+        // (params unused — tutorial pins player at hp(1,0))
+        const centerQ = 1;
+        const centerR = 0;
         const neighborOffsets = [
-            { dq:  1, dr:  0 },
-            { dq:  0, dr:  1 },
-            { dq: -1, dr:  1 },
-            { dq: -1, dr:  0 },
-            { dq:  0, dr: -1 },
-            { dq:  1, dr: -1 }
+            { dq:  1, dr:  0 }, { dq:  0, dr:  1 }, { dq: -1, dr:  1 },
+            { dq: -1, dr:  0 }, { dq:  0, dr: -1 }, { dq:  1, dr: -1 }
         ];
-
-        // Only fill ring positions NOT already occupied by an earth stone
-        // (Avalanche places 2 of the 6 ring stones as part of its pattern)
-        const SNAP = 50; // pixel tolerance for matching existing stone coords
-        const existingEarth = Array.isArray(window.placedStones)
-            ? window.placedStones.filter(s => s.type === 'earth')
-            : [];
-
-        const emptySlots = neighborOffsets.filter(({ dq, dr }) => {
-            const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
-            return !existingEarth.some(s => Math.abs(s.x - nx) < SNAP && Math.abs(s.y - ny) < SNAP);
-        });
-
-        let delay = 0;
-        emptySlots.forEach(({ dq, dr }) => {
-            setTimeout(() => {
-                const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
-                if (typeof window.placeStoneVisually === 'function') {
-                    window.placeStoneVisually(nx, ny, 'earth');
-                }
-            }, delay);
-            delay += 200;   // stagger by 200ms for visual drama
-        });
-
-        // Fire callback after all gap stones placed + a small buffer
-        setTimeout(callback, delay + 400);
-    }
-
-    /**
-     * Second trap: same ring pattern but offset by one tile to the east (+1 hex in q).
-     * This places stones around (centerQ+1, centerR) rather than (centerQ, centerR).
-     */
-    function runScriptedOpponentRetrap(centerX, centerY, callback) {
-        // Shift the trap center one tile east
-        const r = centerY / (S * 1.5);
-        const q = centerX / (S * SQ3) - r / 2;
-        const centerQ = Math.round(q) + 1;   // +1 tile east
-        const centerR = Math.round(r);
-
-        const neighborOffsets = [
-            { dq:  1, dr:  0 },
-            { dq:  0, dr:  1 },
-            { dq: -1, dr:  1 },
-            { dq: -1, dr:  0 },
-            { dq:  0, dr: -1 },
-            { dq:  1, dr: -1 }
-        ];
-
-        // Only fill ring positions NOT already occupied by an earth stone
         const SNAP = 50;
         const existingEarth = Array.isArray(window.placedStones)
             ? window.placedStones.filter(s => s.type === 'earth')
             : [];
-
         const emptySlots = neighborOffsets.filter(({ dq, dr }) => {
             const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
             return !existingEarth.some(s => Math.abs(s.x - nx) < SNAP && Math.abs(s.y - ny) < SNAP);
         });
-
         let delay = 0;
         emptySlots.forEach(({ dq, dr }) => {
             setTimeout(() => {
@@ -900,7 +877,39 @@ const TutorialMode = (function () {
             }, delay);
             delay += 200;
         });
+        setTimeout(callback, delay + 400);
+    }
 
+    /**
+     * Second trap: hard-coded one hex east of the first trap center (q=2, r=0).
+     * (params unused — center is fixed to avoid pixel-grid inversion errors)
+     */
+    function runScriptedOpponentRetrap(centerX, centerY, callback) {
+        // Second trap is one hex east of the first (q=2, r=0).
+        const centerQ = 2;
+        const centerR = 0;
+        const neighborOffsets = [
+            { dq:  1, dr:  0 }, { dq:  0, dr:  1 }, { dq: -1, dr:  1 },
+            { dq: -1, dr:  0 }, { dq:  0, dr: -1 }, { dq:  1, dr: -1 }
+        ];
+        const SNAP = 50;
+        const existingEarth = Array.isArray(window.placedStones)
+            ? window.placedStones.filter(s => s.type === 'earth')
+            : [];
+        const emptySlots = neighborOffsets.filter(({ dq, dr }) => {
+            const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
+            return !existingEarth.some(s => Math.abs(s.x - nx) < SNAP && Math.abs(s.y - ny) < SNAP);
+        });
+        let delay = 0;
+        emptySlots.forEach(({ dq, dr }) => {
+            setTimeout(() => {
+                const { x: nx, y: ny } = hp(centerQ + dq, centerR + dr);
+                if (typeof window.placeStoneVisually === 'function') {
+                    window.placeStoneVisually(nx, ny, 'earth');
+                }
+            }, delay);
+            delay += 200;
+        });
         setTimeout(callback, delay + 400);
     }
 
