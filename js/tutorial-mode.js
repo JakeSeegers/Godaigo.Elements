@@ -249,10 +249,10 @@ const TutorialMode = (function () {
             title: 'Opponent Responds!',
             content: `Your opponent sees your powerful cast and <strong style="color:#ed1b43;">surrounds you with Earth stones</strong>!
                 <div style="margin-top:10px;">
-                    You're trapped. Earth stones block all movement — you can't walk through them.
+                    You're trapped. Earth stones block movement — you can't walk through them.
                 </div>
                 <div style="margin-top:8px; color:#aaa; font-size:13px;">
-                    Don't panic — you have options. Earth stones cost <strong>5 AP</strong> to break.
+                    Watch the ring drop into place. Then we'll show you how to escape.
                 </div>`,
             action: 'scripted-ai',   // auto-advances after AI fires
             nextLabel: null,
@@ -262,21 +262,30 @@ const TutorialMode = (function () {
         {
             id: 'break-trap',
             title: 'Break Free!',
-            content: `<strong>Right-click an Earth stone</strong> to break it and escape the ring.
+            content: `<strong>Right-click any Earth stone in the ring</strong> to break it.
                 <div style="margin-top:10px;">
-                    Breaking Earth costs <strong style="color:#69d83a;">5 AP</strong>. You have enough — do it now.
+                    Breaking Earth costs <strong style="color:#69d83a;">5 AP</strong>. We've topped you up — you have enough.
+                </div>
+                <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                    On touch devices: long-press the stone instead.
                 </div>`,
             action: 'stone-broken',
             nextLabel: null,
+            boardRing: true,
+            boardRingTarget: PLAYER_POS,
+            freeMove: true,
             modalPos: 'corner'
         },
         // ── retrap: scripted AI fires second trap, auto-advance ───────────────────
         {
             id: 'opponent-retrap',
             title: 'Second Trap!',
-            content: `Your opponent strikes again with a <strong style="color:#ed1b43;">second Earth ring</strong>!
+            content: `Your opponent strikes again with a <strong style="color:#ed1b43;">second Earth ring</strong>, one tile east!
                 <div style="margin-top:10px;">
-                    This time you don't have enough AP to break through Earth. Try a different approach.
+                    You can't break through this one with raw AP. Time for a different element.
+                </div>
+                <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                    We've added some Wind and Fire stones to your pool. Use them next.
                 </div>`,
             action: 'scripted-ai',
             nextLabel: null,
@@ -286,10 +295,12 @@ const TutorialMode = (function () {
         {
             id: 'wind-escape',
             title: 'Wind Stone — Free Move!',
-            content: `<strong style="color:#ffce00;">Wind stones</strong> make movement free (0 AP)!
+            content: `<strong style="color:#ffce00;">Wind stones</strong> let you move for free (0 AP)!
                 <div style="margin-top:10px;">
-                    <strong>Drag a Wind stone</strong> from the pool and place it near the trap ring.
-                    Then you can step through it without spending AP.
+                    Look at the dock — you have Wind stones now. <strong>Drag a Wind stone</strong> from the pool and drop it on a hex near the trap.
+                </div>
+                <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                    Once placed, walking onto that hex costs zero AP.
                 </div>`,
             action: 'stone-placed-wind',
             nextLabel: null,
@@ -299,10 +310,13 @@ const TutorialMode = (function () {
         {
             id: 'fire-counter',
             title: 'Fire Destroys Earth!',
-            content: `<strong style="color:#ed1b43;">Fire stones</strong> destroy adjacent stones when placed.
+            content: `<strong style="color:#ed1b43;">Fire stones</strong> destroy adjacent stones when placed!
                 <div style="margin-top:10px;">
                     <strong>Drag a Fire stone</strong> from the pool and drop it <em>adjacent to an Earth stone</em>.
-                    Watch the Earth stone disappear!
+                    Watch the Earth stone disappear.
+                </div>
+                <div style="margin-top:8px; color:#aaa; font-size:13px;">
+                    This is how Fire counters Earth — perfect for breaking traps without spending AP.
                 </div>`,
             action: 'stone-placed-fire',
             nextLabel: null,
@@ -619,7 +633,8 @@ const TutorialMode = (function () {
         // restricting the pawn — used for the shrine step where the player
         // may need to navigate back from wherever they ended up.
         if (step.boardRing) {
-            showBoardRing(EARTH_POS.x, EARTH_POS.y);
+            const _ringTarget = step.boardRingTarget || EARTH_POS;
+            showBoardRing(_ringTarget.x, _ringTarget.y);
             if (!step.freeMove) {
                 window.tutorialAllowedHexes = new Set([
                     `${Math.round(EARTH_POS.x)},${Math.round(EARTH_POS.y)}`
