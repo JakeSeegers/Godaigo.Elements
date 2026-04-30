@@ -6885,6 +6885,7 @@ function clearPlayerPath() {
                     stonesToDestroy.forEach(targetId => {
                         const target = placedStones.find(s => s.id === targetId);
                         if (target) {
+                            window.effectsSystem?.play('fire_effect', target.x, target.y);
                             target.element.remove();
                             placedStones = placedStones.filter(s => s.id !== targetId);
                             returnStoneToPool(target.type);
@@ -6936,6 +6937,7 @@ function clearPlayerPath() {
 
                     // Destroy all adjacent stones (voided or not)
                     stonesToDestroy.forEach(stone => {
+                        window.effectsSystem?.play('fire_effect', stone.x, stone.y);
                         removeStone(stone.id);
                         updateStatus(`Fire destroyed ${stone.type} stone!`);
                     });
@@ -6949,6 +6951,7 @@ function clearPlayerPath() {
                     if (!hasVoid) {
                         const stoneToRemove = placedStones.find(s => s.x === x && s.y === y);
                         if (stoneToRemove) {
+                            window.effectsSystem?.play('fire_effect', x, y);
                             removeStone(stoneToRemove.id);
                             updateStatus(`Fire destroyed ${type} stone!`);
                         }

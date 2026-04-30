@@ -3367,6 +3367,191 @@ document.getElementById('undo-move').onclick = function() {
                 inspectSection.appendChild(inspectOut);
                 panel.appendChild(inspectSection);
 
+                // ── Sprite Effect Lab ─────────────────────────────────────────
+                (function buildSpriteEffectLab() {
+                    const section = document.createElement('div');
+                    section.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';
+
+                    const title = document.createElement('div');
+                    title.textContent = '✨ Sprite Effect Lab';
+                    title.style.cssText = 'font-size:12px;color:#aaa;font-weight:bold;cursor:pointer;user-select:none;';
+                    let open = false;
+                    const body = document.createElement('div');
+                    body.style.cssText = 'display:none;flex-direction:column;gap:6px;';
+                    title.onclick = () => { open = !open; body.style.display = open ? 'flex' : 'none'; };
+                    section.appendChild(title);
+                    section.appendChild(body);
+
+                    // State
+                    let frames = [];
+                    let animTimer = null;
+                    let currentFrame = 0;
+                    let cfg = { fps: 18, hueRotate: 0, brightness: 1, saturation: 1, scale: 1, trigger: 'stone_destroyed', stoneType: 'fire' };
+
+                    // Preview canvas
+                    const previewWrap = document.createElement('div');
+                    previewWrap.style.cssText = 'display:flex;justify-content:center;align-items:center;background:#111;border:1px solid #333;border-radius:4px;height:100px;';
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 80; canvas.height = 80;
+                    canvas.style.cssText = 'image-rendering:pixelated;';
+                    previewWrap.appendChild(canvas);
+                    body.appendChild(previewWrap);
+                    const ctx2 = canvas.getContext('2d');
+
+                    function drawFrame() {
+                        ctx2.clearRect(0, 0, canvas.width, canvas.height);
+                        if (!frames.length) return;
+                        const img = frames[currentFrame % frames.length];
+                        const s = cfg.scale;
+                        const w = img.width * s, h = img.height * s;
+                        ctx2.save();
+                        ctx2.filter = `hue-rotate(${cfg.hueRotate}deg) brightness(${cfg.brightness}) saturate(${cfg.saturation})`;
+                        ctx2.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+                        ctx2.restore();
+                    }
+
+                    function startAnim() {
+                        if (animTimer) clearInterval(animTimer);
+                        if (!frames.length) return;
+                        animTimer = setInterval(() => { currentFrame = (currentFrame + 1) % frames.length; drawFrame(); }, 1000 / cfg.fps);
+                    }
+
+                    // File upload
+                    const uploadRow = document.createElement('div');
+                    uploadRow.style.cssText = 'display:flex;gap:4px;align-items:center;';
+                    const uploadLabel = document.createElement('span');
+                    uploadLabel.textContent = 'Frames:';
+                    uploadLabel.style.cssText = 'font-size:11px;color:#aaa;width:44px;flex-shrink:0;';
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.multiple = true;
+                    fileInput.accept = 'image/png,image/webp';
+                    fileInput.style.cssText = 'flex:1;font-size:10px;color:#eee;background:#111;border:1px solid #555;border-radius:4px;padding:2px;cursor:pointer;min-width:0;';
+                    const frameCount = document.createElement('span');
+                    frameCount.style.cssText = 'font-size:10px;color:#6ef;width:32px;text-align:right;flex-shrink:0;';
+                    frameCount.textContent = '0 fr';
+                    fileInput.onchange = () => {
+                        const files = Array.from(fileInput.files).sort((a, b) => a.name.localeCompare(b.name));
+                        frames = [];
+                        currentFrame = 0;
+                        let loaded = 0;
+                        files.forEach((f, i) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                frames[i] = img;
+                                loaded++;
+                                if (loaded === files.length) {
+                                    frameCount.textContent = `${loaded} fr`;
+                                    // Fit first frame in preview
+                                    const first = frames[0];
+                                    cfg.scale = Math.min(1, 80 / Math.max(first.width, first.height));
+                                    scaleSlider.value = cfg.scale.toFixed(2);
+                                    scaleVal.textContent = cfg.scale.toFixed(2);
+                                    startAnim();
+                                }
+                            };
+                            img.src = URL.createObjectURL(f);
+                        });
+                    };
+                    uploadRow.appendChild(uploadLabel);
+                    uploadRow.appendChild(fileInput);
+                    uploadRow.appendChild(frameCount);
+                    body.appendChild(uploadRow);
+
+                    // Slider helper
+                    function makeSlider(label, min, max, step, key, initial, format) {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+                        const lbl = document.createElement('span');
+                        lbl.textContent = label;
+                        lbl.style.cssText = 'font-size:11px;color:#aaa;width:44px;flex-shrink:0;';
+                        const sl = document.createElement('input');
+                        sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step; sl.value = initial;
+                        sl.style.cssText = 'flex:1;accent-color:#f96;min-width:0;';
+                        const vl = document.createElement('span');
+                        vl.style.cssText = 'font-size:11px;color:#eee;width:40px;text-align:right;flex-shrink:0;';
+                        vl.textContent = format(initial);
+                        sl.oninput = () => {
+                            const v = parseFloat(sl.value);
+                            cfg[key] = v;
+                            vl.textContent = format(v);
+                            if (key === 'fps') startAnim(); else drawFrame();
+                        };
+                        row.appendChild(lbl); row.appendChild(sl); row.appendChild(vl);
+                        body.appendChild(row);
+                        return { slider: sl, val: vl };
+                    }
+
+                    makeSlider('Hue',    0, 360, 1,    'hueRotate',  0,   v => `${Math.round(v)}°`);
+                    makeSlider('Bright', 0.1, 3, 0.05, 'brightness', 1,   v => v.toFixed(2));
+                    makeSlider('Satur',  0, 3,   0.05, 'saturation', 1,   v => v.toFixed(2));
+                    const { slider: scaleSlider, val: scaleVal } = makeSlider('Scale', 0.1, 3, 0.05, 'scale', 1, v => v.toFixed(2));
+                    makeSlider('FPS',    1, 60,  1,    'fps',        18,  v => `${Math.round(v)}`);
+
+                    // Trigger + stone type
+                    function makeSelect(label, key, options) {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+                        const lbl = document.createElement('span');
+                        lbl.textContent = label;
+                        lbl.style.cssText = 'font-size:11px;color:#aaa;width:44px;flex-shrink:0;';
+                        const sel = document.createElement('select');
+                        sel.style.cssText = 'flex:1;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:2px 4px;font-size:11px;min-width:0;';
+                        options.forEach(([val, text]) => {
+                            const opt = document.createElement('option');
+                            opt.value = val; opt.textContent = text;
+                            if (val === cfg[key]) opt.selected = true;
+                            sel.appendChild(opt);
+                        });
+                        sel.onchange = () => { cfg[key] = sel.value; };
+                        row.appendChild(lbl); row.appendChild(sel);
+                        body.appendChild(row);
+                    }
+
+                    makeSelect('Trigger', 'trigger', [
+                        ['stone_destroyed', 'Stone destroyed'],
+                        ['scroll_cast',     'Scroll cast'],
+                        ['tile_placed',     'Tile placed'],
+                        ['turn_end',        'Turn end'],
+                    ]);
+                    makeSelect('Stone', 'stoneType', [
+                        ['fire',     'Fire'],
+                        ['earth',    'Earth'],
+                        ['water',    'Water'],
+                        ['wind',     'Wind'],
+                        ['void',     'Void'],
+                        ['catacomb', 'Catacomb'],
+                        ['any',      'Any'],
+                    ]);
+
+                    // Export
+                    const exportBtn = document.createElement('button');
+                    exportBtn.textContent = '📋 Export Config';
+                    Object.assign(exportBtn.style, { padding:'4px 8px', background:'#2d2d44', color:'#f96', border:'1px solid #555', borderRadius:'5px', cursor:'pointer', fontSize:'11px' });
+                    exportBtn.onclick = () => {
+                        const out = JSON.stringify({
+                            trigger:    cfg.trigger,
+                            stoneType:  cfg.stoneType,
+                            frames:     frames.length || '?',
+                            fps:        Math.round(cfg.fps),
+                            hueRotate:  Math.round(cfg.hueRotate),
+                            brightness: parseFloat(cfg.brightness.toFixed(2)),
+                            saturation: parseFloat(cfg.saturation.toFixed(2)),
+                            scale:      parseFloat(cfg.scale.toFixed(2)),
+                        }, null, 2);
+                        const existing = body.querySelector('.sprite-export-area');
+                        if (existing) { existing.remove(); return; }
+                        const ta = document.createElement('textarea');
+                        ta.className = 'sprite-export-area';
+                        ta.value = out;
+                        ta.style.cssText = 'width:100%;height:130px;background:#111;color:#f96;border:1px solid #444;border-radius:4px;font-size:10px;padding:4px;box-sizing:border-box;resize:vertical;';
+                        body.appendChild(ta);
+                        ta.select();
+                    };
+                    body.appendChild(exportBtn);
+                    panel.appendChild(section);
+                })();
+
                 panel.appendChild(makeBtn('✕ Close', () => {
                     if (inspectListener) document.removeEventListener('click', inspectListener, true);
                     panel.remove();
