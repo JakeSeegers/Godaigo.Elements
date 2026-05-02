@@ -1543,7 +1543,7 @@
         function updateHeartbeat() {
             if (!myPlayerId) return;
             if (_heartbeatInterval) clearInterval(_heartbeatInterval);
-            _heartbeatInterval = setInterval(async () => {
+            const beat = async () => {
                 if (!myPlayerId) { clearInterval(_heartbeatInterval); return; }
                 try {
                     await supabase
@@ -1551,31 +1551,37 @@
                         .update({ last_seen: new Date().toISOString() })
                         .eq('id', myPlayerId);
                 } catch (e) { /* ignore */ }
-            }, 30000); // Every 30 seconds
+            };
+            beat(); // Fire immediately so last_seen is never NULL
+            _heartbeatInterval = setInterval(beat, 15000); // Every 15 seconds
         }
 
-        // Host-only: periodically sweep players with stale last_seen and remove them.
+        // Host-only: periodically sweep disconnected players (stale last_seen).
         // Deletion triggers the existing players DELETE handler on all clients,
-        // which already shows "player left" notifications and handles turn skipping.
+        // which shows "player left" notifications and handles turn skipping.
         let _disconnectMonitorInterval = null;
         function startDisconnectMonitor() {
             if (_disconnectMonitorInterval) clearInterval(_disconnectMonitorInterval);
             _disconnectMonitorInterval = setInterval(async () => {
                 if (!isHost || !currentGameId) return;
-                const staleThreshold = new Date(Date.now() - 90 * 1000).toISOString();
+                const staleThreshold = new Date(Date.now() - 45 * 1000).toISOString();
                 try {
-                    const { data: stalePlayers } = await supabase
+                    const { data: allPlayers } = await supabase
                         .from('players')
-                        .select('id, username, last_seen')
+                        .select('id, username, last_seen, created_at')
                         .eq('game_id', currentGameId)
-                        .neq('id', myPlayerId) // never self-evict
-                        .lt('last_seen', staleThreshold);
-                    for (const p of stalePlayers || []) {
-                        console.log(`⚠️ Disconnect detected: ${p.username} (last seen ${p.last_seen}) — removing`);
+                        .neq('id', myPlayerId); // never self-evict
+                    const stalePlayers = (allPlayers || []).filter(p => {
+                        // Use last_seen if available, fall back to created_at
+                        const ref = p.last_seen || p.created_at;
+                        return ref < staleThreshold;
+                    });
+                    for (const p of stalePlayers) {
+                        console.log(`⚠️ Disconnect: ${p.username} (last_seen=${p.last_seen}) — removing`);
                         await supabase.from('players').delete().eq('id', p.id);
                     }
                 } catch (e) { /* ignore network errors */ }
-            }, 60000); // Check every 60 seconds
+            }, 15000); // Check every 15 seconds
         }
         function stopDisconnectMonitor() {
             if (_disconnectMonitorInterval) {
@@ -1584,24 +1590,17 @@
             }
         }
 
-        // Clean up on page unload (synchronous to ensure it completes)
-        window.addEventListener('beforeunload', (e) => {
-            if (myPlayerId) {
-                // Use navigator.sendBeacon for reliable cleanup during page unload
-                const supabaseUrl = supabase.supabaseUrl;
-                const supabaseKey = supabase.supabaseKey;
-
-                // Direct REST API call using fetch with keepalive
-                fetch(`${supabaseUrl}/rest/v1/players?id=eq.${myPlayerId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'apikey': supabaseKey,
-                        'Authorization': `Bearer ${supabaseKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    keepalive: true // This ensures the request completes even if page closes
-                });
-            }
+        // Clean up on page unload — use global constants (supabase client properties aren't reliable)
+        window.addEventListener('beforeunload', () => {
+            if (!myPlayerId) return;
+            fetch(`${SUPABASE_URL}/rest/v1/players?id=eq.${myPlayerId}`, {
+                method: 'DELETE',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                },
+                keepalive: true
+            });
         });
 
         // Auto-refresh player list when tab becomes visible again
