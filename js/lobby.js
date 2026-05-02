@@ -1523,6 +1523,9 @@
                 // Start turn timer monitoring (turn-based timeout)
                 startTurnTimerMonitoring();
 
+                // Host monitors for disconnected players (stale last_seen)
+                if (isHost) startDisconnectMonitor();
+
                 // Initialize game with multiplayer players and shared deck seed
                 startMultiplayerGame(allPlayers, gameDeckSeed);
                 
@@ -1532,15 +1535,13 @@
             }
         }
 
-        // Update heartbeat (keep player active while in waiting room only)
+        // Update heartbeat — keeps last_seen current in both lobby and active game
         let _heartbeatInterval = null;
         function updateHeartbeat() {
             if (!myPlayerId) return;
             if (_heartbeatInterval) clearInterval(_heartbeatInterval);
             _heartbeatInterval = setInterval(async () => {
                 if (!myPlayerId) { clearInterval(_heartbeatInterval); return; }
-                // Skip heartbeat during active game — in-game inactivity timeout uses last_seen
-                if (document.getElementById('game-layout')?.classList.contains('active')) return;
                 try {
                     await supabase
                         .from('players')
@@ -1548,6 +1549,36 @@
                         .eq('id', myPlayerId);
                 } catch (e) { /* ignore */ }
             }, 30000); // Every 30 seconds
+        }
+
+        // Host-only: periodically sweep players with stale last_seen and remove them.
+        // Deletion triggers the existing players DELETE handler on all clients,
+        // which already shows "player left" notifications and handles turn skipping.
+        let _disconnectMonitorInterval = null;
+        function startDisconnectMonitor() {
+            if (_disconnectMonitorInterval) clearInterval(_disconnectMonitorInterval);
+            _disconnectMonitorInterval = setInterval(async () => {
+                if (!isHost || !currentGameId) return;
+                const staleThreshold = new Date(Date.now() - 90 * 1000).toISOString();
+                try {
+                    const { data: stalePlayers } = await supabase
+                        .from('players')
+                        .select('id, username, last_seen')
+                        .eq('game_id', currentGameId)
+                        .neq('id', myPlayerId) // never self-evict
+                        .lt('last_seen', staleThreshold);
+                    for (const p of stalePlayers || []) {
+                        console.log(`⚠️ Disconnect detected: ${p.username} (last seen ${p.last_seen}) — removing`);
+                        await supabase.from('players').delete().eq('id', p.id);
+                    }
+                } catch (e) { /* ignore network errors */ }
+            }, 60000); // Check every 60 seconds
+        }
+        function stopDisconnectMonitor() {
+            if (_disconnectMonitorInterval) {
+                clearInterval(_disconnectMonitorInterval);
+                _disconnectMonitorInterval = null;
+            }
         }
 
         // Clean up on page unload (synchronous to ensure it completes)
@@ -3090,6 +3121,8 @@
             if (typeof stopTurnTimerMonitoring === 'function') {
                 stopTurnTimerMonitoring();
             }
+
+            stopDisconnectMonitor();
 
             // Clear the board
             if (typeof clearBoard === 'function') {
