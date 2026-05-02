@@ -122,25 +122,13 @@ const TutorialMode = (function () {
             spotlight: '#hud-ap-value',
             modalPos: 'corner'
         },
-        // ── 4  scroll found (read-only) ───────────────────────────────────────
+        // ── 4  scroll found + earth shrine (action-gated: onEndTurn at EARTH_POS) ─
         {
-            id: 'scroll-found',
+            id: 'earth-shrine',
             title: 'You Found a Scroll!',
             content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll — a powerful earth spell.
             <div style="margin-top:10px;">
-                We'll use it soon. For now, let's collect some <strong style="color:#69d83a;">Earth stones</strong> to power it up.
-            </div>`,
-            action: 'read',
-            nextLabel: 'Got it!',
-            modalPos: 'corner'
-        },
-        // ── 5  earth shrine (action-gated: onEndTurn at EARTH_POS) ───────────
-        {
-            id: 'earth-shrine',
-            title: 'Collect Earth Stones',
-            content: `You flipped an <strong style="color:#69d83a;">Earth tile</strong>! The glowing center is the <strong>Earth shrine</strong>.
-            <div style="margin-top:10px;">
-                <strong>Walk your pawn to the glowing center</strong>, then click <strong>End Turn</strong> to collect <strong style="color:#69d83a;">5 Earth stones</strong>.
+                You also revealed an <strong style="color:#69d83a;">Earth shrine</strong>. <strong>Walk your pawn to the glowing center</strong>, then click <strong>End Turn</strong> to collect <strong style="color:#69d83a;">5 Earth stones</strong> to power it up.
             </div>
             <div style="margin-top:10px; color:#aaa; font-size:13px;">
                 Stones come from shared <strong>Source Pools</strong> — 25 of each type max.
