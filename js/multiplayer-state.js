@@ -1,10 +1,7 @@
 // ========================================
 // SUPABASE MULTIPLAYER SETUP
 // ========================================
-const SUPABASE_URL = 'https://lovybwpypkaarstnvkbz.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxvdnlid3B5cGthYXJzdG52a2J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMzI4NTgsImV4cCI6MjA4NDYwODg1OH0.lqobDTaopRJ5sA0yZQvzDwudq2x4zz9HMtTkSuJulFU';
-
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// supabase client is declared in config.js — do not redeclare here.
 
 // Multiplayer state
 let myPlayerId = null;
@@ -23,52 +20,38 @@ let currentJoinCode = null;  // 6-char code for private rooms, null for public g
 let currentTurnNumber = 0; // Increments with each turn change (for desync detection)
 let lastReceivedTurnNumber = 0; // Last turn number received from broadcast
 
-// Helper function to get player display name (Username (Color))
-function getPlayerColorName(playerIndex) {
-    const colorNames = {
-        'purple': 'Purple',
-        'yellow': 'Yellow',
-        'red': 'Red',
-        'blue': 'Blue',
-        'green': 'Green'
-    };
+const _COLOR_NAMES = { purple:'Purple', yellow:'Yellow', red:'Red', blue:'Blue', green:'Green' };
+const _HEX_COLOR_NAMES = { '#9458f4':'Purple', '#ffce00':'Yellow', '#ed1b43':'Red', '#5894f4':'Blue', '#69d83a':'Green' };
 
-    let username = null;
-    let colorName = null;
+let _playerColorNameCache = {};
 
-    // Try to get from database player data first
-    if (allPlayersData.length > 0) {
-        const player = allPlayersData.find(p => p.player_index === playerIndex);
-        if (player) {
-            username = player.username;
-            if (player.color) {
-                colorName = colorNames[player.color] || player.color;
-            }
+function _buildPlayerColorCache() {
+    _playerColorNameCache = {};
+    for (const player of allPlayersData) {
+        const colorName = _COLOR_NAMES[player.color] || player.color || null;
+        const username  = player.username || null;
+        if (username && colorName) {
+            _playerColorNameCache[player.player_index] = username + ' (' + colorName + ')';
+        } else if (colorName) {
+            _playerColorNameCache[player.player_index] = colorName;
+        } else if (username) {
+            _playerColorNameCache[player.player_index] = username;
         }
     }
+}
 
-    // Fallback to playerPositions if player tile is placed
-    if (!colorName && typeof playerPositions !== 'undefined' && playerPositions[playerIndex]) {
-        const hexColorNames = {
-            '#9458f4': 'Purple',
-            '#ffce00': 'Yellow',
-            '#ed1b43': 'Red',
-            '#5894f4': 'Blue',
-            '#69d83a': 'Green'
-        };
-        colorName = hexColorNames[playerPositions[playerIndex].color] || 'Player ' + (playerIndex + 1);
+// Helper function to get player display name (Username (Color))
+function getPlayerColorName(playerIndex) {
+    if (_playerColorNameCache[playerIndex] !== undefined) {
+        return _playerColorNameCache[playerIndex];
     }
 
-    // Build display name: "Username (Color)" or just "Color" or "Player X"
-    if (username && colorName) {
-        return username + ' (' + colorName + ')';
-    } else if (colorName) {
-        return colorName;
-    } else if (username) {
-        return username;
-    } else {
-        return 'Player ' + (playerIndex + 1);
+    // Fallback to playerPositions if cache isn't populated yet (early placement phase)
+    if (typeof playerPositions !== 'undefined' && playerPositions[playerIndex]) {
+        return _HEX_COLOR_NAMES[playerPositions[playerIndex].color] || 'Player ' + (playerIndex + 1);
     }
+
+    return 'Player ' + (playerIndex + 1);
 }
 
 // Check if it's the current player's turn (for multiplayer)

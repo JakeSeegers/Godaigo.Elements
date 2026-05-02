@@ -1,6 +1,7 @@
 // ========================================
 // SUPABASE MULTIPLAYER SETUP
 // ========================================
+// Single source of truth for the Supabase client — do not redeclare in other files.
 const SUPABASE_URL = 'https://lovybwpypkaarstnvkbz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxvdnlid3B5cGthYXJzdG52a2J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMzI4NTgsImV4cCI6MjA4NDYwODg1OH0.lqobDTaopRJ5sA0yZQvzDwudq2x4zz9HMtTkSuJulFU';
 

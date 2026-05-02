@@ -1118,6 +1118,7 @@
                                 if (remainingPlayers) {
                                     totalPlayers = remainingPlayers.length;
                                     allPlayersData = remainingPlayers;
+                                    _buildPlayerColorCache();
 
                                     if (isPlacementPhase) {
                                         const remainingIndices = new Set(
@@ -3169,6 +3170,7 @@
 
             // Store player data globally for color name lookups
             allPlayersData = allPlayers;
+            _buildPlayerColorCache();
 
             const numPlayers = allPlayers.length;
             console.log(`🎮 Starting multiplayer game with ${numPlayers} players`);
