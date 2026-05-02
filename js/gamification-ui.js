@@ -6,12 +6,8 @@
 //   Called from the "👤 Profile" button in the auth bar (index.html).
 // ============================================================
 
-/** Toggle the profile panel open / closed */
-function gami_openPanel() {
-    const existing = document.getElementById('gami-panel');
-    if (existing) { existing.remove(); return; }
-    if (!window.gami?.userId) return;
-
+/** Create and append the panel DOM without switching to any tab. Returns the overlay element. */
+function _buildPanelDOM() {
     const overlay = document.createElement('div');
     overlay.id        = 'gami-panel';
     overlay.className = 'gami-overlay';
@@ -34,12 +30,20 @@ function gami_openPanel() {
             </div>
         </div>
     `;
-
     overlay.addEventListener('click', e => {
         if (e.target === overlay) overlay.remove();
     });
-
     document.body.appendChild(overlay);
+    return overlay;
+}
+
+/** Toggle the profile panel open / closed */
+function gami_openPanel() {
+    const existing = document.getElementById('gami-panel');
+    if (existing) { existing.remove(); return; }
+    if (!window.gami?.userId) return;
+
+    _buildPanelDOM();
     gami_switchTab('profile');
 }
 
@@ -56,9 +60,9 @@ function gami_openSettings() {
         }
         return;
     }
-    // Open panel, but land on settings tab instead of profile
-    gami_openPanel();
-    // gami_openPanel ends on 'profile'; immediately switch to settings
+    if (!window.gami?.userId) return;
+    // Build DOM and go straight to settings — avoids profile async render racing with tab switch
+    _buildPanelDOM();
     gami_switchTab('settings');
 }
 
