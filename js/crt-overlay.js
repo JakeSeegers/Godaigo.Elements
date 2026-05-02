@@ -3,7 +3,7 @@
 //
 // Canvas-based CRT effects drawn over the entire page.
 // Effects: scanlines, vignette, film grain, flicker.
-// All effects are on by default and individually togglable.
+// All effects are off by default and individually togglable.
 //
 // Storage key: godaigo_crt_${userId}  (or godaigo_crt_guest)
 // Public API:  window.crtOverlay.init()
@@ -20,7 +20,7 @@ window.crtOverlay = (function () {
     let _ctx    = null;
     let _raf    = null;
 
-    const DEFAULTS = { scanlines: true, vignette: true, grain: true, flicker: true };
+    const DEFAULTS = { scanlines: false, vignette: false, grain: false, flicker: false };
     let _opts = { ...DEFAULTS };
 
     // Vignette gradient — rebuilt on resize, reused every frame
