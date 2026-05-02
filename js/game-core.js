@@ -1,22 +1,4 @@
-        // ========================================
-        // GAME CONSTANTS
-        // ========================================
-        const TILE_SIZE = 20;
-        const SNAP_THRESHOLD = 40;
-        const STONE_SIZE = 12;
-
-        // Cache-bust token for image assets — bump when replacing an image file
-        window.IMG_V = '?v=2';
-        const IMG_V = window.IMG_V;
-
-        const STONE_TYPES = {
-            earth:    { color: '#69d83a', symbol: '▲', img: 'images/mountainsymbol.png' + IMG_V },
-            water:    { color: '#5894f4', symbol: '◯', img: 'images/watersymbol.png'    + IMG_V },
-            fire:     { color: '#ed1b43', symbol: '♦', img: 'images/firesymbol.png'     + IMG_V },
-            wind:     { color: '#ffce00', symbol: '≋', img: 'images/windsymbol.png'     + IMG_V },
-            void:     { color: '#9458f4', symbol: '✺', img: 'images/voidsymbol.png'     + IMG_V },
-            catacomb: { color: '#c8a870', symbol: '✦', img: 'images/Catacomb.png'       + IMG_V }
-        };
+        // Constants defined in config.js: TILE_SIZE, SNAP_THRESHOLD, STONE_SIZE, STONE_TYPES, IMG_V
 
         // Spell System for pattern-based stone generation
         class SpellSystem {
@@ -2408,12 +2390,8 @@
         
         // Player pools - one per player
         let playerPools = []; // Each entry is player's stone pool (for testing: start with 5 of each)
-        const playerPoolCapacity = { earth: 5, water: 5, fire: 5, wind: 5, void: 5 };
+        // playerPoolCapacity, sourcePool, sourcePoolCapacity defined in config.js
         const INITIAL_PLAYER_STONES = { earth: 0, water: 0, fire: 0, wind: 0, void: 0 };
-
-        // Elemental source pool - stones available from shrines (max 25 each)
-        const sourcePool = { earth: 20, water: 20, fire: 20, wind: 20, void: 20 };
-        const sourcePoolCapacity = { earth: 25, water: 25, fire: 25, wind: 25, void: 25 };
 
         // Initialize spell system (after activePlayerIndex is defined)
         const spellSystem = new SpellSystem();
@@ -2440,7 +2418,7 @@
                 return playerPools[displayIndex];
             }
         });
-        const stoneCapacity = playerPoolCapacity;
+        // stoneCapacity defined in config.js (= playerPoolCapacity)
 
         // Expose sourcePool as stonePools for scroll effects system
         window.stonePools = sourcePool;
@@ -2488,13 +2466,7 @@
         let myLastActivity = Date.now(); // Track my own activity
         let timerDisplayInterval = null;
 
-        const PLAYER_COLORS = {
-            green: '#69d83a',
-            blue: '#5894f4',
-            red: '#ed1b43',
-            yellow: '#ffce00',
-            purple: '#9458f4'
-        };
+        // PLAYER_COLORS defined in config.js
 
         // Mobile detection and touch support
         let isMobile = false;

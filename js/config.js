@@ -14,13 +14,16 @@ const TILE_SIZE = 20;
 const SNAP_THRESHOLD = 40;
 const STONE_SIZE = 12;
 
+window.IMG_V = '?v=2';
+const IMG_V = window.IMG_V;
+
 const STONE_TYPES = {
-    earth:    { color: '#69d83a', symbol: '▲', img: 'images/mountainsymbol.png' },
-    water:    { color: '#5894f4', symbol: '◯', img: 'images/watersymbol.png'    },
-    fire:     { color: '#ed1b43', symbol: '♦', img: 'images/firesymbol.png'     },
-    wind:     { color: '#ffce00', symbol: '≋', img: 'images/windsymbol.png'     },
-    void:     { color: '#9458f4', symbol: '✺', img: 'images/voidsymbol.png'     },
-    catacomb: { color: '#8b4513', symbol: '✦', img: 'images/Catacomb.png'       }
+    earth:    { color: '#69d83a', symbol: '▲', img: 'images/mountainsymbol.png' + IMG_V },
+    water:    { color: '#5894f4', symbol: '◯', img: 'images/watersymbol.png'    + IMG_V },
+    fire:     { color: '#ed1b43', symbol: '♦', img: 'images/firesymbol.png'     + IMG_V },
+    wind:     { color: '#ffce00', symbol: '≋', img: 'images/windsymbol.png'     + IMG_V },
+    void:     { color: '#9458f4', symbol: '✺', img: 'images/voidsymbol.png'     + IMG_V },
+    catacomb: { color: '#c8a870', symbol: '✦', img: 'images/Catacomb.png'       + IMG_V }
 };
 
 const PLAYER_COLORS = {
