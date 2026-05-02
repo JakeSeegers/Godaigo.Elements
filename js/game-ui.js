@@ -2278,6 +2278,14 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
 
         document.addEventListener('keydown', (e) => {
             console.log(`Key pressed: ${e.key}, isDraggingTile=${isDraggingTile}, ghostTile=${!!ghostTile}, shift=${e.shiftKey}`);
+
+            // S — open / close settings panel (skip when typing in an input)
+            if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey
+                    && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) {
+                if (typeof gami_openSettings === 'function') gami_openSettings();
+                return;
+            }
+
             if (e.key === 'f' || e.key === 'F') {
                 console.log(`F key detected! isDraggingTile=${isDraggingTile}, ghostTile exists=${!!ghostTile}, shift=${e.shiftKey}`);
                 

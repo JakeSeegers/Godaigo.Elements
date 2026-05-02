@@ -336,6 +336,16 @@
                 let corrected = false;
                 const activatedChangedPlayers = [];
 
+                // Capture which scrolls are currently in local play BEFORE any sync —
+                // used to protect the common area guard and the local player's own hand/active
+                // from being overwritten by a stale periodic snapshot.
+                const preSnapLocalPlay = new Set();
+                for (const p of this.playerScrolls) {
+                    if (!p) continue;
+                    p.hand.forEach(s => preSnapLocalPlay.add(s));
+                    p.active.forEach(s => preSnapLocalPlay.add(s));
+                }
+
                 // Apply player scrolls
                 if (snapshot.players) {
                     for (let i = 0; i < snapshot.players.length; i++) {
@@ -344,8 +354,14 @@
                         const p = this.playerScrolls[i];
                         const snap = snapshot.players[i];
 
+                        // For the local player, use additive-only hand/active sync: a stale
+                        // snapshot must not remove scrolls that were drawn/moved after the
+                        // snapshot was taken. For other players the snapshot is authoritative.
+                        const isLocal = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex === i);
+
                         // Sync hand
                         const newHand = new Set(snap.hand || []);
+                        if (isLocal) p.hand.forEach(s => newHand.add(s));
                         if (!this.setsEqual(p.hand, newHand)) {
                             console.log(`🔄 Player ${i} hand corrected:`, Array.from(p.hand), '→', Array.from(newHand));
                             p.hand = newHand;
@@ -354,6 +370,7 @@
 
                         // Sync active
                         const newActive = new Set(snap.active || []);
+                        if (isLocal) p.active.forEach(s => newActive.add(s));
                         if (!this.setsEqual(p.active, newActive)) {
                             console.log(`🔄 Player ${i} active corrected:`, Array.from(p.active), '→', Array.from(newActive));
                             p.active = newActive;
@@ -377,19 +394,12 @@
 
                 // Apply common area
                 if (snapshot.commonArea) {
-                    // Build a set of scrolls already in players' hands/active areas locally.
-                    // If a scroll is here, the player just drew/played it and the host's
-                    // periodic broadcast is stale — don't put it back in the common area.
-                    const inLocalPlay = new Set();
-                    for (const p of this.playerScrolls) {
-                        if (!p) continue;
-                        p.hand.forEach(s => inLocalPlay.add(s));
-                        p.active.forEach(s => inLocalPlay.add(s));
-                    }
-
+                    // Use preSnapLocalPlay (captured before hand/active sync) so that scrolls
+                    // drawn by the local player right before this snapshot arrived are still
+                    // recognised as "in play" and not incorrectly restored to the common area.
                     ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'].forEach(element => {
                         const newScroll = snapshot.commonArea[element] || null;
-                        if (newScroll && inLocalPlay.has(newScroll)) {
+                        if (newScroll && preSnapLocalPlay.has(newScroll)) {
                             // Host state is stale — this scroll was already drawn by a player
                             console.log(`[sync] Skipping common area restore for ${element}: ${newScroll} is already in local play`);
                             return;
