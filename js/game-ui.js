@@ -1422,6 +1422,7 @@
                             newPos: { x: finalPos.x, y: finalPos.y },
                             apCost: totalCost
                         };
+                        updateUndoBtn();
                         placePlayer(finalPos.x, finalPos.y);
                         // Notify tutorial that the player has moved
                         if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
@@ -1786,6 +1787,7 @@
                                     newPos: { x: targetHex.x, y: targetHex.y },
                                     apCost: actualCost
                                 };
+                                updateUndoBtn();
 
                                 placePlayer(targetHex.x, targetHex.y);
                                 spendAP(actualCost);
@@ -2019,6 +2021,7 @@
                                 newPos: { x: finalPos.x, y: finalPos.y },
                                 apCost: totalCost
                             };
+                            updateUndoBtn();
                             placePlayer(finalPos.x, finalPos.y);
                             spendAP(totalCost);
                             movementSuccessful = true;
@@ -2502,6 +2505,9 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             // Shrine replenishment already handled above (before clearTurnBuffs, so Mine buff applies)
 
             lastMove = null; // Clear undo history on new turn
+            turnStartStoneCount = placedStones.length;
+            turnStartHandSize   = spellSystem?.getPlayerScrolls(true)?.hand?.size ?? 0;
+            turnStartAP         = currentAP;
 
             // Switch to next player based on color rank
             if (playerPositions.length > 1) {
@@ -2650,9 +2656,35 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
         // Inventory toggle button
         const invBtn = document.getElementById('inventory-toggle');
         if (invBtn) invBtn.onclick = toggleInventory;
+        function canUndoMove() {
+            if (!lastMove) return false;
+            if (placedStones.length > turnStartStoneCount) return false;
+            const handSize = spellSystem?.getPlayerScrolls(true)?.hand?.size ?? 0;
+            if (handSize > turnStartHandSize) return false;
+            if (currentAP < turnStartAP - lastMove.apCost) return false;
+            return true;
+        }
+
+        function updateUndoBtn() {
+            const btn = document.getElementById('undo-move');
+            if (!btn) return;
+            const ok = canUndoMove();
+            btn.disabled = !ok;
+            btn.title = ok ? 'Undo last step'
+                : !lastMove                                              ? 'No move to undo'
+                : placedStones.length > turnStartStoneCount              ? 'Cannot undo after placing stones'
+                : (spellSystem?.getPlayerScrolls(true)?.hand?.size ?? 0) > turnStartHandSize ? 'Cannot undo after picking up a scroll'
+                : 'Cannot undo after spending extra AP';
+        }
+
+        window.updateUndoBtn = updateUndoBtn;
+
 document.getElementById('undo-move').onclick = function() {
-            if (!lastMove) {
-                updateStatus('No move to undo!');
+            if (!canUndoMove()) {
+                if (!lastMove) updateStatus('No move to undo!');
+                else if (placedStones.length > turnStartStoneCount) updateStatus("Can't undo — stones have been placed this turn.");
+                else if ((spellSystem?.getPlayerScrolls(true)?.hand?.size ?? 0) > turnStartHandSize) updateStatus("Can't undo — a scroll was picked up this turn.");
+                else updateStatus("Can't undo — extra AP was spent this turn.");
                 return;
             }
 
@@ -2687,6 +2719,7 @@ document.getElementById('undo-move').onclick = function() {
 
             // Clear the undo history (can only undo once)
             lastMove = null;
+            updateUndoBtn();
         };
 
         // scroll-inventory replaced by panel-btn-hand/active/common in scroll-panels.js

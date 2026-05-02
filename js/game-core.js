@@ -2448,6 +2448,9 @@
         let currentAP = 5;
         let voidAP = 0; // Bonus AP from void stones (used first)
         let lastMove = null; // Stores { prevPos: {x, y}, newPos: {x, y}, apCost: number }
+        let turnStartStoneCount = 0; // placedStones.length at start of turn
+        let turnStartHandSize  = 0; // hand scroll count at start of turn
+        let turnStartAP        = 5; // currentAP at start of turn
 
         // Track each player's AP for multiplayer display
         let playerAPs = []; // Each entry is { currentAP: 5, voidAP: 0 }
@@ -6409,6 +6412,7 @@ function clearPlayerPath() {
                 type: type,
                 element: stoneGroup
             });
+            if (typeof window.updateUndoBtn === 'function') window.updateUndoBtn();
 
             // Tutorial hook — fires after stone added to placedStones
             if (window.isTutorialMode && window.TutorialMode?.onStonePlaced) {
@@ -6554,6 +6558,7 @@ function clearPlayerPath() {
                 type: type,
                 element: stoneGroup
             });
+            if (typeof window.updateUndoBtn === 'function') window.updateUndoBtn();
 
             updateTileClasses();
             processStoneInteractions(x, y, type);
@@ -6690,6 +6695,7 @@ function clearPlayerPath() {
                 type: stoneType,
                 element: stoneGroup
             });
+            if (typeof window.updateUndoBtn === 'function') window.updateUndoBtn();
 
             updateTileClasses();
             processStoneInteractions(x, y, stoneType);
