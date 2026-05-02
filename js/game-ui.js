@@ -565,7 +565,20 @@
                     card.className = 'dock-player-card' + (isActive ? ' active-player' : '');
                     const color = colorMap[p.color] || '#888';
                     const apText = isActive ? ((typeof currentAP !== 'undefined' ? currentAP : '?') + 'AP') : '';
-                    card.innerHTML = `<span class="dock-player-dot" style="background:${color};"></span><span class="dock-player-name">${p.username || ('P' + (idx + 1))}</span>${apText ? `<span class="dock-player-ap">${apText}</span>` : ''}`;
+                    const dot = document.createElement('span');
+                    dot.className = 'dock-player-dot';
+                    dot.style.background = color;
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'dock-player-name';
+                    nameSpan.textContent = p.username || ('P' + (idx + 1));
+                    card.appendChild(dot);
+                    card.appendChild(nameSpan);
+                    if (apText) {
+                        const apSpan = document.createElement('span');
+                        apSpan.className = 'dock-player-ap';
+                        apSpan.textContent = apText;
+                        card.appendChild(apSpan);
+                    }
                     container.appendChild(card);
                 });
             } catch (e) { /* not ready */ }
