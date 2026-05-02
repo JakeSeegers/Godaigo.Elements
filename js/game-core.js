@@ -814,7 +814,7 @@
 
                 if (scrolls.hand.size > this.MAX_HAND_SIZE) {
                     // Over limit — remind the player they must cascade before ending their turn
-                    updateStatus(`Picked up "${scrollInfo?.name || selected}" — hand is over the limit. Cascade a scroll before ending your turn!`);
+                    updateStatus(`Scroll added to hand — hand is over the limit. Cascade a scroll before ending your turn!`);
                 } else {
                     this.showScrollNotification(scrollInfo, shrineType);
                 }
@@ -4605,10 +4605,11 @@
             }
 
             const apBonus = isCatacombReveal ? ' +1 AP!' : '';
+            const scrollBonus = scrollInfo ? ' Scroll added to hand.' : '';
             if (scrollInfo && ctaDrawn > 0) {
-                updateStatus(`Revealed ${effectiveType} shrine! Found ${scrollInfo.name}! Call to Adventure: +${ctaDrawn} ${effectiveType} stone${ctaDrawn > 1 ? 's' : ''}!${apBonus}`);
+                updateStatus(`Revealed ${effectiveType} shrine!${scrollBonus} Call to Adventure: +${ctaDrawn} ${effectiveType} stone${ctaDrawn > 1 ? 's' : ''}!${apBonus}`);
             } else if (scrollInfo) {
-                updateStatus(`Revealed ${effectiveType} shrine! Found ${scrollInfo.name}!${apBonus}`);
+                updateStatus(`Revealed ${effectiveType} shrine!${scrollBonus}${apBonus}`);
             } else if (ctaDrawn > 0) {
                 updateStatus(`Revealed ${effectiveType} shrine! Call to Adventure: +${ctaDrawn} ${effectiveType} stone${ctaDrawn > 1 ? 's' : ''}!${apBonus}`);
             } else {
