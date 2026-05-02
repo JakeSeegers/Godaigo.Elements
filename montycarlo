@@ -399,3 +399,126 @@ def main(num_players_to_run: Optional[int] = None):
 
 if __name__ == "__main__":
     lengths = main() # Capture the returned lengths list
+
+
+Overview
+This document outlines a request for a significant upgrade to the existing Monte Carlo win-probability simulator for 'Godaigo: Elements'. The current simulation models basic scroll activation, stone collection, and player movement, but lacks the depth required to accurately represent the game's full complexity. The goal is to extend the simulator to incorporate intricate board mechanics, diverse scroll abilities, and advanced player interactions, moving towards a more comprehensive and realistic game model.
+
+Current Simulation Limitations
+The current simulator operates on a highly abstracted level, making several simplifying assumptions:
+
+No Physical Board: There is no representation of a game board or player positions in a 2D space.
+Simplified Movement: 'Travel' is abstracted as a time cost, not actual movement across tiles.
+Basic Stone Collection: Stones are collected by visiting abstract 'shrine elements'.
+No Scroll Effects: Scroll-specific abilities (e.g., Iron Stance, Arson) are not simulated.
+Generic Catacomb Patterns: Catacomb scrolls use a fixed pattern, without consideration for their specific level or unique effects.
+Limited Interaction: Player interaction is primarily through shared decks; there's no direct interaction on a board.
+No Tile Revelation/Placement: The dynamic aspects of revealing tiles or placing stones on a board are not present.
+New Game Mechanics to Implement
+The following is a list of new game mechanics that need to be integrated into the simulation. These are derived from the full game design document and specific user requests.
+
+1. Spatial Board and Movement
+Grid-Based Board: Implement a 2D grid representing the game board (e.g., 5x5 or larger). Each tile can have properties (e.g., empty, shrine, catacomb, stone-holding, activated).
+Player Position: Each player will have a specific (x, y) coordinate on the board.
+AP-Based Movement: Movement between adjacent tiles costs a specific amount of AP (e.g., 1 AP per tile). Diagonal movement might have different costs or restrictions.
+Pathfinding: Players should be able to move towards objectives (shrines, target tiles for stone placement).
+2. Dynamic Tile Revelation and Interaction
+Shrine Revelation: Shrines (elemental and catacomb) are revealed dynamically when a player lands on a specific tile or performs an action. This might involve drawing a tile from a
+Gemini
+stack of hidden tiles.
+
+Stone Placement: To activate a scroll, players must place elemental stones onto specific adjacent tiles around their current position, matching the scroll's pattern. This costs AP.
+Tile Properties: Tiles need to store information about which stones are placed on them.
+Stone Pattern Matching: The simulation must verify if the placed stones match the required pattern for the active scroll.
+Common Area: Implement a 'common area' for scrolls if a player's hand/active area is full, potentially allowing other players to claim them.
+3. Comprehensive Scroll Mechanics
+Scroll Levels and Patterns: Accurately model the stone patterns required for each scroll level (I-V) and catacomb scrolls. Each level has unique setup costs (LEVEL_SETUP_AP_COSTS is a good start, but needs to be integrated with board interaction).
+Scroll Effects (Example):
+Iron Stance (Earth): Grants temporary defense, reducing AP costs or preventing certain actions. (e.g., next N AP costs are reduced).
+Arson (Fire): Allows burning (destroying) stones on adjacent tiles, potentially disrupting other players' patterns or clearing space.
+Sacrificial Pyre (Void): Sacrifices a scroll for an immediate benefit (e.g., gain AP, draw cards).
+Unique Catacomb Effects: Each catacomb scroll may have unique effects beyond just activating two elements. (Current model only activates paired elements).
+Scroll State: Scrolls can be in a deck, hand, active area, discarded, or activated.
+4. Advanced Stone Mechanics
+Elemental Stone Sources: Differentiate between stones collected at elemental shrines, and those gained through other means (e.g., scroll effects).
+Stone Supply: Model a global supply of stones for each element, potentially limited.
+Void Stone AP Bonus: The existing effective_ap_per_turn for void stones is a good start; ensure it scales and interacts correctly with other AP costs.
+5. Player Strategy Enhancements
+More Sophisticated AI: The current greedy strategy is too simplistic. The AI needs to factor in:
+Optimal pathfinding to shrines/activation spots.
+Prioritization of scrolls based on current board state and opponent progress.
+Decision-making regarding which stones to place and where.
+Evaluating the use of scroll effects.
+Opponent Interaction: Model competitive aspects like racing for shrines, disrupting opponent stone patterns, or stealing common scrolls.
+Consolidated Logic and Spatial Specification
+Hey Greplit, here is the consolidated Logic and Spatial Specification for the Godaigo engine. Use this as the primary reference for board generation, pathfinding, and movement state-machines.
+
+I. Global Distribution & Tile Ratios
+Board Composition: The grid is a spiral arrangement of hexagonal tiles.
+Tile Frequency: For N players, the pool must contain N tiles of each element (Earth, Water, Fire, Wind, Void) plus N Catacomb tiles.
+Catacomb Density: Effectively 1 in 6 tiles on the board is a Catacomb biome.
+II. Player Tile Geometry: The "Flower" Array
+The Player Tile consists of 19 segments organized in a radial "flower" or stellated pattern:
+
+The Core (Layer 0): The Home Shrine (Center hex). This is the spawning point and the final victory trigger.
+Inner Ring (Layer 1): Six full hexes immediately adjacent to the core that provide the primary movement options out of the shrine.
+The Boundary (Layer 2): An alternating ring of six Outer Petals (full hexes forming the points) and six Half-Hexes (flat boundary pieces).
+III. Spatial Navigation & Collision Logic
+The engine must manage movement permissions based on the following state-checks:
+
+Standard Traversal: Moving between full hexes costs 1 AP.
+Half-Hex Conditional Logic:
+Default State: Half-hexes are generally non-traversable; players cannot move onto or end turns on them.
+The Intersection Rule: If two half-hexes from adjacent tiles intersect/align, they form a Full Hex Bridge. This joined hex becomes a valid MoveTarget (1 AP).
+Catacomb Teleportation (The "Void Step"):
+Free Movement: Players can move for 0 AP between the centers of any two revealed Catacomb tiles.
+Prerequisite: The pawn must already be in the center of a Catacomb tile to initiate the jump.
+Rewards: Revealing a new Catacomb tile triggers a DrawCard event from the Catacomb Deck, which is distinct from Elemental Decks.
+IV. Technical Reference Table
+Feature	Logic Type	Cost	Constraints
+Home Shrine	Victory Node	N/A	Must have 5 Marking Stones and return here to win.
+Full Hex	Standard Node	1 AP	Players cannot end their turn on an Elemental Stone.
+Joined Half-Hex	Bridge Node	1 AP	Becomes traversable only when aligned with an adjacent tile.
+Catacomb Jump	Teleportation	0 AP	Free movement between centers; no stone drawing permitted.
+Stone Break	Interaction	Rank AP	Cost is based on the Stone's Rank (1–5).
+Implementation Note: When initializing the board, flag Catacomb centers as TeleportNode and the Home Shrine as VictoryNode. For pathfinding, ensure the MovePawn function performs an adjacency check to verify if a Half-Hex has "Joined" another before allowing it to be added to the valid path.
+
+Architectural Changes Required
+To accommodate these new mechanics, significant changes to the data structures and class architecture will be needed:
+
+1. Board Representation
+Board Class: A new class to represent the game board as a 2D grid. It should store:
+tiles: A 2D array/list of Tile objects.
+Methods for checking adjacency, placing stones, checking patterns, revealing tiles.
+2. Tile Object
+Tile Class: A new class to represent individual tiles on the board, storing:
+type: (e.g., 'empty', 'earth_shrine', 'catacomb_entry').
+stones_present: A dictionary or list indicating which elemental stones are currently on the tile.
+is_revealed: Boolean state.
+position: (x, y) coordinates.
+3. Enhanced Player Class
+player_position: Add (x, y) coordinates to the Player class.
+current_ap: Track AP dynamically per turn, not just ap_per_turn.
+_move(self, target_x, target_y) method: New method for AP-costing movement.
+_place_stone(self, tile_x, tile_y, element) method: New method to interact with the board.
+_cast_scroll_effect(self, scroll) method: Handle unique scroll abilities.
+Strategy Logic: Rework take_turn to incorporate complex decision-making based on board state, available scrolls, and opponent progress.
+4. Modified Scroll Class
+effect_type / effect_parameters: Add attributes to Scroll to define its unique ability and associated parameters.
+pattern_definition: More detailed representation of stone patterns, potentially including relative positions for placement.
+5. Game Class (or simulate_game function)
+Board Integration: The simulate_game function (or a new Game class) needs to manage the Board object and all player interactions with it.
+Turn Order: Ensure clear turn structure including movement, action, and AP management.
+Functional Changes Required
+1. take_turn() Logic Overhaul
+The take_turn() method will be significantly more complex, involving:
+
+AP Budgeting: Players must manage their AP for movement, stone placement, and scroll activation.
+Decision Tree: A series of decisions: where to move, which scroll to activate, whether to use a scroll's effect, which stones to place, when to draw from a deck, etc.
+Board State Evaluation: Players need to assess the board to find optimal stone placement spots or target tiles for effects.
+2. build_shared_decks() Expansion
+Include unique scroll effects and patterns for each scroll instance.
+3. Win Condition Update
+While the core win condition (activating all 5 elements) remains, the process of achieving it will be much more involved due to board and stone mechanics.
+Conclusion
+Implementing these changes will transform the simulator from a basic abstraction to a detailed, feature-rich model capable of evaluating complex strategies and game balance. This enhancement is crucial for accurately assessing win probabilities and informing game design decisions for Godaigo: Elements. The architectural and functional overhauls described are essential for a robust and extensible simulation.
