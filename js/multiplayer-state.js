@@ -370,3 +370,14 @@ let isMultiplayer = false;
 let gameRoomSubscription = null;
 let playersSubscription = null;
 let gameStateSubscription = null;
+
+function cleanupMultiplayerSubscriptions() {
+    [gameRoomSubscription, playersSubscription, gameStateSubscription].forEach(sub => {
+        if (sub) supabase.removeChannel(sub);
+    });
+    gameRoomSubscription = null;
+    playersSubscription  = null;
+    gameStateSubscription = null;
+}
+
+window.addEventListener('beforeunload', cleanupMultiplayerSubscriptions);

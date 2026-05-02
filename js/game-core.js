@@ -7178,11 +7178,16 @@ function clearPlayerPath() {
 
         // Reset all per-game state so a new game starts clean (no leftover resources)
         function resetGameResources() {
+            // Tear down Supabase realtime channels from the previous session
+            if (typeof cleanupMultiplayerSubscriptions === 'function') {
+                cleanupMultiplayerSubscriptions();
+            }
+
             // Remove any leftover game-over overlays from a previous game
             document.querySelectorAll('.game-over-overlay').forEach(el => el.remove());
 
             // Remove all stone SVG elements still on the board from the previous game
-            document.querySelectorAll('.stone').forEach(el => el.remove());
+            document.querySelectorAll('.stone, .stone-ghost, [data-stone]').forEach(el => el.remove());
             placedStones.length = 0;
 
             // Stone pools
