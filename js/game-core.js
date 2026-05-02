@@ -564,7 +564,7 @@
 
                 // Check active area limit
                 if (scrolls.active.size >= this.MAX_ACTIVE_SIZE) {
-                    updateStatus(`Active area full! Max ${this.MAX_ACTIVE_SIZE} scrolls. Move one to active or common area first.`);
+                    updateStatus(`Active area full! Max ${this.MAX_ACTIVE_SIZE} scrolls. Move one to hand or common area first.`);
                     return false;
                 }
 
