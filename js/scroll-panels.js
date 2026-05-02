@@ -354,6 +354,9 @@ const ScrollPanelSystem = (() => {
                 castBtn.title = patternMatches ? 'Pattern matches — ready to cast!' : 'Place stones in the required pattern first';
                 castBtn.addEventListener('click', e => {
                     e.stopPropagation();
+                    card.style.setProperty('--element-color', color);
+                    card.classList.add('activating');
+                    setTimeout(() => card.classList.remove('activating'), 400);
                     sp.castSpell();
                 });
                 acts.appendChild(castBtn);
@@ -368,6 +371,9 @@ const ScrollPanelSystem = (() => {
                 castBtn.title = patternMatches ? 'Pattern matches — ready to cast!' : 'Place stones in the required pattern first';
                 castBtn.addEventListener('click', e => {
                     e.stopPropagation();
+                    card.style.setProperty('--element-color', color);
+                    card.classList.add('activating');
+                    setTimeout(() => card.classList.remove('activating'), 400);
                     sp.castSpell();
                 });
                 acts.appendChild(castBtn);

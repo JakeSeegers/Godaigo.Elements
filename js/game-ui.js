@@ -516,6 +516,19 @@
                         hudPlayerName.textContent = `${name}'s Turn`;
                     }
                     if (hudPlayer) hudPlayer.classList.toggle('your-turn', isMyTurnNow);
+
+                    // Pulse the local player's pawn when it becomes their turn
+                    if (typeof playerPositions !== 'undefined' && typeof myPlayerIndex !== 'undefined'
+                            && myPlayerIndex !== null) {
+                        playerPositions.forEach((p, i) => {
+                            if (p?.element) p.element.classList.remove('my-turn');
+                        });
+                        if (isMyTurnNow && playerPositions[myPlayerIndex]?.element) {
+                            const pawnEl = playerPositions[myPlayerIndex].element;
+                            pawnEl.classList.add('my-turn');
+                            setTimeout(() => pawnEl.classList.remove('my-turn'), 700);
+                        }
+                    }
                 }
 
                 // Update player dot color — must reflect the ACTIVE player, not the local player
@@ -2702,6 +2715,30 @@ document.getElementById('undo-move').onclick = function() {
             return null;
         }
 
+        const _stoneFloatEmoji = { earth: '🏔', water: '💧', fire: '🔥', wind: '🌀', void: '✺', catacomb: '✦' };
+        const _stoneFloatColor = { earth: '#69d83a', water: '#5894f4', fire: '#ed1b43', wind: '#ffce00', void: '#9458f4', catacomb: '#c8a870' };
+
+        function showStoneFloat(count, type) {
+            const card = document.querySelector(`.stone-card[data-element="${type}"]`);
+            const rect = card ? card.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight / 2 };
+            const el = document.createElement('div');
+            el.textContent = `+${count} ${_stoneFloatEmoji[type] || type}`;
+            Object.assign(el.style, {
+                position: 'fixed',
+                left: `${rect.left + (card ? rect.width / 2 : 0)}px`,
+                top: `${rect.top}px`,
+                color: _stoneFloatColor[type] || '#fff',
+                fontWeight: 'bold',
+                fontSize: '16px',
+                pointerEvents: 'none',
+                zIndex: '9999',
+                textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+                animation: 'stone-float 1.1s ease-out forwards'
+            });
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1200);
+        }
+
         function replenishShrineStones(shrineType) {
             // Stone rank determines replenishment amount
             const STONE_RANK = {
@@ -2732,6 +2769,7 @@ document.getElementById('undo-move').onclick = function() {
                 sourcePool[shrineType] -= actualReplenished;
                 playerPool[shrineType] += actualReplenished;
                 updateStoneCount(shrineType);
+                showStoneFloat(actualReplenished, shrineType);
 
                 // Sync resources in multiplayer
                 syncPlayerState();

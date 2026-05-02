@@ -47,6 +47,11 @@ button:disabled {
     cursor: not-allowed;
 }
 
+button:active:not(:disabled) {
+    transform: scale(0.95);
+    transition: transform 0.07s;
+}
+
 /* ============================================
    STONE GRID
    ============================================ */

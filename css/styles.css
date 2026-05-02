@@ -3481,6 +3481,12 @@ label, .hud-ap-label, .hud-ap-value {
 
 
 /* ---- Scroll card ---- */
+@keyframes scroll-activate {
+    0%   { box-shadow: none; }
+    40%  { box-shadow: 0 0 18px var(--element-color, var(--el-color, #e6c79c)); }
+    100% { box-shadow: none; opacity: 0.6; }
+}
+
 .fsp-card {
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.07);
@@ -3489,6 +3495,10 @@ label, .hud-ap-label, .hud-ap-value {
     overflow: hidden;
     transition: background 0.15s, box-shadow 0.15s;
     flex-shrink: 0;
+}
+
+.fsp-card.activating {
+    animation: scroll-activate 0.35s ease-out forwards;
 }
 .fsp-card:hover {
     background: rgba(255,255,255,0.06);

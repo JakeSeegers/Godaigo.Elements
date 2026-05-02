@@ -27,8 +27,20 @@ svg {
     fill: none;
 }
 
+@keyframes tile-land {
+    0%   { transform: scale(1.08); }
+    60%  { transform: scale(0.97); }
+    100% { transform: scale(1); }
+}
+
 .placed-tile {
     cursor: grab;
+}
+
+.placed-tile.just-placed {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: tile-land 0.18s ease-out forwards;
 }
 
 .placed-tile.has-stones {
@@ -70,6 +82,7 @@ svg {
 
 .ghost-tile {
     opacity: 0.4;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.7));
 }
 
 .shrine-marker {
@@ -78,6 +91,11 @@ svg {
 
 .shrine-marker circle {
     filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.5));
+}
+
+@keyframes snap-pulse {
+    0%, 100% { opacity: 0.5; stroke-width: 3; }
+    50%       { opacity: 1;   stroke-width: 5; }
 }
 
 .snap-indicator {
@@ -89,7 +107,7 @@ svg {
 }
 
 .snap-indicator.active {
-    opacity: 0.8;
+    animation: snap-pulse 0.9s ease-in-out infinite;
 }
 
 /* ============================================
@@ -118,6 +136,7 @@ svg {
     opacity: 0.5;
     transition: none;
     pointer-events: none;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.7));
 }
 
 /* ============================================
@@ -135,6 +154,21 @@ svg {
 
 .player:active {
     cursor: grabbing;
+}
+
+@keyframes your-turn-ring {
+    0%   { filter: drop-shadow(0 0 0px var(--accent-gold, #e6c79c)); }
+    50%  { filter: drop-shadow(0 0 12px var(--accent-gold, #e6c79c)); }
+    100% { filter: drop-shadow(0 0 3px var(--accent-gold, #e6c79c)); }
+}
+
+.player.my-turn {
+    animation: your-turn-ring 0.6s ease-out forwards;
+}
+
+@keyframes stone-float {
+    0%   { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-40px); }
 }
 
 .player-marker {

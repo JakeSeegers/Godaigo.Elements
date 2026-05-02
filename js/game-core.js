@@ -4221,6 +4221,9 @@
 
             viewport.insertBefore(tileGroup, snapIndicator);
 
+            tileGroup.classList.add('just-placed');
+            setTimeout(() => tileGroup.classList.remove('just-placed'), 200);
+
             placedTiles.push({
                 id: tileId,
                 x: x,
