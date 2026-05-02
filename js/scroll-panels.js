@@ -566,6 +566,7 @@ const ScrollPanelSystem = (() => {
         document.body.appendChild(preview);
 
         let hideTimer = null;
+        let showTimer = null;
 
         function showPreview(card) {
             clearTimeout(hideTimer);
@@ -627,12 +628,14 @@ const ScrollPanelSystem = (() => {
         document.addEventListener('mouseover', e => {
             const card = e.target.closest('.fsp-card');
             if (card && card.closest('.fsp')) {   // only cards inside a panel (not the preview itself)
-                showPreview(card);
+                clearTimeout(showTimer);
+                showTimer = setTimeout(() => showPreview(card), 500);
             }
         });
         document.addEventListener('mouseout', e => {
             const card = e.target.closest('.fsp-card');
             if (card && card.closest('.fsp')) {
+                clearTimeout(showTimer);
                 hidePreview();
             }
         });
