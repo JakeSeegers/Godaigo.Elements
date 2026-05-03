@@ -5069,11 +5069,13 @@ function clearPlayerPath() {
 
         // Visual-only player tile placement (called when receiving broadcast from other players)
         function placePlayerTileVisually(x, y, playerIndex, colorName, cosmetics) {
-            console.log(`📄 Placing other player's tile: player ${playerIndex}, color ${colorName}, at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+            // Normalize to hex so COLOR_RANK lookups never get a string name like 'purple'
+            const hexColor = colorName?.startsWith('#') ? colorName : (PLAYER_COLORS[colorName] || colorName);
+            console.log(`📄 Placing other player's tile: player ${playerIndex}, color ${hexColor}, at (${x.toFixed(1)}, ${y.toFixed(1)})`);
 
             // Temporarily set playerColor to the other player's color
             const originalColor = playerColor;
-            playerColor = colorName;
+            playerColor = hexColor;
 
             // Place the player tile - skip multiplayer logic since this is visual-only
             placeTile(x, y, 0, false, 'player', true, true);
