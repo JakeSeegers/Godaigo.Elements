@@ -3081,10 +3081,32 @@
                 showGameOverToAll(payload.winnerIndex, payload.winType || 'scrolls');
             });
 
-            // Subscribe to the channel
+            // Presence: detect disconnects instantly via WebSocket leave events.
+            // More reliable than DB polling — fires as soon as the connection drops.
+            gameChannel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
+                if (!isMultiplayer || !currentGameId) return;
+                leftPresences.forEach(p => {
+                    if (p.playerIndex === myPlayerIndex) return; // ignore our own leave echo
+                    const isOurGame = allPlayersData.some(ap => ap.player_index === p.playerIndex);
+                    if (!isOurGame) return;
+                    console.log('Presence: player', p.playerIndex, 'disconnected');
+                    const state = gameChannel.presenceState();
+                    const connectedIndices = Object.values(state).flat().map(s => s.playerIndex);
+                    const othersStillConnected = connectedIndices.filter(i => i !== myPlayerIndex);
+                    if (othersStillConnected.length === 0 && myPlayerIndex !== null && myPlayerIndex !== undefined) {
+                        handleGameOver(myPlayerIndex, 'last_standing');
+                    } else {
+                        const playerName = getPlayerColorName(p.playerIndex);
+                        updateStatus(`${playerName} disconnected`);
+                    }
+                });
+            });
+
+            // Subscribe to the channel, then announce our presence
             gameChannel.subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
-                    console.log('✅ Connected to game broadcast channel');
+                    console.log('Connected to game broadcast channel');
+                    gameChannel.track({ playerIndex: myPlayerIndex, playerId: myPlayerId });
                 }
             });
         }
