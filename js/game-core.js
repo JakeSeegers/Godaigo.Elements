@@ -4713,6 +4713,13 @@
         window.getPlacedStones = () => placedStones;
         window.getPlayerPositions = () => playerPositions;
         window.getActivePlayerIndex = () => activePlayerIndex;
+        // Mirror activePlayerIndex as a window property so lobby.js's unqualified assignments
+        // stay in sync with game-core.js's script-local variable (classic scripts use separate scopes)
+        Object.defineProperty(window, 'activePlayerIndex', {
+            get: () => activePlayerIndex,
+            set: (v) => { activePlayerIndex = v; },
+            configurable: true
+        });
         window.getStoneCounts = () => stoneCounts;
         // Programmatic bot movement: move active player pawn to (targetX, targetY) spending AP
         window.botExecuteMove = function(targetX, targetY) {
