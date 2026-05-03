@@ -265,9 +265,9 @@ body {
 .hud-stone-info-btn {
     background: none;
     border: 1px solid #555;
-    color: #aaa;
+    color: #d0d0d0;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: bold;
     line-height: 1;
     cursor: pointer;
@@ -301,7 +301,7 @@ body {
 }
 .stone-info-close {
     position: absolute; top: 12px; right: 14px;
-    background: none; border: none; color: #888;
+    background: none; border: none; color: #c0c0c0;
     font-size: 20px; cursor: pointer; line-height: 1;
 }
 .stone-info-close:hover { color: #fff; }
@@ -325,7 +325,7 @@ body {
     font-size: 12px; color: var(--text-secondary); line-height: 1.45;
 }
 .stone-row-cost {
-    font-size: 11px; color: #888; margin-top: 3px;
+    font-size: 13px; color: #c0c0c0; margin-top: 3px;
 }
 
 .hud-badges {
@@ -425,7 +425,7 @@ body {
 }
 
 .hud-ap-label {
-    font-size: 11px;
+    font-size: 13px;
     opacity: 0.9;
 }
 
@@ -502,7 +502,7 @@ body {
 
 .panel-title {
     font-family: var(--font-pixel);
-    font-size: 11px;
+    font-size: 13px;
     color: #d9b08c;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -627,7 +627,7 @@ body {
 
 .scroll-deck-card .deck-icon span {
     font-family: var(--font-pixel);
-    font-size: 11px;
+    font-size: 13px;
     font-weight: bold;
     color: #fff;
     text-shadow: 1px 1px 0 #000;
@@ -798,7 +798,7 @@ body {
 }
 
 .scroll-browse-item .scroll-level {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     margin-top: 4px;
 }
@@ -992,7 +992,7 @@ body {
 }
 
 .opponent-win-count {
-    color: #888;
+    color: #c0c0c0;
     font-size: 13px;
     margin-left: 4px;
 }
@@ -1041,7 +1041,7 @@ body {
 .opponent-scroll-element {
     font-family: var(--font-terminal);
     font-size: 16px;
-    color: #aaa;
+    color: #d0d0d0;
     margin-top: 2px;
 }
 
@@ -1121,7 +1121,7 @@ body {
 
 .dock-player-name {
     font-family: var(--font-sans);
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
     white-space: nowrap;
@@ -1132,7 +1132,7 @@ body {
 
 .dock-player-ap {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 13px;
     color: var(--text-muted);
     flex-shrink: 0;
 }
@@ -1255,7 +1255,7 @@ button:disabled {
     border-bottom: 2px solid var(--border-subtle);
     font-family: var(--font-terminal);
     font-size: 22px;
-    color: #aaa;
+    color: #d0d0d0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1473,7 +1473,7 @@ svg {
 
     .hud-badge {
         padding: 3px 8px;
-        font-size: 11px;
+        font-size: 13px;
     }
 
     .hud-ap {
@@ -1545,7 +1545,7 @@ svg {
 
     .hud-badge {
         padding: 2px 6px;
-        font-size: 10px;
+        font-size: 12px;
     }
 
     .action-bar {
@@ -1561,7 +1561,7 @@ svg {
 
     button {
         padding: 6px 8px;
-        font-size: 11px;
+        font-size: 13px;
         white-space: nowrap;
     }
 
@@ -1724,7 +1724,7 @@ svg {
 .si-card-desc {
     font-family: 'VT323', monospace;
     font-size: 16px;
-    color: #aaa;
+    color: #d0d0d0;
     margin-bottom: 8px;
 }
 .si-element-label {
@@ -1736,13 +1736,13 @@ svg {
 .si-pattern-box {
     font-family: 'VT323', monospace;
     font-size: 14px;
-    color: #888;
+    color: #c0c0c0;
     background: #0d0d1a;
     border: 1px solid #2a2a3a;
     padding: 8px;
     margin-top: 8px;
 }
-.si-pattern-title { color: #aaa; margin-bottom: 4px; }
+.si-pattern-title { color: #d0d0d0; margin-bottom: 4px; }
 .si-pattern-line  { margin-left: 10px; margin-top: 2px; }
 .si-pattern-more  { margin-left: 10px; margin-top: 2px; font-style: italic; color: #555; }
 .si-common-item {
@@ -1754,9 +1754,9 @@ svg {
     margin-bottom: 6px;
 }
 .si-common-item-name { font-family: 'VT323', monospace; font-size: 18px; font-weight: bold; }
-.si-common-item-desc { font-family: 'VT323', monospace; font-size: 14px; color: #aaa; margin-top: 2px; }
-.si-common-note { font-family: 'VT323', monospace; font-size: 16px; color: #999; margin-bottom: 8px; }
-.si-empty { font-family: 'VT323', monospace; font-size: 16px; color: #888; font-style: italic; }
+.si-common-item-desc { font-family: 'VT323', monospace; font-size: 14px; color: #d0d0d0; margin-top: 2px; }
+.si-common-note { font-family: 'VT323', monospace; font-size: 16px; color: #b8b8b8; margin-bottom: 8px; }
+.si-empty { font-family: 'VT323', monospace; font-size: 16px; color: #c0c0c0; font-style: italic; }
 .si-tip {
     font-family: 'VT323', monospace;
     font-size: 15px;
@@ -1921,7 +1921,7 @@ svg {
 .tmode-exit {
     background: none;
     border: 1px solid #555;
-    color: #bbb;
+    color: #d8d8d8;
     font-size: 14px;
     cursor: pointer;
     padding: 2px 8px;
@@ -1946,7 +1946,7 @@ svg {
     padding: 8px 18px;
     background: rgba(20, 20, 20, 0.92);
     border: 1px solid #555;
-    color: #bbb;
+    color: #d8d8d8;
     font-size: 13px;
     border-radius: 6px;
     cursor: pointer;
@@ -2077,7 +2077,7 @@ svg {
 .gami-close {
     background: none;
     border: 2px solid #555;
-    color: #888;
+    color: #c0c0c0;
     font-size: 22px;
     cursor: pointer;
     line-height: 1;
@@ -2085,7 +2085,7 @@ svg {
     font-family: var(--font-terminal);
     box-shadow: 2px 2px 0 #000;
 }
-.gami-close:hover { color: #fff; border-color: #999; }
+.gami-close:hover { color: #fff; border-color: #b8b8b8; }
 .gami-close:active { transform: translate(2px,2px); box-shadow: none; transition: none; }
 
 /* Tabs */
@@ -2113,7 +2113,7 @@ svg {
     box-shadow: none;
     letter-spacing: 0.5px;
 }
-.gami-tab:hover  { color: #ccc; }
+.gami-tab:hover  { color: #e0e0e0; }
 .gami-tab.active { color: #d9b08c; border-bottom-color: #d9b08c; }
 .gami-tab:active { transform: none; box-shadow: none; }
 
@@ -2145,7 +2145,7 @@ svg {
     flex-shrink: 0;
 }
 .gami-level-num   { font-size: 26px; font-weight: bold; line-height: 1; font-family: var(--font-pixel); }
-.gami-level-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-terminal); }
+.gami-level-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-terminal); }
 
 .gami-profile-info { flex: 1; min-width: 0; }
 .gami-display-name {
@@ -2269,7 +2269,7 @@ svg {
     letter-spacing: 1px;
 }
 .gami-toggle.on  { background: #1a3a1a; border-color: #6abf40; color: #6abf40; }
-.gami-toggle.off { background: #2a1a1a; border-color: #888;    color: #888; }
+.gami-toggle.off { background: #2a1a1a; border-color: #c0c0c0;    color: #c0c0c0; }
 .gami-toggle:active { transform: translate(3px,3px); box-shadow: none; transition: none; }
 
 /* --- XP / Gold toast notification --- */
@@ -2337,7 +2337,7 @@ svg {
     border-radius: 2px;
     flex-shrink: 0;
 }
-.gami-cos-name { flex: 1; color: #ccc; font-size: 20px; font-family: var(--font-terminal); }
+.gami-cos-name { flex: 1; color: #e0e0e0; font-size: 20px; font-family: var(--font-terminal); }
 .gami-cos-action { flex-shrink: 0; }
 .gami-cos-btn {
     padding: 6px 14px;
@@ -2379,7 +2379,7 @@ svg {
     transition: background 0.1s, border-color 0.1s;
     padding: 0;
 }
-.gami-emoji-btn.text-emoji { font-size: 11px; font-weight: bold; color: #eee; width: auto; padding: 0 8px; min-width: 44px; }
+.gami-emoji-btn.text-emoji { font-size: 13px; font-weight: bold; color: #eee; width: auto; padding: 0 8px; min-width: 44px; }
 .gami-emoji-btn:hover:not(.inactive) { background: #333; border-color: #d9b08c; }
 .gami-emoji-btn.inactive { opacity: 0.45; cursor: default; }
 
@@ -2420,14 +2420,14 @@ svg {
     line-height: 1;
 }
 .gami-shop-emoji.text-emoji {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: bold;
     color: #eee;
     padding: 4px 2px;
 }
 .gami-shop-name {
-    color: #888;
-    font-size: 10px;
+    color: #c0c0c0;
+    font-size: 12px;
     line-height: 1.2;
     overflow: hidden;
     display: -webkit-box;
@@ -2441,7 +2441,7 @@ svg {
     font-weight: bold;
 }
 .gami-shop-buy-btn {
-    font-size: 11px;
+    font-size: 13px;
     padding: 3px 8px;
     background: transparent;
     border: 1px solid;
@@ -2594,14 +2594,14 @@ svg {
 }
 .emoji-tab-btn:not(.active):hover {
     background: #222;
-    color: #aaa;
+    color: #d0d0d0;
     border-color: #666;
 }
 .emoji-panel-close {
     font-family: var(--font-terminal);
     font-size: 22px;
     background: #1a1a1a;
-    color: #888;
+    color: #c0c0c0;
     border: 2px solid #444;
     border-radius: 2px;
     cursor: pointer;
@@ -2680,7 +2680,7 @@ svg {
 .emoji-btn-inactive.text-emoji {
     font-family: var(--font-terminal);
     font-size: 12px;
-    color: #888;
+    color: #c0c0c0;
     padding: 9px 2px;
 }
 .emoji-no-game-note {
@@ -2723,7 +2723,7 @@ svg {
     font-family: var(--font-terminal);
     flex: 1;
     font-size: 20px;
-    color: #ccc;
+    color: #e0e0e0;
 }
 .shop-tier-cost {
     font-family: var(--font-terminal);
@@ -2767,7 +2767,7 @@ svg {
 .shop-emoji-btn:hover { transform: scale(1.18); }
 .shop-emoji-btn.text-emoji {
     font-family: var(--font-terminal);
-    font-size: 11px;
+    font-size: 13px;
     color: #eee;
     background: #222;
     padding: 5px 3px;
@@ -2779,7 +2779,7 @@ svg {
 .shop-item-name {
     font-family: var(--font-terminal);
     font-size: 13px;
-    color: #888;
+    color: #c0c0c0;
     line-height: 1.2;
     width: 100%;
     overflow: hidden;
@@ -2894,7 +2894,7 @@ svg {
 }
 .cos-title {
     font-family: var(--font-pixel);
-    font-size: 11px;
+    font-size: 13px;
     color: #d9b08c;
     text-shadow: 1px 1px 0 #000;
     text-transform: uppercase;
@@ -2906,7 +2906,7 @@ svg {
     background: #1a1a1a;
     border: 2px solid #444;
     border-radius: 2px;
-    color: #888;
+    color: #c0c0c0;
     cursor: pointer;
     padding: 0 6px;
     box-shadow: 2px 2px 0 #000;
@@ -2971,8 +2971,8 @@ svg {
     transition: background 0.1s;
 }
 .cos-btn:active { box-shadow: none; transform: translate(2px,2px); }
-.cos-equip-btn    { background: #1a1a1a; border-color: #666; color: #ccc; }
-.cos-equip-btn:hover { background: #333; border-color: #aaa; }
+.cos-equip-btn    { background: #1a1a1a; border-color: #666; color: #e0e0e0; }
+.cos-equip-btn:hover { background: #333; border-color: #d0d0d0; }
 .cos-equipped-btn { background: #1e0a3a; border-color: #9458f4; color: #9458f4; }
 .cos-equipped-btn:hover { background: #2a1050; }
 .cos-buy-btn      { background: #1a1000; border-color: #d9b08c; color: #d9b08c; }
@@ -3218,7 +3218,7 @@ label, .hud-ap-label, .hud-ap-value {
 .retro-dlg-line {
     font-family: var(--font-terminal);
     font-size: 22px;
-    color: #ccc;
+    color: #e0e0e0;
     text-align: center;
     line-height: 1.3;
 }
@@ -3303,7 +3303,7 @@ label, .hud-ap-label, .hud-ap-value {
 .game-over-msg {
     font-family: var(--font-terminal);
     font-size: 22px;
-    color: #ccc;
+    color: #e0e0e0;
     margin: 0;
 }
 .game-over-elements {
@@ -3383,8 +3383,8 @@ label, .hud-ap-label, .hud-ap-value {
 
 .fsp-badge {
     font-family: var(--font-mono);
-    font-size: 11px;
-    color: #888;
+    font-size: 13px;
+    color: #c0c0c0;
     background: rgba(255,255,255,0.06);
     border-radius: 10px;
     padding: 1px 6px;
@@ -3414,7 +3414,7 @@ label, .hud-ap-label, .hud-ap-value {
     border: 1px solid transparent;
     color: #777;
     font-family: var(--font-sans);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 500;
     line-height: 1;
     padding: 3px 6px;
@@ -3547,7 +3547,7 @@ label, .hud-ap-label, .hud-ap-value {
 
 .fsp-card-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--el-color, #888);
     letter-spacing: 0.5px;
     opacity: 0.85;
@@ -3612,7 +3612,7 @@ label, .hud-ap-label, .hud-ap-value {
 
 .fsp-card-btn {
     font-family: var(--font-sans);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 500;
     padding: 4px 9px;
     border-radius: 4px;
@@ -3631,12 +3631,12 @@ label, .hud-ap-label, .hud-ap-value {
 
 .fsp-card-btn-alt {
     background: rgba(255,255,255,0.05);
-    color: #888;
+    color: #c0c0c0;
     border-color: rgba(255,255,255,0.12);
 }
 .fsp-card-btn-alt:hover {
     background: rgba(255,255,255,0.12);
-    color: #bbb;
+    color: #d8d8d8;
     border-color: rgba(255,255,255,0.25);
 }
 
@@ -3653,7 +3653,7 @@ label, .hud-ap-label, .hud-ap-value {
 }
 .fsp-cast-dim:hover {
     background: rgba(255,255,255,0.08);
-    color: #999;
+    color: #b8b8b8;
 }
 .fsp-cast-ready {
     background: rgba(237,27,67,0.2);
@@ -3723,7 +3723,7 @@ label, .hud-ap-label, .hud-ap-value {
     opacity: 1;
 }
 .fsp-card-preview .fsp-card-tag {
-    font-size: 11px;
+    font-size: 13px;
     padding: 3px 8px;
 }
 .fsp-card-preview .fsp-card-desc {
