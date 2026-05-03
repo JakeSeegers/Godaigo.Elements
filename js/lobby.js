@@ -417,17 +417,8 @@
             const refreshBtn = document.getElementById('refresh-browser-btn');
             if (refreshBtn) refreshBtn.textContent = '…';
 
-            // Sweep stale players from waiting rooms (disconnected without clean logout)
-            const staleTime = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-            const { data: waitingRooms } = await supabase
-                .from('game_room').select('id').eq('status', 'waiting');
-            if (waitingRooms?.length) {
-                await supabase
-                    .from('players')
-                    .delete()
-                    .in('game_id', waitingRooms.map(r => r.id))
-                    .lt('last_seen', staleTime);
-            }
+            // Sweep stale players via server-side RPC (client DELETE is blocked by RLS)
+            await supabase.rpc('cleanup_inactive_players');
 
             const { data: rooms } = await supabase
                 .from('game_room')
@@ -1590,15 +1581,17 @@
             }
         }
 
-        // Clean up on page unload — use global constants (supabase client properties aren't reliable)
+        // Clean up on page unload — call remove_player RPC (direct DELETE is blocked by RLS)
         window.addEventListener('beforeunload', () => {
             if (!myPlayerId) return;
-            fetch(`${SUPABASE_URL}/rest/v1/players?id=eq.${myPlayerId}`, {
-                method: 'DELETE',
+            fetch(`${SUPABASE_URL}/rest/v1/rpc/remove_player`, {
+                method: 'POST',
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
                 },
+                body: JSON.stringify({ p_player_id: myPlayerId }),
                 keepalive: true
             });
         });
