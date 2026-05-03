@@ -88,6 +88,7 @@
         }
 
         const ap = window.getCurrentAP ? window.getCurrentAP() : 0;
+        console.log(`🤖 loop tick: ap=${ap} botIdx=${botIndex} registered=${window._botPlayerIndices?.has(botIndex)}`);
         if (ap <= 0) {
             _endTurn();
             return;
@@ -95,6 +96,7 @@
 
         const action = _pickBestAction(botIndex);
         if (!action) {
+            console.log('🤖 No action found — ending turn');
             _endTurn();
             return;
         }
