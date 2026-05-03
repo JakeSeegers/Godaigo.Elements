@@ -859,6 +859,9 @@
                 // Show win screen after XP is secured
                 showGameOverToAll(winnerPlayerIndex, winType);
 
+                // Broadcast win type so other clients show the correct message
+                broadcastGameAction('game-over', { winnerIndex: winnerPlayerIndex, winType });
+
                 // Update game room status to 'finished' and store winner index
                 const { error } = await supabase
                     .from('game_room')
@@ -1164,7 +1167,8 @@
 
                                 // Notify if we became host
                                 if (!wasHost && isHost) {
-                                    console.log('⚠️ You are now the host!');
+                                    console.log('You are now the host.');
+                                    startDisconnectMonitor();
                                 }
                             }
                         }
@@ -3070,6 +3074,11 @@
                 if (typeof window.emojiSystem !== 'undefined') {
                     window.emojiSystem.showEmojiOverPawn(playerIndex, display, !!isText);
                 }
+            });
+
+            // Game over broadcast — carries win type so non-winner clients show the correct message
+            gameChannel.on('broadcast', { event: 'game-over' }, ({ payload }) => {
+                showGameOverToAll(payload.winnerIndex, payload.winType || 'scrolls');
             });
 
             // Subscribe to the channel
