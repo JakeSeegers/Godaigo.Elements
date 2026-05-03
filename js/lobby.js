@@ -1522,6 +1522,9 @@
                     ...p,
                     isBot: p.username === '[BOT]'
                 }));
+                // Populate reliable bot index registry used by game-ui.js for AP resets
+                window._botPlayerIndices = window._botPlayerIndices || new Set();
+                allPlayers.filter(p => p.isBot).forEach(p => window._botPlayerIndices.add(p.player_index));
 
                 console.log('🎮 Starting multiplayer game!');
                 console.log('My index:', myPlayerIndex);
@@ -1958,7 +1961,7 @@
 
                 // AP resets at the start of the new player's turn (own turn or bot turn on host)
                 if (activePlayerIndex === myPlayerIndex ||
-                    (isHost && allPlayersData?.find(p => p.player_index === activePlayerIndex)?.isBot)) {
+                    (isHost && window._botPlayerIndices?.has(activePlayerIndex))) {
                     currentAP = 5;
                     document.getElementById('ap-count').textContent = currentAP;
                     if (typeof refreshVoidAP === 'function') refreshVoidAP();
@@ -1971,7 +1974,7 @@
 
                 if (isPlacementPhase) {
                     // During placement, update status for tile placement
-                    const isActiveBotTurn = allPlayersData?.find(p => p.player_index === activePlayerIndex)?.isBot;
+                    const isActiveBotTurn = window._botPlayerIndices?.has(activePlayerIndex);
                     if (isHost && isActiveBotTurn) {
                         // Auto-place bot tile after a short delay
                         setTimeout(() => placeBotPlayerTile(activePlayerIndex), 600);
@@ -1988,8 +1991,7 @@
                     // Normal gameplay turn display
                     updateTurnDisplay();
                     // Trigger bot turn if needed (for turns received from host broadcasts)
-                    const isActiveBotTurn2 = allPlayersData?.find(p => p.player_index === activePlayerIndex)?.isBot;
-                    if (isHost && isActiveBotTurn2) {
+                    if (isHost && window._botPlayerIndices?.has(activePlayerIndex)) {
                         setTimeout(() => window.GodaigoBot?.onTurnStart(activePlayerIndex), 400);
                     }
                 }
@@ -3287,10 +3289,12 @@
             if (typeof placePlayerTileVisually === 'function') {
                 placePlayerTileVisually(x, y, botPlayerIndex, botColor);
             }
-            // Mark as bot in playerPositions
+            // Mark as bot in playerPositions and in the reliable registry
             if (typeof playerPositions !== 'undefined' && playerPositions[botPlayerIndex]) {
                 playerPositions[botPlayerIndex].isBot = true;
             }
+            window._botPlayerIndices = window._botPlayerIndices || new Set();
+            window._botPlayerIndices.add(botPlayerIndex);
 
             // Track placement
             playerTilesPlaced.add(botPlayerIndex);
@@ -3320,7 +3324,7 @@
                 } else {
                     updateStatus(`All tiles placed! Now ${getPlayerColorName(activePlayerIndex)}'s turn!`);
                     // If first player is also a bot, trigger its turn
-                    if (allPlayersData?.find(p => p.player_index === activePlayerIndex)?.isBot) {
+                    if (window._botPlayerIndices?.has(activePlayerIndex)) {
                         setTimeout(() => window.GodaigoBot?.onTurnStart(activePlayerIndex), 600);
                     }
                 }

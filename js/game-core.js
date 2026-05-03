@@ -1632,7 +1632,8 @@
                         // effect throws (e.g. DOM error inside enterTransmuteMode or similar)
                         let result = { success: false, requiresSelection: false };
                         try {
-                            result = this.scrollEffects.execute(name, activePlayerIndex, { spell, scrollName: name, previousScrollCast }) || result;
+                            const _botCtx = (typeof window !== 'undefined' && window._scrollBotContext) || {};
+                            result = this.scrollEffects.execute(name, activePlayerIndex, { spell, scrollName: name, previousScrollCast, ..._botCtx }) || result;
                         } catch (execErr) {
                             console.error(`❌ Effect execute threw for "${name}":`, execErr);
                             // Continue below to still track win condition and broadcast

@@ -2466,7 +2466,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                             spellSystem.scrollEffects.processExcavateTeleport(activePlayerIndex);
                         }
                         // AP resets at the start of the new player's turn (own turn or bot turn on host)
-                        if (activePlayerIndex === myPlayerIndex || playerPositions[activePlayerIndex]?.isBot) {
+                        if (activePlayerIndex === myPlayerIndex || window._botPlayerIndices?.has(activePlayerIndex)) {
                             currentAP = 5;
                             document.getElementById('ap-count').textContent = currentAP;
                             updateApPips(currentAP);
@@ -2490,7 +2490,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         updateStatus(`Turn ended. Now ${nextPlayerColorName}'s turn! AP restored.`);
                         console.log(`📄 Switched to player ${activePlayerIndex + 1} (${nextPlayerColorName})`);
                         // Trigger bot turn if next player is a bot
-                        if (playerPositions[activePlayerIndex]?.isBot) {
+                        if (window._botPlayerIndices?.has(activePlayerIndex)) {
                             setTimeout(() => window.GodaigoBot?.onTurnStart(activePlayerIndex), 400);
                         }
                     } else {
@@ -2592,7 +2592,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
 
                 // AP resets at the start of the new player's turn (own turn or bot turn on host)
-                if (activePlayerIndex === myPlayerIndex || playerPositions[activePlayerIndex]?.isBot) {
+                if (activePlayerIndex === myPlayerIndex || window._botPlayerIndices?.has(activePlayerIndex)) {
                     currentAP = 5;
                     document.getElementById('ap-count').textContent = currentAP;
                     updateApPips(currentAP);
@@ -2618,7 +2618,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 console.log(`📄 Switched to player ${activePlayerIndex + 1} (${nextPlayerColorName})`);
                 isEndingTurn = false;
                 // Trigger bot turn if next player is a bot
-                if (playerPositions[activePlayerIndex]?.isBot) {
+                if (window._botPlayerIndices?.has(activePlayerIndex)) {
                     setTimeout(() => window.GodaigoBot?.onTurnStart(activePlayerIndex), 400);
                 }
             } else {
