@@ -230,7 +230,7 @@
                             .filter(p => p.created_at < twoMinutesAgo)
                             .map(p => p.id);
                         if (staleIds.length) {
-                            await supabase.from('players').delete().in('id', staleIds);
+                            await supabase.rpc('remove_players', { p_player_ids: staleIds });
                             console.log('🧹 Auto-cleaned stale player entries:', staleIds);
                         } else {
                             setBrowserStatus('You\'re already in a waiting room. Leave it first before creating a new one.');
@@ -323,7 +323,7 @@
                 });
                 const active = match.filter(p => !stale.includes(p));
                 if (stale.length) {
-                    await supabase.from('players').delete().in('id', stale.map(p => p.id));
+                    await supabase.rpc('remove_players', { p_player_ids: stale.map(p => p.id) });
                     console.log('🧹 Auto-cleaned stale entry for', username);
                 }
                 if (active.length) {
@@ -378,7 +378,7 @@
             }
 
             if (myPlayerId) {
-                await supabase.from('players').delete().eq('id', myPlayerId);
+                await supabase.rpc('remove_player', { p_player_id: myPlayerId });
             }
 
             // If the host leaves, delete the game_room entirely so it disappears from
@@ -943,7 +943,7 @@
                     if (roomId) {
                         const { data: allP } = await supabase.from('players').select('id').eq('game_id', roomId);
                         if (allP && allP.length > 0) {
-                            await supabase.from('players').delete().in('id', allP.map(p => p.id));
+                            await supabase.rpc('remove_players', { p_player_ids: allP.map(p => p.id) });
                         }
                         await supabase.from('game_room').update({ status: 'waiting', current_turn_index: 0 }).eq('id', roomId);
                     }
@@ -1569,7 +1569,7 @@
                     });
                     for (const p of stalePlayers) {
                         console.log(`⚠️ Disconnect: ${p.username} (last_seen=${p.last_seen}) — removing`);
-                        await supabase.from('players').delete().eq('id', p.id);
+                        await supabase.rpc('remove_player', { p_player_id: p.id });
                     }
                 } catch (e) { /* ignore network errors */ }
             }, 15000); // Check every 15 seconds
