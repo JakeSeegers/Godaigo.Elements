@@ -227,10 +227,14 @@
             }
             const headerText = document.createElement('div');
             headerText.style.cssText = 'flex:1;';
-            headerText.innerHTML = `
-                <div style="font-family:var(--font-pixel);font-size:11px;color:${elementColor};letter-spacing:2px;text-transform:uppercase;">${elementLabel}${levelText ? ' &nbsp;·&nbsp; ' + levelText : ''}</div>
-                <div style="font-family:var(--font-terminal);font-size:20px;color:#e8dcc8;margin-top:3px;line-height:1.2;">${scrollTitle}</div>
-            `;
+            const line1 = document.createElement('div');
+            line1.style.cssText = `font-family:var(--font-pixel);font-size:11px;color:${elementColor};letter-spacing:2px;text-transform:uppercase;`;
+            line1.textContent = elementLabel + (levelText ? ' · ' + levelText : '');
+            headerText.appendChild(line1);
+            const line2 = document.createElement('div');
+            line2.style.cssText = 'font-family:var(--font-terminal);font-size:20px;color:#e8dcc8;margin-top:3px;line-height:1.2;';
+            line2.textContent = scrollTitle;
+            headerText.appendChild(line2);
             header.appendChild(headerText);
             box.appendChild(header);
 
