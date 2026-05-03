@@ -135,6 +135,8 @@
         // ========================================
 
         let isHost = false; // Track if this player is the host
+        let _hasBotSlot = false;  // Host added a bot to this room
+        let _botPlayerId = null;  // Supabase row ID of the inserted bot player
 
         let isJoining = false; // Prevent double-joins
 
@@ -1266,29 +1268,60 @@
 
                 // Show/hide host settings panel
                 const hostSettings = document.getElementById('host-settings');
-                const totalCount = players.length;
+                const effectiveCount = players.length + (_hasBotSlot ? 1 : 0);
 
                 // Host settings (and Start button) appear as soon as there are enough players
-                if (isHost && totalCount >= 2 && totalCount <= 5) {
+                if (isHost && effectiveCount >= 2 && effectiveCount <= 5) {
                     hostSettings.style.display = 'block';
                 } else {
                     hostSettings.style.display = 'none';
                 }
 
+                // Show/update Add Bot button (host only, room not full)
+                let addBotBtn = document.getElementById('add-bot-btn');
+                if (isHost) {
+                    if (!addBotBtn) {
+                        addBotBtn = document.createElement('button');
+                        addBotBtn.id = 'add-bot-btn';
+                        addBotBtn.style.cssText = 'margin: 8px 0; padding: 6px 14px; background: #555; color: #fff; border: 1px solid #888; border-radius: 4px; cursor: pointer; font-size: 13px;';
+                        addBotBtn.onclick = () => {
+                            _hasBotSlot = !_hasBotSlot;
+                            updatePlayerList();
+                        };
+                        const container = document.getElementById('players-container');
+                        if (container && container.parentNode) container.parentNode.insertBefore(addBotBtn, container);
+                    }
+                    addBotBtn.textContent = _hasBotSlot ? '✕ Remove Bot' : '+ Add Bot';
+                    addBotBtn.style.background = _hasBotSlot ? '#c0392b' : '#555';
+                    addBotBtn.style.display = '';
+                } else if (addBotBtn) {
+                    addBotBtn.style.display = 'none';
+                }
+
+                // If bot slot active, append bot entry to display
+                if (_hasBotSlot) {
+                    const botEntry = `
+                        <div style="padding: 10px; margin: 5px 0; background: #3a3a3a; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; border: 1px dashed #888;">
+                            <span style="color: #aaa;">🤖 Bot</span>
+                            <span style="color: #4CAF50; font-size: 20px;">✓</span>
+                        </div>`;
+                    container.innerHTML += botEntry;
+                }
+
                 // Update status
                 const statusDiv = document.getElementById('lobby-status');
 
-                if (totalCount < 2) {
-                    statusDiv.textContent = 'Waiting for more players... (need at least 2)';
+                if (effectiveCount < 2) {
+                    statusDiv.textContent = 'Waiting for more players... (need at least 2, or add a Bot)';
                     statusDiv.style.color = '#999';
-                } else if (totalCount > 5) {
+                } else if (effectiveCount > 5) {
                     statusDiv.textContent = 'Too many players! Maximum is 5.';
                     statusDiv.style.color = '#f44336';
                 } else if (isHost) {
-                    statusDiv.textContent = `${totalCount} players in lobby. Ready to start!`;
+                    statusDiv.textContent = `${effectiveCount} players in lobby. Ready to start!`;
                     statusDiv.style.color = '#4CAF50';
                 } else {
-                    statusDiv.textContent = `${totalCount} players in lobby. Waiting for host to start...`;
+                    statusDiv.textContent = `${effectiveCount} players in lobby. Waiting for host to start...`;
                     statusDiv.style.color = '#4CAF50';
                 }
                 
@@ -1315,6 +1348,26 @@
                     .eq('game_id', currentGameId);
 
                 if (error) throw error;
+
+                // Insert bot player row if host requested a bot
+                if (_hasBotSlot && !_botPlayerId) {
+                    const { data: botRow, error: botErr } = await supabase
+                        .from('players')
+                        .insert([{ username: '[BOT]', is_ready: true, game_id: currentGameId }])
+                        .select()
+                        .single();
+                    if (botErr) {
+                        console.warn('⚠️ Could not insert bot player row:', botErr.message);
+                        // Bot slot will be skipped — don't block game start
+                        _hasBotSlot = false;
+                    } else {
+                        _botPlayerId = botRow.id;
+                        console.log('🤖 Bot player row inserted:', _botPlayerId);
+                        // Re-fetch to include the bot
+                        const { data: refreshed } = await supabase.from('players').select('*').eq('game_id', currentGameId);
+                        if (refreshed) players.splice(0, players.length, ...refreshed);
+                    }
+                }
 
                 // Validate player count
                 if (players.length < 2) {
@@ -1458,12 +1511,18 @@
                 myPlayerIndex = myPlayer.player_index;
                 
                 // Get all players in this room
-                const { data: allPlayers } = await supabase
+                const { data: allPlayersRaw } = await supabase
                     .from('players')
                     .select('*')
                     .eq('game_id', currentGameId)
                     .order('player_index', { ascending: true });
-                
+
+                // Mark bot players (identified by username '[BOT]')
+                const allPlayers = (allPlayersRaw || []).map(p => ({
+                    ...p,
+                    isBot: p.username === '[BOT]'
+                }));
+
                 console.log('🎮 Starting multiplayer game!');
                 console.log('My index:', myPlayerIndex);
                 console.log('My color:', myPlayer.color);
@@ -1897,8 +1956,9 @@
                     spellSystem.scrollEffects.processExcavateTeleport(activePlayerIndex);
                 }
 
-                // AP resets at the start of the new player's turn
-                if (activePlayerIndex === myPlayerIndex) {
+                // AP resets at the start of the new player's turn (own turn or bot turn on host)
+                if (activePlayerIndex === myPlayerIndex ||
+                    (isHost && allPlayersData?.find(p => p.player_index === activePlayerIndex)?.isBot)) {
                     currentAP = 5;
                     document.getElementById('ap-count').textContent = currentAP;
                     if (typeof refreshVoidAP === 'function') refreshVoidAP();
@@ -1911,7 +1971,11 @@
 
                 if (isPlacementPhase) {
                     // During placement, update status for tile placement
-                    if (canPlaceTile()) {
+                    const isActiveBotTurn = allPlayersData?.find(p => p.player_index === activePlayerIndex)?.isBot;
+                    if (isHost && isActiveBotTurn) {
+                        // Auto-place bot tile after a short delay
+                        setTimeout(() => placeBotPlayerTile(activePlayerIndex), 600);
+                    } else if (canPlaceTile()) {
                         updateStatus(`Your turn! Place your player tile (${playerTilesPlaced.size}/${totalPlayers} placed)`);
                         setInventoryOpen(true);
                         console.log(`✅ My turn to place tile`);
@@ -1923,6 +1987,11 @@
                 } else {
                     // Normal gameplay turn display
                     updateTurnDisplay();
+                    // Trigger bot turn if needed (for turns received from host broadcasts)
+                    const isActiveBotTurn2 = allPlayersData?.find(p => p.player_index === activePlayerIndex)?.isBot;
+                    if (isHost && isActiveBotTurn2) {
+                        setTimeout(() => window.GodaigoBot?.onTurnStart(activePlayerIndex), 400);
+                    }
                 }
             });
 
@@ -3196,6 +3265,90 @@
             }
         }
 
+        // Auto-place bot player tile during placement phase (called by host)
+        function placeBotPlayerTile(botPlayerIndex) {
+            if (!isHost || !isPlacementPhase) return;
+            const botData = allPlayersData?.find(p => p.player_index === botPlayerIndex);
+            if (!botData?.isBot) return;
+
+            // Pick a placement position — use spiral position for this player index
+            const numTiles = totalPlayers * 6;
+            const spiralPositions = typeof generateSpiralPositions === 'function'
+                ? generateSpiralPositions(numTiles)
+                : window._boardSpiralPositions || [];
+            // Assign a position offset from the spiral that doesn't overlap existing player tiles
+            const candidatePos = spiralPositions[botPlayerIndex] || spiralPositions[0] || { x: 0, y: 0 };
+
+            const botColor = botData.color;
+            const x = candidatePos.x;
+            const y = candidatePos.y;
+
+            // Place the tile visually (on this client)
+            if (typeof placePlayerTileVisually === 'function') {
+                placePlayerTileVisually(x, y, botPlayerIndex, botColor);
+            }
+            // Mark as bot in playerPositions
+            if (typeof playerPositions !== 'undefined' && playerPositions[botPlayerIndex]) {
+                playerPositions[botPlayerIndex].isBot = true;
+            }
+
+            // Track placement
+            playerTilesPlaced.add(botPlayerIndex);
+
+            // Broadcast visual placement to other clients
+            broadcastGameAction('player-tile-place', {
+                x, y, playerIndex: botPlayerIndex, color: botColor
+            });
+
+            // Broadcast tile-placed tracking event
+            broadcastGameAction('player-tile-placed', { playerIndex: botPlayerIndex });
+
+            // Check if placement phase is complete
+            if (playerTilesPlaced.size >= totalPlayers) {
+                isPlacementPhase = false;
+                activePlayerIndex = 0;
+                const startedAt = Date.now();
+                turnStartedAtMs = startedAt;
+                broadcastGameAction('placement-complete', {
+                    playerIndex: 0,
+                    turnStartedAt: startedAt
+                });
+                updateTurnDisplay();
+                updateDeckIndicatorVisibility();
+                if (isMyTurn()) {
+                    updateStatus(`All tiles placed! It's your turn!`);
+                } else {
+                    updateStatus(`All tiles placed! Now ${getPlayerColorName(activePlayerIndex)}'s turn!`);
+                    // If first player is also a bot, trigger its turn
+                    if (allPlayersData?.find(p => p.player_index === activePlayerIndex)?.isBot) {
+                        setTimeout(() => window.GodaigoBot?.onTurnStart(activePlayerIndex), 600);
+                    }
+                }
+            } else {
+                // Advance to next player
+                activePlayerIndex = (activePlayerIndex + 1) % totalPlayers;
+                const startedAt = Date.now();
+                turnStartedAtMs = startedAt;
+                currentTurnNumber++;
+                broadcastGameAction('turn-change', {
+                    playerIndex: activePlayerIndex,
+                    turnStartedAt: startedAt,
+                    turnNumber: currentTurnNumber
+                });
+                // If next player is also a bot, auto-place
+                const nextBotData = allPlayersData?.find(p => p.player_index === activePlayerIndex);
+                if (nextBotData?.isBot) {
+                    setTimeout(() => placeBotPlayerTile(activePlayerIndex), 600);
+                } else if (canPlaceTile()) {
+                    updateStatus(`Your turn! Place your player tile (${playerTilesPlaced.size}/${totalPlayers} placed)`);
+                    setInventoryOpen(true);
+                } else {
+                    updateStatus(`Waiting for ${getPlayerColorName(activePlayerIndex)} to place their tile...`);
+                }
+            }
+            console.log(`🤖 Bot player tile placed at (${x.toFixed(1)}, ${y.toFixed(1)}) for playerIndex=${botPlayerIndex}`);
+        }
+
         // Broadcast a game action to all other players
         function broadcastGameAction(event, payload) {
             if (!gameChannel || !isMultiplayer) return;
@@ -3280,6 +3433,7 @@
 
             // Place hidden tiles in spiral pattern
             const spiralPositions = generateSpiralPositions(numTiles);
+            window._boardSpiralPositions = spiralPositions; // expose for bot tile auto-placement
             console.log(`Placing ${numTiles} tiles for ${numPlayers} player(s)`);
             spiralPositions.forEach((pos, index) => {
                 console.log(`Tile ${index + 1}: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
@@ -3289,10 +3443,15 @@
             // Center and fit the board to view
             fitBoardToView();
 
+            // If player 0 is a bot, auto-place its tile (host only)
+            if (isHost && allPlayers[0]?.isBot) {
+                setTimeout(() => placeBotPlayerTile(0), 800);
+            }
+
             // Show appropriate message based on turn order
-            if (myPlayer.player_index === 0) {
+            if (myPlayer.player_index === 0 && !allPlayers[0]?.isBot) {
                 updateStatus(`You are Player ${myPlayer.player_index + 1} (${playerColor}). Drag your player tile to the board to start!`);
-            } else {
+            } else if (!allPlayers[myPlayer.player_index]?.isBot) {
                 updateStatus(`You are Player ${myPlayer.player_index + 1} (${playerColor}). Waiting for other players to place their tiles...`);
             }
 

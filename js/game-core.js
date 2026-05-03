@@ -2375,6 +2375,65 @@
                     if (window.ScrollPanelSystem) window.ScrollPanelSystem.refresh();
                 } catch (e) {}
             }
+            // ── Bot API methods ──────────────────────────────────────────────────
+
+            patternSatisfied(scrollName, playerIndex) {
+                return this.checkPatternForPlayer(scrollName, playerIndex);
+            }
+
+            missingStones(scrollName, playerIndex) {
+                const pattern = this.patterns[scrollName];
+                if (!pattern) return Infinity;
+                let pos;
+                if (playerIndex === activePlayerIndex && playerPosition) {
+                    pos = playerPosition;
+                } else if (playerPositions[playerIndex]) {
+                    pos = playerPositions[playerIndex];
+                } else {
+                    return Infinity;
+                }
+                const playerHex = pixelToHex(pos.x, pos.y, TILE_SIZE);
+                let minMissing = Infinity;
+                for (const variant of pattern.patterns) {
+                    let missing = 0;
+                    for (const req of variant) {
+                        const checkPos = hexToPixel(playerHex.q + req.q, playerHex.r + req.r, TILE_SIZE);
+                        const found = placedStones.find(s =>
+                            Math.sqrt(Math.pow(s.x - checkPos.x, 2) + Math.pow(s.y - checkPos.y, 2)) < 5
+                            && s.type === req.type
+                        );
+                        if (!found) missing++;
+                    }
+                    minMissing = Math.min(minMissing, missing);
+                }
+                return minMissing;
+            }
+
+            moveScrollToActive(scrollName, playerIndex) {
+                this.ensurePlayerScrollsStructure(playerIndex);
+                const p = this.playerScrolls[playerIndex];
+                if (!p.hand.has(scrollName)) return false;
+                if (p.active.size >= this.MAX_ACTIVE_SIZE) return false;
+                p.hand.delete(scrollName);
+                p.active.add(scrollName);
+                this.updateScrollCount();
+                if (typeof broadcastGameAction === 'function' && typeof isMultiplayer !== 'undefined' && isMultiplayer) {
+                    broadcastGameAction('scroll-move', { scrollName, from: 'hand', to: 'active', playerIndex });
+                }
+                if (typeof updateScrollDeckUI === 'function') { try { updateScrollDeckUI(); } catch(e) {} }
+                return true;
+            }
+
+            castSpecificScroll(scrollName) {
+                const spell = this.patterns[scrollName];
+                if (!spell) return false;
+                const scrolls = this.getPlayerScrolls(false);
+                const fromCommonArea = this.getCommonAreaScrolls().includes(scrollName);
+                if (!scrolls.active.has(scrollName) && !fromCommonArea) return false;
+                if (!this.checkPatternForPlayer(scrollName, activePlayerIndex)) return false;
+                this.executeSpell({ name: scrollName, spell, fromCommonArea });
+                return true;
+            }
         }
 
         function toRoman(num) {
@@ -4637,6 +4696,45 @@
         // Expose placeStoneVisually and placedStones for tutorial scripted AI trap sequence
         window.placeStoneVisually = placeStoneVisually;
         window.placedStones = placedStones;
+        // Bot API — programmatic access for GodaigoBot
+        window.dijkstraPath = _dijkstraPath;
+        window.getCurrentAP = () => getTotalAP();
+        window.botPlaceStone = function(x, y, type, playerIndex) {
+            if (!playerPools[playerIndex]) return false;
+            if ((playerPools[playerIndex][type] || 0) <= 0) return false;
+            playerPools[playerIndex][type]--;
+            placeStone(x, y, type);
+            if (typeof updateStoneCount === 'function') { try { updateStoneCount(type); } catch(e) {} }
+            return true;
+        };
+        window.getPlayerPools = () => playerPools;
+        window.getPlacedTiles = () => placedTiles;
+        window.getPlacedStones = () => placedStones;
+        window.getPlayerPositions = () => playerPositions;
+        window.getActivePlayerIndex = () => activePlayerIndex;
+        window.getStoneCounts = () => stoneCounts;
+        // Programmatic bot movement: move active player pawn to (targetX, targetY) spending AP
+        window.botExecuteMove = function(targetX, targetY) {
+            if (!playerPosition) return { ok: false, reason: 'no player position' };
+            const startPos = { x: playerPosition.x, y: playerPosition.y };
+            const path = _dijkstraPath(startPos, { x: targetX, y: targetY });
+            if (!path || path.length < 2) return { ok: false, reason: 'no path' };
+            const cost = path[path.length - 1].cost;
+            if (cost > getTotalAP()) return { ok: false, reason: 'not enough AP' };
+            placePlayer(targetX, targetY);
+            spendAP(cost);
+            broadcastGameAction('player-move', {
+                playerIndex: activePlayerIndex,
+                x: targetX,
+                y: targetY,
+                apSpent: cost
+            });
+            // Reveal any flipped tile at landing position
+            const nearTile = placedTiles.find(t => t.flipped && !t.isPlayerTile &&
+                Math.sqrt(Math.pow(t.x - targetX, 2) + Math.pow(t.y - targetY, 2)) < 5);
+            if (nearTile) revealTile(nearTile.id);
+            return { ok: true, cost };
+        };
         // Expose tileMoveMode for scroll effects (e.g. Telekinesis)
         Object.defineProperty(window, 'tileMoveMode', {
             get() { return tileMoveMode; },

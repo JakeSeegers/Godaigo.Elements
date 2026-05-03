@@ -524,6 +524,25 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🌊 Wandering River activated by player ${casterIndex}`);
 
+                // Bot: change the current tile to void (maximizes catacomb overlap)
+                if (context?.botMode) {
+                    const pos = (typeof playerPositions !== 'undefined' ? playerPositions : [])[casterIndex];
+                    const tiles = typeof placedTiles !== 'undefined' ? placedTiles : [];
+                    if (pos) {
+                        const nearTile = tiles.find(t => !t.flipped && !t.isPlayerTile &&
+                            Math.sqrt(Math.pow(t.x - pos.x, 2) + Math.pow(t.y - pos.y, 2)) < 5);
+                        if (nearTile && typeof system.applyWanderingRiverToTile === 'function') {
+                            system.applyWanderingRiverToTile(nearTile, 'void', casterIndex, {
+                                scrollName: context?.scrollName || 'WATER_SCROLL_4'
+                            });
+                            return { success: true, message: 'Bot: Wandering River changed tile to void' };
+                        }
+                    }
+                    // Fallback: give water stones
+                    system.drawStonesToPool('water', 4, casterIndex);
+                    return { success: true, message: 'Bot: Wandering River — gave water stones' };
+                }
+
                 // If triggered via Psychic on a non-caster client, skip interactive UI
                 if (context?.psychicRemoteClient) {
                     console.log(`🌊 Wandering River: skipping tile-element UI on non-caster remote client`);
@@ -553,6 +572,12 @@ const ScrollEffects = {
 
             execute(casterIndex, context, system) {
                 console.log(`🌀 Control the Current activated by player ${casterIndex}`);
+
+                // Bot: give fallback water stones (level 5)
+                if (context?.botMode) {
+                    system.drawStonesToPool('water', 5, casterIndex);
+                    return { success: true, message: 'Bot: Control the Current — gave water stones' };
+                }
 
                 // If triggered via Psychic on a non-caster client, skip interactive UI
                 if (context?.psychicRemoteClient) {
@@ -781,6 +806,27 @@ const ScrollEffects = {
 
             execute(casterIndex, context, system) {
                 console.log(`🔥 Arson activated by player ${casterIndex}`);
+
+                // Bot: destroy the highest-value stone from the opponent with the most stones
+                if (context?.botMode) {
+                    const pools = typeof playerPools !== 'undefined' ? playerPools : [];
+                    let bestOpponent = -1, bestType = null, bestRank = -1;
+                    const STONE_RANK = { earth: 5, water: 4, fire: 3, wind: 2, void: 1 };
+                    pools.forEach((pool, idx) => {
+                        if (!pool || idx === casterIndex) return;
+                        for (const [type, rank] of Object.entries(STONE_RANK)) {
+                            if ((pool[type] || 0) > 0 && rank > bestRank) {
+                                bestRank = rank; bestType = type; bestOpponent = idx;
+                            }
+                        }
+                    });
+                    if (bestOpponent >= 0 && bestType) {
+                        pools[bestOpponent][bestType]--;
+                        if (typeof updateStoneCount === 'function') try { updateStoneCount(bestType); } catch(e) {}
+                        return { success: true, message: `Bot Arson: destroyed ${bestType} stone from player ${bestOpponent}` };
+                    }
+                    return { success: false, cancelled: true, message: 'Bot Arson: no opponent stones to destroy' };
+                }
 
                 // If triggered via Psychic on a non-caster client, skip interactive UI
                 if (context?.psychicRemoteClient) {
@@ -1071,6 +1117,28 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🔮 Create activated by player ${casterIndex}`);
 
+                // Bot: draw stones of the most-needed element for current scroll patterns
+                if (context?.botMode) {
+                    const STONE_RANK = { earth: 5, water: 4, fire: 3, wind: 2, void: 1 };
+                    let bestType = 'earth';
+                    // Pick element from active/hand scroll with most pattern stones missing
+                    if (typeof spellSystem !== 'undefined' && spellSystem) {
+                        const scrolls = spellSystem.getPlayerScrolls?.(false) || {};
+                        let bestMissing = -1;
+                        for (const scrollId of [...(scrolls.active || []), ...(scrolls.hand || [])]) {
+                            const missing = spellSystem.missingStones?.(scrollId, casterIndex) ?? 0;
+                            const def = window.SCROLL_DEFINITIONS?.[scrollId];
+                            if (def && missing > bestMissing) {
+                                bestMissing = missing;
+                                bestType = def.element !== 'catacomb' ? def.element : bestType;
+                            }
+                        }
+                    }
+                    const count = STONE_RANK[bestType] || 1;
+                    system.drawStonesToPool(bestType, count, casterIndex);
+                    return { success: true, message: `Bot Create: drew ${count} ${bestType} stones` };
+                }
+
                 // If triggered via Psychic on a non-caster client, skip the interactive UI.
                 // The Psychic caster's client handles the stone selection and syncs state.
                 if (context?.psychicRemoteClient) {
@@ -1146,6 +1214,35 @@ const ScrollEffects = {
             priority: 2,
             execute(casterIndex, context, system) {
                 console.log(`🔮 Scholar's Insight activated by player ${casterIndex}`);
+
+                // Bot: search for level-2 scroll of the most-needed element
+                if (context?.botMode) {
+                    let targetElement = 'earth';
+                    if (typeof spellSystem !== 'undefined' && spellSystem) {
+                        const scrolls = spellSystem.getPlayerScrolls?.(false) || {};
+                        let bestMissing = -1;
+                        for (const scrollId of [...(scrolls.active || []), ...(scrolls.hand || [])]) {
+                            const missing = spellSystem.missingStones?.(scrollId, casterIndex) ?? 0;
+                            const def = window.SCROLL_DEFINITIONS?.[scrollId];
+                            if (def && def.element !== 'catacomb' && missing > bestMissing) {
+                                bestMissing = missing; targetElement = def.element;
+                            }
+                        }
+                    }
+                    const targetScrollId = `${targetElement.toUpperCase()}_SCROLL_2`;
+                    const deck = typeof spellSystem !== 'undefined' ? spellSystem.scrollDecks?.[targetElement] : null;
+                    if (deck && deck.includes(targetScrollId)) {
+                        const idx = deck.indexOf(targetScrollId);
+                        deck.splice(idx, 1);
+                        spellSystem.ensurePlayerScrollsStructure?.(casterIndex);
+                        spellSystem.playerScrolls?.[casterIndex]?.hand?.add(targetScrollId);
+                        if (typeof spellSystem.updateScrollCount === 'function') spellSystem.updateScrollCount();
+                        return { success: true, message: `Bot Scholar's Insight: drew ${targetScrollId}` };
+                    }
+                    // Fallback: give void stones
+                    system.drawStonesToPool('void', 2, casterIndex);
+                    return { success: true, message: 'Bot Scholar\'s Insight: fallback stones' };
+                }
 
                 // If triggered via Psychic on a non-caster client, skip interactive UI
                 if (context?.psychicRemoteClient) {
@@ -1479,6 +1576,33 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🏴‍☠️ Plunder activated by player ${casterIndex}`);
 
+                // Bot: discard the highest-level scroll from the opponent with most active scrolls
+                if (context?.botMode) {
+                    if (typeof spellSystem !== 'undefined' && spellSystem) {
+                        const playerPositionsLocal = typeof playerPositions !== 'undefined' ? playerPositions : [];
+                        let bestTarget = -1, bestScrollId = null, bestLevel = -1;
+                        playerPositionsLocal.forEach((p, idx) => {
+                            if (!p || idx === casterIndex) return;
+                            const scrolls = spellSystem.playerScrolls?.[idx];
+                            if (!scrolls) return;
+                            for (const scrollId of scrolls.active) {
+                                const def = window.SCROLL_DEFINITIONS?.[scrollId];
+                                if (def && def.level > bestLevel) {
+                                    bestLevel = def.level; bestScrollId = scrollId; bestTarget = idx;
+                                }
+                            }
+                        });
+                        if (bestTarget >= 0 && bestScrollId) {
+                            spellSystem.playerScrolls[bestTarget].active.delete(bestScrollId);
+                            spellSystem.commonAreaScrolls = spellSystem.commonAreaScrolls || new Set();
+                            spellSystem.commonAreaScrolls.add(bestScrollId);
+                            if (typeof spellSystem.updateScrollCount === 'function') spellSystem.updateScrollCount();
+                            return { success: true, message: `Bot Plunder: discarded ${bestScrollId} from player ${bestTarget}` };
+                        }
+                    }
+                    return { success: false, cancelled: true, message: 'Bot Plunder: no opponent scrolls to plunder' };
+                }
+
                 // If triggered via Psychic on a non-caster client, skip interactive UI
                 if (context?.psychicRemoteClient) {
                     console.log(`🏴‍☠️ Plunder: skipping plunder UI on non-caster remote client`);
@@ -1506,6 +1630,34 @@ const ScrollEffects = {
             priority: 9,
             execute(casterIndex, context, system) {
                 console.log(`⚡ Quick Reflexes activated by player ${casterIndex}`);
+
+                // Bot: grab a level-1 scroll of the most-needed element + draw 2 of that type
+                if (context?.botMode) {
+                    let targetElement = 'earth';
+                    if (typeof spellSystem !== 'undefined' && spellSystem) {
+                        const scrolls = spellSystem.getPlayerScrolls?.(false) || {};
+                        let bestMissing = -1;
+                        for (const scrollId of [...(scrolls.active || []), ...(scrolls.hand || [])]) {
+                            const missing = spellSystem.missingStones?.(scrollId, casterIndex) ?? 0;
+                            const def = window.SCROLL_DEFINITIONS?.[scrollId];
+                            if (def && def.element !== 'catacomb' && missing > bestMissing) {
+                                bestMissing = missing; targetElement = def.element;
+                            }
+                        }
+                    }
+                    const targetScrollId = `${targetElement.toUpperCase()}_SCROLL_1`;
+                    const deck = typeof spellSystem !== 'undefined' ? spellSystem.scrollDecks?.[targetElement] : null;
+                    if (deck && deck.includes(targetScrollId)) {
+                        const idx = deck.indexOf(targetScrollId);
+                        deck.splice(idx, 1);
+                        spellSystem.ensurePlayerScrollsStructure?.(casterIndex);
+                        spellSystem.playerScrolls?.[casterIndex]?.hand?.add(targetScrollId);
+                        if (typeof spellSystem.updateScrollCount === 'function') spellSystem.updateScrollCount();
+                    }
+                    system.drawStonesToPool(targetElement, 2, casterIndex);
+                    system.activeBuffs.quickReflexes = { playerIndex: casterIndex };
+                    return { success: true, message: `Bot Quick Reflexes: drew ${targetScrollId} and 2 ${targetElement} stones` };
+                }
 
                 // If triggered via Psychic on a non-caster client, skip interactive UI
                 if (context?.psychicRemoteClient) {
@@ -1540,6 +1692,39 @@ const ScrollEffects = {
             priority: 10,
             execute(casterIndex, context, system) {
                 console.log(`🔥 Combust activated by player ${casterIndex}`);
+
+                // Bot: destroy stones on the nearest non-player, non-bot tile that has opponent stones
+                if (context?.botMode) {
+                    const pos = (typeof playerPositions !== 'undefined' ? playerPositions : [])[casterIndex];
+                    const tiles = typeof placedTiles !== 'undefined' ? placedTiles : [];
+                    const stonesArr = typeof placedStones !== 'undefined' ? placedStones : [];
+                    if (pos) {
+                        // Find non-player tile with the most opponent stones
+                        let bestTile = null, bestCount = 0;
+                        for (const tile of tiles) {
+                            if (tile.isPlayerTile || tile.flipped) continue;
+                            const count = stonesArr.filter(s =>
+                                Math.sqrt(Math.pow(s.x - tile.x, 2) + Math.pow(s.y - tile.y, 2)) < 5
+                            ).length;
+                            if (count > bestCount) { bestCount = count; bestTile = tile; }
+                        }
+                        if (bestTile && bestCount > 0) {
+                            // Remove all stones on this tile
+                            for (let i = stonesArr.length - 1; i >= 0; i--) {
+                                const s = stonesArr[i];
+                                if (Math.sqrt(Math.pow(s.x - bestTile.x, 2) + Math.pow(s.y - bestTile.y, 2)) < 5) {
+                                    if (s.element && s.element.parentNode) s.element.parentNode.removeChild(s.element);
+                                    stonesArr.splice(i, 1);
+                                }
+                            }
+                            if (typeof updateStoneCount === 'function') {
+                                try { ['earth','water','fire','wind','void'].forEach(t => updateStoneCount(t)); } catch(e) {}
+                            }
+                            return { success: true, message: `Bot Combust: destroyed ${bestCount} stones on tile` };
+                        }
+                    }
+                    return { success: false, cancelled: true, message: 'Bot Combust: no valid tile to combust' };
+                }
 
                 // If triggered via Psychic on a non-caster client, skip interactive UI
                 if (context?.psychicRemoteClient) {

@@ -2352,8 +2352,8 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             // Prevent double-click from advancing turn twice
             if (isEndingTurn) return;
 
-            // In multiplayer, only allow ending turn if it's your turn
-            if (!canTakeAction()) {
+            // In multiplayer, only allow ending turn if it's your turn (or the bot's turn on the host)
+            if (!canTakeAction() && !window._botTurnActive) {
                 notYourTurn();
                 return;
             }
@@ -2465,8 +2465,8 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         if (spellSystem?.scrollEffects?.processExcavateTeleport) {
                             spellSystem.scrollEffects.processExcavateTeleport(activePlayerIndex);
                         }
-                        // AP resets at the start of the new player's turn (only for the new active player)
-                        if (activePlayerIndex === myPlayerIndex) {
+                        // AP resets at the start of the new player's turn (own turn or bot turn on host)
+                        if (activePlayerIndex === myPlayerIndex || playerPositions[activePlayerIndex]?.isBot) {
                             currentAP = 5;
                             document.getElementById('ap-count').textContent = currentAP;
                             updateApPips(currentAP);
@@ -2489,6 +2489,10 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         spellSystem.updateScrollCount();
                         updateStatus(`Turn ended. Now ${nextPlayerColorName}'s turn! AP restored.`);
                         console.log(`📄 Switched to player ${activePlayerIndex + 1} (${nextPlayerColorName})`);
+                        // Trigger bot turn if next player is a bot
+                        if (playerPositions[activePlayerIndex]?.isBot) {
+                            setTimeout(() => window.GodaigoBot?.onTurnStart(activePlayerIndex), 400);
+                        }
                     } else {
                         // Single player: AP resets for next turn
                         currentAP = 5;
@@ -2587,8 +2591,8 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     spellSystem.scrollEffects.processExcavateTeleport(activePlayerIndex);
                 }
 
-                // AP resets at the start of the new player's turn (only for the new active player)
-                if (activePlayerIndex === myPlayerIndex) {
+                // AP resets at the start of the new player's turn (own turn or bot turn on host)
+                if (activePlayerIndex === myPlayerIndex || playerPositions[activePlayerIndex]?.isBot) {
                     currentAP = 5;
                     document.getElementById('ap-count').textContent = currentAP;
                     updateApPips(currentAP);
@@ -2613,6 +2617,10 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 updateStatus(`Turn ended. Now ${nextPlayerColorName}'s turn! AP restored.`);
                 console.log(`📄 Switched to player ${activePlayerIndex + 1} (${nextPlayerColorName})`);
                 isEndingTurn = false;
+                // Trigger bot turn if next player is a bot
+                if (playerPositions[activePlayerIndex]?.isBot) {
+                    setTimeout(() => window.GodaigoBot?.onTurnStart(activePlayerIndex), 400);
+                }
             } else {
                 // Single player: your next turn starts now; clear buffs then restore AP
                 if (spellSystem && spellSystem.scrollEffects && spellSystem.scrollEffects.clearWanderingRiverForPlayer) {
@@ -2652,7 +2660,17 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             }
         };
 
-        
+        // Bot programmatic end-turn — sets flag to bypass canTakeAction check, then clicks
+        window.botEndTurn = function() {
+            window._botTurnActive = true;
+            const btn = document.getElementById('end-turn');
+            if (btn) {
+                btn.disabled = false;
+                btn.click();
+            }
+            window._botTurnActive = false;
+        };
+
         // Inventory toggle button
         const invBtn = document.getElementById('inventory-toggle');
         if (invBtn) invBtn.onclick = toggleInventory;
