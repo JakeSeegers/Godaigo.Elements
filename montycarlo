@@ -1,0 +1,524 @@
+#!/usr/bin/env python3
+"""
+Godaigo: Elements — Monte Carlo Win-Probability Simulator
+=========================================================
+Run:
+    python3 simulate.py                        # 10,000 games, 2 players
+    python3 simulate.py --games 50000 --players 4
+    python3 simulate.py --ap 6 --travel 4 --verbose
+    python3 simulate.py --seed 42              # reproducible
+
+RULES MODELLED (from docs/game-design-document.md & scroll-definitions.js):
+  Win condition : activate ≥1 scroll of each of the 5 main elements
+                  (earth, water, fire, wind, void).
+                  Catacomb scrolls count toward both of their paired elements.
+  Decks         : 5 elemental decks × 5 scrolls (levels I–V), shuffled per
+                  game. 10 catacomb scrolls in a shared deck. Decks are SHARED
+                  — first player to reveal a shrine draws first.
+  Activation    : costs 2 AP; scroll must be in Active Area; player must be
+                  standing in a position where adjacent stones match the scroll's
+                  pattern (stone placement costs 1 AP per stone).
+  Stones        : player cap 5 per element (config.js: playerPoolCapacity).
+                  Source pool starts at 20 per element (cap 25).
+  Hand / Active : max 2 scrolls each (TODO.md: MAX_HAND_SIZE / MAX_ACTIVE_SIZE).
+
+ASSUMPTIONS (tune via CLI flags — see --help):
+  1. AP per turn         : 4  (not in docs; change with --ap)
+  2. Travel to shrine    : modelled as a random Normal(mean, std) number of turns
+                          during which all AP is spent on movement.
+  3. Stone collection    : 1 stone/turn while standing on an elemental shrine tile.
+  4. Casting AP cost     : stones_required × 1 + 2 cast AP, spread over ≥1 turns.
+  5. Catacomb pattern   : 2 stones of each of its two elements (4 total), level 2.
+  6. Strategy           : greedy — prioritise unactivated elements; always move
+                          scrolls to Active immediately; cast as soon as able.
+  7. Scroll effects     : not simulated (Iron Stance, Arson, Sacrificial Pyre …).
+  8. Common area        : not modelled (no scroll overflow handling).
+"""
+
+import random
+import argparse
+import statistics
+from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+# ── Game constants (from config.js and scroll-definitions.js) ───────────────────────────
+
+ELEMENTS = ["earth", "water", "fire", "wind", "void"]
+
+# Stones needed to fill the stone pattern for each scroll level
+# Level 1–2 patterns have 2 stones; 3–4 have 3; 5 has 4.
+STONES_REQUIRED = {1: 2, 2: 2, 3: 3, 4: 3, 5: 4}
+
+# New: AP cost to 'set up' (place stones for) scrolls of each level.
+LEVEL_SETUP_AP_COSTS = {
+    1: 0,
+    2: 4,
+    3: 0,
+    4: 5,
+    5: 4,
+}
+
+# Catacomb scrolls always use 2 stones of each of two elements (4 total).
+# Pairs are taken directly from CATACOMB_SCROLL_1-10 in scroll-definitions.js.
+CATACOMB_PAIRS = [
+    ("water", "earth"),  # CATACOMB_SCROLL_1
+    ("earth", "fire"),   # CATACOMB_SCROLL_2
+    ("wind",  "earth"),  # CATACOMB_SCROLL_3
+    ("void",  "earth"),  # CATACOMB_SCROLL_4
+    ("water", "fire"),   # CATACOMB_SCROLL_5
+    ("wind",  "water"),  # CATACOMB_SCROLL_6
+    ("void",  "water"),  # CATACOMB_SCROLL_7
+    ("fire",  "wind"),   # CATACOMB_SCROLL_8
+    ("void",  "wind"),   # CATACOMB_SCROLL_9
+    ("fire",  "void"),   # CATACOMB_SCROLL_10
+]
+
+
+# ── Data ───────────────────────────────────────────────────
+
+@dataclass
+class Scroll:
+    key: str
+    element: str            # "earth"|"water"|"fire"|"wind"|"void"|"catacomb"
+    level: int              # 1-5
+    catacomb_pair: Optional[tuple] = None
+
+
+def build_shared_decks() -> dict:
+    """Shuffle all decks for a new game (Fisher-Yates, matching shuffleDeck() in code)."""
+    decks: dict[str, list[Scroll]] = {}
+    for elem in ELEMENTS:
+        deck = [Scroll(f"{elem.upper()}_SCROLL_{lvl}", elem, lvl) for lvl in range(1, 6)]
+        random.shuffle(deck)
+        decks[elem] = deck
+    cat = [
+        Scroll(f"CATACOMB_SCROLL_{i+1}", "catacomb", 2, CATACOMB_PAIRS[i])
+        for i in range(10)
+    ]
+    random.shuffle(cat)
+    decks["catacomb"] = cat
+    return decks
+
+
+# ── Player ───────────────────────────────────────────────────
+
+class Player:
+    def __init__(self, idx: int, decks: dict, cfg: dict):
+        self.idx = idx
+        self.decks = decks          # shared reference — all players use same decks
+        self.cfg = cfg
+
+        self.hand:   list[Scroll] = []
+        self.active: list[Scroll] = []
+        self.stones: dict[str, int] = defaultdict(int)
+        self.activated: set[str] = set()
+
+        # Shrine visit plan: randomise order so players don't all race to same shrine
+        self.shrine_plan: list[str] = random.sample(ELEMENTS, len(ELEMENTS))
+        # Optionally insert catacomb shrine visits
+        for _ in range(random.randint(0, 2)):
+            self.shrine_plan.insert(random.randint(0, len(self.shrine_plan)), "catacomb")
+
+        self.shrine_idx = 0
+        self.at_element: Optional[str] = None   # current shrine element (None = travelling)
+        self.turns_to_arrive: int = self._travel_time()
+
+        # Multi-turn casting state
+        self.pending_scroll: Optional[Scroll] = None
+        self.cast_turns_left: int = 0
+
+    @property
+    def effective_ap_per_turn(self) -> int:
+        """Calculates AP per turn, considering bonus from void stones."""
+        void_bonus = min(self.stones["void"], 5) # Max +5 AP from void stones
+        return self.cfg["ap_per_turn"] + void_bonus
+
+    # ── helpers ──────────────────────────────────────────
+
+    def _travel_time(self) -> int:
+        mean = self.cfg["travel_mean"]
+        std  = self.cfg["travel_std"]
+        return max(1, round(random.gauss(mean, std)))
+
+    def _stones_for(self, scroll: Scroll) -> dict[str, int]:
+        """Stones required to fill this scroll's pattern."""
+        if scroll.element == "catacomb":
+            e1, e2 = scroll.catacomb_pair
+            return {e1: 2, e2: 2}       # catacomb patterns always 2+2
+        return {scroll.element: STONES_REQUIRED[scroll.level]}
+
+    def _total_ap_to_cast(self, scroll: Scroll) -> int:
+        # Old: stones = sum(self._stones_for(scroll).values())
+        # Old: return stones * self.cfg["place_ap"] + self.cfg["cast_ap"]
+        return LEVEL_SETUP_AP_COSTS[scroll.level] + self.cfg["cast_ap"]
+
+    def _turns_to_cast(self) -> int:
+        """Ceiling division: how many turns to place stones + cast."""
+        # Use the effective_ap_per_turn which accounts for void stones
+        return -(-self._total_ap_to_cast(self.pending_scroll) // self.effective_ap_per_turn)
+
+    def _has_stones(self, scroll: Scroll) -> bool:
+        return all(self.stones[e] >= n for e, n in self._stones_for(scroll).items())
+
+    def _activate(self, scroll: Scroll):
+        """Apply scroll activation — spend stones, mark elements done."""
+        for e, n in self._stones_for(scroll).items():
+            self.stones[e] -= n
+        self.active.remove(scroll)
+        if scroll.element == "catacomb":
+            self.activated.update(scroll.catacomb_pair)
+        else:
+            self.activated.add(scroll.element)
+
+    def _refill_active(self):
+        """Move scrolls hand → active (0 AP, from design doc). Prioritise unactivated elements."""
+        while len(self.active) < self.cfg["active_limit"] and self.hand:
+            best = None
+            for s in self.hand:
+                covered = set(s.catacomb_pair) if s.element == "catacomb" else {s.element}
+                if covered - self.activated:
+                    best = s
+                    break
+            if best is None:
+                best = self.hand[0]
+            self.active.append(best)
+            self.hand.remove(best)
+
+    def _draw_from(self, element: str) -> Optional[Scroll]:
+        """Pop top scroll from the element's deck (shared)."""
+        deck = self.decks.get(element, [])
+        return deck.pop(0) if deck else None
+
+    def _add_to_hand(self, scroll: Scroll):
+        if len(self.hand) < self.cfg["hand_limit"]:
+            self.hand.append(scroll)
+        elif len(self.active) < self.cfg["active_limit"]:
+            self.active.append(scroll)
+        # else: hand+active full — scroll lost (simplified; real game has overflow modal)
+
+    def _advance_shrine(self):
+        self.shrine_idx += 1
+        self.at_element = None
+        self.turns_to_arrive = self._travel_time()
+
+        # If we've visited all planned shrines, keep looping over missing elements
+        if self.shrine_idx >= len(self.shrine_plan):
+            missing = [e for e in ELEMENTS if e not in self.activated]
+            if missing:
+                self.shrine_plan.extend(random.sample(missing, len(missing)))
+
+    def won(self) -> bool:
+        return self.activated.issuperset(ELEMENTS)
+
+    # ── main turn logic ─────────────────────────────────────────────
+
+    def take_turn(self) -> bool:
+        """Execute one full turn. Returns True if this player has won."""
+
+        # ── A. Finish a multi-turn casting sequence ────────────────────────────
+        if self.cast_turns_left > 0:
+            self.cast_turns_left -= 1
+            if self.cast_turns_left == 0 and self.pending_scroll:
+                self._activate(self.pending_scroll)
+                self.pending_scroll = None
+                if self.won():
+                    return True
+                self._advance_shrine()
+            return False
+
+        # ── B. Travel ─────────────────────────────────────
+        if self.turns_to_arrive > 0:
+            self.turns_to_arrive -= 1
+            return False
+
+        # ── C. Arrive at shrine ─────────────────────────────
+        if self.at_element is None:
+            if self.shrine_idx >= len(self.shrine_plan):
+                return self.won()
+            self.at_element = self.shrine_plan[self.shrine_idx]
+            scroll = self._draw_from(self.at_element)
+            if scroll:
+                self._add_to_hand(scroll)
+
+        # ── D. Collect 1 stone from shrine ─────────────────────────
+        e = self.at_element
+        if e in ELEMENTS and self.stones[e] < self.cfg["stone_cap"]:
+            self.stones[e] += 1
+
+        # ── E. Fill active area ──────────────────────────────
+        self._refill_active()
+
+        # ── F. Start casting if we have the stones ───────────────────
+        # Prioritise: unactivated elements first; lower AP cost first (cheaper/faster)
+        candidates = sorted(
+            self.active,
+            key=lambda s: (
+                0 if (set(s.catacomb_pair) if s.element == "catacomb" else {s.element}) - self.activated else 1,
+                self._total_ap_to_cast(s)
+            )
+        )
+        for scroll in candidates:
+            if self._has_stones(scroll):
+                # When starting a multi-turn cast, set pending_scroll
+                self.pending_scroll = scroll
+                t = self._turns_to_cast()
+                if t == 1:
+                    self._activate(self.pending_scroll)
+                    self.pending_scroll = None
+                    if self.won():
+                        return True
+                    self._advance_shrine()
+                else:
+                    # Multi-turn cast: commit to it
+                    self.cast_turns_left = t - 1   # this turn counts as turn 1
+                return False
+
+        # ── G. Stay farming if we need more stones; move on if no scrolls target here ──
+        targeting_current = [
+            s for s in self.hand + self.active
+            if (set(s.catacomb_pair) if s.element == "catacomb" else {s.element}) & {self.at_element}
+        ]
+        if not targeting_current:
+            self._advance_shrine()
+
+        return False
+
+
+# ── Game ─────────────────────────────────────────────
+
+def simulate_game(num_players: int, cfg: dict) -> tuple[int, int]:
+    """
+    Simulate one game. Returns (winner_idx, game_rounds).
+    winner_idx == -1 means draw (max_turns reached).
+    """
+    decks = build_shared_decks()
+    players = [Player(i, decks, cfg) for i in range(num_players)]
+
+    for round_num in range(1, cfg["max_turns"] + 1):
+        for p in players:
+            if p.take_turn():
+                return p.idx, round_num
+
+    return -1, cfg["max_turns"]
+
+
+# ── Reporting ─────────────────────────────────────────────
+
+def run(num_games: int, num_players: int, cfg: dict, verbose: bool):
+    wins = defaultdict(int)
+    draws = 0
+    lengths: list[int] = []
+
+    for _ in range(num_games):
+        winner, turns = simulate_game(num_players, cfg)
+        lengths.append(turns)
+        if winner == -1:
+            draws += 1
+        else:
+            wins[winner] += 1
+
+    decided = num_games - draws
+
+    print(f"\nGodaigo: Elements — Monte Carlo Simulation")
+    print("=" * 48)
+    print(f"Games       : {num_games:,}")
+    print(f"Players     : {num_players}")
+    print(f"Draws       : {draws:,}  ({100*draws/num_games:.1f}%)\n")
+
+    header = f"{'Player':<12}{'Wins':>8}{'Win %':>9}{'Win % (no draws)':>20}"
+    print(header)
+    print("-" * len(header))
+    for i in range(num_players):
+        w = wins[i]
+        pct      = 100 * w / num_games
+        pct_excl = 100 * w / decided if decided else 0.0
+        label    = f"P{i+1}{' (goes 1st)' if i == 0 else ''}"
+        print(f"{label:<12}{w:>8,}{pct:>8.2f}%{pct_excl:>19.2f}%")
+
+    print(f"\nGame length  (rounds — 1 round = all players take 1 turn):")
+    print(f"  Mean   : {statistics.mean(lengths):.1f}")
+    print(f"  Median : {statistics.median(lengths):.1f}")
+    print(f"  Stdev  : {statistics.stdev(lengths):.1f}")
+    print(f"  Min    : {min(lengths)}")
+    print(f"  Max    : {max(lengths)}")
+
+    if verbose:
+        print(f"\nConfiguration:")
+        for k, v in cfg.items():
+            print(f"  {k:<20} = {v}")
+
+    return lengths # Return lengths here
+
+# ── CLI ─────────────────────────────────────────────
+
+def main(num_players_to_run: Optional[int] = None):
+    p = argparse.ArgumentParser(
+        description="Godaigo: Elements — Monte Carlo win-probability simulator",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
+    )
+    p.add_argument("--games",      type=int,   default=10_000, help="Number of games (default: 10000)")
+    p.add_argument("--players",    type=int,   default=5,      help="Number of players, 2–4 (default: 2)") # Changed default to 5
+    p.add_argument("--ap",         type=int,   default=5,      help="AP per turn (default: 5)")
+    p.add_argument("--travel",     type=float, default=3.0,    help="Mean turns to reach a shrine (default: 3.0)")
+    p.add_argument("--travel-std", type=float, default=1.0,    help="Std-dev of travel time (default: 1.0)")
+    p.add_argument("--max-turns",  type=int,   default=300,    help="Draw threshold in rounds (default: 300)")
+    p.add_argument("--seed",       type=int,   default=None,   help="RNG seed for reproducible output")
+    p.add_argument("--verbose",    action="store_true",        help="Print full config after results")
+    # Pass an empty list to parse_args() to prevent it from trying to parse arguments
+    # passed by the Jupyter kernel (like -f).
+    args = p.parse_args([])
+
+    # Override args.players if num_players_to_run is provided
+    if num_players_to_run is not None:
+        args.players = num_players_to_run
+
+    if not (2 <= args.players <= 5): # Modified to allow 5 players
+        p.error("--players must be between 2 and 5")
+
+    if args.seed is not None:
+        random.seed(args.seed)
+
+    cfg = {
+        "ap_per_turn":   args.ap,
+        "reveal_ap":     1,         # 1 AP to reveal a shrine tile
+        "cast_ap":       2,         # 2 AP to activate scroll (design doc)
+        "hand_limit":    2,         # MAX_HAND_SIZE (TODO.md)
+        "active_limit":  2,         # MAX_ACTIVE_SIZE (TODO.md)
+        "stone_cap":     5,         # playerPoolCapacity (config.js)
+        "source_start":  20,        # sourcePool starting value (config.js)
+        "travel_mean":   args.travel,
+        "travel_std":    args.travel_std,
+        "max_turns":     args.max_turns,
+    }
+
+    return run(args.games, args.players, cfg, args.verbose) # Modified to return run result
+
+
+if __name__ == "__main__":
+    lengths = main() # Capture the returned lengths list
+
+
+Overview
+This document outlines a request for a significant upgrade to the existing Monte Carlo win-probability simulator for 'Godaigo: Elements'. The current simulation models basic scroll activation, stone collection, and player movement, but lacks the depth required to accurately represent the game's full complexity. The goal is to extend the simulator to incorporate intricate board mechanics, diverse scroll abilities, and advanced player interactions, moving towards a more comprehensive and realistic game model.
+
+Current Simulation Limitations
+The current simulator operates on a highly abstracted level, making several simplifying assumptions:
+
+No Physical Board: There is no representation of a game board or player positions in a 2D space.
+Simplified Movement: 'Travel' is abstracted as a time cost, not actual movement across tiles.
+Basic Stone Collection: Stones are collected by visiting abstract 'shrine elements'.
+No Scroll Effects: Scroll-specific abilities (e.g., Iron Stance, Arson) are not simulated.
+Generic Catacomb Patterns: Catacomb scrolls use a fixed pattern, without consideration for their specific level or unique effects.
+Limited Interaction: Player interaction is primarily through shared decks; there's no direct interaction on a board.
+No Tile Revelation/Placement: The dynamic aspects of revealing tiles or placing stones on a board are not present.
+New Game Mechanics to Implement
+The following is a list of new game mechanics that need to be integrated into the simulation. These are derived from the full game design document and specific user requests.
+
+1. Spatial Board and Movement
+Grid-Based Board: Implement a 2D grid representing the game board (e.g., 5x5 or larger). Each tile can have properties (e.g., empty, shrine, catacomb, stone-holding, activated).
+Player Position: Each player will have a specific (x, y) coordinate on the board.
+AP-Based Movement: Movement between adjacent tiles costs a specific amount of AP (e.g., 1 AP per tile). Diagonal movement might have different costs or restrictions.
+Pathfinding: Players should be able to move towards objectives (shrines, target tiles for stone placement).
+2. Dynamic Tile Revelation and Interaction
+Shrine Revelation: Shrines (elemental and catacomb) are revealed dynamically when a player lands on a specific tile or performs an action. This might involve drawing a tile from a
+Gemini
+stack of hidden tiles.
+
+Stone Placement: To activate a scroll, players must place elemental stones onto specific adjacent tiles around their current position, matching the scroll's pattern. This costs AP.
+Tile Properties: Tiles need to store information about which stones are placed on them.
+Stone Pattern Matching: The simulation must verify if the placed stones match the required pattern for the active scroll.
+Common Area: Implement a 'common area' for scrolls if a player's hand/active area is full, potentially allowing other players to claim them.
+3. Comprehensive Scroll Mechanics
+Scroll Levels and Patterns: Accurately model the stone patterns required for each scroll level (I-V) and catacomb scrolls. Each level has unique setup costs (LEVEL_SETUP_AP_COSTS is a good start, but needs to be integrated with board interaction).
+Scroll Effects (Example):
+Iron Stance (Earth): Grants temporary defense, reducing AP costs or preventing certain actions. (e.g., next N AP costs are reduced).
+Arson (Fire): Allows burning (destroying) stones on adjacent tiles, potentially disrupting other players' patterns or clearing space.
+Sacrificial Pyre (Void): Sacrifices a scroll for an immediate benefit (e.g., gain AP, draw cards).
+Unique Catacomb Effects: Each catacomb scroll may have unique effects beyond just activating two elements. (Current model only activates paired elements).
+Scroll State: Scrolls can be in a deck, hand, active area, discarded, or activated.
+4. Advanced Stone Mechanics
+Elemental Stone Sources: Differentiate between stones collected at elemental shrines, and those gained through other means (e.g., scroll effects).
+Stone Supply: Model a global supply of stones for each element, potentially limited.
+Void Stone AP Bonus: The existing effective_ap_per_turn for void stones is a good start; ensure it scales and interacts correctly with other AP costs.
+5. Player Strategy Enhancements
+More Sophisticated AI: The current greedy strategy is too simplistic. The AI needs to factor in:
+Optimal pathfinding to shrines/activation spots.
+Prioritization of scrolls based on current board state and opponent progress.
+Decision-making regarding which stones to place and where.
+Evaluating the use of scroll effects.
+Opponent Interaction: Model competitive aspects like racing for shrines, disrupting opponent stone patterns, or stealing common scrolls.
+Consolidated Logic and Spatial Specification
+Hey Greplit, here is the consolidated Logic and Spatial Specification for the Godaigo engine. Use this as the primary reference for board generation, pathfinding, and movement state-machines.
+
+I. Global Distribution & Tile Ratios
+Board Composition: The grid is a spiral arrangement of hexagonal tiles.
+Tile Frequency: For N players, the pool must contain N tiles of each element (Earth, Water, Fire, Wind, Void) plus N Catacomb tiles.
+Catacomb Density: Effectively 1 in 6 tiles on the board is a Catacomb biome.
+II. Player Tile Geometry: The "Flower" Array
+The Player Tile consists of 19 segments organized in a radial "flower" or stellated pattern:
+
+The Core (Layer 0): The Home Shrine (Center hex). This is the spawning point and the final victory trigger.
+Inner Ring (Layer 1): Six full hexes immediately adjacent to the core that provide the primary movement options out of the shrine.
+The Boundary (Layer 2): An alternating ring of six Outer Petals (full hexes forming the points) and six Half-Hexes (flat boundary pieces).
+III. Spatial Navigation & Collision Logic
+The engine must manage movement permissions based on the following state-checks:
+
+Standard Traversal: Moving between full hexes costs 1 AP.
+Half-Hex Conditional Logic:
+Default State: Half-hexes are generally non-traversable; players cannot move onto or end turns on them.
+The Intersection Rule: If two half-hexes from adjacent tiles intersect/align, they form a Full Hex Bridge. This joined hex becomes a valid MoveTarget (1 AP).
+Catacomb Teleportation (The "Void Step"):
+Free Movement: Players can move for 0 AP between the centers of any two revealed Catacomb tiles.
+Prerequisite: The pawn must already be in the center of a Catacomb tile to initiate the jump.
+Rewards: Revealing a new Catacomb tile triggers a DrawCard event from the Catacomb Deck, which is distinct from Elemental Decks.
+IV. Technical Reference Table
+Feature	Logic Type	Cost	Constraints
+Home Shrine	Victory Node	N/A	Must have 5 Marking Stones and return here to win.
+Full Hex	Standard Node	1 AP	Players cannot end their turn on an Elemental Stone.
+Joined Half-Hex	Bridge Node	1 AP	Becomes traversable only when aligned with an adjacent tile.
+Catacomb Jump	Teleportation	0 AP	Free movement between centers; no stone drawing permitted.
+Stone Break	Interaction	Rank AP	Cost is based on the Stone's Rank (1–5).
+Implementation Note: When initializing the board, flag Catacomb centers as TeleportNode and the Home Shrine as VictoryNode. For pathfinding, ensure the MovePawn function performs an adjacency check to verify if a Half-Hex has "Joined" another before allowing it to be added to the valid path.
+
+Architectural Changes Required
+To accommodate these new mechanics, significant changes to the data structures and class architecture will be needed:
+
+1. Board Representation
+Board Class: A new class to represent the game board as a 2D grid. It should store:
+tiles: A 2D array/list of Tile objects.
+Methods for checking adjacency, placing stones, checking patterns, revealing tiles.
+2. Tile Object
+Tile Class: A new class to represent individual tiles on the board, storing:
+type: (e.g., 'empty', 'earth_shrine', 'catacomb_entry').
+stones_present: A dictionary or list indicating which elemental stones are currently on the tile.
+is_revealed: Boolean state.
+position: (x, y) coordinates.
+3. Enhanced Player Class
+player_position: Add (x, y) coordinates to the Player class.
+current_ap: Track AP dynamically per turn, not just ap_per_turn.
+_move(self, target_x, target_y) method: New method for AP-costing movement.
+_place_stone(self, tile_x, tile_y, element) method: New method to interact with the board.
+_cast_scroll_effect(self, scroll) method: Handle unique scroll abilities.
+Strategy Logic: Rework take_turn to incorporate complex decision-making based on board state, available scrolls, and opponent progress.
+4. Modified Scroll Class
+effect_type / effect_parameters: Add attributes to Scroll to define its unique ability and associated parameters.
+pattern_definition: More detailed representation of stone patterns, potentially including relative positions for placement.
+5. Game Class (or simulate_game function)
+Board Integration: The simulate_game function (or a new Game class) needs to manage the Board object and all player interactions with it.
+Turn Order: Ensure clear turn structure including movement, action, and AP management.
+Functional Changes Required
+1. take_turn() Logic Overhaul
+The take_turn() method will be significantly more complex, involving:
+
+AP Budgeting: Players must manage their AP for movement, stone placement, and scroll activation.
+Decision Tree: A series of decisions: where to move, which scroll to activate, whether to use a scroll's effect, which stones to place, when to draw from a deck, etc.
+Board State Evaluation: Players need to assess the board to find optimal stone placement spots or target tiles for effects.
+2. build_shared_decks() Expansion
+Include unique scroll effects and patterns for each scroll instance.
+3. Win Condition Update
+While the core win condition (activating all 5 elements) remains, the process of achieving it will be much more involved due to board and stone mechanics.
+Conclusion
+Implementing these changes will transform the simulator from a basic abstraction to a detailed, feature-rich model capable of evaluating complex strategies and game balance. This enhancement is crucial for accurately assessing win probabilities and informing game design decisions for Godaigo: Elements. The architectural and functional overhauls described are essential for a robust and extensible simulation.

@@ -256,6 +256,20 @@ document.addEventListener('DOMContentLoaded', () => {
                                     activatedElements: activatedElements
                                 });
                             }
+
+                            // Win-condition check for the counter-caster (e.g. Iron Stance is
+                            // Player B's 5th scroll). The caster's client (which runs resolveResponseStack)
+                            // doesn't receive its own scroll-effect broadcast (self: false), so we must
+                            // check here. The receiving client also checks via the scroll-effect handler.
+                            if (spellSystem.playerScrolls[counterCasterIdx].activated.size === 5) {
+                                console.log(`🏆 Win condition met for counter-caster player ${counterCasterIdx} (Iron Stance / counter scroll)`);
+                                if (typeof spellSystem.showLevelComplete === 'function') {
+                                    spellSystem.showLevelComplete(counterCasterIdx);
+                                }
+                                if (typeof handleGameOver === 'function') {
+                                    handleGameOver(counterCasterIdx);
+                                }
+                            }
                         }
                     }
                     // Check if the effect flagged this scroll to go to common area (e.g. Psychic)
@@ -269,10 +283,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     spellSystem.ensurePlayerScrollsStructure(counterCasterIdx);
                     const counterScrolls = spellSystem.playerScrolls[counterCasterIdx];
                     if (shouldForceCommon) {
+                        // Guard: only discard if scroll is still in active — Lamplight may have
+                        // already redirected it to hand, in which case we must not override.
                         if (counterScrolls.active.has(scrollName)) {
                             counterScrolls.active.delete(scrollName);
+                            spellSystem.discardToCommonArea(scrollName);
                         }
-                        spellSystem.discardToCommonArea(scrollName);
                     }
                     spellSystem.updateScrollCount();
                     if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
@@ -309,7 +325,7 @@ function notYourTurn() {
     // First check for pending cascade
     const playerIdx = isMultiplayer ? myPlayerIndex : activePlayerIndex;
     if (typeof spellSystem !== 'undefined' && spellSystem.hasPendingCascade(playerIdx)) {
-        updateStatus(`📜 You must cascade a scroll before taking other actions!`);
+        updateStatus(`You must cascade a scroll before taking other actions!`);
         // Re-show the cascade prompt
         spellSystem.showPendingCascadePrompt(playerIdx);
         return;
@@ -317,10 +333,10 @@ function notYourTurn() {
 
     if (isPlacementPhase) {
         const activeColor = getPlayerColorName(activePlayerIndex);
-        updateStatus(`⏳ Waiting for ${activeColor} to place their tile... (${playerTilesPlaced.size}/${totalPlayers})`);
+        updateStatus(`Waiting for ${activeColor} to place their tile... (${playerTilesPlaced.size}/${totalPlayers})`);
     } else {
         const activeColor = getPlayerColorName(activePlayerIndex);
-        updateStatus(`⏳ Not your turn! It's ${activeColor}'s turn.`);
+        updateStatus(`Not your turn. Waiting for ${activeColor}...`);
     }
 }
 
@@ -331,15 +347,36 @@ function updateTurnDisplay() {
     updateEndTurnButtonVisibility();
     updateDeckIndicatorVisibility();
 
-    const myColorName = getPlayerColorName(myPlayerIndex);
+    const myColorName     = getPlayerColorName(myPlayerIndex);
     const activeColorName = getPlayerColorName(activePlayerIndex);
+    const myTurn          = isMyTurn();
 
-    if (isMyTurn()) {
-        updateStatus(`✅ It's your turn! You are ${myColorName}.`);
-        console.log('✅ My turn now!');
+    console.log(`[turn] updateTurnDisplay: myPlayerIndex=${myPlayerIndex} activePlayerIndex=${activePlayerIndex} isMyTurn=${myTurn} isPlacementPhase=${isPlacementPhase}`);
+
+    // Update HUD player name + dot immediately (don't wait for render loop)
+    const hudPlayerName = document.getElementById('hud-player-name');
+    const hudPlayerDot  = document.getElementById('hud-player-dot');
+    const hudPlayer     = hudPlayerName?.closest('.hud-player');
+    if (hudPlayerName) {
+        hudPlayerName.textContent = myTurn ? 'Your Turn' : `${activeColorName}'s Turn`;
+    }
+    if (hudPlayer) {
+        hudPlayer.classList.toggle('your-turn', myTurn);
+    }
+    // Sync dot color to active player
+    if (hudPlayerDot && typeof allPlayersData !== 'undefined') {
+        const colorMap = { purple:'#9458f4', yellow:'#ffce00', red:'#ed1b43', blue:'#5894f4', green:'#69d83a' };
+        const activeData = allPlayersData.find(p => p.player_index === activePlayerIndex);
+        const key = activeData?.color;
+        if (key && colorMap[key]) hudPlayerDot.style.background = colorMap[key];
+    }
+
+    if (myTurn) {
+        updateStatus(`Your turn!`);
+        console.log('My turn now!');
     } else {
-        updateStatus(`⏳ Waiting... ${activeColorName}'s turn.`);
-        console.log(`⏳ Waiting for player ${activePlayerIndex + 1}`);
+        updateStatus(`Waiting for ${activeColorName}...`);
+        console.log(`Waiting for player ${activePlayerIndex + 1}`);
     }
 
     // Note: Each player always sees their own inventory (stones/scrolls/AP)

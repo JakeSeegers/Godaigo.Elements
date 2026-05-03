@@ -179,22 +179,24 @@ window.gami = (function () {
          *   Win:  75 + (n-1)*25   →  2p=100, 3p=125, 4p=150, 5p=175
          */
         async onGameComplete(isWinner, numPlayers) {
-            if (!_userId) return;
+            _log(`onGameComplete called — userId=${_userId}, isWinner=${isWinner}, numPlayers=${numPlayers}`);
+            if (!_userId) { console.warn('[gami] onGameComplete: no userId, XP skipped'); return; }
+            if (!isWinner) { _log('no XP awarded — only winners earn XP'); return; }
             const n   = Math.max(2, numPlayers || 2);
-            const xp  = isWinner
-                ? 75  + (n - 1) * 25
-                : 20  + (n - 1) * 10;
+            const xp  = 75 + (n - 1) * 25;
 
+            _log(`awarding ${xp} XP (isWinner=${isWinner}, n=${n})`);
             try {
                 // Award XP
-                const { error: xpErr } = await supabase.rpc('update_user_xp', {
+                const { data: xpData, error: xpErr } = await supabase.rpc('update_user_xp', {
                     p_user_id:     _userId,
                     p_xp_points:   xp,
                     p_description: isWinner
                         ? `Game win (${n} players)`
                         : `Game complete — ${n} players`
                 });
-                if (xpErr) { console.error('[gami] game complete xp error:', xpErr); return; }
+                if (xpErr) { console.error('[gami] update_user_xp RPC error:', xpErr); return; }
+                _log('update_user_xp success, result:', xpData);
 
                 // Log game_complete (badge: First Steps, Veteran)
                 _logActivity('game_complete', xp, 0,
@@ -213,9 +215,7 @@ window.gami = (function () {
                 _patchStats(stats);
                 if (_profile) _profile.total_xp = (_profile.total_xp || 0) + xp;
 
-                const msg = isWinner
-                    ? `Victory! +${xp} XP`
-                    : `Game complete. +${xp} XP`;
+                const msg = `Victory! +${xp} XP`;
                 api.notify(msg, xp, 'xp');
                 _log('game complete —', msg);
             } catch (err) {
@@ -271,7 +271,7 @@ window.gami = (function () {
             const toast = document.createElement('div');
             toast.className = 'gami-toast';
             toast.innerHTML =
-                `<span class="gami-toast-icon">${type === 'gold' ? '💰' : '⚡'}</span>${message}`;
+                `<span class="gami-toast-icon">${type === 'gold' ? '[G]' : '[XP]'}</span>${message}`;
             document.body.appendChild(toast);
 
             requestAnimationFrame(() => toast.classList.add('gami-toast-show'));

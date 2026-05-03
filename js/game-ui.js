@@ -90,8 +90,6 @@
                         e.preventDefault();
                         if (typeof window !== 'undefined' && window.SHOW_SCROLL_DECK_BROWSER) {
                             showScrollDeckBrowser(element);
-                        } else {
-                            updateStatus('Scroll deck browser is disabled. Use showScrollDeckBrowserUI() to enable.');
                         }
                     });
 
@@ -99,8 +97,6 @@
                     card.addEventListener('click', (e) => {
                         if (typeof window !== 'undefined' && window.SHOW_SCROLL_DECK_BROWSER) {
                             showScrollDeckBrowser(element);
-                        } else {
-                            updateStatus('Scroll deck browser is disabled. Use showScrollDeckBrowserUI() to enable.');
                         }
                     });
                 }
@@ -174,14 +170,138 @@
                     scrollEl.appendChild(patternVisual);
                 }
 
-                // Click to view details or take from common area
+                // Click to view details
                 scrollEl.addEventListener('click', () => {
-                    showCommonAreaScrollDetails(scrollName, scrollInfo, element);
+                    showScrollInfoPopup(scrollName, scrollInfo, element);
                 });
 
                 container.appendChild(scrollEl);
             });
         }
+
+        // Shared scroll info popup — used by common area and opponent active area
+        function showScrollInfoPopup(scrollName, pattern, element) {
+            const existing = document.getElementById('scroll-info-popup-overlay');
+            if (existing) existing.remove();
+
+            const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#aaa';
+            const elementLabel = element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown';
+            const elementImg   = STONE_TYPES[element]?.img || '';
+            const scrollTitle  = pattern?.name || scrollName;
+            const levelText    = pattern?.level ? `Level ${pattern.level}` : '';
+            const description  = pattern?.description || 'No description available.';
+
+            const overlay = document.createElement('div');
+            overlay.id = 'scroll-info-popup-overlay';
+            overlay.className = 'retro-dlg-overlay';
+            overlay.style.zIndex = '2000';
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+            const box = document.createElement('div');
+            box.className = 'retro-dlg-box wide';
+            box.style.cssText = `
+                max-width: 380px;
+                padding: 0;
+                overflow: hidden;
+                border: 2px solid ${elementColor};
+                box-shadow: 0 0 24px ${elementColor}55, 0 4px 32px #000a;
+            `;
+
+            // ── Coloured header band ──────────────────────────────────
+            const header = document.createElement('div');
+            header.style.cssText = `
+                background: ${elementColor}22;
+                border-bottom: 2px solid ${elementColor};
+                padding: 14px 18px 10px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            `;
+            if (elementImg) {
+                const icon = document.createElement('img');
+                icon.src = elementImg;
+                icon.className = 'element-icon-sm';
+                icon.alt = elementLabel;
+                icon.style.cssText = 'width:28px;height:28px;object-fit:contain;flex-shrink:0;';
+                header.appendChild(icon);
+            }
+            const headerText = document.createElement('div');
+            headerText.style.cssText = 'flex:1;';
+            const line1 = document.createElement('div');
+            line1.style.cssText = `font-family:var(--font-pixel);font-size:11px;color:${elementColor};letter-spacing:2px;text-transform:uppercase;`;
+            line1.textContent = elementLabel + (levelText ? ' · ' + levelText : '');
+            headerText.appendChild(line1);
+            const line2 = document.createElement('div');
+            line2.style.cssText = 'font-family:var(--font-terminal);font-size:20px;color:#e8dcc8;margin-top:3px;line-height:1.2;';
+            line2.textContent = scrollTitle;
+            headerText.appendChild(line2);
+            header.appendChild(headerText);
+            box.appendChild(header);
+
+            // ── Description ──────────────────────────────────────────
+            const body = document.createElement('div');
+            body.style.cssText = 'padding: 16px 18px 4px;';
+
+            const desc = document.createElement('div');
+            desc.style.cssText = `
+                font-family: var(--font-terminal);
+                font-size: 17px;
+                color: #cfc9b8;
+                line-height: 1.55;
+                text-align: left;
+            `;
+            desc.textContent = description;
+            body.appendChild(desc);
+            box.appendChild(body);
+
+            // ── Pattern visual ───────────────────────────────────────
+            if (pattern?.patterns && typeof spellSystem?.createPatternVisual === 'function') {
+                const sep = document.createElement('div');
+                sep.style.cssText = `
+                    margin: 14px 18px 0;
+                    border-top: 1px solid ${elementColor}44;
+                    padding-top: 12px;
+                `;
+                const patternLabel = document.createElement('div');
+                patternLabel.style.cssText = `
+                    font-family: var(--font-pixel);
+                    font-size: 10px;
+                    color: ${elementColor};
+                    letter-spacing: 2px;
+                    text-transform: uppercase;
+                    margin-bottom: 10px;
+                    text-align: center;
+                `;
+                patternLabel.textContent = 'Stone Pattern';
+                sep.appendChild(patternLabel);
+
+                const patternWrap = document.createElement('div');
+                patternWrap.style.cssText = 'display:flex;justify-content:center;padding-bottom:4px;';
+                const visual = spellSystem.createPatternVisual(pattern, element);
+                // Scale up the pattern SVG slightly for readability
+                visual.style.transform = 'scale(1.3)';
+                visual.style.transformOrigin = 'center top';
+                visual.style.marginBottom = '20px';
+                patternWrap.appendChild(visual);
+                sep.appendChild(patternWrap);
+                box.appendChild(sep);
+            }
+
+            // ── Close button ─────────────────────────────────────────
+            const footer = document.createElement('div');
+            footer.style.cssText = 'padding: 14px 18px 16px; text-align: center;';
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = 'Close';
+            closeBtn.className = 'retro-dlg-btn';
+            closeBtn.onclick = () => overlay.remove();
+            footer.appendChild(closeBtn);
+            box.appendChild(footer);
+
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+        }
+        // Expose globally so scroll-panels.js can call it
+        window.showScrollInfoPopup = showScrollInfoPopup;
 
         // Show details for a common area scroll
         function showCommonAreaScrollDetails(scrollName, scrollInfo, element) {
@@ -250,7 +370,7 @@
                         <!-- Scrolls will be added here -->
                     </div>
                     <div class="scroll-browse-footer">
-                        <button class="btn-shuffle">📜 Shuffle Deck</button>
+                        <button class="btn-shuffle">Shuffle Deck</button>
                         <button class="btn-close">Close</button>
                     </div>
                 </div>
@@ -293,7 +413,7 @@
             modal.querySelector('.btn-shuffle').addEventListener('click', () => {
                 if (spellSystem.shuffleDeck && spellSystem.scrollDecks[element]) {
                     spellSystem.shuffleDeck(spellSystem.scrollDecks[element]);
-                    updateStatus(`📜 ${element.charAt(0).toUpperCase() + element.slice(1)} scroll deck shuffled!`);
+                    updateStatus(`${element.charAt(0).toUpperCase() + element.slice(1)} scroll deck shuffled!`);
                     modal.remove();
                     // Reopen to show new order
                     showScrollDeckBrowser(element);
@@ -316,7 +436,7 @@
 
             // Check hand limit
             if (scrolls.hand.size >= 4) {
-                updateStatus(`❌ Your hand is full (4 scrolls max)! Discard or use a scroll first.`);
+                updateStatus(`Your hand is full (4 scrolls max)! Discard or use a scroll first.`);
                 // Put scroll back
                 deck.splice(index, 0, scrollName);
                 return;
@@ -328,7 +448,7 @@
             updateHUD();
 
             const scrollInfo = spellSystem.patterns?.[scrollName] || SCROLL_DEFINITIONS?.[scrollName];
-            updateStatus(`📜 Drew ${scrollInfo?.name || scrollName} from the ${element} deck!`);
+            updateStatus(`Drew ${scrollInfo?.name || scrollName} from the ${element} deck!`);
 
             // Shuffle the deck after drawing (as requested)
             if (spellSystem.shuffleDeck) {
@@ -360,6 +480,7 @@
             // Update AP
             const hudApValue = document.getElementById('hud-ap-value');
             if (hudApValue) hudApValue.textContent = currentAP;
+            updateApPips(currentAP);
 
             // Update Void AP display
             const hudVoidAp = document.getElementById('hud-void-ap');
@@ -385,9 +506,12 @@
             // Update player name/turn indicator
             try {
                 const hudPlayerName = document.getElementById('hud-player-name');
-                const hudPlayerDot = document.getElementById('hud-player-dot');
+                const hudPlayerDot  = document.getElementById('hud-player-dot');
+                const hudPlayer     = hudPlayerName?.closest('.hud-player');
                 if (hudPlayerName && typeof activePlayerIndex !== 'undefined') {
-                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && myPlayerIndex === activePlayerIndex) {
+                    const isMyTurnNow = typeof isMultiplayer !== 'undefined' && isMultiplayer
+                        && myPlayerIndex === activePlayerIndex;
+                    if (isMyTurnNow) {
                         hudPlayerName.textContent = 'Your Turn';
                     } else {
                         const name = typeof getPlayerColorName === 'function'
@@ -395,6 +519,7 @@
                             : `Player ${activePlayerIndex + 1}`;
                         hudPlayerName.textContent = `${name}'s Turn`;
                     }
+                    if (hudPlayer) hudPlayer.classList.toggle('your-turn', isMyTurnNow);
                 }
 
                 // Update player dot color — must reflect the ACTIVE player, not the local player
@@ -416,9 +541,70 @@
                         ? colorMap[activeColorKey]
                         : '#d9b08c';
                 }
+                // Update shrine dots for current player
+                if (typeof activePlayerIndex !== 'undefined') {
+                    updateShrineDots(activePlayerIndex);
+                }
+                // Update dock
+                updateDockPlayers();
             } catch (e) {
                 // Variables not ready yet
             }
+        }
+
+        function updateDockPlayers() {
+            const container = document.getElementById('dock-players');
+            if (!container) return;
+            try {
+                const pList = (typeof allPlayersData !== 'undefined' && allPlayersData?.length)
+                    ? allPlayersData
+                    : null;
+                if (!pList) return;
+                container.innerHTML = '';
+                const colorMap = { purple:'#9458f4', yellow:'#ffce00', red:'#ed1b43', blue:'#5894f4', green:'#69d83a' };
+                pList.forEach(p => {
+                    const idx = p.player_index ?? 0;
+                    const isActive = idx === (typeof activePlayerIndex !== 'undefined' ? activePlayerIndex : 0);
+                    const card = document.createElement('div');
+                    card.className = 'dock-player-card' + (isActive ? ' active-player' : '');
+                    const color = colorMap[p.color] || '#888';
+                    const apText = isActive ? ((typeof currentAP !== 'undefined' ? currentAP : '?') + 'AP') : '';
+                    const dot = document.createElement('span');
+                    dot.className = 'dock-player-dot';
+                    dot.style.background = color;
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'dock-player-name';
+                    nameSpan.textContent = p.username || ('P' + (idx + 1));
+                    card.appendChild(dot);
+                    card.appendChild(nameSpan);
+                    if (apText) {
+                        const apSpan = document.createElement('span');
+                        apSpan.className = 'dock-player-ap';
+                        apSpan.textContent = apText;
+                        card.appendChild(apSpan);
+                    }
+                    container.appendChild(card);
+                });
+            } catch (e) { /* not ready */ }
+        }
+
+        function updateShrineDots(playerIndex) {
+            try {
+                const scrollData = window.spellSystem?.playerScrolls?.[playerIndex];
+                const activated = scrollData?.activated ?? new Set();
+                ['earth', 'water', 'fire', 'wind', 'void'].forEach(el => {
+                    const dot = document.getElementById('shrine-dot-' + el);
+                    if (!dot) return;
+                    dot.classList.toggle('complete', activated.has(el));
+                });
+            } catch (e) { /* spellSystem not ready */ }
+        }
+
+        function updateApPips(apValue) {
+            document.querySelectorAll('.ap-pip').forEach(pip => {
+                const n = parseInt(pip.dataset.pip, 10);
+                pip.classList.toggle('filled', n <= apValue);
+            });
         }
 
         function setupStoneDragFromCard(card, element) {
@@ -445,6 +631,13 @@
             }
 
             e.preventDefault();
+
+            // Clean up any pre-existing ghost (prevents orphaned stamps if drag starts mid-drag)
+            if (ghostStone) {
+                ghostStone.remove();
+                ghostStone = null;
+            }
+
             isDraggingFromDeck = true;
             isDraggingStone = true;
             draggedStoneId = null;
@@ -468,18 +661,16 @@
             circle.setAttribute('class', 'stone-piece');
             circle.setAttribute('fill', STONE_TYPES[type].color);
 
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', 0);
-            text.setAttribute('y', 0);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', '#fff');
-            text.setAttribute('font-size', '14');
-            text.setAttribute('font-weight', 'bold');
-            text.textContent = STONE_TYPES[type].symbol;
+            const ghostImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            ghostImg.setAttribute('href', STONE_TYPES[type].img);
+            ghostImg.setAttribute('x', -STONE_SIZE);
+            ghostImg.setAttribute('y', -STONE_SIZE);
+            ghostImg.setAttribute('width', STONE_SIZE * 2);
+            ghostImg.setAttribute('height', STONE_SIZE * 2);
+            ghostImg.style.mixBlendMode = 'screen';
 
             ghostStone.appendChild(circle);
-            ghostStone.appendChild(text);
+            ghostStone.appendChild(ghostImg);
             viewport.appendChild(ghostStone);
         }
 
@@ -501,10 +692,17 @@
         }
 
         let lastStatusMessage = null;
+        let _statusFlashTimer = null;
         function updateStatus(msg) {
             if (msg === lastStatusMessage) return;
             lastStatusMessage = msg;
-            document.getElementById('status').textContent = msg;
+            const el = document.getElementById('status');
+            if (!el) return;
+            el.textContent = msg;
+            // Brief gold flash to draw attention to new messages
+            el.style.color = '#d9b08c';
+            clearTimeout(_statusFlashTimer);
+            _statusFlashTimer = setTimeout(() => { el.style.color = ''; }, 1800);
         }
 
         let endTurnPromptShown = false;
@@ -524,71 +722,33 @@
 
             const overlay = document.createElement('div');
             overlay.id = 'end-turn-empty-ap-modal';
-            Object.assign(overlay.style, {
-                position: 'fixed',
-                top: '0', left: '0', right: '0', bottom: '0',
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                zIndex: '3000',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            });
+            overlay.className = 'retro-dlg-overlay';
 
             const modal = document.createElement('div');
-            Object.assign(modal.style, {
-                backgroundColor: '#1a1a2e',
-                border: '2px solid #f39c12',
-                borderRadius: '10px',
-                padding: '20px',
-                color: 'white',
-                minWidth: '260px',
-                maxWidth: '360px',
-                textAlign: 'center'
-            });
+            modal.className = 'retro-dlg-box';
 
-            const title = document.createElement('h3');
+            const title = document.createElement('div');
             title.textContent = 'Out of AP';
-            title.style.marginTop = '0';
+            title.className = 'retro-dlg-title';
             modal.appendChild(title);
 
             const message = document.createElement('div');
             message.textContent = "You're out of AP. Do you want to end your turn?";
-            message.style.margin = '10px 0 16px';
+            message.className = 'retro-dlg-line';
             modal.appendChild(message);
 
             const btnRow = document.createElement('div');
-            btnRow.style.display = 'flex';
-            btnRow.style.gap = '8px';
-            btnRow.style.justifyContent = 'center';
+            btnRow.className = 'retro-dlg-btns';
 
             const cancelBtn = document.createElement('button');
             cancelBtn.textContent = 'Keep Playing';
-            Object.assign(cancelBtn.style, {
-                padding: '8px 12px',
-                backgroundColor: '#2d2d44',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            });
-            cancelBtn.onclick = () => {
-                overlay.remove();
-            };
+            cancelBtn.className = 'retro-dlg-btn cancel';
+            cancelBtn.onclick = () => overlay.remove();
 
             const confirmBtn = document.createElement('button');
             confirmBtn.textContent = 'End Turn';
-            Object.assign(confirmBtn.style, {
-                padding: '8px 12px',
-                backgroundColor: '#e67e22',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            });
-            confirmBtn.onclick = () => {
-                overlay.remove();
-                endTurnBtn.click();
-            };
+            confirmBtn.className = 'retro-dlg-btn ok';
+            confirmBtn.onclick = () => { overlay.remove(); endTurnBtn.click(); };
 
             btnRow.appendChild(cancelBtn);
             btnRow.appendChild(confirmBtn);
@@ -620,10 +780,31 @@
             if (cardsContainer) cardsContainer.innerHTML = '';
             if (newCardsContainer) newCardsContainer.innerHTML = '';
 
-            // Get all players except myself
-            for (let i = 0; i < totalPlayers; i++) {
-                if (i === myPlayerIndex) continue; // Skip myself
+            // Delegated click handler for scroll card popups — added once per container.
+            // innerHTML = '' only clears children, not listeners on the container itself,
+            // so we guard with a data flag to avoid stacking listeners on re-calls.
+            const attachScrollDelegate = (container) => {
+                if (!container || container.dataset.scrollDelegated) return;
+                container.dataset.scrollDelegated = 'true';
+                container.addEventListener('click', (e) => {
+                    const sc = e.target.closest('.opponent-scroll-card[data-scroll-name]');
+                    if (!sc) return;
+                    const sName = sc.dataset.scrollName;
+                    showScrollInfoPopup(sName, spellSystem.patterns[sName], spellSystem.getScrollElement(sName));
+                });
+            };
+            attachScrollDelegate(cardsContainer);
+            attachScrollDelegate(newCardsContainer);
 
+            // Build ordered list: self first, then others
+            const playerOrder = [];
+            playerOrder.push(myPlayerIndex);
+            for (let i = 0; i < totalPlayers; i++) {
+                if (i !== myPlayerIndex) playerOrder.push(i);
+            }
+
+            for (const i of playerOrder) {
+                const isSelf = (i === myPlayerIndex);
                 const playerData = allPlayersData.find(p => p.player_index === i);
                 const playerName = getPlayerColorName(i);
                 const playerColor = playerData ? PLAYER_COLORS[playerData.color] : '#666';
@@ -632,18 +813,18 @@
                 // Get player resources
                 const pool = playerPools[i] || { earth: 0, water: 0, fire: 0, wind: 0, void: 0 };
                 const ap = playerAPs[i] || { currentAP: 5, voidAP: 0 };
-                const scrollData = spellSystem.playerScrolls[i] || { hand: new Set(), active: new Set() };
+                const scrollData = spellSystem.playerScrolls[i] || { hand: new Set(), active: new Set(), activated: new Set() };
 
                 const card = document.createElement('div');
-                card.className = 'opponent-card' + (isActiveTurn ? ' active-turn' : '');
+                card.className = 'opponent-card' + (isActiveTurn ? ' active-turn' : '') + (isSelf ? ' self-card' : '');
                 card.style.borderLeftColor = playerColor;
 
                 // Header with name and AP
                 const header = document.createElement('div');
                 header.className = 'opponent-header';
                 header.innerHTML = `
-                    <span class="opponent-name" style="color: ${playerColor};">${playerName}</span>
-                    <span class="opponent-ap">AP: ${ap.currentAP}${ap.voidAP > 0 ? ` +${ap.voidAP}✺` : ''}</span>
+                    <span class="opponent-name" style="color: ${playerColor};">${playerName}${isSelf ? ' (you)' : ''}</span>
+                    <span class="opponent-ap">AP: ${ap.currentAP}${ap.voidAP > 0 ? ` +${ap.voidAP}<img src="images/voidsymbol.png${IMG_V}" class="element-icon-sm" alt="void" style="vertical-align:middle;">` : ''}</span>
                 `;
                 card.appendChild(header);
 
@@ -651,19 +832,34 @@
                 const stonesDiv = document.createElement('div');
                 stonesDiv.className = 'opponent-stones';
                 const stoneElements = ['earth', 'water', 'fire', 'wind', 'void'];
+                let hasStones = false;
                 stoneElements.forEach(element => {
                     if (pool[element] > 0) {
+                        hasStones = true;
                         const stoneSpan = document.createElement('span');
                         stoneSpan.className = 'opponent-stone';
                         stoneSpan.style.color = STONE_TYPES[element].color;
-                        stoneSpan.textContent = `${STONE_TYPES[element].symbol} ${pool[element]}`;
+                        stoneSpan.innerHTML = `<img src="${STONE_TYPES[element].img}" class="element-icon-sm" alt="${element}"> ${element}: ${pool[element]}/5`;
                         stonesDiv.appendChild(stoneSpan);
                     }
                 });
-                if (stonesDiv.children.length === 0) {
-                    stonesDiv.innerHTML = '<span style="color: #666; font-size: 11px;">No stones</span>';
+                if (!hasStones) {
+                    stonesDiv.innerHTML = '<span class="opponent-no-stones">No stones</span>';
                 }
                 card.appendChild(stonesDiv);
+
+                // Win condition progress
+                const activated = scrollData.activated ? scrollData.activated : new Set();
+                const activatedCount = activated.size;
+                const winDiv = document.createElement('div');
+                winDiv.className = 'opponent-win-progress';
+                const activatedSymbols = ['earth', 'water', 'fire', 'wind', 'void'].map(el => {
+                    const done = activated.has(el);
+                    const img = STONE_TYPES[el]?.img || '';
+                    return `<img src="${img}" class="element-icon-sm win-pip${done ? ' win-pip-active' : ''}" alt="${el}" title="${el}">`;
+                }).join('');
+                winDiv.innerHTML = `<span class="opponent-win-label">Elements:</span> ${activatedSymbols} <span class="opponent-win-count">${activatedCount}/5</span>`;
+                card.appendChild(winDiv);
 
                 // Scrolls summary (hand count only - hand contents are private)
                 const handSize = scrollData.hand ? scrollData.hand.size : 0;
@@ -671,7 +867,7 @@
 
                 const scrollsSummary = document.createElement('div');
                 scrollsSummary.className = 'opponent-scrolls-summary';
-                scrollsSummary.textContent = `📜 Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''} (hidden)`;
+                scrollsSummary.textContent = `Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''} (hidden)`;
                 card.appendChild(scrollsSummary);
 
                 // Active scrolls (visible to opponents)
@@ -681,21 +877,24 @@
 
                     const activeTitle = document.createElement('div');
                     activeTitle.className = 'opponent-active-scrolls-title';
-                    activeTitle.textContent = `⚡ Active Area (${activeSize}):`;
+                    activeTitle.textContent = `Active Area (${activeSize}):`;
                     activeScrollsDiv.appendChild(activeTitle);
 
                     scrollData.active.forEach(scrollName => {
                         const pattern = spellSystem.patterns[scrollName];
                         const element = spellSystem.getScrollElement(scrollName);
                         const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#666';
-                        const elementSymbol = element === 'catacomb' ? '🔅' : STONE_TYPES[element]?.symbol || '?';
+                        const elementIconHTML = `<img src="${STONE_TYPES[element]?.img || ''}" class="element-icon-sm" alt="${element}" style="vertical-align:middle;">`;
 
                         const scrollCard = document.createElement('div');
                         scrollCard.className = 'opponent-scroll-card';
+                        scrollCard.style.cursor = 'pointer';
+                        scrollCard.title = 'Click to view scroll details';
+                        scrollCard.dataset.scrollName = scrollName; // stored for clone re-wiring
                         scrollCard.innerHTML = `
                             <div class="opponent-scroll-name">${pattern ? pattern.name : scrollName}</div>
                             <div class="opponent-scroll-element" style="color: ${elementColor};">
-                                ${elementSymbol} ${element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown'}
+                                ${elementIconHTML} ${element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown'}
                             </div>
                             <div class="opponent-scroll-pattern-wrap"></div>
                         `;
@@ -706,6 +905,7 @@
                             patternVisual.classList?.add?.('opponent-scroll-pattern');
                             patternWrap.appendChild(patternVisual);
                         }
+                        // Click handled by delegated listener on the container (see attachScrollDelegate above)
                         activeScrollsDiv.appendChild(scrollCard);
                     });
 
@@ -713,7 +913,8 @@
                 }
 
                 if (cardsContainer) cardsContainer.appendChild(card);
-                // Clone card for new UI
+                // Clone into new UI container — delegation listener on the container
+                // handles clicks so no per-card event wiring is needed on the clone.
                 if (newCardsContainer) newCardsContainer.appendChild(card.cloneNode(true));
             }
 
@@ -932,7 +1133,7 @@
                         const last = (playerPath && playerPath.length) ? playerPath[playerPath.length - 1] : playerPosition;
                         ghostPlayer.setAttribute('transform', `translate(${last.x}, ${last.y})`);
                         snapIndicator.classList.remove('active');
-                        updateStatus('❌ Blocked by another player');
+                        updateStatus('Blocked by another player');
                         return;
                     }
 
@@ -1049,7 +1250,7 @@
                     placeTile(draggedTileOriginalPos.x, draggedTileOriginalPos.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
                 } else if (isPlayerTile) {
                     // Player tile couldn't be placed - show why
-                    updateStatus('⚠️ Player tiles must touch at least 2 unrevealed tiles!');
+                    updateStatus('Player tiles must touch at least 2 unrevealed tiles!');
                 }
 
                 ghostTile.remove();
@@ -1064,49 +1265,54 @@
                 const screenY = e.clientY - rect.top;
                 const world = screenToWorld(screenX, screenY);
 
-                const stonePos = findValidStonePosition(world.x, world.y);
-                if (stonePos.valid) {
-                    if (draggedStoneId === null) {
-                        placeStone(stonePos.x, stonePos.y, draggedStoneType);
-                        console.log(`📤 Placing stone from deck: type=${draggedStoneType}, before=${stoneCounts[draggedStoneType]}`);
-                        stoneCounts[draggedStoneType]--;
-                        console.log(`📤 After decrement: ${draggedStoneType}=${stoneCounts[draggedStoneType]}, playerPool.${draggedStoneType}=${playerPool[draggedStoneType]}`);
-                        updateStoneCount(draggedStoneType);
-
-                        // Sync resources after placing stone
-                        syncPlayerState();
-                        updateStatus('Placed ' + draggedStoneType + ' stone');
-                    } else {
-                        placeMovedStone(stonePos.x, stonePos.y, draggedStoneType, draggedStoneId);
-                        if (isMultiplayer) {
-                            broadcastGameAction('stone-move', {
-                                stoneId: draggedStoneId,
-                                x: stonePos.x,
-                                y: stonePos.y,
-                                stoneType: draggedStoneType
-                            });
-                        }
-                        updateStatus('Moved ' + draggedStoneType + ' stone');
-                    }
-                } else {
-                    if (draggedStoneId !== null) {
-                        // Was a placed stone, couldn't place back
-                        if (draggedStoneOriginalPos) {
-                            placeMovedStone(draggedStoneOriginalPos.x, draggedStoneOriginalPos.y, draggedStoneType, draggedStoneId);
-                            updateStatus('Invalid placement! Stone returned to original spot.');
-                        } else {
-                            returnStoneToPool(draggedStoneType);
-                        }
-                    }
-                }
-
+                // Remove ghost FIRST — prevents orphaned ghost stamps if anything below throws
                 ghostStone.remove();
                 ghostStone = null;
                 isDraggingStone = false;
+                snapIndicator.classList.remove('active');
+
+                const capturedStoneId = draggedStoneId;
+                const capturedStoneType = draggedStoneType;
+                const capturedOriginalPos = draggedStoneOriginalPos;
                 draggedStoneId = null;
                 draggedStoneType = null;
                 draggedStoneOriginalPos = null;
-                snapIndicator.classList.remove('active');
+
+                const stonePos = findValidStonePosition(world.x, world.y);
+                if (stonePos.valid) {
+                    if (capturedStoneId === null) {
+                        placeStone(stonePos.x, stonePos.y, capturedStoneType);
+                        console.log(`📤 Placing stone from deck: type=${capturedStoneType}, before=${stoneCounts[capturedStoneType]}`);
+                        stoneCounts[capturedStoneType]--;
+                        console.log(`📤 After decrement: ${capturedStoneType}=${stoneCounts[capturedStoneType]}, playerPool.${capturedStoneType}=${playerPool[capturedStoneType]}`);
+                        updateStoneCount(capturedStoneType);
+
+                        // Sync resources after placing stone
+                        syncPlayerState();
+                        updateStatus('Placed ' + capturedStoneType + ' stone');
+                    } else {
+                        placeMovedStone(stonePos.x, stonePos.y, capturedStoneType, capturedStoneId);
+                        if (isMultiplayer) {
+                            broadcastGameAction('stone-move', {
+                                stoneId: capturedStoneId,
+                                x: stonePos.x,
+                                y: stonePos.y,
+                                stoneType: capturedStoneType
+                            });
+                        }
+                        updateStatus('Moved ' + capturedStoneType + ' stone');
+                    }
+                } else {
+                    if (capturedStoneId !== null) {
+                        // Was a placed stone, couldn't place back
+                        if (capturedOriginalPos) {
+                            placeMovedStone(capturedOriginalPos.x, capturedOriginalPos.y, capturedStoneType, capturedStoneId);
+                            updateStatus('Invalid placement! Stone returned to original spot.');
+                        } else {
+                            returnStoneToPool(capturedStoneType);
+                        }
+                    }
+                }
             } else if (isDraggingPlayer && ghostPlayer) {
                 const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
                 const rect = boardSvg.getBoundingClientRect();
@@ -1185,10 +1391,20 @@
                     // CAN end turn on: void (or empty hex)
                     const cannotEndTurnHere = stoneAtFinal && stoneAtFinal.type !== 'void';
 
+                    // Tutorial gate: only allow movement to the designated hex(es)
+                    const tutorialBlocked = window.isTutorialMode && window.tutorialAllowedHexes &&
+                        ![...window.tutorialAllowedHexes].some(key => {
+                            const [ax, ay] = key.split(',').map(Number);
+                            return Math.abs(ax - finalPos.x) < 70 && Math.abs(ay - finalPos.y) < 70;
+                        });
+
                     if (cannotEndTurnHere) {
                         console.log(`❌ Movement rejected: Cannot end turn on ${stoneAtFinal.type} stone at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)})`);
                         placePlayer(startPos.x, startPos.y);
                         updateStatus('Cannot end movement on a ' + stoneAtFinal.type + ' stone!');
+                    } else if (tutorialBlocked) {
+                        placePlayer(startPos.x, startPos.y);
+                        if (window.TutorialMode) window.TutorialMode.showMovementHint();
                     } else if (moveCheck.canMove && totalCost <= getTotalAP()) {
                         console.log(`✅ Movement successful: ${playerPath.length - 1} hexes, cost ${totalCost} AP`);
                         // Store the last move for undo
@@ -1198,6 +1414,10 @@
                             apCost: totalCost
                         };
                         placePlayer(finalPos.x, finalPos.y);
+                        // Notify tutorial that the player has moved
+                        if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
+                            window.TutorialMode.onPlayerMoved(finalPos.x, finalPos.y);
+                        }
                         // Update Steam Vents alternation state before spending AP
                         if (typeof commitSteamVentsState === 'function') commitSteamVentsState(playerPath);
                         spendAP(totalCost); // Use void AP first, then regular AP
@@ -1390,8 +1610,8 @@
                 let newScale = pinchStartScale * (dist / pinchStartDist);
                 newScale = Math.max(0.25, Math.min(3.0, newScale));
 
-                const centerX = boardSvg.width.baseVal.value / 2;
-                const centerY = boardSvg.height.baseVal.value / 2;
+                const centerX = boardSvg.clientWidth / 2;
+                const centerY = boardSvg.clientHeight / 2;
 
                 // Keep pinch midpoint roughly stable during zoom
                 const k = (1 / viewportScale) - (1 / newScale);
@@ -1673,7 +1893,7 @@
                         } else if (draggedTileId !== null) {
                             // Moving already-placed non-player tiles is not synced in multiplayer; revert to avoid desync.
                             if (isMultiplayer && draggedTileOriginalPos) {
-                                updateStatus('⚠️ Tiles cannot be moved in multiplayer.');
+                                updateStatus('Tiles cannot be moved in multiplayer.');
                                 placeTile(draggedTileOriginalPos.x, draggedTileOriginalPos.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
                             }
                         }
@@ -1694,30 +1914,32 @@
                     draggedTileOriginalPos = null;
                     snapIndicator.classList.remove('active');
                 } else if (isDraggingStone && ghostStone) {
-                    const stonePos = findValidStonePosition(world.x, world.y);
-                    if (stonePos.valid) {
-                        const stoneId = placeStone(stonePos.x, stonePos.y, draggedStoneType);
-
-                        if (draggedStoneId === null) {
-                            playerPool[draggedStoneType]--;
-                            updateStoneCountDisplay(draggedStoneType);
-                            syncPlayerState();
-                        }
-
-                        if (isMultiplayer && stoneId) {
-                            broadcastStonePlace(stoneId, stonePos.x, stonePos.y, draggedStoneType);
-                        }
-                    } else if (draggedStoneId !== null) {
-                        playerPool[draggedStoneType]++;
-                        updateStoneCountDisplay(draggedStoneType);
-                        syncPlayerState();
-                    }
-
+                    // Remove ghost FIRST — prevents orphaned ghost stamps if anything below throws
                     viewport.removeChild(ghostStone);
                     ghostStone = null;
                     isDraggingStone = false;
-                    draggedStoneId = null;
                     snapIndicator.classList.remove('active');
+
+                    const capturedStoneId = draggedStoneId;
+                    const capturedStoneType = draggedStoneType;
+                    draggedStoneId = null;
+                    draggedStoneType = null;
+
+                    const stonePos = findValidStonePosition(world.x, world.y);
+                    if (stonePos.valid) {
+                        placeStone(stonePos.x, stonePos.y, capturedStoneType);
+
+                        if (capturedStoneId === null) {
+                            playerPool[capturedStoneType]--;
+                            updateStoneCountDisplay(capturedStoneType);
+                            syncPlayerState();
+                        }
+                        // Note: placeStone already calls broadcastGameAction('stone-place', ...) internally.
+                    } else if (capturedStoneId !== null) {
+                        playerPool[capturedStoneType]++;
+                        updateStoneCountDisplay(capturedStoneType);
+                        syncPlayerState();
+                    }
                 } else if (isDraggingPlayer && ghostPlayer) {
                     const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
                     const playerPos = findNearestHexPosition(world.x, world.y);
@@ -2120,7 +2342,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             // They must choose where to place the overflowing scroll before ending.
             const turnPlayerIdx = isMultiplayer ? myPlayerIndex : activePlayerIndex;
             if (spellSystem && spellSystem.hasPendingCascade(turnPlayerIdx)) {
-                updateStatus('⚠️ Resolve your pending scroll cascade before ending your turn!');
+                updateStatus('Resolve your pending scroll cascade before ending your turn!');
                 spellSystem.showPendingCascadePrompt(turnPlayerIdx);
                 return;
             }
@@ -2134,6 +2356,12 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     const effectiveType = spellSystem?.scrollEffects?.getEffectiveTileElement?.(shrine) ?? shrine.shrineType;
                     replenishShrineStones(effectiveType);
                 }
+            }
+
+            // Tutorial hook — fires after shrine stone collection so the tutorial
+            // can detect which shrine the player just ended their turn on.
+            if (window.isTutorialMode && window.TutorialMode?.onEndTurn) {
+                window.TutorialMode.onEndTurn(playerPosition);
             }
 
             // Cancel any active selection mode (tile swap/flip in progress)
@@ -2221,6 +2449,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         if (activePlayerIndex === myPlayerIndex) {
                             currentAP = 5;
                             document.getElementById('ap-count').textContent = currentAP;
+                            updateApPips(currentAP);
                             refreshVoidAP();
                             syncPlayerState();
                         }
@@ -2244,6 +2473,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         // Single player: AP resets for next turn
                         currentAP = 5;
                         document.getElementById('ap-count').textContent = currentAP;
+                        updateApPips(currentAP);
                         refreshVoidAP();
                         updateStatus('Turn ended. AP restored.');
                     }
@@ -2338,6 +2568,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 if (activePlayerIndex === myPlayerIndex) {
                     currentAP = 5;
                     document.getElementById('ap-count').textContent = currentAP;
+                    updateApPips(currentAP);
                     refreshVoidAP();
                     syncPlayerState();
                 }
@@ -2391,6 +2622,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 // AP resets at start of new turn
                 currentAP = 5;
                 document.getElementById('ap-count').textContent = currentAP;
+                updateApPips(currentAP);
                 refreshVoidAP();
                 updateStatus('Turn ended. AP restored.');
                 isEndingTurn = false;
@@ -2440,9 +2672,9 @@ document.getElementById('undo-move').onclick = function() {
             lastMove = null;
         };
 
-        document.getElementById('scroll-inventory').onclick = function() {
-            spellSystem.showInventory();
-        };
+        // scroll-inventory replaced by panel-btn-hand/active/common in scroll-panels.js
+        const _legacyScrollBtn = document.getElementById('scroll-inventory');
+        if (_legacyScrollBtn) _legacyScrollBtn.onclick = () => spellSystem.showInventory();
 
         document.getElementById('cast-spell').onclick = function() {
             if (!canTakeAction()) {
@@ -2532,7 +2764,7 @@ document.getElementById('undo-move').onclick = function() {
             const currentShrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
             const freedomActive = spellSystem && spellSystem.scrollEffects
                 && typeof spellSystem.scrollEffects.hasFreedomActive === 'function'
-                && spellSystem.scrollEffects.hasFreedomActive();
+                && spellSystem.scrollEffects.hasFreedomActive(myPlayerIndex);
             const elementalTypes = ['earth', 'water', 'fire', 'wind', 'void'];
             const isCatacombLike = (tile) => {
                 if (!tile) return false;
@@ -2567,8 +2799,8 @@ document.getElementById('undo-move').onclick = function() {
 
             if (otherCatacombs.length === 0) {
                 const message = currentShrine.shrineType === 'catacomb'
-                    ? '🔅 Standing on catacomb shrine, but no valid destinations! (must be revealed and have no stone on center)'
-                    : '🔅 Freedom active, but no valid shrine destinations! (must be revealed and have no stone on center)';
+                    ? 'Standing on catacomb shrine, but no valid destinations! (must be revealed and have no stone on center)'
+                    : 'Freedom active, but no valid shrine destinations! (must be revealed and have no stone on center)';
                 updateStatus(message);
                 return;
             }
@@ -2603,7 +2835,7 @@ document.getElementById('undo-move').onclick = function() {
                     });
                     
                     if (hasStoneNow) {
-                        updateStatus('🔅 Cannot teleport there - a stone is blocking!');
+                        updateStatus('Cannot teleport there - a stone is blocking!');
                         updateCatacombIndicators();
                         return;
                     }
@@ -2616,14 +2848,14 @@ document.getElementById('undo-move').onclick = function() {
                     });
 
                     if (hasPlayerNow) {
-                        updateStatus('🔅 Cannot teleport there - another player is in the way!');
+                        updateStatus('Cannot teleport there - another player is in the way!');
                         updateCatacombIndicators();
                         return;
                     }
 
                     // Teleport player (no AP cost)
                     placePlayer(shrine.x, shrine.y);
-                    updateStatus(`🔅 Teleported to another catacomb shrine!`);
+                    updateStatus(`Teleported to another catacomb shrine!`);
 
                     // Broadcast teleport so other clients stay in sync
                     if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
@@ -2646,13 +2878,156 @@ document.getElementById('undo-move').onclick = function() {
             });
 
             const prompt = currentShrine.shrineType === 'catacomb'
-                ? '🔅 Standing on catacomb shrine. Click another revealed catacomb to teleport (free).'
-                : '🔅 Freedom active. Click another revealed shrine to teleport (free).';
+                ? 'Standing on catacomb shrine. Click another revealed catacomb to teleport (free).'
+                : 'Freedom active. Click another revealed shrine to teleport (free).';
             updateStatus(prompt);
         }
 
         // Expose for scroll effects (e.g. Freedom)
         window.updateCatacombIndicators = updateCatacombIndicators;
+
+        // ── Scroll Reference Panel ────────────────────────────────────────────────
+        // Read-only in-game encyclopedia of all scrolls pulled from scroll-definitions.js.
+        // Toggling calls remove so the button acts as open/close.
+        function showScrollReferencePopup() {
+            const existing = document.getElementById('scroll-ref-overlay');
+            if (existing) { existing.remove(); return; }
+
+            const ELEMENT_ORDER = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
+            const elementColor = (el) => el === 'catacomb' ? '#c8a870' : (STONE_TYPES[el]?.color || '#aaa');
+
+            const overlay = document.createElement('div');
+            overlay.id = 'scroll-ref-overlay';
+            overlay.className = 'retro-dlg-overlay';
+            overlay.style.zIndex = '2000';
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+            const box = document.createElement('div');
+            box.className = 'retro-dlg-box';
+            box.style.cssText = `
+                max-width: 540px; width: 95vw; max-height: 85vh;
+                display: flex; flex-direction: column;
+                padding: 0; overflow: hidden;
+            `;
+
+            // Header
+            const header = document.createElement('div');
+            header.style.cssText = `
+                padding: 12px 16px; border-bottom: 1px solid #333;
+                display: flex; align-items: center; justify-content: space-between;
+                flex-shrink: 0;
+            `;
+            const titleEl = document.createElement('div');
+            titleEl.textContent = 'Scroll Reference';
+            titleEl.style.cssText = `font-family: var(--font-pixel); font-size: 12px; color: #e8dcc8; letter-spacing: 1px;`;
+            const closeX = document.createElement('button');
+            closeX.textContent = '×';
+            closeX.className = 'retro-dlg-btn';
+            closeX.style.cssText = `padding: 1px 10px; font-size: 20px; line-height: 1;`;
+            closeX.onclick = () => overlay.remove();
+            header.appendChild(titleEl);
+            header.appendChild(closeX);
+            box.appendChild(header);
+
+            // Tab bar
+            const tabBar = document.createElement('div');
+            tabBar.style.cssText = `
+                display: flex; flex-wrap: wrap; gap: 2px;
+                padding: 8px 10px 0; background: #111; flex-shrink: 0;
+                border-bottom: 1px solid #2a2a2a;
+            `;
+            ELEMENT_ORDER.forEach(el => {
+                const c = elementColor(el);
+                const tab = document.createElement('button');
+                tab.dataset.element = el;
+                tab.textContent = el.charAt(0).toUpperCase() + el.slice(1);
+                tab.style.cssText = `
+                    font-family: var(--font-pixel); font-size: 9px;
+                    padding: 6px 11px; border: 1px solid ${c}44;
+                    background: transparent; color: ${c}88; cursor: pointer;
+                    border-radius: 3px 3px 0 0; letter-spacing: 1px;
+                `;
+                tab.addEventListener('click', () => switchTab(el));
+                tabBar.appendChild(tab);
+            });
+            box.appendChild(tabBar);
+
+            // Scroll list content
+            const content = document.createElement('div');
+            content.style.cssText = `overflow-y: auto; flex: 1; padding: 12px 14px;`;
+            box.appendChild(content);
+
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            function switchTab(el) {
+                const c = elementColor(el);
+
+                // Update tab button styles
+                tabBar.querySelectorAll('button[data-element]').forEach(btn => {
+                    const bc = elementColor(btn.dataset.element);
+                    const active = btn.dataset.element === el;
+                    btn.style.background  = active ? `${bc}1a` : 'transparent';
+                    btn.style.color       = active ? bc : `${bc}88`;
+                    btn.style.borderColor = active ? bc : `${bc}44`;
+                });
+
+                // Build list
+                content.innerHTML = '';
+                const scrollNames = (typeof SCROLL_DECKS !== 'undefined' && SCROLL_DECKS[el]) || [];
+
+                if (scrollNames.length === 0) {
+                    content.innerHTML = `<div style="color:#555;font-family:var(--font-terminal);padding:20px;text-align:center;">No scrolls found.</div>`;
+                    return;
+                }
+
+                scrollNames.forEach(scrollName => {
+                    const pattern = spellSystem?.patterns?.[scrollName];
+                    if (!pattern) return;
+
+                    const card = document.createElement('div');
+                    card.style.cssText = `
+                        border-left: 3px solid ${c}; background: ${c}0d;
+                        border-radius: 0 4px 4px 0; padding: 10px 12px;
+                        margin-bottom: 8px; cursor: pointer;
+                    `;
+                    card.title = 'Click to see stone pattern';
+                    card.addEventListener('click', () => showScrollInfoPopup(scrollName, pattern, el));
+
+                    // Name + level row
+                    const nameRow = document.createElement('div');
+                    nameRow.style.cssText = `display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;`;
+
+                    const nameEl = document.createElement('span');
+                    nameEl.textContent = pattern.name;
+                    nameEl.style.cssText = `font-family: var(--font-terminal); font-size: 17px; color: ${c};`;
+
+                    const lvl = document.createElement('span');
+                    lvl.textContent = `Lv ${pattern.level}`;
+                    lvl.style.cssText = `font-family: var(--font-pixel); font-size: 8px; color: #666; letter-spacing: 1px;`;
+
+                    nameRow.appendChild(nameEl);
+                    nameRow.appendChild(lvl);
+                    card.appendChild(nameRow);
+
+                    const descEl = document.createElement('div');
+                    descEl.textContent = pattern.description;
+                    descEl.style.cssText = `font-family: var(--font-terminal); font-size: 14px; color: #aaa; line-height: 1.45;`;
+                    card.appendChild(descEl);
+
+                    const hint = document.createElement('div');
+                    hint.textContent = 'click for pattern';
+                    hint.style.cssText = `font-family: var(--font-pixel); font-size: 7px; color: ${c}55; margin-top: 5px; letter-spacing: 1px;`;
+                    card.appendChild(hint);
+
+                    content.appendChild(card);
+                });
+            }
+
+            switchTab('earth');
+        }
+
+        window.showScrollReferencePopup = showScrollReferencePopup;
 
         // Generate spiral tile positions starting from center
         // Based on the spiral pattern from the image: 1(center), 2(SE), 3(SW), 4(W), 5(NW), 6(NE), 7(E), then ring 2...
@@ -2735,7 +3110,8 @@ document.getElementById('undo-move').onclick = function() {
                     flexDirection: 'column',
                     gap: '8px',
                     boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-                    minWidth: '160px'
+                    minWidth: '240px',
+                    maxWidth: '280px'
                 });
 
                 function makeBtn(label, action) {
@@ -2755,13 +3131,448 @@ document.getElementById('undo-move').onclick = function() {
                     return btn;
                 }
 
-                panel.appendChild(makeBtn('🪨 Fill Stones', () => {
+                panel.appendChild(makeBtn('Fill Stones', () => {
                     if (typeof window.fillstones === 'function') window.fillstones();
                 }));
-                panel.appendChild(makeBtn('📜 Toggle Deck Browser', () => {
+                panel.appendChild(makeBtn('Toggle Deck Browser', () => {
                     if (typeof window.showdeck === 'function') window.showdeck();
                 }));
-                panel.appendChild(makeBtn('✕ Close', () => panel.remove()));
+
+                // Place Anywhere toggle — uses the same globalPlacement buff as Avalanche,
+                // but with expiresThisTurn:false so it persists until toggled off.
+                const placeAnywhereBtn = makeBtn('Place Anywhere: OFF', () => {
+                    if (!spellSystem || !spellSystem.scrollEffects) {
+                        updateStatus('spellSystem not ready');
+                        return;
+                    }
+                    const idx = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null)
+                        ? myPlayerIndex : activePlayerIndex;
+                    const buff = spellSystem.scrollEffects.activeBuffs.globalPlacement;
+                    if (buff && buff.playerIndex === idx && buff.cheatPersist) {
+                        // Turn off
+                        spellSystem.scrollEffects.activeBuffs.globalPlacement = null;
+                        placeAnywhereBtn.textContent = 'Place Anywhere: OFF';
+                        placeAnywhereBtn.style.color = '#eee';
+                        updateStatus('Place anywhere: OFF');
+                    } else {
+                        // Turn on
+                        spellSystem.scrollEffects.activeBuffs.globalPlacement = {
+                            playerIndex: idx,
+                            expiresThisTurn: false,
+                            cheatPersist: true   // flag so we can toggle it off
+                        };
+                        placeAnywhereBtn.textContent = 'Place Anywhere: ON';
+                        placeAnywhereBtn.style.color = '#6ef';
+                        updateStatus('Place anywhere: ON — stones may be placed on any empty tile');
+                    }
+                });
+                panel.appendChild(placeAnywhereBtn);
+
+                // ── Overlay Editor ───────────────────────────────────────────
+                const overlaySection = document.createElement('div');
+                overlaySection.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';
+
+                const overlayTitle = document.createElement('div');
+                overlayTitle.textContent = '🖼 Tile Image Overlays';
+                overlayTitle.style.cssText = 'font-size:12px;color:#aaa;font-weight:bold;cursor:pointer;user-select:none;';
+                let overlayOpen = false;
+                const overlayBody = document.createElement('div');
+                overlayBody.style.cssText = 'display:none;flex-direction:column;gap:6px;';
+                overlayTitle.onclick = () => {
+                    overlayOpen = !overlayOpen;
+                    overlayBody.style.display = overlayOpen ? 'flex' : 'none';
+                };
+                overlaySection.appendChild(overlayTitle);
+                overlaySection.appendChild(overlayBody);
+
+                const ELEMENTS = ['earth', 'fire', 'water', 'wind', 'void', 'catacomb'];
+                const EL_COLORS = { earth:'#69d83a', fire:'#ed1b43', water:'#5894f4', wind:'#ffce00', void:'#9458f4', catacomb:'#aaa' };
+                let selectedEl = 'earth';
+
+                // Element selector pills
+                const pillRow = document.createElement('div');
+                pillRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
+                const pills = {};
+                ELEMENTS.forEach(el => {
+                    const pill = document.createElement('button');
+                    pill.textContent = el;
+                    pill.style.cssText = `padding:2px 6px;border-radius:10px;border:1px solid ${EL_COLORS[el]};background:#1a1a2e;color:${EL_COLORS[el]};font-size:11px;cursor:pointer;`;
+                    pill.onclick = () => { selectedEl = el; refreshOverlayControls(); highlightPill(); };
+                    pills[el] = pill;
+                    pillRow.appendChild(pill);
+                });
+                overlayBody.appendChild(pillRow);
+
+                function highlightPill() {
+                    ELEMENTS.forEach(el => {
+                        pills[el].style.background = el === selectedEl ? EL_COLORS[el] : '#1a1a2e';
+                        pills[el].style.color = el === selectedEl ? '#111' : EL_COLORS[el];
+                    });
+                }
+                highlightPill();
+
+                // Image src input
+                const srcRow = document.createElement('div');
+                srcRow.style.cssText = 'display:flex;gap:4px;align-items:center;';
+                const srcLabel = document.createElement('span');
+                srcLabel.textContent = 'Src:';
+                srcLabel.style.cssText = 'font-size:11px;color:#aaa;width:30px;flex-shrink:0;';
+                const srcInput = document.createElement('input');
+                srcInput.type = 'text';
+                srcInput.placeholder = 'images/tiles/earth.png';
+                srcInput.style.cssText = 'flex:1;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:2px 5px;font-size:11px;';
+                srcInput.onchange = () => {
+                    if (window.tileOverlaySettings?.[selectedEl]) {
+                        window.tileOverlaySettings[selectedEl].src = srcInput.value.trim();
+                        window.refreshAllTileOverlays?.();
+                    }
+                };
+                srcRow.appendChild(srcLabel);
+                srcRow.appendChild(srcInput);
+                overlayBody.appendChild(srcRow);
+
+                // Slider helper
+                function makeOverlaySlider(label, min, max, step, key) {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+                    const lbl = document.createElement('span');
+                    lbl.textContent = label;
+                    lbl.style.cssText = 'font-size:11px;color:#aaa;width:38px;flex-shrink:0;';
+                    const slider = document.createElement('input');
+                    slider.type = 'range';
+                    slider.min = min; slider.max = max; slider.step = step;
+                    slider.style.cssText = 'flex:1;accent-color:#6ef;min-width:0;';
+                    const val = document.createElement('span');
+                    val.style.cssText = 'font-size:11px;color:#eee;width:36px;text-align:right;flex-shrink:0;';
+                    slider.oninput = () => {
+                        const v = parseFloat(slider.value);
+                        val.textContent = step < 1 ? v.toFixed(2) : Math.round(v);
+                        if (window.tileOverlaySettings?.[selectedEl]) {
+                            window.tileOverlaySettings[selectedEl][key] = v;
+                            window.refreshAllTileOverlays?.();
+                        }
+                    };
+                    row.appendChild(lbl); row.appendChild(slider); row.appendChild(val);
+                    overlayBody.appendChild(row);
+                    return { slider, val };
+                }
+
+                const sliders = {
+                    x:        makeOverlaySlider('X',       -80,  80,  1,    'x'),
+                    y:        makeOverlaySlider('Y',       -80,  80,  1,    'y'),
+                    rotation:    makeOverlaySlider('Rotate',  0,   360, 1,    'rotation'),
+                    scale:       makeOverlaySlider('Scale',   0.1, 3,   0.05, 'scale'),
+                    opacity:     makeOverlaySlider('Opacity', 0,   1,   0.01, 'opacity'),
+                    tintOpacity: makeOverlaySlider('Tint',    0,   1,   0.01, 'tintOpacity'),
+                };
+
+                function refreshOverlayControls() {
+                    const s = window.tileOverlaySettings?.[selectedEl];
+                    if (!s) return;
+                    srcInput.value = s.src || '';
+                    sliders.x.slider.value = s.x;               sliders.x.val.textContent = s.x;
+                    sliders.y.slider.value = s.y;               sliders.y.val.textContent = s.y;
+                    sliders.rotation.slider.value = s.rotation; sliders.rotation.val.textContent = s.rotation;
+                    sliders.scale.slider.value = s.scale;       sliders.scale.val.textContent = s.scale.toFixed(2);
+                    sliders.opacity.slider.value = s.opacity;   sliders.opacity.val.textContent = s.opacity.toFixed(2);
+                    const tint = s.tintOpacity ?? 0.22;
+                    sliders.tintOpacity.slider.value = tint;    sliders.tintOpacity.val.textContent = tint.toFixed(2);
+                }
+                refreshOverlayControls();
+
+                // Click-to-select tile mode
+                let clickSelectActive = false;
+                let clickSelectListener = null;
+                const clickSelectBtn = document.createElement('button');
+                clickSelectBtn.textContent = '🎯 Click Tile to Select';
+                Object.assign(clickSelectBtn.style, { padding:'4px 8px', background:'#2d2d44', color:'#eee', border:'1px solid #555', borderRadius:'5px', cursor:'pointer', fontSize:'11px' });
+                clickSelectBtn.onclick = () => {
+                    clickSelectActive = !clickSelectActive;
+                    clickSelectBtn.style.background = clickSelectActive ? '#3a5a3a' : '#2d2d44';
+                    clickSelectBtn.textContent = clickSelectActive ? '🎯 Selecting... (click tile)' : '🎯 Click Tile to Select';
+                    if (clickSelectActive) {
+                        clickSelectListener = (e) => {
+                            const tileEl = e.target.closest('[data-tile-id]');
+                            if (!tileEl) return;
+                            const tileId = parseInt(tileEl.getAttribute('data-tile-id'));
+                            const tile = (typeof placedTiles !== 'undefined') && placedTiles.find(t => t.id === tileId);
+                            if (tile && tile.shrineType && tile.shrineType !== 'player') {
+                                selectedEl = tile.shrineType;
+                                highlightPill();
+                                refreshOverlayControls();
+                            }
+                            // Deactivate after one click
+                            clickSelectActive = false;
+                            clickSelectBtn.style.background = '#2d2d44';
+                            clickSelectBtn.textContent = '🎯 Click Tile to Select';
+                            document.removeEventListener('click', clickSelectListener, true);
+                            clickSelectListener = null;
+                        };
+                        document.addEventListener('click', clickSelectListener, true);
+                    } else if (clickSelectListener) {
+                        document.removeEventListener('click', clickSelectListener, true);
+                        clickSelectListener = null;
+                    }
+                };
+                overlayBody.appendChild(clickSelectBtn);
+
+                // Export button
+                const exportBtn = document.createElement('button');
+                exportBtn.textContent = '📋 Export Settings';
+                Object.assign(exportBtn.style, { padding:'4px 8px', background:'#2d2d44', color:'#6ef', border:'1px solid #555', borderRadius:'5px', cursor:'pointer', fontSize:'11px' });
+                exportBtn.onclick = () => {
+                    const out = JSON.stringify(window.tileOverlaySettings, null, 2);
+                    console.log('[OVERLAY EXPORT]\n' + out);
+                    const pre = document.createElement('textarea');
+                    pre.value = out;
+                    pre.style.cssText = 'width:100%;height:120px;background:#111;color:#6ef;border:1px solid #444;border-radius:4px;font-size:10px;padding:4px;box-sizing:border-box;resize:vertical;';
+                    // Replace or append export area
+                    const existing = overlayBody.querySelector('.overlay-export-area');
+                    if (existing) existing.remove(); else { pre.className = 'overlay-export-area'; overlayBody.appendChild(pre); pre.select(); }
+                };
+                overlayBody.appendChild(exportBtn);
+                overlaySection.appendChild(overlayBody);
+                panel.appendChild(overlaySection);
+
+                // ── Inspect Tool ─────────────────────────────────────────────
+                const inspectSection = document.createElement('div');
+                inspectSection.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';
+
+                let inspectActive = false;
+                let inspectListener = null;
+                const inspectOut = document.createElement('div');
+                inspectOut.style.cssText = 'display:none;font-size:10px;color:#6ef;background:#111;border:1px solid #444;border-radius:4px;padding:5px 7px;white-space:pre;font-family:monospace;line-height:1.5;';
+
+                const inspectBtn = makeBtn('🔍 Inspect Tile: OFF', () => {
+                    inspectActive = !inspectActive;
+                    inspectBtn.textContent = inspectActive ? '🔍 Inspect Tile: ON' : '🔍 Inspect Tile: OFF';
+                    inspectBtn.style.color = inspectActive ? '#6ef' : '#eee';
+                    inspectOut.style.display = inspectActive ? 'block' : 'none';
+
+                    if (inspectListener) {
+                        document.removeEventListener('click', inspectListener, true);
+                        inspectListener = null;
+                    }
+                    if (inspectActive) {
+                        inspectListener = (e) => {
+                            const tileEl = e.target.closest('[data-tile-id]');
+                            if (!tileEl) return;
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const tileId = parseInt(tileEl.getAttribute('data-tile-id'));
+                            const tile = (typeof placedTiles !== 'undefined') ? placedTiles.find(t => t.id === tileId) : null;
+                            if (!tile) { inspectOut.textContent = `tile id=${tileId} not found`; return; }
+                            const lines = [
+                                `id:        ${tile.id}`,
+                                `shrine:    ${tile.shrineType || '(hidden)'}`,
+                                `flipped:   ${tile.flipped}`,
+                                `pos:       x=${tile.x?.toFixed(1)}, y=${tile.y?.toFixed(1)}`,
+                                `rotation:  ${tile.rotation ?? 0}`,
+                                `isPlayer:  ${tile.isPlayerTile || false}`,
+                            ];
+                            const overlay = window.tileOverlaySettings?.[tile.shrineType];
+                            if (overlay) {
+                                lines.push(`overlay:   x=${overlay.x} y=${overlay.y} r=${overlay.rotation} s=${overlay.scale}`);
+                                lines.push(`           op=${overlay.opacity} tint=${overlay.tintOpacity}`);
+                            }
+                            inspectOut.textContent = lines.join('\n');
+                        };
+                        document.addEventListener('click', inspectListener, true);
+                    }
+                });
+                inspectSection.appendChild(inspectBtn);
+                inspectSection.appendChild(inspectOut);
+                panel.appendChild(inspectSection);
+
+                // ── Sprite Effect Lab ─────────────────────────────────────────
+                (function buildSpriteEffectLab() {
+                    const section = document.createElement('div');
+                    section.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';
+
+                    const title = document.createElement('div');
+                    title.textContent = '✨ Sprite Effect Lab';
+                    title.style.cssText = 'font-size:12px;color:#aaa;font-weight:bold;cursor:pointer;user-select:none;';
+                    let open = false;
+                    const body = document.createElement('div');
+                    body.style.cssText = 'display:none;flex-direction:column;gap:6px;';
+                    title.onclick = () => { open = !open; body.style.display = open ? 'flex' : 'none'; };
+                    section.appendChild(title);
+                    section.appendChild(body);
+
+                    // State
+                    let frames = [];
+                    let animTimer = null;
+                    let currentFrame = 0;
+                    let cfg = { fps: 18, hueRotate: 0, brightness: 1, saturation: 1, scale: 1, trigger: 'stone_destroyed', stoneType: 'fire' };
+
+                    // Preview canvas
+                    const previewWrap = document.createElement('div');
+                    previewWrap.style.cssText = 'display:flex;justify-content:center;align-items:center;background:#111;border:1px solid #333;border-radius:4px;height:100px;';
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 80; canvas.height = 80;
+                    canvas.style.cssText = 'image-rendering:pixelated;';
+                    previewWrap.appendChild(canvas);
+                    body.appendChild(previewWrap);
+                    const ctx2 = canvas.getContext('2d');
+
+                    function drawFrame() {
+                        ctx2.clearRect(0, 0, canvas.width, canvas.height);
+                        if (!frames.length) return;
+                        const img = frames[currentFrame % frames.length];
+                        const s = cfg.scale;
+                        const w = img.width * s, h = img.height * s;
+                        ctx2.save();
+                        ctx2.filter = `hue-rotate(${cfg.hueRotate}deg) brightness(${cfg.brightness}) saturate(${cfg.saturation})`;
+                        ctx2.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+                        ctx2.restore();
+                    }
+
+                    function startAnim() {
+                        if (animTimer) clearInterval(animTimer);
+                        if (!frames.length) return;
+                        animTimer = setInterval(() => { currentFrame = (currentFrame + 1) % frames.length; drawFrame(); }, 1000 / cfg.fps);
+                    }
+
+                    // File upload
+                    const uploadRow = document.createElement('div');
+                    uploadRow.style.cssText = 'display:flex;gap:4px;align-items:center;';
+                    const uploadLabel = document.createElement('span');
+                    uploadLabel.textContent = 'Frames:';
+                    uploadLabel.style.cssText = 'font-size:11px;color:#aaa;width:44px;flex-shrink:0;';
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.multiple = true;
+                    fileInput.accept = 'image/png,image/webp';
+                    fileInput.style.cssText = 'flex:1;font-size:10px;color:#eee;background:#111;border:1px solid #555;border-radius:4px;padding:2px;cursor:pointer;min-width:0;';
+                    const frameCount = document.createElement('span');
+                    frameCount.style.cssText = 'font-size:10px;color:#6ef;width:32px;text-align:right;flex-shrink:0;';
+                    frameCount.textContent = '0 fr';
+                    fileInput.onchange = () => {
+                        const files = Array.from(fileInput.files).sort((a, b) => a.name.localeCompare(b.name));
+                        frames = [];
+                        currentFrame = 0;
+                        let loaded = 0;
+                        files.forEach((f, i) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                frames[i] = img;
+                                loaded++;
+                                if (loaded === files.length) {
+                                    frameCount.textContent = `${loaded} fr`;
+                                    // Fit first frame in preview
+                                    const first = frames[0];
+                                    cfg.scale = Math.min(1, 80 / Math.max(first.width, first.height));
+                                    scaleSlider.value = cfg.scale.toFixed(2);
+                                    scaleVal.textContent = cfg.scale.toFixed(2);
+                                    startAnim();
+                                }
+                            };
+                            img.src = URL.createObjectURL(f);
+                        });
+                    };
+                    uploadRow.appendChild(uploadLabel);
+                    uploadRow.appendChild(fileInput);
+                    uploadRow.appendChild(frameCount);
+                    body.appendChild(uploadRow);
+
+                    // Slider helper
+                    function makeSlider(label, min, max, step, key, initial, format) {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+                        const lbl = document.createElement('span');
+                        lbl.textContent = label;
+                        lbl.style.cssText = 'font-size:11px;color:#aaa;width:44px;flex-shrink:0;';
+                        const sl = document.createElement('input');
+                        sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step; sl.value = initial;
+                        sl.style.cssText = 'flex:1;accent-color:#f96;min-width:0;';
+                        const vl = document.createElement('span');
+                        vl.style.cssText = 'font-size:11px;color:#eee;width:40px;text-align:right;flex-shrink:0;';
+                        vl.textContent = format(initial);
+                        sl.oninput = () => {
+                            const v = parseFloat(sl.value);
+                            cfg[key] = v;
+                            vl.textContent = format(v);
+                            if (key === 'fps') startAnim(); else drawFrame();
+                        };
+                        row.appendChild(lbl); row.appendChild(sl); row.appendChild(vl);
+                        body.appendChild(row);
+                        return { slider: sl, val: vl };
+                    }
+
+                    makeSlider('Hue',    0, 360, 1,    'hueRotate',  0,   v => `${Math.round(v)}°`);
+                    makeSlider('Bright', 0.1, 3, 0.05, 'brightness', 1,   v => v.toFixed(2));
+                    makeSlider('Satur',  0, 3,   0.05, 'saturation', 1,   v => v.toFixed(2));
+                    const { slider: scaleSlider, val: scaleVal } = makeSlider('Scale', 0.1, 3, 0.05, 'scale', 1, v => v.toFixed(2));
+                    makeSlider('FPS',    1, 60,  1,    'fps',        18,  v => `${Math.round(v)}`);
+
+                    // Trigger + stone type
+                    function makeSelect(label, key, options) {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+                        const lbl = document.createElement('span');
+                        lbl.textContent = label;
+                        lbl.style.cssText = 'font-size:11px;color:#aaa;width:44px;flex-shrink:0;';
+                        const sel = document.createElement('select');
+                        sel.style.cssText = 'flex:1;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:2px 4px;font-size:11px;min-width:0;';
+                        options.forEach(([val, text]) => {
+                            const opt = document.createElement('option');
+                            opt.value = val; opt.textContent = text;
+                            if (val === cfg[key]) opt.selected = true;
+                            sel.appendChild(opt);
+                        });
+                        sel.onchange = () => { cfg[key] = sel.value; };
+                        row.appendChild(lbl); row.appendChild(sel);
+                        body.appendChild(row);
+                    }
+
+                    makeSelect('Trigger', 'trigger', [
+                        ['stone_destroyed', 'Stone destroyed'],
+                        ['scroll_cast',     'Scroll cast'],
+                        ['tile_placed',     'Tile placed'],
+                        ['turn_end',        'Turn end'],
+                    ]);
+                    makeSelect('Stone', 'stoneType', [
+                        ['fire',     'Fire'],
+                        ['earth',    'Earth'],
+                        ['water',    'Water'],
+                        ['wind',     'Wind'],
+                        ['void',     'Void'],
+                        ['catacomb', 'Catacomb'],
+                        ['any',      'Any'],
+                    ]);
+
+                    // Export
+                    const exportBtn = document.createElement('button');
+                    exportBtn.textContent = '📋 Export Config';
+                    Object.assign(exportBtn.style, { padding:'4px 8px', background:'#2d2d44', color:'#f96', border:'1px solid #555', borderRadius:'5px', cursor:'pointer', fontSize:'11px' });
+                    exportBtn.onclick = () => {
+                        const out = JSON.stringify({
+                            trigger:    cfg.trigger,
+                            stoneType:  cfg.stoneType,
+                            frames:     frames.length || '?',
+                            fps:        Math.round(cfg.fps),
+                            hueRotate:  Math.round(cfg.hueRotate),
+                            brightness: parseFloat(cfg.brightness.toFixed(2)),
+                            saturation: parseFloat(cfg.saturation.toFixed(2)),
+                            scale:      parseFloat(cfg.scale.toFixed(2)),
+                        }, null, 2);
+                        const existing = body.querySelector('.sprite-export-area');
+                        if (existing) { existing.remove(); return; }
+                        const ta = document.createElement('textarea');
+                        ta.className = 'sprite-export-area';
+                        ta.value = out;
+                        ta.style.cssText = 'width:100%;height:130px;background:#111;color:#f96;border:1px solid #444;border-radius:4px;font-size:10px;padding:4px;box-sizing:border-box;resize:vertical;';
+                        body.appendChild(ta);
+                        ta.select();
+                    };
+                    body.appendChild(exportBtn);
+                    panel.appendChild(section);
+                })();
+
+                panel.appendChild(makeBtn('✕ Close', () => {
+                    if (inspectListener) document.removeEventListener('click', inspectListener, true);
+                    panel.remove();
+                }));
 
                 document.body.appendChild(panel);
             }

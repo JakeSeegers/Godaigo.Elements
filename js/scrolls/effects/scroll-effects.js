@@ -427,30 +427,55 @@ const ScrollEffects = {
 
         /**
          * Water Scroll II - Refreshing Thought
-         * Discard a scroll to common area, draw a scroll of that type.
+         * Draw a Catacomb scroll.
          */
         WATER_SCROLL_2: {
             name: 'Refreshing Thought',
-            description: 'Discard a scroll to the common area, then draw a scroll of that element type.',
+            description: 'Draw a Catacomb scroll.',
             isCounter: false,
             priority: 2,
 
             execute(casterIndex, context, system) {
                 console.log(`💧 Refreshing Thought activated by player ${casterIndex}`);
 
-                // If triggered via Psychic on a non-caster client, skip interactive UI
-                if (context?.psychicRemoteClient) {
-                    console.log(`💧 Refreshing Thought: skipping discard UI on non-caster remote client`);
-                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                // Draw a catacomb scroll from the catacomb deck
+                let drawnScroll = null;
+                if (system.spellSystem && typeof system.spellSystem.drawFromDeck === 'function') {
+                    drawnScroll = system.spellSystem.drawFromDeck('catacomb');
                 }
 
-                // Enter scroll selection mode
-                system.enterScrollDiscardMode(casterIndex, 'refreshing-thought');
+                if (drawnScroll) {
+                    system.spellSystem.ensurePlayerScrollsStructure(casterIndex);
+                    system.spellSystem.playerScrolls[casterIndex].hand.add(drawnScroll);
+                    system.spellSystem.updateScrollCount();
+
+                    const drawnDef = system.spellSystem.patterns?.[drawnScroll];
+                    const drawnName = drawnDef?.name || drawnScroll;
+                    console.log(`💧 Refreshing Thought: drew ${drawnName} from catacomb deck`);
+
+                    // Broadcast in multiplayer so other clients update their deck/hand state
+                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                        broadcastGameAction('scroll-collected', {
+                            playerIndex: casterIndex,
+                            scrollName: drawnScroll,
+                            shrineType: 'catacomb'
+                        });
+                    }
+
+                    if (typeof updateScrollDeckUI === 'function') {
+                        try { updateScrollDeckUI(); } catch (e) {}
+                    }
+
+                    updateStatus(`Drew a Catacomb scroll: ${drawnName}!`);
+                } else {
+                    console.log(`💧 Refreshing Thought: no catacomb scrolls left in deck`);
+                    updateStatus('No Catacomb scrolls left in deck!');
+                }
 
                 return {
                     success: true,
-                    requiresSelection: true,
-                    message: 'Select a scroll to discard...'
+                    requiresSelection: false,
+                    message: drawnScroll ? `Drew a Catacomb scroll!` : 'No Catacomb scrolls left in deck.'
                 };
             }
         },
@@ -580,15 +605,16 @@ const ScrollEffects = {
                 const triggeringScroll = context?.triggeringScroll;
 
                 if (triggeringScroll) {
-                    // Mark the triggering scroll to go to common area
-                    system.pendingCommonAreaRedirect = {
+                    // Mark the triggering scroll to go to lamplight caster's hand
+                    system.pendingHandRedirect = {
                         scrollName: triggeringScroll.name,
-                        originalCasterIndex: triggeringScroll.casterIndex
+                        originalCasterIndex: triggeringScroll.casterIndex,
+                        redirectToPlayerIndex: casterIndex
                     };
 
                     const scrollDef = system.spellSystem?.patterns?.[triggeringScroll.name];
                     const scrollDisplayName = scrollDef?.name || triggeringScroll.name;
-                    const message = `Unbidden Lamplight! ${scrollDisplayName} will go to common area after resolving.`;
+                    const message = `Unbidden Lamplight! ${scrollDisplayName} will go to your hand after resolving.`;
                     updateStatus(message);
 
                     // Count as activating fire for win-condition indicator on player tile
@@ -602,7 +628,7 @@ const ScrollEffects = {
 
                     return {
                         success: true,
-                        redirectToCommon: triggeringScroll.name,
+                        redirectToHand: triggeringScroll.name,
                         message: message
                     };
                 }
@@ -674,6 +700,17 @@ const ScrollEffects = {
                 if (context?.psychicRemoteClient) {
                     console.log(`🔥 Sacrificial Pyre: skipping sacrifice UI on non-caster remote client`);
                     return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
+                }
+
+                // Check if player has any scrolls in hand to sacrifice
+                const playerScrolls = system.spellSystem
+                    ? system.spellSystem.playerScrolls?.[casterIndex]
+                    : null;
+                if (!playerScrolls || playerScrolls.hand.size === 0) {
+                    console.log(`🔥 Sacrificial Pyre: no scrolls in hand — cancelling`);
+                    if (typeof updateStatus === 'function') updateStatus('No scrolls in hand to sacrifice!');
+                    // cancelled: true prevents win-condition tracking in applyScrollEffects
+                    return { success: false, requiresSelection: false, cancelled: true, message: 'No scrolls to sacrifice!' };
                 }
 
                 // Enter scroll selection mode for sacrificial activation
@@ -930,31 +967,20 @@ const ScrollEffects = {
          * Until your next turn, elemental shrine centers act as catacomb tiles.
          */
         WIND_SCROLL_3: {
-            name: 'Freedom',
-            description: 'Until your next turn, the centers of elemental shrines act as catacomb tiles.',
+            name: 'Breath of Power',
+            description: 'Until end of turn, you may move adjacent stones to another adjacent empty space.',
             isCounter: false,
             priority: 3,
 
             execute(casterIndex, context, system) {
-                console.log(`🌬️ Freedom activated by player ${casterIndex}`);
+                console.log(`🌬️ Breath of Power activated by player ${casterIndex}`);
 
-                system.activeBuffs.freedom = {
-                    playerIndex: casterIndex,
-                    expiresNextTurn: true
+                system.activeBuffs.breathOfPower = {
+                    expiresThisTurn: true,
+                    playerIndex: casterIndex
                 };
 
-                if (typeof updateCatacombIndicators === 'function') {
-                    updateCatacombIndicators();
-                }
-
-                // Broadcast to other players so they also get the buff
-                if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
-                    broadcastGameAction('freedom-apply', {
-                        playerIndex: casterIndex
-                    });
-                }
-
-                const message = 'Freedom: elemental shrine centers act as catacomb tiles until your next turn.';
+                const message = 'Breath of Power: move adjacent stones to adjacent empty spaces this turn.';
                 updateStatus(message);
 
                 return {
@@ -1001,20 +1027,24 @@ const ScrollEffects = {
          * Move adjacent stones to another adjacent empty space until end of turn.
          */
         WIND_SCROLL_5: {
-            name: 'Breath of Power',
-            description: 'Until end of turn, you may move adjacent stones to another adjacent empty space.',
+            name: 'Freedom',
+            description: 'Until your next turn, the centers of elemental shrines act as catacomb tiles (only applies to you).',
             isCounter: false,
             priority: 5,
 
             execute(casterIndex, context, system) {
-                console.log(`🌬️ Breath of Power activated by player ${casterIndex}`);
+                console.log(`🌬️ Freedom activated by player ${casterIndex}`);
 
-                system.activeBuffs.breathOfPower = {
-                    expiresThisTurn: true,
-                    playerIndex: casterIndex
+                system.activeBuffs.freedom = {
+                    playerIndex: casterIndex,
+                    expiresNextTurn: true
                 };
 
-                const message = 'Breath of Power: move adjacent stones to adjacent empty spaces this turn.';
+                if (typeof updateCatacombIndicators === 'function') {
+                    updateCatacombIndicators();
+                }
+
+                const message = 'Freedom: elemental shrine centers act as catacomb tiles until your next turn.';
                 updateStatus(message);
 
                 return {
@@ -1058,28 +1088,34 @@ const ScrollEffects = {
             }
         },
 
-        VOID_SCROLL_4: {
+        VOID_SCROLL_3: {
             name: 'Simplify',
-            description: 'Scrolls cost 1 AP to activate until the end of your turn.',
+            description: 'Scrolls cost 1 AP for you to cast until the beginning of your next turn.',
             isCounter: false,
-            priority: 4,
+            priority: 3,
             execute(casterIndex, context, system) {
                 console.log(`🔮 Simplify activated by player ${casterIndex}`);
                 system.activeBuffs.simplify = {
                     expiresThisTurn: true,
                     playerIndex: casterIndex
                 };
-                const message = 'Simplify: scrolls now cost 1 AP to activate this turn!';
+                const playerName = typeof getPlayerColorName === 'function' ? getPlayerColorName(casterIndex) : `Player ${casterIndex + 1}`;
+                const message = `Simplify: ${playerName}'s scrolls cost 1 AP to cast until their next turn.`;
                 updateStatus(message);
+
+                if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('simplify-applied', { playerIndex: casterIndex });
+                }
+
                 return { success: true, message: message };
             }
         },
 
-        VOID_SCROLL_3: {
+        VOID_SCROLL_4: {
             name: 'Telekinesis',
-            description: 'Move a tile unoccupied by stones or players. It must be touching 2 other tiles. Cannot move a tile if it would strand an adjacent tile.',
+            description: 'Move a tile unoccupied by stones or players. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.',
             isCounter: false,
-            priority: 3,
+            priority: 4,
             execute(casterIndex, context, system) {
                 console.log(`🔮 Telekinesis activated by player ${casterIndex}`);
 
@@ -1090,7 +1126,7 @@ const ScrollEffects = {
                 }
 
                 system.enterTelekinesisMode(casterIndex, {
-                    scrollName: context?.scrollName || 'VOID_SCROLL_3',
+                    scrollName: context?.scrollName || 'VOID_SCROLL_4',
                     effectName: 'Telekinesis',
                     spell: context?.spell
                 });
@@ -2303,7 +2339,7 @@ const ScrollEffects = {
             // Currently hidden -> reveal it
             if (typeof revealTile === 'function') {
                 revealTile(tile.id);
-                updateStatus(`Revealed ${tile.shrineType} shrine!`);
+                // revealTile() sets its own status (including AP bonus message for catacomb tiles)
             } else {
                 // Manual reveal
                 tile.flipped = false;
@@ -2766,9 +2802,9 @@ const ScrollEffects = {
         return false;
     },
 
-    // Check if Freedom is active (affects all players)
-    hasFreedomActive() {
-        return !!this.activeBuffs.freedom;
+    // Check if Freedom is active for a specific player
+    hasFreedomActive(playerIndex) {
+        return this.activeBuffs.freedom?.playerIndex === playerIndex;
     },
 
     // Track last scroll cast this turn (for Reflect)
@@ -2855,10 +2891,15 @@ const ScrollEffects = {
                 });
             }
 
-            // Run the reflected scroll's ability with full context
+            // Run the reflected scroll's ability with full context.
+            // On non-caster clients, pass psychicRemoteClient=true so interactive scrolls
+            // (e.g. Shifting Sands tile-swap) skip their UI — the caster's client handles
+            // selection and syncs state via broadcast.
+            const isReflectCaster = (typeof myPlayerIndex === 'undefined' || myPlayerIndex === null || myPlayerIndex === playerIndex);
             const result = self.execute(scrollName, playerIndex, {
                 spell: definition,
                 scrollName,
+                psychicRemoteClient: !isReflectCaster,
                 onComplete: () => {
                     // Restore activePlayerIndex after interactive selection resolves
                     if (originalActivePlayer !== null && typeof activePlayerIndex !== 'undefined') {
@@ -3358,50 +3399,6 @@ const ScrollEffects = {
         stone.element.style.pointerEvents = '';
     },
 
-    // Water II - Refreshing Thought: Discard a scroll to draw another
-    enterScrollDiscardMode(casterIndex, mode) {
-        const self = this;
-
-        // Get player's scrolls
-        const playerScrolls = this.spellSystem?.playerScrolls?.[casterIndex];
-        if (!playerScrolls || playerScrolls.hand.size === 0) {
-            updateStatus('No scrolls to discard!');
-            return;
-        }
-
-        // Create scroll selection UI
-        const scrollArray = Array.from(playerScrolls.hand);
-        this.showScrollSelectionModal(scrollArray, 'Select a scroll to discard:', (selectedScroll) => {
-            // Get scroll element type
-            const scrollDef = this.spellSystem?.patterns?.[selectedScroll];
-            const element = scrollDef?.element;
-
-            // Remove from hand, add to common area using proper method
-            playerScrolls.hand.delete(selectedScroll);
-            if (this.spellSystem.discardToCommonArea) {
-                this.spellSystem.discardToCommonArea(selectedScroll);
-            }
-
-            // Draw a new scroll of the same element from the deck
-            let newScroll = null;
-            if (element && this.spellSystem?.scrollDecks?.[element]?.length > 0) {
-                newScroll = this.spellSystem.scrollDecks[element].pop();
-            }
-
-            if (newScroll) {
-                playerScrolls.hand.add(newScroll);
-                updateStatus(`Discarded ${scrollDef?.name || selectedScroll}. Drew a new ${element} scroll!`);
-            } else {
-                updateStatus(`Discarded ${scrollDef?.name || selectedScroll}. No ${element} scrolls left in deck!`);
-            }
-
-            // Update UI
-            if (this.spellSystem?.updateScrollCount) {
-                this.spellSystem.updateScrollCount();
-            }
-        });
-    },
-
     // Water III - Inspiring Draught: Select 1 deck, draw 2 from it, add to hand, then show ALL scrolls
     // of that element and player chooses one to put back; that deck is then shuffled.
     enterInspiringDraughtMode(casterIndex) {
@@ -3607,27 +3604,50 @@ const ScrollEffects = {
         return entry ? entry.newElement : (tile.shrineType || null);
     },
 
-    // Add visual indicator: tile looks like the chosen element (symbol + color)
+    // Add visual indicator: tile looks like the chosen element (symbol image + color)
     applyWanderingRiverIndicator(tile, newElement) {
         if (!tile || !tile.element) return;
-        const stoneTypes = (typeof STONE_TYPES !== 'undefined') ? STONE_TYPES : { earth: { color: '#69d83a', symbol: '▲' }, water: { color: '#5894f4', symbol: '◯' }, fire: { color: '#ed1b43', symbol: '♦' }, wind: { color: '#ffce00', symbol: '≋' }, void: { color: '#9458f4', symbol: '✺' }, catacomb: { color: '#8b4513', symbol: '🔅' } };
-        const info = stoneTypes[newElement] || { color: '#888', symbol: newElement.charAt(0).toUpperCase() };
+        const stoneTypes = (typeof STONE_TYPES !== 'undefined') ? STONE_TYPES : {};
+        const info = stoneTypes[newElement] || { color: '#888', img: null };
         tile.element.classList.add('wandering-river-transformed', 'wandering-river-' + newElement);
         tile.element.setAttribute('data-wandering-river-element', newElement);
+        // Also update data-shrine so the elemental hover tint applies
+        tile.element.setAttribute('data-shrine', newElement);
+
         let label = tile.element.querySelector('.wandering-river-label');
         if (label) label.remove();
-        label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        label.setAttribute('class', 'wandering-river-label');
-        label.setAttribute('x', 0);
-        label.setAttribute('y', -8);
-        label.setAttribute('text-anchor', 'middle');
-        label.setAttribute('dominant-baseline', 'middle');
-        label.setAttribute('fill', info.color);
-        label.setAttribute('font-size', '16');
-        label.setAttribute('font-weight', 'bold');
-        label.setAttribute('stroke', '#000');
-        label.setAttribute('stroke-width', '1');
-        label.textContent = info.symbol;
+
+        // Use the updated stone symbol image instead of a text character
+        const imgSrc = info.img || null;
+        if (imgSrc) {
+            label = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            label.setAttribute('class', 'wandering-river-label');
+            // Circular background in element color
+            const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            bg.setAttribute('cx', '0'); bg.setAttribute('cy', '-8');
+            bg.setAttribute('r', '9');
+            bg.setAttribute('fill', info.color);
+            bg.setAttribute('opacity', '0.7');
+            bg.setAttribute('stroke', '#000'); bg.setAttribute('stroke-width', '1');
+            label.appendChild(bg);
+            const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            img.setAttribute('href', imgSrc);
+            img.setAttribute('x', '-9'); img.setAttribute('y', '-17');
+            img.setAttribute('width', '18'); img.setAttribute('height', '18');
+            img.style.mixBlendMode = newElement === 'catacomb' ? 'normal' : 'screen';
+            label.appendChild(img);
+        } else {
+            // Fallback: text symbol
+            label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            label.setAttribute('class', 'wandering-river-label');
+            label.setAttribute('x', 0); label.setAttribute('y', -8);
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('dominant-baseline', 'middle');
+            label.setAttribute('fill', info.color);
+            label.setAttribute('font-size', '16'); label.setAttribute('font-weight', 'bold');
+            label.setAttribute('stroke', '#000'); label.setAttribute('stroke-width', '1');
+            label.textContent = newElement.charAt(0).toUpperCase();
+        }
         tile.element.appendChild(label);
     },
 
@@ -3640,6 +3660,12 @@ const ScrollEffects = {
         tile.element.removeAttribute('data-wandering-river-element');
         const label = tile.element.querySelector('.wandering-river-label');
         if (label) label.remove();
+        // Restore data-shrine to the tile's actual element
+        if (tile.shrineType && tile.shrineType !== 'player') {
+            tile.element.setAttribute('data-shrine', tile.shrineType);
+        } else {
+            tile.element.removeAttribute('data-shrine');
+        }
     },
 
     // Clear Wandering River buffs for a player when their next turn starts
@@ -3845,7 +3871,7 @@ const ScrollEffects = {
                 const display = document.getElementById('void-ap-display');
                 if (display) {
                     if (voidAP > 0) {
-                        display.textContent = `(+${voidAP} ✨ Void AP)`;
+                        display.textContent = `(+${voidAP} Void AP)`;
                         display.style.display = 'inline';
                     } else {
                         display.style.display = 'none';
@@ -4238,10 +4264,21 @@ const ScrollEffects = {
                     });
                 }
 
-                // Send Take Flight to common area using handleScrollDisposition
+                // Disposition: goes to opponent's hand if targeting another player, stays in active area if self
                 if (self.spellSystem) {
                     const scrollName = completionPayload?.scrollName || 'WIND_SCROLL_4';
-                    self.spellSystem.handleScrollDisposition(scrollName, false, true);
+                    if (targetPlayerIndex !== casterIndex) {
+                        // Remove from caster's active area and add to target's hand
+                        const casterScrolls = self.spellSystem.playerScrolls[casterIndex];
+                        if (casterScrolls?.active.has(scrollName)) {
+                            casterScrolls.active.delete(scrollName);
+                        }
+                        self.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
+                        self.spellSystem.playerScrolls[targetPlayerIndex].hand.add(scrollName);
+                        self.spellSystem.updateScrollCount();
+                        updateCommonAreaUI();
+                    }
+                    // If self-targeting, scroll stays in active area — no action needed
                 }
 
                 // Signal completion
@@ -5091,7 +5128,7 @@ const ScrollEffects = {
         });
 
         const titleEl = document.createElement('h3');
-        titleEl.textContent = '⛏️ Excavate';
+        titleEl.textContent = 'Excavate';
         titleEl.style.marginBottom = '10px';
         titleEl.style.color = '#8b4513';
         modal.appendChild(titleEl);

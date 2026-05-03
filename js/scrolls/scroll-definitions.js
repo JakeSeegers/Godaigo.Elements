@@ -69,7 +69,7 @@ const EARTH_SCROLL_EFFECTS = {
 // Water scroll effect definitions
 const WATER_SCROLL_EFFECTS = {
     1: { name: 'Reflect', description: 'Duplicate the effect of the scroll that was last cast this turn.', isResponse: true },
-    2: { name: 'Refreshing Thought', description: 'Discard a scroll to the common area, then draw a scroll of that element type.' },
+    2: { name: 'Refreshing Thought', description: 'Draw a Catacomb scroll.' },
     3: { name: 'Inspiring Draught', description: 'Draw 2 scrolls from any decks, then put 1 back and shuffle that deck.' },
     4: { name: 'Wandering River', description: 'Select a tile. Until your next turn, that tile counts as any element type you choose.' },
     5: { name: 'Control the Current', description: 'Click adjacent water stones to transform them into any other element (free, no AP cost).' }
@@ -77,7 +77,7 @@ const WATER_SCROLL_EFFECTS = {
 
 // Fire scroll effect definitions
 const FIRE_SCROLL_EFFECTS = {
-    1: { name: 'Unbidden Lamplight', description: 'Response: Send the triggering scroll to the common area (scroll still resolves).', isResponse: true },
+    1: { name: 'Unbidden Lamplight', description: 'Response: Send the triggering scroll to your hand after it resolves (scroll still resolves).', isResponse: true },
     2: { name: 'Burning Motivation', description: 'Until end of turn, gain 2 AP for each stone you place. Stacks if activated multiple times.' },
     3: { name: 'Sacrificial Pyre', description: 'Activate any scroll in your hand (ignoring pattern). The scroll goes to the common area.' },
     4: { name: 'Transmute', description: 'Discard any number of stones or scrolls to regain 2 AP each.' },
@@ -88,8 +88,8 @@ const FIRE_SCROLL_EFFECTS = {
 const VOID_SCROLL_EFFECTS = {
     1: { name: 'Psychic', description: 'Counter the previous scroll, then play it during your turn. Move Psychic to the common area.', isCounter: true },
     2: { name: "Scholar's Insight", description: 'Search through a Scroll Deck and add a scroll of your choice to your hand. Shuffle that deck afterwards.' },
-    3: { name: 'Telekinesis', description: 'Move a tile unoccupied by stones or players. It must be touching 2 other tiles. Cannot move a tile if it would strand an adjacent tile.' },
-    4: { name: 'Simplify', description: 'Scrolls cost 1 AP to activate until the end of your turn.' },
+    3: { name: 'Simplify', description: 'Scrolls cost 1 AP for you to cast until the beginning of your next turn.' },
+    4: { name: 'Telekinesis', description: 'Move a tile unoccupied by stones or players. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.' },
     5: { name: 'Create', description: 'Choose a stone type and draw stones equal to that stone\'s rank (Earth 5, Water 4, Fire 3, Wind 2, Void 1). Cannot exceed 5 of that type.' }
 };
 
@@ -97,9 +97,9 @@ const VOID_SCROLL_EFFECTS = {
 const WIND_SCROLL_EFFECTS = {
     1: { name: 'Sigh of Recollection', description: 'Draw a scroll and a stone of the type that was just activated, if available. Draw one stone of each if it was a Catacomb scroll.', isResponse: true },
     2: { name: 'Respirate', description: 'Draw 2 wind stones. At end of turn, return all your wind stones to the source pools.' },
-    3: { name: 'Freedom', description: 'Until your next turn, the centers of elemental shrines act as catacomb tiles.' },
-    4: { name: 'Take Flight', description: 'Teleport target player to an unoccupied space of your choice. Move Take Flight to the common area.' },
-    5: { name: 'Breath of Power', description: 'Until end of turn, you may move adjacent stones to another adjacent empty space.' }
+    3: { name: 'Breath of Power', description: 'Until end of turn, you may move adjacent stones to another adjacent empty space.' },
+    4: { name: 'Take Flight', description: 'Teleport target player to an unoccupied space of your choice. If targeting an opponent, Take Flight goes to their hand. If targeting yourself, it stays in your active area.' },
+    5: { name: 'Freedom', description: 'Until your next turn, the centers of elemental shrines act as catacomb tiles (only applies to you).' }
 };
 
 // Catacomb scroll effect definitions (keyed by scroll number, e.g. 1 = CATACOMB_SCROLL_1)

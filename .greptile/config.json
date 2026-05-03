@@ -1,0 +1,17 @@
+{
+  "ignorePatterns": [
+    "**/*.lock",
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/*.min.*",
+    "**/*.map",
+    "**/*.generated.*",
+    "**/vendor/**",
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "**/.DS_Store"
+  ]
+}

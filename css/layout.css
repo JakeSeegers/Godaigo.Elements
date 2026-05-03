@@ -2,12 +2,25 @@
    LOBBY STYLES (shown before game)
    ============================================ */
 .lobby-wrapper {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
     padding: var(--space-xl);
+}
+
+.version-label {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    font-family: var(--font-terminal);
+    font-size: 11px;
+    color: rgba(183, 130, 60, 0.45);
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    user-select: none;
 }
 
 .lobby-wrapper h1 {
@@ -218,7 +231,7 @@
    ============================================ */
 .board-area {
     grid-area: board;
-    background: var(--bg-dark);
+    background: #000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -227,7 +240,7 @@
 }
 
 .board-container {
-    background: var(--bg-panel);
+    background: transparent;
     border-radius: var(--radius-lg);
     padding: var(--space-md);
     box-shadow: 0 0 40px rgba(0,0,0,0.5);
