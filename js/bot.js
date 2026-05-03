@@ -161,7 +161,14 @@
             candidates.push(...moveMoves);
         }
 
-        if (candidates.length === 0) return null;
+        if (candidates.length === 0) {
+            const scrolls = window.spellSystem?.getPlayerScrolls?.(false) || { hand: new Set(), active: new Set() };
+            const placedTiles = window.getPlacedTiles?.() || [];
+            const hiddenTiles = placedTiles.filter(t => t.flipped && !t.isPlayerTile);
+            const testPath = hiddenTiles.length > 0 ? window.dijkstraPath?.(pos, { x: hiddenTiles[0].x, y: hiddenTiles[0].y }) : null;
+            console.log(`🤖 No candidates — scrollHand=${scrolls.hand.size} scrollActive=${scrolls.active.size} pool=${JSON.stringify(pool)} pos=(${pos?.x?.toFixed(1)},${pos?.y?.toFixed(1)}) hiddenTiles=${hiddenTiles.length} testPath=${testPath ? testPath.length : 'null'}`);
+            return null;
+        }
         candidates.sort((a, b) => b.score - a.score);
         return candidates[0];
     }
