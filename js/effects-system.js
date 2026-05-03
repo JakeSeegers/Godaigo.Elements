@@ -8,8 +8,9 @@ window.effectsSystem = (() => {
             baseFrameSize: 128,
         },
         ring_fire: {
-            frames: 40,
+            frames: 30,
             fps: 13,
+            srcId: 'fire_effect',
             filter: 'hue-rotate(342deg) brightness(0.95) saturate(1.75)',
             svgDiameter: 70,
             baseFrameSize: 128,
@@ -41,7 +42,7 @@ window.effectsSystem = (() => {
         loaded[effectId] = [];
         for (let i = 1; i <= cfg.frames; i++) {
             const img = new Image();
-            img.src = `images/effects/${effectId}/${String(i).padStart(4, '0')}.png`;
+            img.src = `images/effects/${cfg.srcId || effectId}/${String(i).padStart(4, '0')}.png`;
             loaded[effectId].push(img);
         }
     }
