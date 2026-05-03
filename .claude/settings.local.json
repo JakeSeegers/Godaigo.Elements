@@ -14,7 +14,8 @@
       "Skill(update-config:*)",
       "Bash(node -e \"JSON.parse\\(require\\(''fs''\\).readFileSync\\(''C:/Users/aikij/Downloads/Godaigo.Elements2.13/.claude/settings.local.json'',''utf8''\\)\\); console.log\\(''valid''\\)\")",
       "Bash(gh pr:*)",
-      "Bash(winget install:*)"
+      "Bash(winget install:*)",
+      "mcp__bf10adcb-d90f-470e-bcbd-5fe22d6fc6b0__execute_sql"
     ]
   },
   "hooks": {
