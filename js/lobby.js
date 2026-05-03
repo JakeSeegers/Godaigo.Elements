@@ -1393,9 +1393,21 @@
                 console.log('⚠️ Turn time limit set to:', turnTimeLimit / 1000, 'seconds');
                 console.log('👢 Kick on turn timeout:', kickMode);
 
-                // Randomly assign player indices and colors
+                // Assign indices: shuffle humans, then append bot(s) at the end
                 const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
-                const shuffledIndices = [...Array(players.length).keys()].sort(() => Math.random() - 0.5);
+                const humanPlayers = players.filter(p => p.username !== '[BOT]');
+                const botPlayers   = players.filter(p => p.username === '[BOT]');
+                // Fisher-Yates shuffle for human indices only
+                const humanIndices = [...Array(humanPlayers.length).keys()];
+                for (let i = humanIndices.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [humanIndices[i], humanIndices[j]] = [humanIndices[j], humanIndices[i]];
+                }
+                const allAssigned = [
+                    ...humanPlayers.map((p, i) => ({ id: p.id, index: humanIndices[i], color: colorRankOrder[humanIndices[i]] })),
+                    ...botPlayers.map((p, i) => ({ id: p.id, index: humanPlayers.length + i, color: colorRankOrder[humanPlayers.length + i] }))
+                ];
+                console.log('🎲 Assigned player indices:', allAssigned.map(a => `${a.id.slice(-4)}→${a.index}(${a.color})`).join(', '));
 
                 // Update game room status to trigger game start and store turn-timer settings
                 const startedAtIso = new Date().toISOString();
@@ -1447,18 +1459,14 @@
                 turnStartedAtMs = Date.now();
 
                 // Assign colors and indices to players
-                for (let i = 0; i < players.length; i++) {
-                    const player = players[i];
-                    const assignedIndex = shuffledIndices[i];
-                    const assignedColor = colorRankOrder[assignedIndex];
-
+                for (const assignment of allAssigned) {
                     await supabase
                         .from('players')
                         .update({
-                            player_index: assignedIndex,
-                            color: assignedColor
+                            player_index: assignment.index,
+                            color: assignment.color
                         })
-                        .eq('id', player.id);
+                        .eq('id', assignment.id);
                 }
 
                 console.log('✅ Game started by host!');
@@ -3273,13 +3281,18 @@
             const botData = allPlayersData?.find(p => p.player_index === botPlayerIndex);
             if (!botData?.isBot) return;
 
-            // Pick a placement position — use spiral position for this player index
-            const numTiles = totalPlayers * 6;
-            const spiralPositions = typeof generateSpiralPositions === 'function'
-                ? generateSpiralPositions(numTiles)
-                : window._boardSpiralPositions || [];
-            // Assign a position offset from the spiral that doesn't overlap existing player tiles
-            const candidatePos = spiralPositions[botPlayerIndex] || spiralPositions[0] || { x: 0, y: 0 };
+            // Pick a board tile that is not already claimed by another player
+            const boardTiles = (typeof placedTiles !== 'undefined' ? placedTiles : [])
+                .filter(t => !t.isPlayerTile);
+            const occupiedXY = (typeof playerPositions !== 'undefined' ? playerPositions : [])
+                .filter((p, i) => p && i !== botPlayerIndex)
+                .map(p => ({ x: p.x, y: p.y }));
+            const freeTiles = boardTiles.filter(t =>
+                !occupiedXY.some(o => Math.abs(o.x - t.x) < 5 && Math.abs(o.y - t.y) < 5)
+            );
+            // Prefer tiles near the centre (smallest distance from origin)
+            freeTiles.sort((a, b) => (a.x * a.x + a.y * a.y) - (b.x * b.x + b.y * b.y));
+            const candidatePos = freeTiles[Math.floor(freeTiles.length * 0.2)] || freeTiles[0] || { x: 0, y: 0 };
 
             const botColor = botData.color;
             const x = candidatePos.x;
