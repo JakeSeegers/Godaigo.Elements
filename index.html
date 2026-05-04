@@ -309,6 +309,13 @@
                 <span class="panel-title">Resources</span>
             </div>
             <div class="panel-content">
+                <!-- Player Tiles Section — shown during placement phase; sits at top so it's immediately visible -->
+                <div class="tiles-section">
+                    <div id="new-player-tile-deck" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+                        <!-- Player tiles will be added here dynamically -->
+                    </div>
+                </div>
+
                 <!-- Stone Grid -->
                 <div class="stone-grid" id="stone-grid">
                     <div class="stone-card" id="new-earth-deck" data-element="earth">
@@ -406,12 +413,6 @@
                     </div>
                 </div>
 
-                <!-- Player Tiles Section -->
-                <div class="tiles-section">
-                    <div id="new-player-tile-deck" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
-                        <!-- Player tiles will be added here dynamically -->
-                    </div>
-                </div>
             </div>
         </div>
 
