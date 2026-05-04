@@ -3131,6 +3131,11 @@
         function resetToLobby() {
             console.log('🔄 Resetting game back to lobby');
 
+            // Close all floating scroll panels so they don't bleed into the lobby
+            if (typeof ScrollPanelSystem !== 'undefined') {
+                ['hand', 'active', 'common'].forEach(id => ScrollPanelSystem.closePanel(id));
+            }
+
             // Remove self from DB and stop heartbeat — prevents ghost rooms
             if (myPlayerId) {
                 supabase.rpc('remove_player', { p_player_id: myPlayerId }).catch(() => {});
