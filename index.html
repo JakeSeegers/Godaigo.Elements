@@ -184,8 +184,8 @@
             </div>
 
             <!-- Player List -->
-            <div id="player-list" style="background: #333; padding: 20px; border-radius: 5px; margin-bottom: 16px; min-height: 80px;">
-                <h3 style="margin-top: 0; color: #d9b08c;">Players in Room:</h3>
+            <div id="player-list" style="background: #333; padding: 10px 14px; border-radius: 5px; margin-bottom: 8px; min-height: 50px;">
+                <div style="color: #d9b08c; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Players in Room</div>
                 <div id="players-container" style="color: #eee;"></div>
             </div>
 
@@ -193,40 +193,36 @@
             <div id="ready-controls" style="display: none; text-align: center;">
                 <button id="ready-button" onclick="toggleReady()"
                         title="Click to mark yourself ready"
-                        style="padding: 15px 40px; font-size: 18px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        style="padding: 8px 28px; font-size: 16px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">
                     Not Ready
                 </button>
 
                 <!-- Host-only Settings & Start Game -->
-                <div id="host-settings" style="display: none; margin-top: 20px; background: #333; padding: 15px; border-radius: 5px;">
-                    <h4 style="color: #d9b08c; margin-top: 0;">Host Settings</h4>
-
-                    <div style="margin-bottom: 10px;">
-                        <label style="color: #eee; display: block; margin-bottom: 5px;">Turn Time Limit:</label>
-                        <select id="timeout-setting" style="padding: 8px; background: #444; color: #eee; border: 1px solid #666; border-radius: 5px;">
+                <div id="host-settings" style="display: none; margin-top: 10px; background: #333; padding: 10px 14px; border-radius: 5px; text-align: left;">
+                    <!-- Turn limit + kick on one compact row -->
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap;">
+                        <label style="color: #eee; white-space: nowrap; font-size: 14px;">Turn limit:</label>
+                        <select id="timeout-setting" style="padding: 5px 8px; background: #444; color: #eee; border: 1px solid #666; border-radius: 5px; font-size: 14px;">
                             <option value="0">Disabled</option>
-                            <option value="30">30 seconds</option>
-                            <option value="60">1 minute</option>
-                            <option value="120" selected>2 minutes</option>
-                            <option value="180">3 minutes</option>
-                            <option value="300">5 minutes</option>
+                            <option value="30">30 sec</option>
+                            <option value="60">1 min</option>
+                            <option value="120" selected>2 min</option>
+                            <option value="180">3 min</option>
+                            <option value="300">5 min</option>
                         </select>
-                        <label style="color: #eee; display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                        <label style="color: #eee; display: flex; align-items: center; gap: 6px; font-size: 14px;">
                             <input type="checkbox" id="kick-on-timeout" checked>
-                            Kick active player when turn timer expires
+                            Kick on timeout
                         </label>
-                        <div style="color: #999; font-size: 12px; margin-top: 6px;">
-                            If disabled, expired turns will auto-pass to the next player.
-                        </div>
                     </div>
 
                     <button id="host-start-button" onclick="hostStartGame()"
-                            style="padding: 15px 40px; font-size: 18px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
-                        Start Game (Host)
+                            style="padding: 10px 24px; font-size: 16px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
+                        Start Game
                     </button>
                 </div>
 
-                <p id="lobby-instruction" style="color: #999; margin-top: 10px; font-size: 14px;">
+                <p id="lobby-instruction" style="color: #999; margin-top: 8px; font-size: 13px;">
                     The host can start the game when 2–5 players have joined
                 </p>
             </div>
