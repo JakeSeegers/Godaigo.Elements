@@ -5458,7 +5458,7 @@ function clearPlayerPath() {
                     .eq('game_id', currentGameId);
                 const forfeitPlayer = forfeitPlayers?.find(p => p.player_index === activePlayerIndex);
                 if (forfeitPlayer) {
-                    await supabase.from('players').delete().eq('id', forfeitPlayer.id);
+                    await supabase.rpc('remove_player', { p_player_id: forfeitPlayer.id });
                 }
                 await hostAdvanceToNextPlayerAndRestartTimer();
                 return;
@@ -5469,15 +5469,14 @@ function clearPlayerPath() {
                 // Kick active player
                 const { data: allPlayers } = await supabase
                     .from('players')
-                    .select('id, username, player_index');
+                    .select('id, username, player_index')
+                    .eq('game_id', currentGameId);
 
                 const activePlayer = allPlayers?.find(p => p.player_index === activePlayerIndex);
 
                 if (activePlayer) {
                     const { error: kickErr } = await supabase
-                        .from('players')
-                        .delete()
-                        .eq('id', activePlayer.id);
+                        .rpc('remove_player', { p_player_id: activePlayer.id });
 
                     if (kickErr) {
                         console.error('❌ Failed to kick player (turn timeout):', kickErr);
@@ -5501,6 +5500,7 @@ function clearPlayerPath() {
             const { data: remainingPlayers, error } = await supabase
                 .from('players')
                 .select('player_index')
+                .eq('game_id', currentGameId)
                 .order('player_index', { ascending: true });
 
             if (error) {
@@ -5514,6 +5514,13 @@ function clearPlayerPath() {
                 .sort((a, b) => a - b);
 
             if (indices.length === 0) return;
+
+            // Last player standing — they win
+            if (indices.length === 1 && typeof handleGameOver === 'function') {
+                console.log('🏆 Last player standing after kick/forfeit:', indices[0]);
+                await handleGameOver(indices[0], 'last_standing');
+                return;
+            }
 
             // Find next index after current; wrap around
             let nextIndex = indices.find(i => i > activePlayerIndex);

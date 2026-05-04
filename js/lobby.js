@@ -684,11 +684,9 @@
             try {
                 console.log('👋 Leaving game...');
 
-                // Delete myself from players table
+                // Delete myself from players table via RPC (direct DELETE blocked by RLS)
                 const { error } = await supabase
-                    .from('players')
-                    .delete()
-                    .eq('id', myPlayerId);
+                    .rpc('remove_player', { p_player_id: myPlayerId });
 
                 if (error) throw error;
 
