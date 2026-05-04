@@ -676,7 +676,7 @@ body {
 .common-area-empty {
     font-family: var(--font-terminal);
     font-size: 16px;
-    color: #555;
+    color: #ccc;
 }
 
 .common-area-scroll {
@@ -1652,7 +1652,7 @@ svg {
 .si-subtitle {
     font-family: 'VT323', monospace;
     font-size: 16px;
-    color: #555;
+    color: #ccc;
     text-align: center;
     margin-bottom: 14px;
 }
@@ -1744,7 +1744,7 @@ svg {
 }
 .si-pattern-title { color: #aaa; margin-bottom: 4px; }
 .si-pattern-line  { margin-left: 10px; margin-top: 2px; }
-.si-pattern-more  { margin-left: 10px; margin-top: 2px; font-style: italic; color: #555; }
+.si-pattern-more  { margin-left: 10px; margin-top: 2px; font-style: italic; color: #ccc; }
 .si-common-item {
     background: #1a1a2e;
     border: 2px solid #333;
@@ -1760,7 +1760,7 @@ svg {
 .si-tip {
     font-family: 'VT323', monospace;
     font-size: 15px;
-    color: #555;
+    color: #ccc;
     background: #0d0d1a;
     border: 1px solid #2a2a3a;
     border-radius: 2px;
@@ -2631,7 +2631,7 @@ svg {
     font-family: var(--font-terminal);
     text-align: center;
     padding: 40px 16px;
-    color: #555;
+    color: #ccc;
     font-size: 20px;
 }
 
@@ -2685,7 +2685,7 @@ svg {
 }
 .emoji-no-game-note {
     font-family: var(--font-terminal);
-    color: #555;
+    color: #ccc;
     font-size: 16px;
     text-align: center;
     margin-top: 10px;
@@ -3449,7 +3449,7 @@ label, .hud-ap-label, .hud-ap-value {
 .fsp-body::-webkit-scrollbar-thumb { background: rgba(148,88,244,0.4); border-radius: 2px; }
 
 .fsp-empty {
-    color: #555;
+    color: #ccc;
     font-size: 12px;
     text-align: center;
     padding: 20px 8px;

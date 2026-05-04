@@ -394,7 +394,7 @@ function _renderSettings(content) {
                 <button class="gami-toggle ${gameSound ? 'on' : 'off'}"
                         onclick="_gami_toggleSetting('game_sound', this)">${gameSound ? 'ON' : 'OFF'}</button>
             </div>
-            <div style="font-family:var(--font-terminal);font-size:17px;color:#555;padding:8px 0 2px;letter-spacing:1px;">— Display —</div>
+            <div style="font-family:var(--font-terminal);font-size:17px;color:#ccc;padding:8px 0 2px;letter-spacing:1px;">— Display —</div>
             <div class="gami-settings-row">
                 <div class="gami-settings-label">
                     <div class="gami-settings-name">Scanlines</div>

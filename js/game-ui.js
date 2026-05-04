@@ -2977,7 +2977,7 @@ document.getElementById('undo-move').onclick = function() {
                 const scrollNames = (typeof SCROLL_DECKS !== 'undefined' && SCROLL_DECKS[el]) || [];
 
                 if (scrollNames.length === 0) {
-                    content.innerHTML = `<div style="color:#555;font-family:var(--font-terminal);padding:20px;text-align:center;">No scrolls found.</div>`;
+                    content.innerHTML = `<div style="color:#ccc;font-family:var(--font-terminal);padding:20px;text-align:center;">No scrolls found.</div>`;
                     return;
                 }
 
