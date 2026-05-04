@@ -12,15 +12,16 @@
 }
 
 .version-label {
-    position: absolute;
-    top: 12px;
-    right: 16px;
+    position: fixed;
+    bottom: 8px;
+    right: 10px;
     font-family: var(--font-terminal);
-    font-size: 11px;
-    color: rgba(183, 130, 60, 0.45);
+    font-size: 9px;
+    color: rgba(183, 130, 60, 0.25);
     letter-spacing: 0.05em;
     pointer-events: none;
     user-select: none;
+    z-index: 1;
 }
 
 .lobby-wrapper h1 {
