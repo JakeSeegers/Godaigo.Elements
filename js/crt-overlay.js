@@ -133,14 +133,24 @@ window.crtOverlay = (function () {
     }
 
     function _buildScanPattern() {
-        // 1×4 offscreen canvas: 1px dark line + 3px transparent
+        // Realistic CRT phosphor scanlines: 4px period with soft gradient falloff.
+        // Real CRTs have a dark inter-line gap that feathers into the bright phosphor
+        // area rather than a hard edge. Four opacity steps simulate this:
+        //   y=0  gap (darkest)   → y=1  soft shadow   → y=2  barely visible
+        //   → y=3  clear (phosphor active — full brightness)
+        // Max opacity (0.09) is half the old flat-line value (0.18).
         const sc = document.createElement('canvas');
         sc.width  = 1;
         sc.height = 4;
         const c = sc.getContext('2d');
         c.clearRect(0, 0, 1, 4);
-        c.fillStyle = 'rgba(0,0,0,0.18)';
+        c.fillStyle = 'rgba(0,0,0,0.09)';  // inter-line gap — darkest
         c.fillRect(0, 0, 1, 1);
+        c.fillStyle = 'rgba(0,0,0,0.04)';  // soft shadow
+        c.fillRect(0, 1, 1, 1);
+        c.fillStyle = 'rgba(0,0,0,0.01)';  // barely visible transition
+        c.fillRect(0, 2, 1, 1);
+        // y=3: left transparent — phosphor center at full brightness
         return _ctx.createPattern(sc, 'repeat');
     }
 
