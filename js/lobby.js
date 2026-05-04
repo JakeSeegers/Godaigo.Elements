@@ -446,17 +446,11 @@
             const counts = {};
             (players || []).forEach(p => { counts[p.game_id] = (counts[p.game_id] || 0) + 1; });
 
-            // Auto-delete ghost rooms (exist in game_room but have no players)
-            // Only delete rooms older than 60s to avoid racing with a player who is mid-join
-            const sixtySecondsAgo = new Date(Date.now() - 60 * 1000).toISOString();
-            const ghostIds = rooms
-                .filter(r => !counts[r.id] && r.created_at < sixtySecondsAgo)
-                .map(r => r.id);
-            if (ghostIds.length) {
-                supabase.from('game_room').delete().in('id', ghostIds).then(() => {
-                    console.log('🗑️ Cleaned up', ghostIds.length, 'empty ghost room(s):', ghostIds);
-                });
-            }
+            // Auto-delete ghost rooms via RPC (client DELETE blocked by RLS)
+            supabase.rpc('cleanup_ghost_rooms').then(() => {
+                const ghostCount = rooms.filter(r => !counts[r.id]).length;
+                if (ghostCount) console.log('🗑️ Cleaned up', ghostCount, 'empty ghost room(s)');
+            });
 
             // Only show rooms that actually have players in them
             const liveRooms = rooms.filter(r => (counts[r.id] || 0) > 0);
