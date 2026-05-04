@@ -267,11 +267,11 @@ body {
     border: 1px solid #555;
     color: #aaa;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 14px;
     font-weight: bold;
     line-height: 1;
     cursor: pointer;
-    padding: 3px 7px;
+    padding: 8px 16px;
     transition: border-color 0.15s, color 0.15s;
     flex-shrink: 0;
     white-space: nowrap;
