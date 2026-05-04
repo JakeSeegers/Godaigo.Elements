@@ -3008,7 +3008,6 @@ svg {
 #multiplayer-lobby select,
 #multiplayer-lobby button {
     font-family: var(--font-terminal) !important;
-    font-size: 32px !important;
 }
 #multiplayer-lobby h2 {
     font-family: var(--font-pixel) !important;
@@ -3735,5 +3734,21 @@ label, .hud-ap-label, .hud-ap-value {
 /* No action buttons in the preview */
 .fsp-card-preview .fsp-card-actions {
     display: none !important;
+}
+
+/* ============================================
+   VERSION LABEL
+   ============================================ */
+.version-label {
+    position: fixed;
+    bottom: 8px;
+    right: 10px;
+    font-family: var(--font-terminal);
+    font-size: 9px;
+    color: rgba(183, 130, 60, 0.25);
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    user-select: none;
+    z-index: 1;
 }
 
