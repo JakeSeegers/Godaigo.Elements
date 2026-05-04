@@ -552,41 +552,7 @@
             }
         }
 
-        function updateDockPlayers() {
-            const container = document.getElementById('dock-players');
-            if (!container) return;
-            try {
-                const pList = (typeof allPlayersData !== 'undefined' && allPlayersData?.length)
-                    ? allPlayersData
-                    : null;
-                if (!pList) return;
-                container.innerHTML = '';
-                const colorMap = { purple:'#9458f4', yellow:'#ffce00', red:'#ed1b43', blue:'#5894f4', green:'#69d83a' };
-                pList.forEach(p => {
-                    const idx = p.player_index ?? 0;
-                    const isActive = idx === (typeof activePlayerIndex !== 'undefined' ? activePlayerIndex : 0);
-                    const card = document.createElement('div');
-                    card.className = 'dock-player-card' + (isActive ? ' active-player' : '');
-                    const color = colorMap[p.color] || '#888';
-                    const apText = isActive ? ((typeof currentAP !== 'undefined' ? currentAP : '?') + 'AP') : '';
-                    const dot = document.createElement('span');
-                    dot.className = 'dock-player-dot';
-                    dot.style.background = color;
-                    const nameSpan = document.createElement('span');
-                    nameSpan.className = 'dock-player-name';
-                    nameSpan.textContent = p.username || ('P' + (idx + 1));
-                    card.appendChild(dot);
-                    card.appendChild(nameSpan);
-                    if (apText) {
-                        const apSpan = document.createElement('span');
-                        apSpan.className = 'dock-player-ap';
-                        apSpan.textContent = apText;
-                        card.appendChild(apSpan);
-                    }
-                    container.appendChild(card);
-                });
-            } catch (e) { /* not ready */ }
-        }
+        function updateDockPlayers() { /* removed — dock player roster was redundant with existing AP/turn displays */ }
 
         function updateShrineDots(playerIndex) {
             try {
