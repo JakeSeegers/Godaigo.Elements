@@ -216,7 +216,7 @@ function _renderEmojis(content) {
     let html = '<div class="gami-section-title">My Emojis</div>';
 
     if (owned.length === 0) {
-        html += `<div style="color:#666;font-style:italic;padding:8px 0 16px;">No emojis yet — buy some below!</div>`;
+        html += `<div style="color:#ccc;font-style:italic;padding:8px 0 16px;">No emojis yet — buy some below!</div>`;
     } else {
         html += `<div class="gami-emoji-grid">`;
         for (const item of owned) {
@@ -228,7 +228,7 @@ function _renderEmojis(content) {
             }
         }
         html += `</div>`;
-        if (!inGame) html += `<div style="color:#666;font-size:12px;padding:4px 0 14px;">Join a game to use emojis</div>`;
+        if (!inGame) html += `<div style="color:#ccc;font-size:12px;padding:4px 0 14px;">Join a game to use emojis</div>`;
     }
 
     html += `<div class="gami-section-title" style="margin-top:4px;">Shop <span style="color:#d9b08c;float:right;">${gold}g</span></div>`;

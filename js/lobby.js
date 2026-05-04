@@ -433,7 +433,7 @@
             if (!list) return;
 
             if (!rooms?.length) {
-                list.innerHTML = '<p style="color:#666;font-style:italic;text-align:center;padding:20px 0;margin:0;">No public games open. Host one!</p>';
+                list.innerHTML = '<p style="color:#ccc;font-style:italic;text-align:center;padding:20px 0;margin:0;">No public games open. Host one!</p>';
                 return;
             }
 
@@ -455,7 +455,7 @@
             // Only show rooms that actually have players in them
             const liveRooms = rooms.filter(r => (counts[r.id] || 0) > 0);
             if (!liveRooms.length) {
-                list.innerHTML = '<p style="color:#666;font-style:italic;text-align:center;padding:20px 0;margin:0;">No public games open. Host one!</p>';
+                list.innerHTML = '<p style="color:#ccc;font-style:italic;text-align:center;padding:20px 0;margin:0;">No public games open. Host one!</p>';
                 return;
             }
 

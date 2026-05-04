@@ -87,8 +87,8 @@
 
                     <!-- Room Name input -->
                     <div id="room-name-row" style="margin-bottom: 12px;">
-                        <label style="color: #999; font-size: 12px; display: block; margin-bottom: 4px;">Room Name <span style="color:#666;">(optional — used when hosting)</span></label>
-                        <input type="text" id="room-name-input" placeholder="e.g. Fire Nation Showdown" maxlength="30"
+                        <label style="color: #999; font-size: 12px; display: block; margin-bottom: 4px;">Room Name</label>
+                        <input type="text" id="room-name-input" placeholder="" maxlength="30"
                                style="padding: 10px; font-size: 15px; width: 100%; box-sizing: border-box; background: #333; color: #eee; border: 2px solid #666; border-radius: 5px;">
                     </div>
 
@@ -126,7 +126,7 @@
                         </div>
                         <div id="public-games-list"
                              style="background: #1a1a1a; border-radius: 5px; min-height: 80px; max-height: 220px; overflow-y: auto; padding: 4px;">
-                            <p style="color: #666; font-style: italic; text-align: center; padding: 20px 0; margin: 0;">Loading...</p>
+                            <p style="color: #ccc; font-style: italic; text-align: center; padding: 20px 0; margin: 0;">Loading...</p>
                         </div>
                     </div>
 
@@ -736,7 +736,7 @@
 
             const rank = document.createElement('span');
             rank.textContent = `Rank ${s.rank}  ·  ${s.cost} AP`;
-            rank.style.cssText = `font-family: var(--font-pixel); font-size: 8px; color: #666; letter-spacing: 1px;`;
+            rank.style.cssText = `font-family: var(--font-pixel); font-size: 8px; color: #ccc; letter-spacing: 1px;`;
 
             nameRow.appendChild(name);
             nameRow.appendChild(rank);

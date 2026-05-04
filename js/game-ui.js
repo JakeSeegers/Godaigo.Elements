@@ -920,7 +920,7 @@
 
             // If no opponents to show
             if (cardsContainer && cardsContainer.children.length === 0) {
-                cardsContainer.innerHTML = '<div style="color: #666; font-size: 12px; text-align: center;">Waiting for opponents...</div>';
+                cardsContainer.innerHTML = '<div style="color: #ccc; font-size: 12px; text-align: center;">Waiting for opponents...</div>';
             }
             if (newCardsContainer && newCardsContainer.children.length === 0) {
                 newCardsContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 20px;">Waiting for opponents...</div>';
@@ -3004,7 +3004,7 @@ document.getElementById('undo-move').onclick = function() {
 
                     const lvl = document.createElement('span');
                     lvl.textContent = `Lv ${pattern.level}`;
-                    lvl.style.cssText = `font-family: var(--font-pixel); font-size: 8px; color: #666; letter-spacing: 1px;`;
+                    lvl.style.cssText = `font-family: var(--font-pixel); font-size: 8px; color: #ccc; letter-spacing: 1px;`;
 
                     nameRow.appendChild(nameEl);
                     nameRow.appendChild(lvl);
