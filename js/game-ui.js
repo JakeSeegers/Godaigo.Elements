@@ -2559,7 +2559,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     cancelMovePreview();
                     const startPos = { x: playerPosition.x, y: playerPosition.y };
                     const actualCost = calculateTapMoveCost(startPos, target);
-                    if (actualCost > 0 && actualCost <= getTotalAP()) {
+                    if (actualCost >= 0 && actualCost <= getTotalAP()) {
                         lastMove = { prevPos: startPos, newPos: { x: target.x, y: target.y }, apCost: actualCost };
                         placePlayer(target.x, target.y);
                         if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {

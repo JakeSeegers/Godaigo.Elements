@@ -6270,7 +6270,7 @@ function clearPlayerPath() {
 
                     let newCost = cost;
                     let newBanked = banked;
-                    const stepCost = moveCheck.cost || 1;
+                    const stepCost = moveCheck.cost ?? 1;
                     if (steamBuff && stepCost > 0 && newBanked) {
                         newBanked = false; // free step
                     } else {
