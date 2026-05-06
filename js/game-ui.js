@@ -2398,12 +2398,12 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
 
             draggedStoneType = prevType;
 
-            // Sort by distance from player so closest positions come first
+            // Sort by clockwise angle around the player so ←/→ sweeps in a circle
             if (playerPosition) {
                 valid.sort((a, b) => {
-                    const da = Math.sqrt(Math.pow(a.x - playerPosition.x, 2) + Math.pow(a.y - playerPosition.y, 2));
-                    const db = Math.sqrt(Math.pow(b.x - playerPosition.x, 2) + Math.pow(b.y - playerPosition.y, 2));
-                    return da - db;
+                    const angleA = Math.atan2(a.y - playerPosition.y, a.x - playerPosition.x);
+                    const angleB = Math.atan2(b.y - playerPosition.y, b.x - playerPosition.x);
+                    return angleA - angleB;
                 });
             }
             return valid;
