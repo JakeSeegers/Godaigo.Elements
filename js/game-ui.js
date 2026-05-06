@@ -2359,7 +2359,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
 
         // Stone placement keyboard-preview state
         // Keys 1-6 map to: earth, water, fire, wind, void, catacomb
-        const STONE_KEY_ORDER = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
+        const STONE_KEY_ORDER = ['void', 'wind', 'fire', 'water', 'earth'];
         let stonePreviewActive = false;
         let stonePreviewType = null;
         let stonePreviewPositions = [];
@@ -2503,7 +2503,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             }
 
             // Number keys 1-6: stone placement preview
-            if (/^[1-6]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            if (/^[1-5]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
                 const type = STONE_KEY_ORDER[parseInt(e.key) - 1];
                 if (canTakeAction() && stoneCounts[type] > 0) {
                     if (stonePreviewActive && stonePreviewType === type) {
