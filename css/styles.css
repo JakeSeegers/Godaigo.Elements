@@ -1353,6 +1353,16 @@ svg {
     50%       { opacity: 1; }
 }
 
+.stone-preview {
+    pointer-events: none;
+    animation: stone-preview-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes stone-preview-pulse {
+    0%, 100% { opacity: 0.5; }
+    50%       { opacity: 0.85; }
+}
+
 .shrine-marker {
     pointer-events: none;
 }

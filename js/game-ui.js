@@ -2357,6 +2357,108 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             movePreviewPositions = [];
         }
 
+        // Stone placement keyboard-preview state
+        // Keys 1-6 map to: earth, water, fire, wind, void, catacomb
+        const STONE_KEY_ORDER = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
+        let stonePreviewActive = false;
+        let stonePreviewType = null;
+        let stonePreviewPositions = [];
+        let stonePreviewIndex = 0;
+        let stonePreviewGhost = null;
+
+        function buildValidStonePositions(type) {
+            const hexPositions = getAllHexagonPositions();
+            // Temporarily set draggedStoneType so isInPlacementRange reads the right type
+            const prevType = draggedStoneType;
+            draggedStoneType = type;
+
+            const valid = hexPositions.filter(pos => {
+                const stoneHere = placedStones.some(s =>
+                    Math.sqrt(Math.pow(s.x - pos.x, 2) + Math.pow(s.y - pos.y, 2)) < 5
+                );
+                if (stoneHere) return false;
+
+                let playerHere = false;
+                if (playerPosition) {
+                    playerHere = Math.sqrt(Math.pow(playerPosition.x - pos.x, 2) + Math.pow(playerPosition.y - pos.y, 2)) < 5;
+                }
+                if (!playerHere && typeof playerPositions !== 'undefined') {
+                    playerPositions.forEach(p => {
+                        if (p && p.x != null) {
+                            if (Math.sqrt(Math.pow(p.x - pos.x, 2) + Math.pow(p.y - pos.y, 2)) < 5) playerHere = true;
+                        }
+                    });
+                }
+                if (playerHere) return false;
+
+                if (isPositionOnFlippedTile(pos.x, pos.y, hexPositions)) return false;
+                if (!isInPlacementRange(pos.x, pos.y, type)) return false;
+                return true;
+            });
+
+            draggedStoneType = prevType;
+
+            // Sort by distance from player so closest positions come first
+            if (playerPosition) {
+                valid.sort((a, b) => {
+                    const da = Math.sqrt(Math.pow(a.x - playerPosition.x, 2) + Math.pow(a.y - playerPosition.y, 2));
+                    const db = Math.sqrt(Math.pow(b.x - playerPosition.x, 2) + Math.pow(b.y - playerPosition.y, 2));
+                    return da - db;
+                });
+            }
+            return valid;
+        }
+
+        function showStonePreviewGhost(pos, type) {
+            if (stonePreviewGhost) stonePreviewGhost.remove();
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'stone-preview');
+            g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', 0);
+            circle.setAttribute('cy', 0);
+            circle.setAttribute('r', STONE_SIZE);
+            circle.setAttribute('fill', STONE_TYPES[type].color);
+            circle.setAttribute('stroke', '#fff');
+            circle.setAttribute('stroke-width', '2');
+            g.appendChild(circle);
+
+            const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            img.setAttribute('href', STONE_TYPES[type].img);
+            img.setAttribute('x', -STONE_SIZE);
+            img.setAttribute('y', -STONE_SIZE);
+            img.setAttribute('width', STONE_SIZE * 2);
+            img.setAttribute('height', STONE_SIZE * 2);
+            g.appendChild(img);
+
+            viewport.appendChild(g);
+            stonePreviewGhost = g;
+        }
+
+        function cancelStonePreview() {
+            if (stonePreviewGhost) { stonePreviewGhost.remove(); stonePreviewGhost = null; }
+            stonePreviewActive = false;
+            stonePreviewType = null;
+            stonePreviewPositions = [];
+        }
+
+        function enterStonePreview(type) {
+            cancelTilePreview();
+            cancelMovePreview();
+            const positions = buildValidStonePositions(type);
+            if (positions.length === 0) {
+                updateStatus(`No valid positions for ${type} stone!`);
+                return;
+            }
+            stonePreviewType = type;
+            stonePreviewPositions = positions;
+            stonePreviewIndex = 0;
+            stonePreviewActive = true;
+            showStonePreviewGhost(positions[0], type);
+            updateStatus(`${type} stone — pos 1 of ${positions.length} — ← → to move, Enter to place, ${STONE_KEY_ORDER.indexOf(type) + 1} or Esc to cancel`);
+        }
+
         document.addEventListener('keydown', (e) => {
             console.log(`Key pressed: ${e.key}, isDraggingTile=${isDraggingTile}, ghostTile=${!!ghostTile}, shift=${e.shiftKey}`);
             if (e.key === 'f' || e.key === 'F') {
@@ -2400,8 +2502,34 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // Enter: drives both tile-placement preview and movement preview
+            // Number keys 1-6: stone placement preview
+            if (/^[1-6]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const type = STONE_KEY_ORDER[parseInt(e.key) - 1];
+                if (canTakeAction() && stoneCounts[type] > 0) {
+                    if (stonePreviewActive && stonePreviewType === type) {
+                        cancelStonePreview();
+                        updateStatus('Stone placement cancelled.');
+                    } else {
+                        enterStonePreview(type);
+                    }
+                }
+            }
+
+            // Enter: drives tile-placement, movement, and stone placement previews
             if (e.key === 'Enter') {
+                // --- Stone placement: confirm ---
+                if (stonePreviewActive) {
+                    const pos = stonePreviewPositions[stonePreviewIndex];
+                    const type = stonePreviewType;
+                    cancelStonePreview();
+                    placeStone(pos.x, pos.y, type);
+                    stoneCounts[type]--;
+                    updateStoneCount(type);
+                    syncPlayerState();
+                    updateStatus(`Placed ${type} stone`);
+                    return;
+                }
+
                 // --- Tile placement: confirm ---
                 if (tilePreviewActive) {
                     const pos = tilePreviewPositions[tilePreviewIndex];
@@ -2489,15 +2617,19 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // Arrow keys: cycle tile-placement or movement preview
+            // Arrow keys: cycle tile-placement, movement, or stone preview
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                if (!tilePreviewActive && !movePreviewActive) return;
+                if (!tilePreviewActive && !movePreviewActive && !stonePreviewActive) return;
                 e.preventDefault();
                 const dir = e.key === 'ArrowRight' ? 1 : -1;
                 if (tilePreviewActive) {
                     tilePreviewIndex = (tilePreviewIndex + dir + tilePreviewPositions.length) % tilePreviewPositions.length;
                     showTilePreviewGhost(tilePreviewPositions[tilePreviewIndex]);
                     updateStatus(`Tile position ${tilePreviewIndex + 1} of ${tilePreviewPositions.length} — ← → to move, Enter to confirm, Esc to cancel`);
+                } else if (stonePreviewActive) {
+                    stonePreviewIndex = (stonePreviewIndex + dir + stonePreviewPositions.length) % stonePreviewPositions.length;
+                    showStonePreviewGhost(stonePreviewPositions[stonePreviewIndex], stonePreviewType);
+                    updateStatus(`${stonePreviewType} stone — pos ${stonePreviewIndex + 1} of ${stonePreviewPositions.length} — ← → to move, Enter to place, ${STONE_KEY_ORDER.indexOf(stonePreviewType) + 1} or Esc to cancel`);
                 } else {
                     movePreviewIndex = (movePreviewIndex + dir + movePreviewPositions.length) % movePreviewPositions.length;
                     showMovePreviewGhost(movePreviewPositions[movePreviewIndex]);
@@ -2510,6 +2642,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             if (e.key === 'Escape') {
                 if (tilePreviewActive) { cancelTilePreview(); updateStatus('Tile placement cancelled.'); }
                 else if (movePreviewActive) { cancelMovePreview(); updateStatus('Move cancelled.'); }
+                else if (stonePreviewActive) { cancelStonePreview(); updateStatus('Stone placement cancelled.'); }
             }
         });
 
