@@ -2586,6 +2586,24 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
+            // H / A: toggle Hand / Active scroll panels
+            if ((e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const sps = window.ScrollPanelSystem;
+                if (sps) {
+                    const el = document.getElementById('fsp-hand');
+                    if (el && el.style.display !== 'none') sps.closePanel('hand');
+                    else sps.openPanel('hand');
+                }
+            }
+            if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const sps = window.ScrollPanelSystem;
+                if (sps) {
+                    const el = document.getElementById('fsp-active');
+                    if (el && el.style.display !== 'none') sps.closePanel('active');
+                    else sps.openPanel('active');
+                }
+            }
+
             // C key: catacomb teleport preview
             if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.altKey && !e.metaKey) {
                 if (cataPreviewActive) {
