@@ -1318,6 +1318,24 @@ svg {
     opacity: 0.4;
 }
 
+.player-tile-preview {
+    opacity: 0.75;
+    animation: preview-pulse 1s ease-in-out infinite;
+}
+
+.player-tile-preview .preview-outline {
+    fill: none;
+    stroke: #e6c79c;
+    stroke-width: 5;
+    stroke-dasharray: 12 6;
+    pointer-events: none;
+}
+
+@keyframes preview-pulse {
+    0%, 100% { opacity: 0.75; }
+    50%       { opacity: 1; }
+}
+
 .shrine-marker {
     pointer-events: none;
 }

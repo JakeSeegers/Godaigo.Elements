@@ -2233,6 +2233,67 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
         // Debug mode: array to store debug markers
         let debugMarkers = [];
 
+        // Player tile keyboard-placement preview state
+        let tilePreviewActive = false;
+        let tilePreviewPositions = [];
+        let tilePreviewIndex = 0;
+        let tilePreviewGhost = null;
+
+        function buildValidPlayerTilePositions() {
+            const largeHexSize = TILE_SIZE * 4;
+            const offsets = [
+                { q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 },
+                { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 }
+            ];
+            const valid = [];
+            const seen = new Set();
+            for (const tile of placedTiles) {
+                const th = pixelToHex(tile.x, tile.y, largeHexSize);
+                for (const off of offsets) {
+                    const key = `${th.q + off.q},${th.r + off.r}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    const pos = hexToPixel(th.q + off.q, th.r + off.r, largeHexSize);
+                    const occupied = placedTiles.some(t =>
+                        Math.sqrt(Math.pow(t.x - pos.x, 2) + Math.pow(t.y - pos.y, 2)) < TILE_SIZE
+                    );
+                    if (!occupied && countTouchingUnrevealedTiles(pos.x, pos.y) >= 2) {
+                        valid.push(pos);
+                    }
+                }
+            }
+            // Sort clockwise by angle from board centre so ←/→ feel spatial
+            valid.sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x));
+            return valid;
+        }
+
+        function showTilePreviewGhost(pos) {
+            if (tilePreviewGhost) tilePreviewGhost.remove();
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'player-tile-preview');
+            g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+
+            const tile = createTileGroup(TILE_SIZE, 0, false);
+            g.appendChild(tile);
+
+            // Dashed outline ring
+            const outline = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            outline.setAttribute('class', 'preview-outline');
+            outline.setAttribute('cx', 0);
+            outline.setAttribute('cy', 0);
+            outline.setAttribute('r', TILE_SIZE * 2);
+            g.appendChild(outline);
+
+            viewport.appendChild(g);
+            tilePreviewGhost = g;
+        }
+
+        function cancelTilePreview() {
+            if (tilePreviewGhost) { tilePreviewGhost.remove(); tilePreviewGhost = null; }
+            tilePreviewActive = false;
+            tilePreviewPositions = [];
+        }
+
         document.addEventListener('keydown', (e) => {
             console.log(`Key pressed: ${e.key}, isDraggingTile=${isDraggingTile}, ghostTile=${!!ghostTile}, shift=${e.shiftKey}`);
             if (e.key === 'f' || e.key === 'F') {
@@ -2276,74 +2337,65 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // Enter key: auto-place player tile at a random valid edge position
+            // Enter: first press enters preview mode; second press confirms placement
             if (e.key === 'Enter') {
-                if (playerTilesAvailable <= 0) return;
-                if (isMultiplayer && (!isPlacementPhase || !canPlaceTile())) {
-                    notYourTurn();
+                if (tilePreviewActive) {
+                    // Confirm placement at current preview position
+                    const pos = tilePreviewPositions[tilePreviewIndex];
+                    cancelTilePreview();
+
+                    const tileId = placeTile(pos.x, pos.y, 0, false, 'player', false, false, null);
+                    if (tileId !== null) {
+                        playerTilesAvailable--;
+                        const countEl = document.getElementById('new-player-tile-count') || document.getElementById('player-tile-count');
+                        if (countEl) countEl.textContent = playerTilesAvailable;
+                        if (playerTileElements.length > 0) {
+                            playerTileElements.shift().remove();
+                        }
+                        if (isMultiplayer) {
+                            broadcastGameAction('player-tile-place', {
+                                x: pos.x, y: pos.y,
+                                playerIndex: myPlayerIndex,
+                                color: playerColor,
+                                cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
+                            });
+                        }
+                        updateStatus('Player tile placed!');
+                    }
                     return;
                 }
 
-                const largeHexSize = TILE_SIZE * 4;
-                const adjacentOffsets = [
-                    { q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 },
-                    { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 }
-                ];
-                const validPositions = [];
-                const checkedKeys = new Set();
+                // First press: enter preview mode
+                if (playerTilesAvailable <= 0) return;
+                if (isMultiplayer && (!isPlacementPhase || !canPlaceTile())) { notYourTurn(); return; }
 
-                for (const tile of placedTiles) {
-                    const tileHex = pixelToHex(tile.x, tile.y, largeHexSize);
-                    for (const offset of adjacentOffsets) {
-                        const adjQ = tileHex.q + offset.q;
-                        const adjR = tileHex.r + offset.r;
-                        const key = `${adjQ},${adjR}`;
-                        if (checkedKeys.has(key)) continue;
-                        checkedKeys.add(key);
-
-                        const adjPos = hexToPixel(adjQ, adjR, largeHexSize);
-
-                        const occupied = placedTiles.some(t =>
-                            Math.sqrt(Math.pow(t.x - adjPos.x, 2) + Math.pow(t.y - adjPos.y, 2)) < TILE_SIZE
-                        );
-                        if (occupied) continue;
-
-                        if (countTouchingUnrevealedTiles(adjPos.x, adjPos.y) >= 2) {
-                            validPositions.push(adjPos);
-                        }
-                    }
-                }
-
-                if (validPositions.length === 0) {
+                const positions = buildValidPlayerTilePositions();
+                if (positions.length === 0) {
                     updateStatus('No valid edge positions available for your tile!');
                     return;
                 }
 
-                const pos = validPositions[Math.floor(Math.random() * validPositions.length)];
-                const tileId = placeTile(pos.x, pos.y, 0, false, 'player', false, false, null);
+                tilePreviewPositions = positions;
+                tilePreviewIndex = Math.floor(Math.random() * positions.length);
+                tilePreviewActive = true;
+                showTilePreviewGhost(tilePreviewPositions[tilePreviewIndex]);
+                updateStatus(`Position ${tilePreviewIndex + 1} of ${tilePreviewPositions.length} — ← → to move, Enter to confirm, Esc to cancel`);
+            }
 
-                if (tileId !== null) {
-                    playerTilesAvailable--;
-                    const countEl = document.getElementById('new-player-tile-count') || document.getElementById('player-tile-count');
-                    if (countEl) countEl.textContent = playerTilesAvailable;
+            // Arrow keys: cycle through valid positions while in preview mode
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                if (!tilePreviewActive) return;
+                e.preventDefault();
+                const dir = e.key === 'ArrowRight' ? 1 : -1;
+                tilePreviewIndex = (tilePreviewIndex + dir + tilePreviewPositions.length) % tilePreviewPositions.length;
+                showTilePreviewGhost(tilePreviewPositions[tilePreviewIndex]);
+                updateStatus(`Position ${tilePreviewIndex + 1} of ${tilePreviewPositions.length} — ← → to move, Enter to confirm, Esc to cancel`);
+            }
 
-                    if (playerTileElements.length > 0) {
-                        const tileToRemove = playerTileElements.shift();
-                        tileToRemove.remove();
-                    }
-
-                    if (isMultiplayer) {
-                        broadcastGameAction('player-tile-place', {
-                            x: pos.x,
-                            y: pos.y,
-                            playerIndex: myPlayerIndex,
-                            color: playerColor,
-                            cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
-                        });
-                    }
-
-                    updateStatus('Player tile placed! (Enter key)');
-                }
+            // Escape: cancel preview
+            if (e.key === 'Escape' && tilePreviewActive) {
+                cancelTilePreview();
+                updateStatus('Tile placement cancelled.');
             }
         });
 
