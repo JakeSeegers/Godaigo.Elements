@@ -2275,6 +2275,76 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     console.log(`Cannot flip - not dragging a tile or no ghost tile`);
                 }
             }
+
+            // Enter key: auto-place player tile at a random valid edge position
+            if (e.key === 'Enter') {
+                if (playerTilesAvailable <= 0) return;
+                if (isMultiplayer && (!isPlacementPhase || !canPlaceTile())) {
+                    notYourTurn();
+                    return;
+                }
+
+                const largeHexSize = TILE_SIZE * 4;
+                const adjacentOffsets = [
+                    { q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 },
+                    { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 }
+                ];
+                const validPositions = [];
+                const checkedKeys = new Set();
+
+                for (const tile of placedTiles) {
+                    const tileHex = pixelToHex(tile.x, tile.y, largeHexSize);
+                    for (const offset of adjacentOffsets) {
+                        const adjQ = tileHex.q + offset.q;
+                        const adjR = tileHex.r + offset.r;
+                        const key = `${adjQ},${adjR}`;
+                        if (checkedKeys.has(key)) continue;
+                        checkedKeys.add(key);
+
+                        const adjPos = hexToPixel(adjQ, adjR, largeHexSize);
+
+                        const occupied = placedTiles.some(t =>
+                            Math.sqrt(Math.pow(t.x - adjPos.x, 2) + Math.pow(t.y - adjPos.y, 2)) < TILE_SIZE
+                        );
+                        if (occupied) continue;
+
+                        if (countTouchingUnrevealedTiles(adjPos.x, adjPos.y) >= 2) {
+                            validPositions.push(adjPos);
+                        }
+                    }
+                }
+
+                if (validPositions.length === 0) {
+                    updateStatus('No valid edge positions available for your tile!');
+                    return;
+                }
+
+                const pos = validPositions[Math.floor(Math.random() * validPositions.length)];
+                const tileId = placeTile(pos.x, pos.y, 0, false, 'player', false, false, null);
+
+                if (tileId !== null) {
+                    playerTilesAvailable--;
+                    const countEl = document.getElementById('new-player-tile-count') || document.getElementById('player-tile-count');
+                    if (countEl) countEl.textContent = playerTilesAvailable;
+
+                    if (playerTileElements.length > 0) {
+                        const tileToRemove = playerTileElements.shift();
+                        tileToRemove.remove();
+                    }
+
+                    if (isMultiplayer) {
+                        broadcastGameAction('player-tile-place', {
+                            x: pos.x,
+                            y: pos.y,
+                            playerIndex: myPlayerIndex,
+                            color: playerColor,
+                            cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
+                        });
+                    }
+
+                    updateStatus('Player tile placed! (Enter key)');
+                }
+            }
         });
 
         boardSvg.addEventListener('wheel', (e) => {
