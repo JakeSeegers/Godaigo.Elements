@@ -1363,6 +1363,16 @@ svg {
     50%       { opacity: 0.85; }
 }
 
+.catacomb-preview {
+    pointer-events: none;
+    animation: catacomb-preview-pulse 0.7s ease-in-out infinite;
+}
+
+@keyframes catacomb-preview-pulse {
+    0%, 100% { opacity: 0.65; }
+    50%       { opacity: 1; }
+}
+
 .shrine-marker {
     pointer-events: none;
 }

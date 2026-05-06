@@ -2357,6 +2357,89 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             movePreviewPositions = [];
         }
 
+        // Catacomb teleport keyboard-preview state
+        let cataPreviewActive = false;
+        let cataPreviewDestinations = [];
+        let cataPreviewIndex = 0;
+        let cataPreviewGhost = null;
+
+        function buildCatacombDestinations() {
+            if (!playerPosition) return [];
+            const currentShrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
+            const freedomActive = spellSystem && spellSystem.scrollEffects
+                && typeof spellSystem.scrollEffects.hasFreedomActive === 'function'
+                && spellSystem.scrollEffects.hasFreedomActive(myPlayerIndex);
+            const elementalTypes = ['earth', 'water', 'fire', 'wind', 'void'];
+            const isCatacombLike = (tile) => {
+                if (!tile) return false;
+                if (tile.shrineType === 'catacomb') return true;
+                if (freedomActive && elementalTypes.includes(tile.shrineType)) return true;
+                return false;
+            };
+            if (!currentShrine || !isCatacombLike(currentShrine)) return [];
+            return placedTiles.filter(tile => {
+                if (!isCatacombLike(tile)) return false;
+                if (tile.flipped) return false;
+                if (Math.abs(tile.x - currentShrine.x) <= 5 && Math.abs(tile.y - currentShrine.y) <= 5) return false;
+                const hasStone = placedStones.some(s => Math.sqrt(Math.pow(s.x - tile.x, 2) + Math.pow(s.y - tile.y, 2)) < 5);
+                const hasPlayer = playerPositions.some(p => p && Math.sqrt(Math.pow(p.x - tile.x, 2) + Math.pow(p.y - tile.y, 2)) < 5);
+                return !hasStone && !hasPlayer;
+            });
+        }
+
+        function showCataPreviewGhost(shrine) {
+            if (cataPreviewGhost) cataPreviewGhost.remove();
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'catacomb-preview');
+            g.setAttribute('transform', `translate(${shrine.x}, ${shrine.y})`);
+
+            const outer = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            outer.setAttribute('cx', 0);
+            outer.setAttribute('cy', 0);
+            outer.setAttribute('r', '18');
+            outer.setAttribute('fill', '#8b4513');
+            outer.setAttribute('stroke', '#fff');
+            outer.setAttribute('stroke-width', '3');
+            outer.setAttribute('stroke-dasharray', '8 4');
+            g.appendChild(outer);
+
+            const inner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            inner.setAttribute('cx', 0);
+            inner.setAttribute('cy', 0);
+            inner.setAttribute('r', '6');
+            inner.setAttribute('fill', '#fff');
+            g.appendChild(inner);
+
+            viewport.appendChild(g);
+            cataPreviewGhost = g;
+        }
+
+        function cancelCataPreview() {
+            if (cataPreviewGhost) { cataPreviewGhost.remove(); cataPreviewGhost = null; }
+            cataPreviewActive = false;
+            cataPreviewDestinations = [];
+        }
+
+        function confirmCataTransport() {
+            const shrine = cataPreviewDestinations[cataPreviewIndex];
+            cancelCataPreview();
+            // Re-verify destination is still clear
+            const hasStone = placedStones.some(s => Math.sqrt(Math.pow(s.x - shrine.x, 2) + Math.pow(s.y - shrine.y, 2)) < 5);
+            const hasPlayer = playerPositions.some(p => p && Math.sqrt(Math.pow(p.x - shrine.x, 2) + Math.pow(p.y - shrine.y, 2)) < 5);
+            if (hasStone || hasPlayer) {
+                updateStatus('Cannot teleport there — destination is now blocked!');
+                updateCatacombIndicators();
+                return;
+            }
+            placePlayer(shrine.x, shrine.y);
+            updateStatus('Teleported to another catacomb shrine!');
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                const playerIndex = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null) ? myPlayerIndex : activePlayerIndex;
+                broadcastGameAction('catacomb-teleport', { playerIndex, x: shrine.x, y: shrine.y });
+            }
+            updateCatacombIndicators();
+        }
+
         // Stone placement keyboard-preview state
         // Keys 1-6 map to: earth, water, fire, wind, void, catacomb
         const STONE_KEY_ORDER = ['void', 'wind', 'fire', 'water', 'earth'];
@@ -2446,6 +2529,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
         function enterStonePreview(type) {
             cancelTilePreview();
             cancelMovePreview();
+            cancelCataPreview();
             const positions = buildValidStonePositions(type);
             if (positions.length === 0) {
                 updateStatus(`No valid positions for ${type} stone!`);
@@ -2499,6 +2583,27 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     console.log(`Tile visual updated`);
                 } else {
                     console.log(`Cannot flip - not dragging a tile or no ghost tile`);
+                }
+            }
+
+            // C key: catacomb teleport preview
+            if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                if (cataPreviewActive) {
+                    confirmCataTransport();
+                } else if (canTakeAction() && playerPosition) {
+                    const dests = buildCatacombDestinations();
+                    if (dests.length === 0) {
+                        // Not on a catacomb, or no valid destinations — do nothing silently
+                    } else {
+                        cancelTilePreview();
+                        cancelMovePreview();
+                        cancelStonePreview();
+                        cataPreviewDestinations = dests;
+                        cataPreviewIndex = 0;
+                        cataPreviewActive = true;
+                        showCataPreviewGhost(dests[0]);
+                        updateStatus(`Catacomb teleport — destination 1 of ${dests.length} — ← → to cycle, C to confirm, Esc to cancel`);
+                    }
                 }
             }
 
@@ -2617,9 +2722,9 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // Arrow keys: cycle tile-placement, movement, or stone preview
+            // Arrow keys: cycle tile-placement, movement, stone, or catacomb preview
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                if (!tilePreviewActive && !movePreviewActive && !stonePreviewActive) return;
+                if (!tilePreviewActive && !movePreviewActive && !stonePreviewActive && !cataPreviewActive) return;
                 e.preventDefault();
                 const dir = e.key === 'ArrowRight' ? 1 : -1;
                 if (tilePreviewActive) {
@@ -2630,6 +2735,10 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     stonePreviewIndex = (stonePreviewIndex + dir + stonePreviewPositions.length) % stonePreviewPositions.length;
                     showStonePreviewGhost(stonePreviewPositions[stonePreviewIndex], stonePreviewType);
                     updateStatus(`${stonePreviewType} stone — pos ${stonePreviewIndex + 1} of ${stonePreviewPositions.length} — ← → to move, Enter to place, ${STONE_KEY_ORDER.indexOf(stonePreviewType) + 1} or Esc to cancel`);
+                } else if (cataPreviewActive) {
+                    cataPreviewIndex = (cataPreviewIndex + dir + cataPreviewDestinations.length) % cataPreviewDestinations.length;
+                    showCataPreviewGhost(cataPreviewDestinations[cataPreviewIndex]);
+                    updateStatus(`Catacomb teleport — destination ${cataPreviewIndex + 1} of ${cataPreviewDestinations.length} — ← → to cycle, C to confirm, Esc to cancel`);
                 } else {
                     movePreviewIndex = (movePreviewIndex + dir + movePreviewPositions.length) % movePreviewPositions.length;
                     showMovePreviewGhost(movePreviewPositions[movePreviewIndex]);
@@ -2643,6 +2752,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 if (tilePreviewActive) { cancelTilePreview(); updateStatus('Tile placement cancelled.'); }
                 else if (movePreviewActive) { cancelMovePreview(); updateStatus('Move cancelled.'); }
                 else if (stonePreviewActive) { cancelStonePreview(); updateStatus('Stone placement cancelled.'); }
+                else if (cataPreviewActive) { cancelCataPreview(); updateStatus('Teleport cancelled.'); }
             }
         });
 
