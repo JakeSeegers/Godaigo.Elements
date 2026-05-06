@@ -1336,6 +1336,23 @@ svg {
     50%       { opacity: 1; }
 }
 
+.move-preview {
+    pointer-events: none;
+    animation: move-preview-pulse 0.8s ease-in-out infinite;
+}
+
+.move-preview circle {
+    fill: rgba(230, 199, 156, 0.25);
+    stroke: #e6c79c;
+    stroke-width: 3;
+    stroke-dasharray: 7 4;
+}
+
+@keyframes move-preview-pulse {
+    0%, 100% { opacity: 0.7; }
+    50%       { opacity: 1; }
+}
+
 .shrine-marker {
     pointer-events: none;
 }
