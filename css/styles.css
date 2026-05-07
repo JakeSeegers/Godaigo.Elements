@@ -3807,6 +3807,14 @@ label, .hud-ap-label, .hud-ap-value {
     display: none !important;
 }
 
+/* Keyboard-selected card highlight */
+.fsp-card-selected {
+    background: rgba(255,255,255,0.09) !important;
+    box-shadow: 0 0 0 2px var(--el-color, #888),
+                0 0 14px var(--el-color, #888)66 !important;
+    outline: none;
+}
+
 /* ============================================
    VERSION LABEL
    ============================================ */

@@ -2441,6 +2441,67 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             updateCatacombIndicators();
         }
 
+        // Hand / Active keyboard navigation state
+        let handNavActive = false;
+        let handNavIndex = 0;
+        let activeNavActive = false;
+        let activeNavIndex = 0;
+
+        function getHandScrolls()   { return [...(window.spellSystem?.handScrolls   || [])]; }
+        function getActiveScrolls() { return [...(window.spellSystem?.activeScrolls || [])]; }
+
+        function clearScrollSelection() {
+            document.querySelectorAll('.fsp-card-selected').forEach(c => c.classList.remove('fsp-card-selected'));
+        }
+
+        function highlightScrollCard(panelId, index) {
+            clearScrollSelection();
+            const body = document.getElementById(`fsp-body-${panelId}`);
+            if (!body) return;
+            const cards = body.querySelectorAll('.fsp-card');
+            if (!cards.length) return;
+            const card = cards[index];
+            if (card) {
+                card.classList.add('fsp-card-selected');
+                card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+        }
+
+        function cancelHandNav() {
+            handNavActive = false;
+            clearScrollSelection();
+        }
+        function cancelActiveNav() {
+            activeNavActive = false;
+            clearScrollSelection();
+        }
+
+        function enterHandNav() {
+            const sps = window.ScrollPanelSystem;
+            const scrolls = getHandScrolls();
+            if (!scrolls.length) { updateStatus('Hand is empty.'); return; }
+            const el = document.getElementById('fsp-hand');
+            if (!el || el.style.display === 'none') sps?.openPanel('hand');
+            cancelActiveNav();
+            handNavActive = true;
+            handNavIndex = 0;
+            highlightScrollCard('hand', 0);
+            updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · \\=common · Shift=cast · Esc cancel`);
+        }
+
+        function enterActiveNav() {
+            const sps = window.ScrollPanelSystem;
+            const scrolls = getActiveScrolls();
+            if (!scrolls.length) { updateStatus('Active area is empty.'); return; }
+            const el = document.getElementById('fsp-active');
+            if (!el || el.style.display === 'none') sps?.openPanel('active');
+            cancelHandNav();
+            activeNavActive = true;
+            activeNavIndex = 0;
+            highlightScrollCard('active', 0);
+            updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Shift=cast · \\=common · Esc cancel`);
+        }
+
         // Stone placement keyboard-preview state
         // Keys 1-6 map to: earth, water, fire, wind, void, catacomb
         const STONE_KEY_ORDER = ['void', 'wind', 'fire', 'water', 'earth'];
@@ -2587,6 +2648,61 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
+            // Q: navigate Hand scrolls
+            if ((e.key === 'q' || e.key === 'Q') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                if (handNavActive) { cancelHandNav(); updateStatus('Hand navigation cancelled.'); }
+                else enterHandNav();
+            }
+
+            // K: navigate Active scrolls
+            if ((e.key === 'k' || e.key === 'K') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                if (activeNavActive) { cancelActiveNav(); updateStatus('Active navigation cancelled.'); }
+                else enterActiveNav();
+            }
+
+            // Backslash: move selected card to common area
+            if (e.key === '\\') {
+                const sp = window.spellSystem;
+                const sps = window.ScrollPanelSystem;
+                if (handNavActive) {
+                    const scrolls = getHandScrolls();
+                    if (scrolls.length) {
+                        const name = scrolls[handNavIndex];
+                        cancelHandNav();
+                        sp?.discardScroll(name);
+                        sps?.refresh();
+                        updateStatus(`${name} moved to common area.`);
+                    }
+                } else if (activeNavActive) {
+                    const scrolls = getActiveScrolls();
+                    if (scrolls.length) {
+                        const name = scrolls[activeNavIndex];
+                        cancelActiveNav();
+                        sp?.discardScroll(name);
+                        sps?.refresh();
+                        updateStatus(`${name} moved to common area.`);
+                    }
+                }
+            }
+
+            // Shift alone: cast selected card
+            if (e.key === 'Shift' && (handNavActive || activeNavActive)) {
+                const sp = window.spellSystem;
+                const sps = window.ScrollPanelSystem;
+                const scrolls = handNavActive ? getHandScrolls() : getActiveScrolls();
+                const idx = handNavActive ? handNavIndex : activeNavIndex;
+                const name = scrolls[idx];
+                if (name && sp) {
+                    if (sp.checkPattern && sp.checkPattern(name)) {
+                        if (handNavActive) cancelHandNav(); else cancelActiveNav();
+                        sp.castSpell();
+                        sps?.refresh();
+                    } else {
+                        updateStatus(`Pattern not matched — place the required stones first.`);
+                    }
+                }
+            }
+
             // H / A: toggle Hand / Active scroll panels
             if ((e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.altKey && !e.metaKey) {
                 const sps = window.ScrollPanelSystem;
@@ -2639,8 +2755,23 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // Enter: drives tile-placement, movement, and stone placement previews
+            // Enter: drives tile-placement, movement, stone placement previews, and hand nav
             if (e.key === 'Enter') {
+                // --- Hand nav: move to active ---
+                if (handNavActive) {
+                    const sp = window.spellSystem;
+                    const sps = window.ScrollPanelSystem;
+                    const scrolls = getHandScrolls();
+                    if (scrolls.length) {
+                        const name = scrolls[handNavIndex];
+                        cancelHandNav();
+                        sp?.moveToActive(name);
+                        sps?.refresh();
+                        updateStatus(`${name} moved to active area.`);
+                    }
+                    return;
+                }
+
                 // --- Stone placement: confirm ---
                 if (stonePreviewActive) {
                     const pos = stonePreviewPositions[stonePreviewIndex];
@@ -2741,12 +2872,22 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // Arrow keys: cycle tile-placement, movement, stone, or catacomb preview
+            // Arrow keys: cycle tile-placement, movement, stone, catacomb, or scroll nav
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                if (!tilePreviewActive && !movePreviewActive && !stonePreviewActive && !cataPreviewActive) return;
+                if (!tilePreviewActive && !movePreviewActive && !stonePreviewActive && !cataPreviewActive && !handNavActive && !activeNavActive) return;
                 e.preventDefault();
                 const dir = e.key === 'ArrowRight' ? 1 : -1;
-                if (tilePreviewActive) {
+                if (handNavActive) {
+                    const scrolls = getHandScrolls();
+                    handNavIndex = (handNavIndex + dir + scrolls.length) % scrolls.length;
+                    highlightScrollCard('hand', handNavIndex);
+                    updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · \\=common · Shift=cast · Esc cancel`);
+                } else if (activeNavActive) {
+                    const scrolls = getActiveScrolls();
+                    activeNavIndex = (activeNavIndex + dir + scrolls.length) % scrolls.length;
+                    highlightScrollCard('active', activeNavIndex);
+                    updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Shift=cast · \\=common · Esc cancel`);
+                } else if (tilePreviewActive) {
                     tilePreviewIndex = (tilePreviewIndex + dir + tilePreviewPositions.length) % tilePreviewPositions.length;
                     showTilePreviewGhost(tilePreviewPositions[tilePreviewIndex]);
                     updateStatus(`Tile position ${tilePreviewIndex + 1} of ${tilePreviewPositions.length} — ← → to move, Enter to confirm, Esc to cancel`);
@@ -2766,12 +2907,14 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // Escape: cancel whichever preview is active
+            // Escape: cancel whichever preview or nav is active
             if (e.key === 'Escape') {
                 if (tilePreviewActive) { cancelTilePreview(); updateStatus('Tile placement cancelled.'); }
                 else if (movePreviewActive) { cancelMovePreview(); updateStatus('Move cancelled.'); }
                 else if (stonePreviewActive) { cancelStonePreview(); updateStatus('Stone placement cancelled.'); }
                 else if (cataPreviewActive) { cancelCataPreview(); updateStatus('Teleport cancelled.'); }
+                else if (handNavActive) { cancelHandNav(); updateStatus('Hand navigation cancelled.'); }
+                else if (activeNavActive) { cancelActiveNav(); updateStatus('Active navigation cancelled.'); }
             }
         });
 
