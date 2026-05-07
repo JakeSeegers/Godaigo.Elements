@@ -2441,14 +2441,20 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             updateCatacombIndicators();
         }
 
-        // Hand / Active keyboard navigation state
+        // Hand / Active / Common keyboard navigation state
         let handNavActive = false;
         let handNavIndex = 0;
         let activeNavActive = false;
         let activeNavIndex = 0;
+        let commonNavActive = false;
+        let commonNavIndex = 0;
 
         function getHandScrolls()   { return [...(window.spellSystem?.handScrolls   || [])]; }
         function getActiveScrolls() { return [...(window.spellSystem?.activeScrolls || [])]; }
+        function getCommonScrolls() {
+            return typeof window.spellSystem?.getCommonAreaScrolls === 'function'
+                ? window.spellSystem.getCommonAreaScrolls() : [];
+        }
 
         function clearScrollSelection() {
             document.querySelectorAll('.fsp-card-selected').forEach(c => c.classList.remove('fsp-card-selected'));
@@ -2467,14 +2473,9 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             }
         }
 
-        function cancelHandNav() {
-            handNavActive = false;
-            clearScrollSelection();
-        }
-        function cancelActiveNav() {
-            activeNavActive = false;
-            clearScrollSelection();
-        }
+        function cancelHandNav()   { handNavActive   = false; clearScrollSelection(); }
+        function cancelActiveNav() { activeNavActive = false; clearScrollSelection(); }
+        function cancelCommonNav() { commonNavActive = false; clearScrollSelection(); }
 
         function enterHandNav() {
             const sps = window.ScrollPanelSystem;
@@ -2482,11 +2483,11 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             if (!scrolls.length) { updateStatus('Hand is empty.'); return; }
             const el = document.getElementById('fsp-hand');
             if (!el || el.style.display === 'none') sps?.openPanel('hand');
-            cancelActiveNav();
+            cancelActiveNav(); cancelCommonNav();
             handNavActive = true;
             handNavIndex = 0;
             highlightScrollCard('hand', 0);
-            updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · \\=common · Shift=cast · Esc cancel`);
+            updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · Tab=common · Space=cast · Esc cancel`);
         }
 
         function enterActiveNav() {
@@ -2495,11 +2496,24 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             if (!scrolls.length) { updateStatus('Active area is empty.'); return; }
             const el = document.getElementById('fsp-active');
             if (!el || el.style.display === 'none') sps?.openPanel('active');
-            cancelHandNav();
+            cancelHandNav(); cancelCommonNav();
             activeNavActive = true;
             activeNavIndex = 0;
             highlightScrollCard('active', 0);
-            updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Shift=cast · \\=common · Esc cancel`);
+            updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Tab=common · Space=cast · Esc cancel`);
+        }
+
+        function enterCommonNav() {
+            const sps = window.ScrollPanelSystem;
+            const scrolls = getCommonScrolls();
+            if (!scrolls.length) { updateStatus('Common area is empty.'); return; }
+            const el = document.getElementById('fsp-common');
+            if (!el || el.style.display === 'none') sps?.openPanel('common');
+            cancelHandNav(); cancelActiveNav();
+            commonNavActive = true;
+            commonNavIndex = 0;
+            highlightScrollCard('common', 0);
+            updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} — ← → pick · Space=cast · Esc cancel`);
         }
 
         // Stone placement keyboard-preview state
@@ -2654,14 +2668,21 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 else enterHandNav();
             }
 
-            // K: navigate Active scrolls
-            if ((e.key === 'k' || e.key === 'K') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            // W: navigate Active scrolls
+            if ((e.key === 'w' || e.key === 'W') && !e.ctrlKey && !e.altKey && !e.metaKey) {
                 if (activeNavActive) { cancelActiveNav(); updateStatus('Active navigation cancelled.'); }
                 else enterActiveNav();
             }
 
-            // Backslash: move selected card to common area
-            if (e.key === '\\') {
+            // E: navigate Common scrolls
+            if ((e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                if (commonNavActive) { cancelCommonNav(); updateStatus('Common navigation cancelled.'); }
+                else enterCommonNav();
+            }
+
+            // Tab: move selected card to Common Area
+            if (e.key === 'Tab' && (handNavActive || activeNavActive)) {
+                e.preventDefault();
                 const sp = window.spellSystem;
                 const sps = window.ScrollPanelSystem;
                 if (handNavActive) {
@@ -2685,16 +2706,19 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // Shift alone: cast selected card
-            if (e.key === 'Shift' && (handNavActive || activeNavActive)) {
+            // Space: cast selected card (hand or active nav)
+            if (e.key === ' ' && (handNavActive || activeNavActive || commonNavActive)) {
+                e.preventDefault();
                 const sp = window.spellSystem;
                 const sps = window.ScrollPanelSystem;
-                const scrolls = handNavActive ? getHandScrolls() : getActiveScrolls();
-                const idx = handNavActive ? handNavIndex : activeNavIndex;
+                let scrolls, idx;
+                if (handNavActive)   { scrolls = getHandScrolls();   idx = handNavIndex; }
+                else if (activeNavActive) { scrolls = getActiveScrolls(); idx = activeNavIndex; }
+                else                 { scrolls = getCommonScrolls();  idx = commonNavIndex; }
                 const name = scrolls[idx];
                 if (name && sp) {
                     if (sp.checkPattern && sp.checkPattern(name)) {
-                        if (handNavActive) cancelHandNav(); else cancelActiveNav();
+                        cancelHandNav(); cancelActiveNav(); cancelCommonNav();
                         sp.castSpell();
                         sps?.refresh();
                     } else {
@@ -2703,7 +2727,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
-            // H / A: toggle Hand / Active scroll panels
+            // H / A / C: toggle Hand / Active / Common scroll panels
             if ((e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.altKey && !e.metaKey) {
                 const sps = window.ScrollPanelSystem;
                 if (sps) {
@@ -2720,9 +2744,17 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     else sps.openPanel('active');
                 }
             }
-
-            // C key: catacomb teleport preview
             if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const sps = window.ScrollPanelSystem;
+                if (sps) {
+                    const el = document.getElementById('fsp-common');
+                    if (el && el.style.display !== 'none') sps.closePanel('common');
+                    else sps.openPanel('common');
+                }
+            }
+
+            // T key: catacomb Teleport preview
+            if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.altKey && !e.metaKey) {
                 if (cataPreviewActive) {
                     confirmCataTransport();
                 } else if (canTakeAction() && playerPosition) {
@@ -2737,7 +2769,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         cataPreviewIndex = 0;
                         cataPreviewActive = true;
                         showCataPreviewGhost(dests[0]);
-                        updateStatus(`Catacomb teleport — destination 1 of ${dests.length} — ← → to cycle, C to confirm, Esc to cancel`);
+                        updateStatus(`Catacomb teleport — destination 1 of ${dests.length} — ← → to cycle, T to confirm, Esc to cancel`);
                     }
                 }
             }
@@ -2874,19 +2906,24 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
 
             // Arrow keys: cycle tile-placement, movement, stone, catacomb, or scroll nav
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                if (!tilePreviewActive && !movePreviewActive && !stonePreviewActive && !cataPreviewActive && !handNavActive && !activeNavActive) return;
+                if (!tilePreviewActive && !movePreviewActive && !stonePreviewActive && !cataPreviewActive && !handNavActive && !activeNavActive && !commonNavActive) return;
                 e.preventDefault();
                 const dir = e.key === 'ArrowRight' ? 1 : -1;
                 if (handNavActive) {
                     const scrolls = getHandScrolls();
                     handNavIndex = (handNavIndex + dir + scrolls.length) % scrolls.length;
                     highlightScrollCard('hand', handNavIndex);
-                    updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · \\=common · Shift=cast · Esc cancel`);
+                    updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · Tab=common · Space=cast · Esc cancel`);
                 } else if (activeNavActive) {
                     const scrolls = getActiveScrolls();
                     activeNavIndex = (activeNavIndex + dir + scrolls.length) % scrolls.length;
                     highlightScrollCard('active', activeNavIndex);
-                    updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Shift=cast · \\=common · Esc cancel`);
+                    updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Tab=common · Space=cast · Esc cancel`);
+                } else if (commonNavActive) {
+                    const scrolls = getCommonScrolls();
+                    commonNavIndex = (commonNavIndex + dir + scrolls.length) % scrolls.length;
+                    highlightScrollCard('common', commonNavIndex);
+                    updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} — ← → pick · Space=cast · Esc cancel`);
                 } else if (tilePreviewActive) {
                     tilePreviewIndex = (tilePreviewIndex + dir + tilePreviewPositions.length) % tilePreviewPositions.length;
                     showTilePreviewGhost(tilePreviewPositions[tilePreviewIndex]);
@@ -2898,7 +2935,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 } else if (cataPreviewActive) {
                     cataPreviewIndex = (cataPreviewIndex + dir + cataPreviewDestinations.length) % cataPreviewDestinations.length;
                     showCataPreviewGhost(cataPreviewDestinations[cataPreviewIndex]);
-                    updateStatus(`Catacomb teleport — destination ${cataPreviewIndex + 1} of ${cataPreviewDestinations.length} — ← → to cycle, C to confirm, Esc to cancel`);
+                    updateStatus(`Catacomb teleport — destination ${cataPreviewIndex + 1} of ${cataPreviewDestinations.length} — ← → to cycle, T to confirm, Esc to cancel`);
                 } else {
                     movePreviewIndex = (movePreviewIndex + dir + movePreviewPositions.length) % movePreviewPositions.length;
                     showMovePreviewGhost(movePreviewPositions[movePreviewIndex]);
@@ -2915,6 +2952,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 else if (cataPreviewActive) { cancelCataPreview(); updateStatus('Teleport cancelled.'); }
                 else if (handNavActive) { cancelHandNav(); updateStatus('Hand navigation cancelled.'); }
                 else if (activeNavActive) { cancelActiveNav(); updateStatus('Active navigation cancelled.'); }
+                else if (commonNavActive) { cancelCommonNav(); updateStatus('Common navigation cancelled.'); }
             }
         });
 

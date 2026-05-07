@@ -378,6 +378,7 @@ function _renderSettings(content) {
 
     content.innerHTML = `
         <div class="gami-settings-list">
+            <div class="gami-settings-section-label">— Audio —</div>
             <div class="gami-settings-row">
                 <div class="gami-settings-label">
                     <div class="gami-settings-name">UI Sounds</div>
@@ -394,7 +395,7 @@ function _renderSettings(content) {
                 <button class="gami-toggle ${gameSound ? 'on' : 'off'}"
                         onclick="_gami_toggleSetting('game_sound', this)">${gameSound ? 'ON' : 'OFF'}</button>
             </div>
-            <div style="font-family:var(--font-terminal);font-size:17px;color:#ccc;padding:8px 0 2px;letter-spacing:1px;">— Display —</div>
+            <div class="gami-settings-section-label">— Display —</div>
             <div class="gami-settings-row">
                 <div class="gami-settings-label">
                     <div class="gami-settings-name">Scanlines</div>
@@ -426,6 +427,39 @@ function _renderSettings(content) {
                 </div>
                 <button class="gami-toggle ${crt.flicker ? 'on' : 'off'}"
                         onclick="_gami_toggleCrt('flicker', this)">${crt.flicker ? 'ON' : 'OFF'}</button>
+            </div>
+
+            <div class="gami-settings-section-label">— Keyboard Controls —</div>
+            <div class="gami-keybind-guide">
+                <div class="gami-keybind-group">
+                    <div class="gami-keybind-group-title">Board Actions</div>
+                    <div class="gami-keybind-row"><kbd>Enter</kbd><span>Place tile or move pawn (start / confirm)</span></div>
+                    <div class="gami-keybind-row"><kbd>1</kbd><span>Void stone preview</span></div>
+                    <div class="gami-keybind-row"><kbd>2</kbd><span>Wind stone preview</span></div>
+                    <div class="gami-keybind-row"><kbd>3</kbd><span>Fire stone preview</span></div>
+                    <div class="gami-keybind-row"><kbd>4</kbd><span>Water stone preview</span></div>
+                    <div class="gami-keybind-row"><kbd>5</kbd><span>Earth stone preview</span></div>
+                    <div class="gami-keybind-row"><kbd>T</kbd><span>Catacomb teleport preview (T again to confirm)</span></div>
+                    <div class="gami-keybind-row"><kbd>← →</kbd><span>Cycle positions or scroll cards</span></div>
+                    <div class="gami-keybind-row"><kbd>Esc</kbd><span>Cancel any active preview or navigation</span></div>
+                </div>
+                <div class="gami-keybind-group">
+                    <div class="gami-keybind-group-title">Panel Toggles</div>
+                    <div class="gami-keybind-row"><kbd>H</kbd><span>Toggle Hand panel</span></div>
+                    <div class="gami-keybind-row"><kbd>A</kbd><span>Toggle Active panel</span></div>
+                    <div class="gami-keybind-row"><kbd>C</kbd><span>Toggle Common panel</span></div>
+                </div>
+                <div class="gami-keybind-group">
+                    <div class="gami-keybind-group-title">Scroll Navigation</div>
+                    <div class="gami-keybind-row"><kbd>Q</kbd><span>Navigate Hand scrolls</span></div>
+                    <div class="gami-keybind-row"><kbd>W</kbd><span>Navigate Active scrolls</span></div>
+                    <div class="gami-keybind-row"><kbd>E</kbd><span>Navigate Common scrolls</span></div>
+                    <div class="gami-keybind-row"><kbd>← →</kbd><span>Cycle cards while in nav mode</span></div>
+                    <div class="gami-keybind-row"><kbd>Enter</kbd><span>Move Hand card → Active</span></div>
+                    <div class="gami-keybind-row"><kbd>Tab</kbd><span>Move card → Common Area</span></div>
+                    <div class="gami-keybind-row"><kbd>Space</kbd><span>Cast selected scroll</span></div>
+                    <div class="gami-keybind-row"><kbd>Esc</kbd><span>Exit navigation</span></div>
+                </div>
             </div>
         </div>
     `;
