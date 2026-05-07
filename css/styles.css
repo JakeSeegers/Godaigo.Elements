@@ -3770,6 +3770,9 @@ label, .hud-ap-label, .hud-ap-value {
 }
 .fsp-card-preview .fsp-card-name {
     font-size: 26px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
 }
 .fsp-card-preview .fsp-card-meta {
     font-size: 14px;

@@ -560,9 +560,39 @@ const ScrollPanelSystem = (() => {
         document.body.appendChild(preview);
 
         let hideTimer = null;
+        let showTimer = null;
+        let throbberEl = null;
+
+        function clearThrobber() {
+            if (throbberEl) { throbberEl.remove(); throbberEl = null; }
+        }
 
         function showPreview(card) {
             clearTimeout(hideTimer);
+            clearTimeout(showTimer);
+            clearThrobber();
+
+            // Show a small spinner on the card for 500ms before the preview appears
+            const elColor = card.style.getPropertyValue('--el-color') || '#888';
+            const cardRect = card.getBoundingClientRect();
+            const dot = document.createElement('div');
+            dot.style.cssText = `
+                position: fixed;
+                left: ${cardRect.right - 18}px;
+                top: ${cardRect.top + 6}px;
+                width: 12px; height: 12px;
+                border: 2px solid ${elColor}55;
+                border-top-color: ${elColor};
+                border-radius: 50%;
+                animation: scroll-popup-spin 0.5s linear infinite;
+                pointer-events: none;
+                z-index: 9999;
+            `;
+            document.body.appendChild(dot);
+            throbberEl = dot;
+
+            showTimer = setTimeout(() => {
+                clearThrobber();
 
             // Clone the card DOM (fast) then replace the pattern with a fresh
             // animated instance — cloneNode gives a static snapshot, not live animation
@@ -611,9 +641,12 @@ const ScrollPanelSystem = (() => {
 
             preview.style.left = left + 'px';
             preview.style.top  = top  + 'px';
+            }, 500); // 500ms hover delay
         }
 
         function hidePreview() {
+            clearTimeout(showTimer);
+            clearThrobber();
             hideTimer = setTimeout(() => { preview.style.display = 'none'; }, 80);
         }
 

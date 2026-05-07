@@ -185,30 +185,6 @@
             if (existing) existing.remove();
 
             const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#aaa';
-
-            // Show throbber overlay immediately, then build real popup after delay
-            const throbberOverlay = document.createElement('div');
-            throbberOverlay.id = 'scroll-info-popup-overlay';
-            throbberOverlay.className = 'retro-dlg-overlay';
-            throbberOverlay.style.zIndex = '2000';
-            throbberOverlay.addEventListener('click', (e) => { if (e.target === throbberOverlay) throbberOverlay.remove(); });
-            const throbber = document.createElement('div');
-            throbber.style.cssText = `
-                width: 48px; height: 48px;
-                border: 3px solid ${elementColor}44;
-                border-top-color: ${elementColor};
-                border-radius: 50%;
-                animation: scroll-popup-spin 0.6s linear infinite;
-            `;
-            throbberOverlay.appendChild(throbber);
-            document.body.appendChild(throbberOverlay);
-
-            setTimeout(() => {
-                // If user dismissed throbber already, bail
-                if (!document.getElementById('scroll-info-popup-overlay')) return;
-                throbberOverlay.remove();
-
-            // ── real popup builds below ──
             const elementLabel = element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown';
             const elementImg   = STONE_TYPES[element]?.img || '';
             const scrollTitle  = pattern?.name || scrollName;
@@ -324,7 +300,6 @@
 
             overlay.appendChild(box);
             document.body.appendChild(overlay);
-            }, 500); // 500ms delay
         }
         // Expose globally so scroll-panels.js can call it
         window.showScrollInfoPopup = showScrollInfoPopup;
