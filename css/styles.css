@@ -3737,9 +3737,11 @@ label, .hud-ap-label, .hud-ap-value {
     position: fixed;
     z-index: 1500;
     width: 480px;                  /* ~250% of the 300px panel card */
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    overflow-x: hidden;
     pointer-events: auto;
     border-radius: 12px;
-    overflow: hidden;
     background: #15112a;           /* slightly deeper than bg-panel for contrast */
     border: 1px solid rgba(255,255,255,0.16);
     border-left: 6px solid var(--el-color, #888);
@@ -3747,6 +3749,8 @@ label, .hud-ap-label, .hud-ap-value {
                 0 0 0 1px rgba(255,255,255,0.07),
                 0 0 48px color-mix(in srgb, var(--el-color, #888) 35%, transparent);
     animation: fsp-preview-in 0.14s cubic-bezier(0.25,0.46,0.45,0.94);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.15) transparent;
 }
 @keyframes fsp-preview-in {
     from { opacity: 0; transform: scale(0.92) translateY(6px); }
