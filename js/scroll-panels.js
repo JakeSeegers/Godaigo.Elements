@@ -12,7 +12,7 @@ const ScrollPanelSystem = (() => {
 
     // ---- Config ----
     const CAPACITY    = { hand: 2, active: 2, common: 5 };
-    const STORAGE_KEY = 'godaigo_scroll_panels_v4';  // bumped for horizontal card layout
+    const STORAGE_KEY = 'godaigo_scroll_panels_v5';  // bumped for stacked buttons + taller panels
     const EL_COLORS   = {
         earth: '#69d83a', water: '#5894f4', fire: '#ed1b43',
         wind: '#ffce00', void: '#9458f4', catacomb: '#9b59b6'
@@ -20,9 +20,9 @@ const ScrollPanelSystem = (() => {
 
     // Default positions — horizontal card layout (wide + short)
     const DEFAULTS = {
-        hand:   { x: 20,  y: 140, w: 500, h: 320, collapsed: false },
-        active: { x: 20,  y: 480, w: 500, h: 320, collapsed: false },
-        common: { x: 20,  y: 820, w: 720, h: 320, collapsed: false }
+        hand:   { x: 20,  y: 100, w: 520, h: 420, collapsed: false },
+        active: { x: 20,  y: 540, w: 520, h: 420, collapsed: false },
+        common: { x: 20,  y: 980, w: 760, h: 420, collapsed: false }
     };
 
     const panels = {};      // { id → { el, state, open } }

@@ -3544,8 +3544,8 @@ label, .hud-ap-label, .hud-ap-value {
     overflow: hidden;
     transition: background 0.15s, box-shadow 0.15s;
     flex-shrink: 0;
-    width: 220px;
-    min-width: 220px;
+    width: 230px;
+    min-width: 230px;
 }
 .fsp-card:hover {
     background: rgba(255,255,255,0.06);
@@ -3650,10 +3650,11 @@ label, .hud-ap-label, .hud-ap-value {
     margin-top: 0 !important;
 }
 
-/* Action buttons row */
+/* Action buttons — stacked vertically so they don't overflow card width */
 .fsp-card-actions {
     display: flex;
-    gap: 5px;
+    flex-direction: column;
+    gap: 4px;
     padding: 0 9px 8px;
 }
 
@@ -3668,7 +3669,8 @@ label, .hud-ap-label, .hud-ap-value {
     color: #c4b5f8;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
-    flex-shrink: 0;
+    width: 100%;
+    text-align: center;
 }
 .fsp-card-btn:hover {
     background: rgba(148,88,244,0.35);
