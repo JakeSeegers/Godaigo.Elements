@@ -3488,17 +3488,18 @@ label, .hud-ap-label, .hud-ap-value {
 /* ---- Body ---- */
 .fsp-body {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding: 8px;
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
     /* Custom scrollbar */
     scrollbar-width: thin;
     scrollbar-color: rgba(148,88,244,0.4) transparent;
 }
-.fsp-body::-webkit-scrollbar { width: 4px; }
+.fsp-body::-webkit-scrollbar { height: 4px; }
 .fsp-body::-webkit-scrollbar-track { background: transparent; }
 .fsp-body::-webkit-scrollbar-thumb { background: rgba(148,88,244,0.4); border-radius: 2px; }
 
@@ -3538,11 +3539,13 @@ label, .hud-ap-label, .hud-ap-value {
 .fsp-card {
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.07);
-    border-left: 3px solid var(--el-color, #888);
+    border-top: 3px solid var(--el-color, #888);
     border-radius: 6px;
     overflow: hidden;
     transition: background 0.15s, box-shadow 0.15s;
     flex-shrink: 0;
+    width: 220px;
+    min-width: 220px;
 }
 .fsp-card:hover {
     background: rgba(255,255,255,0.06);
