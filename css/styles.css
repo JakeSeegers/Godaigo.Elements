@@ -1363,6 +1363,10 @@ svg {
     50%       { opacity: 0.85; }
 }
 
+@keyframes scroll-popup-spin {
+    to { transform: rotate(360deg); }
+}
+
 .catacomb-preview {
     pointer-events: none;
     animation: catacomb-preview-pulse 0.7s ease-in-out infinite;
