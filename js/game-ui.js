@@ -200,7 +200,8 @@
             const box = document.createElement('div');
             box.className = 'retro-dlg-box wide';
             box.style.cssText = `
-                max-width: 380px;
+                max-width: 480px;
+                width: 90vw;
                 padding: 0;
                 overflow: hidden;
                 border: 2px solid ${elementColor};
@@ -232,7 +233,7 @@
             line1.textContent = elementLabel + (levelText ? ' · ' + levelText : '');
             headerText.appendChild(line1);
             const line2 = document.createElement('div');
-            line2.style.cssText = 'font-family:var(--font-terminal);font-size:20px;color:#e8dcc8;margin-top:3px;line-height:1.2;';
+            line2.style.cssText = 'font-family:var(--font-terminal);font-size:20px;color:#e8dcc8;margin-top:3px;line-height:1.2;word-break:break-word;';
             line2.textContent = scrollTitle;
             headerText.appendChild(line2);
             header.appendChild(headerText);
