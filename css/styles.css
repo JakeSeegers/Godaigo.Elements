@@ -3816,6 +3816,123 @@ label, .hud-ap-label, .hud-ap-value {
 }
 
 /* ============================================
+   SCROLL FOUND TOAST  (replaces blocking modal)
+   ============================================ */
+.scroll-found-toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #10101e;
+    border: 2px solid var(--toast-color, #9458f4);
+    border-radius: 6px;
+    padding: 10px 16px;
+    z-index: 9500;
+    font-family: var(--font-terminal);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 260px;
+    max-width: 500px;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--toast-color, #9458f4) 30%, transparent);
+    animation: scroll-toast-in 0.25s ease-out;
+}
+.scroll-found-toast-msg {
+    color: var(--toast-color, #9458f4);
+    font-size: 16px;
+    flex: 1;
+}
+.scroll-found-toast-msg strong {
+    color: #fff;
+}
+.scroll-found-toast-btn {
+    background: transparent;
+    border: 1px solid var(--toast-color, #9458f4);
+    color: var(--toast-color, #9458f4);
+    font-family: var(--font-terminal);
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.scroll-found-toast-btn:hover {
+    background: color-mix(in srgb, var(--toast-color, #9458f4) 20%, transparent);
+}
+@keyframes scroll-toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* New-card glow (briefly applied when a scroll is added to hand) */
+.fsp-card-new-glow {
+    animation: fsp-new-glow 2.5s ease-out forwards;
+}
+@keyframes fsp-new-glow {
+    0%   { box-shadow: 0 0 0 3px var(--el-color, #9458f4), 0 0 24px var(--el-color, #9458f4); background: color-mix(in srgb, var(--el-color, #9458f4) 22%, #12121f); }
+    60%  { box-shadow: 0 0 0 2px var(--el-color, #9458f4), 0 0 10px var(--el-color, #9458f4)55; background: color-mix(in srgb, var(--el-color, #9458f4) 10%, #12121f); }
+    100% { box-shadow: none; background: transparent; }
+}
+
+/* ============================================
+   SCROLL OVERFLOW BANNER  (replaces blocking modal)
+   ============================================ */
+#scroll-overflow-banner {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #180808;
+    border-bottom: 3px solid #ed1b43;
+    padding: 10px 20px;
+    z-index: 9600;
+    font-family: var(--font-terminal);
+    color: #ed1b43;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-width: 320px;
+    max-width: 660px;
+    box-shadow: 0 2px 20px #ed1b4355;
+    animation: scroll-toast-in 0.2s ease-out;
+}
+#scroll-overflow-banner .overflow-banner-status {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#scroll-overflow-banner.overflow-resolved {
+    border-bottom-color: #69d83a;
+    color: #69d83a;
+    background: #081808;
+    box-shadow: 0 2px 20px #69d83a44;
+}
+.overflow-banner-btn {
+    background: transparent;
+    border: 2px solid currentColor;
+    color: inherit;
+    font-family: var(--font-terminal);
+    font-size: 13px;
+    padding: 5px 14px;
+    cursor: pointer;
+    border-radius: 3px;
+    flex-shrink: 0;
+    opacity: 0.45;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+.overflow-banner-btn:not(:disabled) {
+    opacity: 1;
+    pointer-events: auto;
+}
+.overflow-banner-btn:not(:disabled):hover {
+    background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+/* ============================================
    VERSION LABEL
    ============================================ */
 .version-label {

@@ -824,7 +824,7 @@
                     // Over limit — remind the player they must cascade before ending their turn
                     updateStatus(`Picked up "${scrollInfo?.name || selected}" — hand is over the limit. Cascade a scroll before ending your turn!`);
                 } else {
-                    this.showScrollNotification(scrollInfo, shrineType);
+                    this.showScrollNotification(scrollInfo, shrineType, selected);
                 }
 
                 return scrollInfo;
@@ -1060,251 +1060,124 @@
                 document.body.appendChild(overlay);
             }
 
-            // End-of-turn overflow: hand or active over capacity. Player must move scrolls to active or common until within limits.
-            // Smart flow: if active is full, they can move active→common first to "make space", then move hand→active.
+            // End-of-turn overflow: hand or active over capacity.
+            // Opens the Hand + Active panels and shows a top banner until resolved.
             showEndTurnOverflowModal(onResolved) {
-                const overlay = document.createElement('div');
-                overlay.id = 'end-turn-overflow-overlay';
-                overlay.className = 'retro-dlg-overlay';
-                overlay.style.zIndex = '1001';
-
-                const popup = document.createElement('div');
-                popup.id = 'end-turn-overflow-popup';
-                popup.className = 'retro-dlg-box wide';
-
-                const title = document.createElement('div');
-                title.textContent = 'Scroll Overflow';
-                title.className = 'retro-dlg-title';
-                popup.appendChild(title);
-
-                const subtitle2 = document.createElement('div');
-                subtitle2.textContent = 'Resolve Before Ending Turn';
-                subtitle2.className = 'retro-dlg-title';
-                subtitle2.style.fontSize = '13px';
-                subtitle2.style.marginTop = '-8px';
-                popup.appendChild(subtitle2);
-
-                const subtitle = document.createElement('p');
-                subtitle.id = 'end-turn-overflow-subtitle';
-                subtitle.className = 'retro-dlg-line';
-                subtitle.style.marginBottom = '12px';
-                popup.appendChild(subtitle);
-
-                const content = document.createElement('div');
-                content.id = 'end-turn-overflow-content';
-                popup.appendChild(content);
-
                 const self = this;
 
-                // Single delegated click: read scroll name from button so the right scroll is always used
-                content.addEventListener('click', function overflowContentClick(e) {
-                    const btn = e.target && e.target.closest && e.target.closest('button[data-scroll-name]');
-                    if (!btn) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const name = btn.getAttribute('data-scroll-name');
-                    const action = btn.getAttribute('data-action');
-                    if (!name) return;
-                    if (action === 'to-common') {
-                        if (self.discardScroll(name)) {
-                            self.updateScrollCount();
-                            try { if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI(); } catch (err) {}
-                            renderContent();
-                        }
-                    } else if (action === 'to-active') {
-                        if (self.moveToActive(name)) {
-                            self.updateScrollCount();
-                            renderContent();
-                        }
-                    }
-                });
-
-                function renderContent() {
-                    content.innerHTML = '';
-                    const scrolls = self.getPlayerScrolls(false);
-                    const handOver = scrolls.hand.size > self.MAX_HAND_SIZE;
-                    const activeOver = scrolls.active.size > self.MAX_ACTIVE_SIZE;
-                    const hasRoomInActive = scrolls.active.size < self.MAX_ACTIVE_SIZE;
-
-                    subtitle.textContent = `Hand: ${scrolls.hand.size}/${self.MAX_HAND_SIZE}  |  Active: ${scrolls.active.size}/${self.MAX_ACTIVE_SIZE}`;
-                    if (handOver) subtitle.textContent += '  (hand over limit)';
-                    if (activeOver) subtitle.textContent += '  (active over limit)';
-
-                    const stillOverflow = handOver || activeOver;
-
-                    // Hand scrolls: can move to Active (if room) or Common
-                    [...scrolls.hand].forEach(scrollName => {
-                        const pattern = self.patterns[scrollName];
-                        const element = self.getScrollElement(scrollName);
-                        const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#aaa';
-
-                        const card = document.createElement('div');
-                        Object.assign(card.style, {
-                            background: '#1a1a2a',
-                            border: '2px solid #444',
-                            borderLeft: `4px solid ${elementColor}`,
-                            padding: '10px 14px',
-                            marginBottom: '10px',
-                        });
-
-                        const nameSpan = document.createElement('div');
-                        nameSpan.textContent = 'Hand: ' + (pattern ? pattern.name : scrollName);
-                        Object.assign(nameSpan.style, {
-                            fontFamily: 'var(--font-terminal)', fontSize: '20px',
-                            color: elementColor, marginBottom: '4px'
-                        });
-                        card.appendChild(nameSpan);
-                        if (pattern) {
-                            const desc = document.createElement('div');
-                            desc.textContent = pattern.description;
-                            Object.assign(desc.style, {
-                                fontFamily: 'var(--font-terminal)', fontSize: '16px',
-                                color: '#aaa', marginBottom: '10px', lineHeight: '1.3'
-                            });
-                            card.appendChild(desc);
-                        }
-
-                        const buttonRow = document.createElement('div');
-                        buttonRow.style.display = 'flex';
-                        buttonRow.style.gap = '10px';
-                        buttonRow.style.justifyContent = 'flex-end';
-
-                        if (hasRoomInActive) {
-                            const toActiveBtn = document.createElement('button');
-                            toActiveBtn.type = 'button';
-                            toActiveBtn.setAttribute('data-scroll-name', scrollName);
-                            toActiveBtn.setAttribute('data-action', 'to-active');
-                            toActiveBtn.textContent = 'To Active';
-                            toActiveBtn.className = 'retro-dlg-btn ok';
-                            buttonRow.appendChild(toActiveBtn);
-                        }
-
-                        const toCommonBtn = document.createElement('button');
-                        toCommonBtn.type = 'button';
-                        toCommonBtn.setAttribute('data-scroll-name', scrollName);
-                        toCommonBtn.setAttribute('data-action', 'to-common');
-                        toCommonBtn.textContent = 'To Common';
-                        toCommonBtn.className = 'retro-dlg-btn cancel';
-                        buttonRow.appendChild(toCommonBtn);
-
-                        card.appendChild(buttonRow);
-                        content.appendChild(card);
-                    });
-
-                    // Active scrolls: can move to Common only (frees space so hand→active becomes possible)
-                    [...scrolls.active].forEach(scrollName => {
-                        const pattern = self.patterns[scrollName];
-                        const element = self.getScrollElement(scrollName);
-                        const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#aaa';
-
-                        const card = document.createElement('div');
-                        Object.assign(card.style, {
-                            background: '#1a1a2a',
-                            border: '2px solid #d9b08c',
-                            borderLeft: `4px solid ${elementColor}`,
-                            padding: '10px 14px',
-                            marginBottom: '10px',
-                        });
-
-                        const nameSpan = document.createElement('div');
-                        nameSpan.textContent = 'Active: ' + (pattern ? pattern.name : scrollName);
-                        Object.assign(nameSpan.style, {
-                            fontFamily: 'var(--font-terminal)', fontSize: '20px',
-                            color: elementColor, marginBottom: '4px'
-                        });
-                        card.appendChild(nameSpan);
-                        if (pattern) {
-                            const desc = document.createElement('div');
-                            desc.textContent = pattern.description;
-                            Object.assign(desc.style, {
-                                fontFamily: 'var(--font-terminal)', fontSize: '16px',
-                                color: '#aaa', marginBottom: '10px', lineHeight: '1.3'
-                            });
-                            card.appendChild(desc);
-                        }
-
-                        const toCommonBtn = document.createElement('button');
-                        toCommonBtn.type = 'button';
-                        toCommonBtn.setAttribute('data-scroll-name', scrollName);
-                        toCommonBtn.setAttribute('data-action', 'to-common');
-                        toCommonBtn.textContent = 'To Common';
-                        toCommonBtn.className = 'retro-dlg-btn cancel';
-                        card.appendChild(toCommonBtn);
-                        content.appendChild(card);
-                    });
-
-                    const doneRow = document.createElement('div');
-                    doneRow.style.marginTop = '16px';
-                    doneRow.style.textAlign = 'center';
-
-                    const doneBtn = document.createElement('button');
-                    doneBtn.type = 'button';
-                    doneBtn.textContent = stillOverflow ? 'Resolve overflow first' : 'Done – End Turn';
-                    doneBtn.disabled = stillOverflow;
-                    doneBtn.className = 'retro-dlg-btn' + (stillOverflow ? '' : ' ok');
-                    if (stillOverflow) doneBtn.style.opacity = '0.5';
-                    doneBtn.onclick = () => {
-                        if (stillOverflow) return;
-                        document.body.removeChild(overlay);
-                        onResolved();
-                    };
-                    doneRow.appendChild(doneBtn);
-                    content.appendChild(doneRow);
+                // Open Hand + Active panels so the player can manage scrolls
+                if (window.ScrollPanelSystem) {
+                    window.ScrollPanelSystem.openPanel('hand');
+                    window.ScrollPanelSystem.openPanel('active');
+                    window.ScrollPanelSystem.refresh();
                 }
 
-                renderContent();
-                overlay.appendChild(popup);
-                document.body.appendChild(overlay);
+                // Remove any stale banner from a previous call
+                const old = document.getElementById('scroll-overflow-banner');
+                if (old) old.remove();
+
+                // Build the banner
+                const banner = document.createElement('div');
+                banner.id = 'scroll-overflow-banner';
+
+                const statusEl = document.createElement('span');
+                statusEl.className = 'overflow-banner-status';
+                banner.appendChild(statusEl);
+
+                const endTurnBtn = document.createElement('button');
+                endTurnBtn.className = 'overflow-banner-btn';
+                endTurnBtn.textContent = 'End Turn';
+                endTurnBtn.disabled = true;
+                banner.appendChild(endTurnBtn);
+
+                document.body.appendChild(banner);
+
+                function updateBanner() {
+                    if (!document.getElementById('scroll-overflow-banner')) {
+                        clearInterval(pollInterval);
+                        return;
+                    }
+                    const scrolls = self.getPlayerScrolls(false);
+                    const handOver   = scrolls.hand.size   > self.MAX_HAND_SIZE;
+                    const activeOver = scrolls.active.size > self.MAX_ACTIVE_SIZE;
+                    const stillOver  = handOver || activeOver;
+
+                    if (stillOver) {
+                        let msg = `⚠ Scroll Overflow — `;
+                        if (handOver)   msg += `Hand: ${scrolls.hand.size}/${self.MAX_HAND_SIZE}  `;
+                        if (activeOver) msg += `Active: ${scrolls.active.size}/${self.MAX_ACTIVE_SIZE}`;
+                        statusEl.textContent = msg.trimEnd();
+                        banner.classList.remove('overflow-resolved');
+                        endTurnBtn.disabled = true;
+                    } else {
+                        statusEl.textContent = `✓ Resolved — Hand: ${scrolls.hand.size}/${self.MAX_HAND_SIZE}  Active: ${scrolls.active.size}/${self.MAX_ACTIVE_SIZE}`;
+                        banner.classList.add('overflow-resolved');
+                        endTurnBtn.disabled = false;
+                    }
+
+                    if (window.ScrollPanelSystem) window.ScrollPanelSystem.refresh();
+                }
+
+                endTurnBtn.addEventListener('click', () => {
+                    const scrolls = self.getPlayerScrolls(false);
+                    const handOver   = scrolls.hand.size   > self.MAX_HAND_SIZE;
+                    const activeOver = scrolls.active.size > self.MAX_ACTIVE_SIZE;
+                    if (handOver || activeOver) return;
+                    clearInterval(pollInterval);
+                    banner.remove();
+                    onResolved();
+                });
+
+                updateBanner();
+                const pollInterval = setInterval(updateBanner, 300);
             }
 
-            showScrollNotification(scrollInfo, elementType) {
+            showScrollNotification(scrollInfo, elementType, scrollId) {
                 const stoneType = STONE_TYPES[elementType];
                 const color = stoneType ? stoneType.color : '#9458f4';
-                const symbolImg = stoneType ? `<img src="${stoneType.img}" class="element-icon-sm" alt="${elementType}" style="vertical-align:middle;">` : '';
 
-                const overlay = document.createElement('div');
-                overlay.className = 'retro-dlg-overlay';
-                overlay.id = 'scroll-found-overlay';
+                // Open the Hand panel so the player can see the new card
+                if (window.ScrollPanelSystem) {
+                    window.ScrollPanelSystem.openPanel('hand');
+                    window.ScrollPanelSystem.refresh();
+                    // Briefly glow the new card after a short render delay
+                    if (scrollId) {
+                        setTimeout(() => {
+                            const body = document.getElementById('fsp-body-hand');
+                            if (body) {
+                                const card = body.querySelector(`.fsp-card[data-scroll-name="${CSS.escape(scrollId)}"]`);
+                                if (card) {
+                                    card.classList.add('fsp-card-new-glow');
+                                    setTimeout(() => card.classList.remove('fsp-card-new-glow'), 2500);
+                                }
+                            }
+                        }, 120);
+                    }
+                }
 
-                const box = document.createElement('div');
-                box.className = 'retro-dlg-box wide';
+                // Non-blocking toast at the bottom of the screen
+                const iconHtml = stoneType
+                    ? `<img src="${stoneType.img}" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;" alt="${elementType}">`
+                    : '✦ ';
 
-                const title = document.createElement('div');
-                title.textContent = 'New Scroll Found!';
-                title.className = 'retro-dlg-title';
-                title.style.color = color;
-                box.appendChild(title);
+                const toast = document.createElement('div');
+                toast.className = 'scroll-found-toast';
+                toast.style.setProperty('--toast-color', color);
 
-                const card = document.createElement('div');
-                card.className = 'si-card';
-
-                const nameRow = document.createElement('div');
-                nameRow.className = 'si-card-header';
-                const nameEl = document.createElement('div');
-                nameEl.innerHTML = `<span style="color:${color}">${symbolImg}</span> ${scrollInfo.name}`;
-                nameEl.className = 'si-card-name';
-                nameRow.appendChild(nameEl);
-                card.appendChild(nameRow);
-
-                const desc = document.createElement('div');
-                desc.textContent = scrollInfo.description;
-                desc.className = 'si-card-desc';
-                card.appendChild(desc);
-
-                const patternVisual = this.createPatternVisual(scrollInfo, elementType);
-                card.appendChild(patternVisual);
-
-                box.appendChild(card);
+                const msg = document.createElement('span');
+                msg.className = 'scroll-found-toast-msg';
+                msg.innerHTML = `${iconHtml}New Scroll: <strong>${scrollInfo?.name || scrollId}</strong>`;
+                toast.appendChild(msg);
 
                 const closeBtn = document.createElement('button');
                 closeBtn.textContent = 'Got it!';
-                closeBtn.className = 'retro-dlg-btn ok';
-                closeBtn.style.width = '100%';
-                closeBtn.onclick = () => overlay.remove();
-                box.appendChild(closeBtn);
+                closeBtn.className = 'scroll-found-toast-btn';
+                closeBtn.onclick = () => toast.remove();
+                toast.appendChild(closeBtn);
 
-                overlay.appendChild(box);
-                document.body.appendChild(overlay);
+                document.body.appendChild(toast);
+                // Auto-dismiss after 5 seconds
+                setTimeout(() => { if (toast.parentNode) toast.remove(); }, 5000);
             }
 
             checkPattern(patternName) {
