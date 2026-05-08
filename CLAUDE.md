@@ -58,6 +58,7 @@ Order matters — later scripts depend on earlier ones.
 14. tutorial-mode.js       ← Interactive tutorial (depends on lobby.js + game-core.js)
 15. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 16. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
+17. bot.js                 ← Scripted test bot; Shift+R = one bot step (depends on game-core + lobby)
 ```
 
 ---
