@@ -2944,6 +2944,12 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
             }
 
+            // X: end turn
+            if ((e.key === 'x' || e.key === 'X') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const btn = document.getElementById('end-turn');
+                if (btn && !btn.disabled) btn.click();
+            }
+
             // Escape: cancel whichever preview or nav is active
             if (e.key === 'Escape') {
                 if (tilePreviewActive) { cancelTilePreview(); updateStatus('Tile placement cancelled.'); }

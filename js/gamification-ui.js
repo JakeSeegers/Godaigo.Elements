@@ -433,6 +433,7 @@ function _renderSettings(content) {
             <div class="gami-keybind-guide">
                 <div class="gami-keybind-group">
                     <div class="gami-keybind-group-title">Board Actions</div>
+                    <div class="gami-keybind-row"><kbd>X</kbd><span>End turn</span></div>
                     <div class="gami-keybind-row"><kbd>Enter</kbd><span>Place tile or move pawn (start / confirm)</span></div>
                     <div class="gami-keybind-row"><kbd>1</kbd><span>Void stone preview</span></div>
                     <div class="gami-keybind-row"><kbd>2</kbd><span>Wind stone preview</span></div>
