@@ -698,6 +698,7 @@
 
                 // Stop polling and subscriptions
                 stopLobbyPoll();
+                stopLastManStandingPoll();
 
                 // Unsubscribe from channels
                 if (playersSubscription) {
@@ -823,6 +824,7 @@
 
             try {
                 console.log('🏆 Game Over! Winner:', winnerPlayerIndex, 'Type:', winType);
+                stopLastManStandingPoll();
 
                 // Award gamification XP FIRST — before showing the overlay — so the async RPC
                 // completes before any page reload triggered by "Return to Lobby" can cancel it
@@ -1511,6 +1513,9 @@
 
                 // Host monitors for disconnected players (stale last_seen)
                 if (isHost) startDisconnectMonitor();
+
+                // All players poll every 5 s — bulletproof fallback for last-man-standing
+                startLastManStandingPoll();
 
                 // Initialize game with multiplayer players and shared deck seed
                 startMultiplayerGame(allPlayers, gameDeckSeed);
@@ -3096,6 +3101,38 @@
         }
 
         // ----------------------------------------------------------------
+        // Last-man-standing poll — bulletproof fallback for disconnect win.
+        // Runs every 5 s for every player (not just host).
+        // Independent of Presence / Realtime subscription delivery.
+        // ----------------------------------------------------------------
+        let _lmsInterval = null;
+
+        function startLastManStandingPoll() {
+            stopLastManStandingPoll();
+            _lmsInterval = setInterval(async () => {
+                if (!isMultiplayer || !currentGameId || !myPlayerId) return;
+                try {
+                    const { data: remaining } = await supabase
+                        .from('players')
+                        .select('id')
+                        .eq('game_id', currentGameId);
+                    if (!remaining) return;
+                    if (remaining.length === 1 && remaining[0].id === myPlayerId) {
+                        console.log('📊 Poll: I am the last player remaining — triggering win.');
+                        stopLastManStandingPoll();
+                        if (myPlayerIndex !== null && myPlayerIndex !== undefined) {
+                            await handleGameOver(myPlayerIndex, 'last_standing');
+                        }
+                    }
+                } catch (e) { /* ignore transient network errors */ }
+            }, 5000);
+        }
+
+        function stopLastManStandingPoll() {
+            if (_lmsInterval) { clearInterval(_lmsInterval); _lmsInterval = null; }
+        }
+
+        // ----------------------------------------------------------------
         // Multiplayer hooks called by game-core.js
         // ----------------------------------------------------------------
 
@@ -3148,6 +3185,7 @@
             }
 
             stopDisconnectMonitor();
+            stopLastManStandingPoll();
 
             // Clear the board
             if (typeof clearBoard === 'function') {
