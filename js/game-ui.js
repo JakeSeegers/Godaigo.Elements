@@ -2620,6 +2620,13 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
         }
 
         document.addEventListener('keydown', (e) => {
+            // Don't fire game shortcuts while the player is typing in any input / textarea / contenteditable
+            const tag = document.activeElement?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+
+            // Don't fire game shortcuts until the game board is actually active
+            if (!document.getElementById('game-layout')?.classList.contains('active')) return;
+
             console.log(`Key pressed: ${e.key}, isDraggingTile=${isDraggingTile}, ghostTile=${!!ghostTile}, shift=${e.shiftKey}`);
             if (e.key === 'f' || e.key === 'F') {
                 console.log(`F key detected! isDraggingTile=${isDraggingTile}, ghostTile exists=${!!ghostTile}, shift=${e.shiftKey}`);
