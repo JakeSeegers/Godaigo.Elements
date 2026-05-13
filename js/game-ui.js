@@ -3310,7 +3310,6 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
         const invBtn = document.getElementById('inventory-toggle');
         if (invBtn) invBtn.onclick = toggleInventory;
 document.getElementById('undo-move').onclick = function() {
-            window.SoundSystem?.play('zipclick');
             // Resolve which action to undo: scroll-panel moves use window.lastScrollAction
             // (different closure), everything else uses lastMove.
             const scrollAction = window.lastScrollAction;

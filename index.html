@@ -605,9 +605,15 @@
         _clickSnd.volume = 0.25;
         window.uiSoundEnabled   = localStorage.getItem('godaigo_ui_sound')   !== 'false';
         window.gameSoundEnabled = localStorage.getItem('godaigo_game_sound') !== 'false';
+        // Buttons that play zipclick instead of the normal click sound
+        const ZIPCLICK_BTN = '#undo-move, .fsp-close-btn, .fsp-collapse-btn, .scroll-browse-close, .btn-close';
         document.addEventListener('mousedown', e => {
-            // Skip buttons that play their own sound (undo uses zipclick)
-            if (window.uiSoundEnabled && e.target.closest('button') && !e.target.closest('#undo-move')) {
+            if (!window.uiSoundEnabled) return;
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            if (btn.matches(ZIPCLICK_BTN) || btn.closest(ZIPCLICK_BTN)) {
+                window.SoundSystem?.play('zipclick');
+            } else {
                 _clickSnd.currentTime = 0;
                 _clickSnd.play().catch(() => {});
             }
