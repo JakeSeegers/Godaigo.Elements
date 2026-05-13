@@ -1578,8 +1578,10 @@
                             // Catacomb scrolls activate each component element
                             const elements = new Set(spell.patterns[0].map(pos => pos.type));
                             elements.forEach(el => {
-                                this.getPlayerScrolls(false).activated.add(el);
-                                window.SoundSystem?.onWinCondition(el);
+                                const ps = this.getPlayerScrolls(false);
+                                const isNew = !ps.activated.has(el);
+                                ps.activated.add(el);
+                                if (isNew) window.SoundSystem?.onWinCondition(el);
                                 if (typeof window.gami?.onElementActivated === 'function') {
                                     window.gami.onElementActivated(el, Array.from(this.getPlayerScrolls(false).activated));
                                 }
@@ -1590,8 +1592,10 @@
                             // no remaining stones of this element for anyone to use.
                             const elementSourcePool = window.stonePools?.[spell.element] ?? 1;
                             if (elementSourcePool > 0) {
-                                this.getPlayerScrolls(false).activated.add(spell.element);
-                                window.SoundSystem?.onWinCondition(spell.element);
+                                const ps = this.getPlayerScrolls(false);
+                                const isNew = !ps.activated.has(spell.element);
+                                ps.activated.add(spell.element);
+                                if (isNew) window.SoundSystem?.onWinCondition(spell.element);
                                 if (typeof window.gami?.onElementActivated === 'function') {
                                     window.gami.onElementActivated(spell.element, Array.from(this.getPlayerScrolls(false).activated));
                                 }
@@ -1655,8 +1659,10 @@
                         updateStoneCount(element);
 
                         // Track activated element for win condition (for active player)
-                        this.getPlayerScrolls(false).activated.add(element);
-                        window.SoundSystem?.onWinCondition(element);
+                        const ps0 = this.getPlayerScrolls(false);
+                        const isNew0 = !ps0.activated.has(element);
+                        ps0.activated.add(element);
+                        if (isNew0) window.SoundSystem?.onWinCondition(element);
                         rewards.push(`+${count} ${element}`);
                     });
 
@@ -1673,8 +1679,10 @@
                     // Track activated element for win condition — source pool guard applies here too
                     const elementSourcePoolDefault = window.stonePools?.[spell.element] ?? 1;
                     if (elementSourcePoolDefault > 0) {
-                        this.getPlayerScrolls(false).activated.add(spell.element);
-                        window.SoundSystem?.onWinCondition(spell.element);
+                        const ps1 = this.getPlayerScrolls(false);
+                        const isNew1 = !ps1.activated.has(spell.element);
+                        ps1.activated.add(spell.element);
+                        if (isNew1) window.SoundSystem?.onWinCondition(spell.element);
                         updateStatus(`Spell cast! Added +${spell.level} ${spell.element} stones!`);
                     } else {
                         updateStatus(`The ${spell.element} shrine source is depleted — scroll effect cast, but win condition not met.`);
