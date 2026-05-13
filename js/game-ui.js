@@ -3447,6 +3447,7 @@ document.getElementById('undo-move').onclick = function() {
                 sourcePool[shrineType] -= actualReplenished;
                 playerPool[shrineType] += actualReplenished;
                 updateStoneCount(shrineType);
+                window.SoundSystem?.play('collectstones');
 
                 // Sync resources in multiplayer
                 syncPlayerState();
