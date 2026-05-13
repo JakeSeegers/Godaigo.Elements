@@ -1296,6 +1296,7 @@
                 }
 
                 if (allCastableScrolls.length === 0) {
+                    window.SoundSystem?.play('error');
                     updateStatus("No scrolls available! Move scrolls to Active Area or use Common Area scrolls.");
                     return false;
                 }
@@ -1349,6 +1350,7 @@
                 }
 
                 if (matchingSpells.length === 0) {
+                    window.SoundSystem?.play('error');
                     updateStatus("No valid spell pattern found! Check console for details.");
                     console.log('\n✗ No matching patterns');
                     return false;

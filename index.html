@@ -606,7 +606,8 @@
         window.uiSoundEnabled   = localStorage.getItem('godaigo_ui_sound')   !== 'false';
         window.gameSoundEnabled = localStorage.getItem('godaigo_game_sound') !== 'false';
         document.addEventListener('mousedown', e => {
-            if (window.uiSoundEnabled && e.target.closest('button')) {
+            // Skip buttons that play their own sound (undo uses zipclick)
+            if (window.uiSoundEnabled && e.target.closest('button') && !e.target.closest('#undo-move')) {
                 _clickSnd.currentTime = 0;
                 _clickSnd.play().catch(() => {});
             }
