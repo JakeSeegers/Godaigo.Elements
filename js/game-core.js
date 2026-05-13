@@ -1515,6 +1515,9 @@
 
             // Apply the actual scroll effects (separated from executeSpell for response window support)
             applyScrollEffects(name, spell, fromCommonArea = false) {
+                // Sound — play before effects so it feels immediate
+                window.SoundSystem?.play('activatescroll');
+
                 // Handle scroll disposition (remove from player and decide where it goes)
                 this.handleScrollDisposition(name, fromCommonArea);
 
@@ -1576,6 +1579,7 @@
                             const elements = new Set(spell.patterns[0].map(pos => pos.type));
                             elements.forEach(el => {
                                 this.getPlayerScrolls(false).activated.add(el);
+                                window.SoundSystem?.onWinCondition(el);
                                 if (typeof window.gami?.onElementActivated === 'function') {
                                     window.gami.onElementActivated(el, Array.from(this.getPlayerScrolls(false).activated));
                                 }
@@ -1587,6 +1591,7 @@
                             const elementSourcePool = window.stonePools?.[spell.element] ?? 1;
                             if (elementSourcePool > 0) {
                                 this.getPlayerScrolls(false).activated.add(spell.element);
+                                window.SoundSystem?.onWinCondition(spell.element);
                                 if (typeof window.gami?.onElementActivated === 'function') {
                                     window.gami.onElementActivated(spell.element, Array.from(this.getPlayerScrolls(false).activated));
                                 }
@@ -1651,6 +1656,7 @@
 
                         // Track activated element for win condition (for active player)
                         this.getPlayerScrolls(false).activated.add(element);
+                        window.SoundSystem?.onWinCondition(element);
                         rewards.push(`+${count} ${element}`);
                     });
 
@@ -1668,6 +1674,7 @@
                     const elementSourcePoolDefault = window.stonePools?.[spell.element] ?? 1;
                     if (elementSourcePoolDefault > 0) {
                         this.getPlayerScrolls(false).activated.add(spell.element);
+                        window.SoundSystem?.onWinCondition(spell.element);
                         updateStatus(`Spell cast! Added +${spell.level} ${spell.element} stones!`);
                     } else {
                         updateStatus(`The ${spell.element} shrine source is depleted — scroll effect cast, but win condition not met.`);
@@ -2632,6 +2639,7 @@
             window.lastScrollAction = null; // a stone-break supersedes any pending scroll undo
 
             // Break the stone
+            window.SoundSystem?.play('breakstone');
             spendAP(breakCost);
 
             // Broadcast stone break to other players
@@ -4512,6 +4520,9 @@
             // Tile reveal is irreversible — clear undo history
             lastMove = null;
             window.lastScrollAction = null;
+
+            // Sound
+            window.SoundSystem?.play('tilereveal');
 
             // Catacomb tile reveal: refund 1 AP
             const isCatacombReveal = tile.shrineType === 'catacomb';

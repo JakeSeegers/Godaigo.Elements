@@ -312,6 +312,7 @@ const ScrollPanelSystem = (() => {
                     }
                     // Record undo state before moving
                     window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'hand', to: 'active', displacedScroll: null };
+                    window.SoundSystem?.play('scrollmove');
                     setTimeout(() => { sp.moveToActive(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toActive);
@@ -332,6 +333,7 @@ const ScrollPanelSystem = (() => {
                     const displaced = element ? (sp.commonArea?.[element] || null) : null;
                     window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'hand', to: 'common', displacedScroll: displaced !== scrollName ? displaced : null };
                     window.lastMove = null;
+                    window.SoundSystem?.play('scrollmove');
                     setTimeout(() => { sp.discardScroll(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toCommon);
@@ -353,6 +355,7 @@ const ScrollPanelSystem = (() => {
                     const displaced = element ? (sp.commonArea?.[element] || null) : null;
                     window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'active', to: 'common', displacedScroll: displaced !== scrollName ? displaced : null };
                     window.lastMove = null;
+                    window.SoundSystem?.play('scrollmove');
                     setTimeout(() => { sp.discardScroll(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toCommon);

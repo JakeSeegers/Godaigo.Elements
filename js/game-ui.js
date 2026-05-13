@@ -1136,6 +1136,7 @@
                     }
                     const tileId = placeTile(snapResult.x, snapResult.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
                     console.log(`   Tile placed with ID: ${tileId}`);
+                    if (tileId !== null) window.SoundSystem?.play('placetile');
 
                     // If this was a player tile from the deck and it was successfully placed
                     if (draggedTileShrineType === 'player' && draggedTileId === null && tileId !== null) {
@@ -1238,6 +1239,7 @@
                 if (stonePos.valid) {
                     if (capturedStoneId === null) {
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
+                        window.SoundSystem?.play('placestone');
                         // Track for undo — stone ID is nextStoneId-1 after placeStone increments it
                         lastMove = {
                             type: 'stone-place',
@@ -1380,6 +1382,7 @@
                             prevVoidAP: voidAP
                         };
                         window.lastScrollAction = null;
+                        window.SoundSystem?.playFootstep();
                         placePlayer(finalPos.x, finalPos.y);
                         // Notify tutorial that the player has moved
                         if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
@@ -1746,7 +1749,7 @@
                                     prevVoidAP: voidAP
                                 };
                                 window.lastScrollAction = null;
-
+                                window.SoundSystem?.playFootstep();
                                 placePlayer(targetHex.x, targetHex.y);
                                 spendAP(actualCost);
 
@@ -1981,6 +1984,7 @@
                                 prevVoidAP: voidAP
                             };
                             window.lastScrollAction = null;
+                            window.SoundSystem?.playFootstep();
                             placePlayer(finalPos.x, finalPos.y);
                             spendAP(totalCost);
                             movementSuccessful = true;
@@ -2821,6 +2825,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     const type = stonePreviewType;
                     cancelStonePreview();
                     placeStone(pos.x, pos.y, type);
+                    window.SoundSystem?.play('placestone');
                     lastMove = { type: 'stone-place', stoneId: nextStoneId - 1, x: pos.x, y: pos.y, element: type };
                     window.lastScrollAction = null;
                     stoneCounts[type]--;
@@ -2862,6 +2867,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     if (actualCost >= 0 && actualCost <= getTotalAP()) {
                         lastMove = { type: 'move', prevPos: startPos, prevCurrentAP: currentAP, prevVoidAP: voidAP };
                         window.lastScrollAction = null;
+                        window.SoundSystem?.playFootstep();
                         placePlayer(target.x, target.y);
                         if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
                             window.TutorialMode.onPlayerMoved(target.x, target.y);
@@ -3299,6 +3305,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
         const invBtn = document.getElementById('inventory-toggle');
         if (invBtn) invBtn.onclick = toggleInventory;
 document.getElementById('undo-move').onclick = function() {
+            window.SoundSystem?.play('click');
             // Resolve which action to undo: scroll-panel moves use window.lastScrollAction
             // (different closure), everything else uses lastMove.
             const scrollAction = window.lastScrollAction;

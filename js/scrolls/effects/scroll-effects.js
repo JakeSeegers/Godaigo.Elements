@@ -80,6 +80,7 @@ const ScrollEffects = {
 
     // Cancel any active selection mode
     cancelSelectionMode() {
+        if (this.selectionMode) window.SoundSystem?.play('click');
         if (this.selectionMode) {
             if (typeof this.selectionMode.cleanup === 'function') {
                 this.selectionMode.cleanup();
