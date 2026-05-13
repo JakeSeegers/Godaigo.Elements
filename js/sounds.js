@@ -25,6 +25,7 @@
         activatescroll: BASE + 'activatescroll.mp3',
         breakstone:     BASE + 'breakstone.mp3',
         collectstones:  BASE + 'collectstones.mp3',
+        endturn:        BASE + 'endturn.mp3',
         placestone:     BASE + 'placeearthstone.mp3',
         placetile:      BASE + 'placetile.mp3',
         scrollmove:     BASE + 'scrollmove.mp3',

@@ -3028,6 +3028,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     replenishShrineStones(effectiveType);
                 }
             }
+            window.SoundSystem?.play('endturn');
 
             // Tutorial hook — fires after shrine stone collection so the tutorial
             // can detect which shrine the player just ended their turn on.
