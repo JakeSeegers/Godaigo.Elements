@@ -1547,13 +1547,23 @@
         // Host-only: periodically sweep disconnected players (stale last_seen).
         // Deletion triggers the existing players DELETE handler on all clients,
         // which shows "player left" notifications and handles turn skipping.
+        // During an active game (status=playing) we do NOT evict — the last-man-standing
+        // poll handles genuine disconnects, and idle-but-present players must not be removed.
         let _disconnectMonitorInterval = null;
         function startDisconnectMonitor() {
             if (_disconnectMonitorInterval) clearInterval(_disconnectMonitorInterval);
             _disconnectMonitorInterval = setInterval(async () => {
                 if (!isHost || !currentGameId) return;
-                const staleThreshold = new Date(Date.now() - 45 * 1000).toISOString();
                 try {
+                    // Check current room status — never evict from an active game
+                    const { data: room } = await supabase
+                        .from('game_room')
+                        .select('status')
+                        .eq('id', currentGameId)
+                        .single();
+                    if (!room || room.status === 'playing') return;
+
+                    const staleThreshold = new Date(Date.now() - 45 * 1000).toISOString();
                     const { data: allPlayers } = await supabase
                         .from('players')
                         .select('id, username, last_seen, created_at')
@@ -1632,8 +1642,10 @@
 
 
         // Secret keyboard sequence "reset" to reveal the Reset Lobby button
+        // Secret keyboard sequence "nuke" to wipe ALL rooms from the DB
         (function() {
             const SECRET = 'reset';
+            const NUKE = 'nuke';
             let buffer = '';
             document.addEventListener('keydown', (e) => {
                 // Only listen while lobby is visible
@@ -1643,16 +1655,24 @@
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
                 buffer += e.key.toLowerCase();
-                // Keep only the last N characters
-                if (buffer.length > SECRET.length) {
-                    buffer = buffer.slice(-SECRET.length);
-                }
-                if (buffer === SECRET) {
+                const maxLen = Math.max(SECRET.length, NUKE.length);
+                if (buffer.length > maxLen) buffer = buffer.slice(-maxLen);
+
+                if (buffer.endsWith(SECRET)) {
                     const btn = document.getElementById('reset-lobby-btn');
                     if (btn) {
                         btn.style.display = btn.style.display === 'none' ? '' : 'none';
                         buffer = '';
                     }
+                }
+
+                if (buffer.endsWith(NUKE)) {
+                    buffer = '';
+                    if (!confirm('Nuke ALL rooms and players from the database?')) return;
+                    supabase.rpc('nuke_all_rooms').then(() => {
+                        console.log('💥 All rooms nuked.');
+                        window.location.reload();
+                    });
                 }
             });
         })();
@@ -1912,6 +1932,29 @@
                 } else {
                     // Normal gameplay turn display
                     updateTurnDisplay();
+                }
+
+                // Clean up telekinesis UI if the caster's turn ended without them clicking Done
+                // (covers timer auto-advance and other paths that bypass cancelSelectionMode)
+                if (window.telekinesisState) { window.telekinesisState = null; window.tileMoveMode = false; }
+                if (window.finishTelekinesis) { window.finishTelekinesis = null; }
+                const _tkDone = document.getElementById('telekinesis-done-btn');
+                if (_tkDone && _tkDone.parentNode) _tkDone.parentNode.removeChild(_tkDone);
+
+                // Reconcile any tile flips that were dropped by the network.
+                // The broadcaster includes every currently-revealed tile; if our local
+                // placedTiles still has any of those as flipped, we missed the broadcast.
+                if (Array.isArray(payload.revealedTiles) && typeof placedTiles !== 'undefined') {
+                    payload.revealedTiles.forEach(({ id, shrineType }) => {
+                        const tile = placedTiles.find(t => t.id === id);
+                        if (tile && tile.flipped) {
+                            const el = document.querySelector(`[data-tile-id="${id}"]`);
+                            if (el && typeof flipTileVisually === 'function') {
+                                console.log(`🔄 turn-change sync: catching missed tile-flip for tile ${id} (${shrineType})`);
+                                flipTileVisually(el, shrineType);
+                            }
+                        }
+                    });
                 }
             });
 

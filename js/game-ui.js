@@ -542,10 +542,11 @@
                         ? colorMap[activeColorKey]
                         : '#d9b08c';
                 }
-                // Update shrine dots for current player
-                if (typeof activePlayerIndex !== 'undefined') {
-                    updateShrineDots(activePlayerIndex);
-                }
+                // Update shrine dots — always show the LOCAL player's win progress
+                const shrineIndex = (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null)
+                    ? myPlayerIndex
+                    : (typeof activePlayerIndex !== 'undefined' ? activePlayerIndex : 0);
+                updateShrineDots(shrineIndex);
                 // Update dock
                 updateDockPlayers();
             } catch (e) {
@@ -815,18 +816,6 @@
                 }
                 card.appendChild(stonesDiv);
 
-                // Win condition progress
-                const activated = scrollData.activated ? scrollData.activated : new Set();
-                const activatedCount = activated.size;
-                const winDiv = document.createElement('div');
-                winDiv.className = 'opponent-win-progress';
-                const activatedSymbols = ['earth', 'water', 'fire', 'wind', 'void'].map(el => {
-                    const done = activated.has(el);
-                    const img = STONE_TYPES[el]?.img || '';
-                    return `<img src="${img}" class="element-icon-sm win-pip${done ? ' win-pip-active' : ''}" alt="${el}" title="${el}">`;
-                }).join('');
-                winDiv.innerHTML = `<span class="opponent-win-label">Elements:</span> ${activatedSymbols} <span class="opponent-win-count">${activatedCount}/5</span>`;
-                card.appendChild(winDiv);
 
                 // Scrolls summary (hand count only - hand contents are private)
                 const handSize = scrollData.hand ? scrollData.hand.size : 0;
@@ -1249,6 +1238,15 @@
                 if (stonePos.valid) {
                     if (capturedStoneId === null) {
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
+                        // Track for undo — stone ID is nextStoneId-1 after placeStone increments it
+                        lastMove = {
+                            type: 'stone-place',
+                            stoneId: nextStoneId - 1,
+                            x: stonePos.x,
+                            y: stonePos.y,
+                            element: capturedStoneType
+                        };
+                        window.lastScrollAction = null;
                         console.log(`📤 Placing stone from deck: type=${capturedStoneType}, before=${stoneCounts[capturedStoneType]}`);
                         stoneCounts[capturedStoneType]--;
                         console.log(`📤 After decrement: ${capturedStoneType}=${stoneCounts[capturedStoneType]}, playerPool.${capturedStoneType}=${playerPool[capturedStoneType]}`);
@@ -1374,12 +1372,14 @@
                         if (window.TutorialMode) window.TutorialMode.showMovementHint();
                     } else if (moveCheck.canMove && totalCost <= getTotalAP()) {
                         console.log(`✅ Movement successful: ${playerPath.length - 1} hexes, cost ${totalCost} AP`);
-                        // Store the last move for undo
+                        // Store the last move for undo (snapshot AP before spending)
                         lastMove = {
+                            type: 'move',
                             prevPos: { x: startPos.x, y: startPos.y },
-                            newPos: { x: finalPos.x, y: finalPos.y },
-                            apCost: totalCost
+                            prevCurrentAP: currentAP,
+                            prevVoidAP: voidAP
                         };
+                        window.lastScrollAction = null;
                         placePlayer(finalPos.x, finalPos.y);
                         // Notify tutorial that the player has moved
                         if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
@@ -1738,12 +1738,14 @@
                             if (actualCost > 0 && actualCost <= getTotalAP()) {
                                 console.log(`📱 Tap-to-move: from (${startPos.x.toFixed(1)}, ${startPos.y.toFixed(1)}) to (${targetHex.x.toFixed(1)}, ${targetHex.y.toFixed(1)}), cost=${actualCost}`);
 
-                                // Store for undo
+                                // Store for undo (snapshot AP before spending)
                                 lastMove = {
+                                    type: 'move',
                                     prevPos: { x: startPos.x, y: startPos.y },
-                                    newPos: { x: targetHex.x, y: targetHex.y },
-                                    apCost: actualCost
+                                    prevCurrentAP: currentAP,
+                                    prevVoidAP: voidAP
                                 };
+                                window.lastScrollAction = null;
 
                                 placePlayer(targetHex.x, targetHex.y);
                                 spendAP(actualCost);
@@ -1971,12 +1973,14 @@
                         } else if (totalCost > getTotalAP()) {
                             updateStatus(`Not enough AP (need ${totalCost}, have ${getTotalAP()})`);
                         } else {
-                            // Store the last move for undo
+                            // Store the last move for undo (snapshot AP before spending)
                             lastMove = {
+                                type: 'move',
                                 prevPos: { x: startPos.x, y: startPos.y },
-                                newPos: { x: finalPos.x, y: finalPos.y },
-                                apCost: totalCost
+                                prevCurrentAP: currentAP,
+                                prevVoidAP: voidAP
                             };
+                            window.lastScrollAction = null;
                             placePlayer(finalPos.x, finalPos.y);
                             spendAP(totalCost);
                             movementSuccessful = true;
@@ -2817,6 +2821,8 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     const type = stonePreviewType;
                     cancelStonePreview();
                     placeStone(pos.x, pos.y, type);
+                    lastMove = { type: 'stone-place', stoneId: nextStoneId - 1, x: pos.x, y: pos.y, element: type };
+                    window.lastScrollAction = null;
                     stoneCounts[type]--;
                     updateStoneCount(type);
                     syncPlayerState();
@@ -2854,7 +2860,8 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     const startPos = { x: playerPosition.x, y: playerPosition.y };
                     const actualCost = calculateTapMoveCost(startPos, target);
                     if (actualCost >= 0 && actualCost <= getTotalAP()) {
-                        lastMove = { prevPos: startPos, newPos: { x: target.x, y: target.y }, apCost: actualCost };
+                        lastMove = { type: 'move', prevPos: startPos, prevCurrentAP: currentAP, prevVoidAP: voidAP };
+                        window.lastScrollAction = null;
                         placePlayer(target.x, target.y);
                         if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
                             window.TutorialMode.onPlayerMoved(target.x, target.y);
@@ -3142,7 +3149,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
 
             // Shrine replenishment already handled above (before clearTurnBuffs, so Mine buff applies)
 
-            lastMove = null; // Clear undo history on new turn
+            lastMove = null; window.lastScrollAction = null; // Clear undo history on new turn
 
             // Switch to next player based on color rank
             if (playerPositions.length > 1) {
@@ -3292,42 +3299,81 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
         const invBtn = document.getElementById('inventory-toggle');
         if (invBtn) invBtn.onclick = toggleInventory;
 document.getElementById('undo-move').onclick = function() {
-            if (!lastMove) {
-                updateStatus('No move to undo!');
+            // Resolve which action to undo: scroll-panel moves use window.lastScrollAction
+            // (different closure), everything else uses lastMove.
+            const scrollAction = window.lastScrollAction;
+            const action = lastMove || (scrollAction ? { type: 'scroll-move', ...scrollAction } : null);
+
+            if (!action) {
+                updateStatus('Nothing to undo!');
                 return;
             }
 
-            // Restore previous position
-            placePlayer(lastMove.prevPos.x, lastMove.prevPos.y);
+            if (action.type === 'move') {
+                // --- Undo player movement ---
+                placePlayer(action.prevPos.x, action.prevPos.y);
+                // Restore exact AP snapshot (handles voidAP correctly)
+                currentAP = action.prevCurrentAP;
+                voidAP    = action.prevVoidAP;
+                document.getElementById('ap-count').textContent = currentAP;
+                if (typeof refreshVoidAP === 'function') refreshVoidAP();
+                updateStatus(`Undid movement. AP restored to ${getTotalAP()}.`);
+                if (isMultiplayer) {
+                    broadcastGameAction('undo-move', {
+                        playerIndex: activePlayerIndex,
+                        x: action.prevPos.x,
+                        y: action.prevPos.y,
+                        apRestored: currentAP
+                    });
+                    if (typeof syncPlayerState === 'function') syncPlayerState();
+                }
 
-            // Restore AP
-            currentAP += lastMove.apCost;
-            document.getElementById('ap-count').textContent = currentAP;
-
-            // Refresh void AP display in case void stones changed
-            if (typeof refreshVoidAP === 'function') {
-                refreshVoidAP();
-            }
-
-            updateStatus(`Undid movement. Restored ${lastMove.apCost} AP (now ${currentAP} AP).`);
-
-            // Broadcast undo in multiplayer
-            if (isMultiplayer) {
-                broadcastGameAction('undo-move', {
-                    playerIndex: activePlayerIndex,
-                    x: lastMove.prevPos.x,
-                    y: lastMove.prevPos.y,
-                    apRestored: lastMove.apCost
-                });
-
-                // Sync player state so other players see updated AP
-                if (typeof syncPlayerState === 'function') {
+            } else if (action.type === 'stone-place') {
+                // --- Undo stone placement: remove it from the board and return to pool ---
+                const stone = placedStones.find(s => s.id === action.stoneId);
+                if (stone) {
+                    if (stone.element && stone.element.parentNode) stone.element.remove();
+                    placedStones.splice(placedStones.findIndex(s => s.id === action.stoneId), 1);
+                    returnStoneToPool(action.element);
+                    stoneCounts[action.element] = (stoneCounts[action.element] || 0) + 1;
+                    updateStoneCount(action.element);
+                    updateTileClasses();
+                    recheckAllStoneInteractions();
+                    updateAllWaterStoneVisuals();
+                    updateAllVoidNullificationVisuals();
                     syncPlayerState();
+                    if (isMultiplayer) {
+                        broadcastGameAction('stone-break', { stoneId: action.stoneId });
+                    }
+                }
+                updateStatus(`Undid ${action.element} stone placement.`);
+
+            } else if (action.type === 'stone-break') {
+                // --- Undo stone break: re-place it and restore AP ---
+                currentAP = action.prevCurrentAP;
+                voidAP    = action.prevVoidAP;
+                document.getElementById('ap-count').textContent = currentAP;
+                if (typeof refreshVoidAP === 'function') refreshVoidAP();
+                placeStoneVisually(action.x, action.y, action.element);
+                if (isMultiplayer) {
+                    broadcastGameAction('stone-place', { x: action.x, y: action.y, stoneType: action.element });
+                    if (typeof syncPlayerState === 'function') syncPlayerState();
+                }
+                updateStatus(`Undid ${action.element} stone break. AP restored to ${getTotalAP()}.`);
+
+            } else if (action.type === 'scroll-move') {
+                // --- Undo scroll area move (hand↔active↔common) ---
+                const sp = window.spellSystem;
+                if (sp && typeof sp._undoScrollMove === 'function') {
+                    sp._undoScrollMove(action.scrollName, action.from, action.to, action.displacedScroll);
+                    if (window.ScrollPanelSystem) window.ScrollPanelSystem.refresh();
+                    updateStatus(`Undid scroll move: ${action.scrollName} returned to ${action.from}.`);
                 }
             }
 
-            // Clear the undo history (can only undo once)
+            // Clear undo history
             lastMove = null;
+            window.lastScrollAction = null;
         };
 
         // scroll-inventory replaced by panel-btn-hand/active/common in scroll-panels.js
@@ -3468,14 +3514,14 @@ document.getElementById('undo-move').onclick = function() {
                 const indicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 indicator.setAttribute('cx', shrine.x);
                 indicator.setAttribute('cy', shrine.y);
-                indicator.setAttribute('r', '15');
+                indicator.setAttribute('r', '11');
                 indicator.setAttribute('fill', '#8b4513');
                 indicator.setAttribute('opacity', '0.5');
                 indicator.setAttribute('stroke', '#fff');
                 indicator.setAttribute('stroke-width', '2');
                 indicator.setAttribute('class', 'teleport-indicator');
                 indicator.style.cursor = 'pointer';
-                indicator.style.animation = 'pulse 1s infinite';
+                indicator.style.animation = 'catacomb-teleport-pulse 3s ease-in-out infinite';
 
                 // Add click handler for teleportation
                 indicator.addEventListener('click', (e) => {

@@ -90,11 +90,14 @@ const ScrollEffects = {
             updateStatus('Selection cancelled.');
         }
 
-        // Safety: remove any orphaned cancel button
+        // Safety: remove any orphaned cancel / telekinesis-done buttons
         const cancelEl = document.getElementById('scroll-cancel-btn');
-        if (cancelEl && cancelEl.parentNode) {
-            cancelEl.parentNode.removeChild(cancelEl);
-        }
+        if (cancelEl && cancelEl.parentNode) cancelEl.parentNode.removeChild(cancelEl);
+        const doneEl = document.getElementById('telekinesis-done-btn');
+        if (doneEl && doneEl.parentNode) doneEl.parentNode.removeChild(doneEl);
+        // Safety: clear telekinesis state in case turn auto-advanced without cleanup
+        if (window.telekinesisState) { window.telekinesisState = null; window.tileMoveMode = false; }
+        if (window.finishTelekinesis) { window.finishTelekinesis = null; }
     },
 
     // Get the effect handler for a scroll
@@ -501,7 +504,7 @@ const ScrollEffects = {
                 }
 
                 // Draw 2 from one deck, then put 1 back (show all scrolls of that element)
-                system.enterInspiringDraughtMode(casterIndex);
+                system.enterInspiringDraughtMode(casterIndex, context);
 
                 return {
                     success: true,
@@ -1568,6 +1571,28 @@ const ScrollEffects = {
 
         console.log(`🔮 Entering Telekinesis mode for player ${casterIndex}`);
 
+        // Inject wind-drift animation once
+        if (!document.getElementById('telekinesis-style')) {
+            const style = document.createElement('style');
+            style.id = 'telekinesis-style';
+            style.textContent = `
+                @keyframes telekinesisFloat {
+                    0%   { opacity: 1;    transform: translateY(0px); }
+                    30%  { opacity: 0.75; transform: translateY(-2px); }
+                    70%  { opacity: 0.85; transform: translateY(1px); }
+                    100% { opacity: 1;    transform: translateY(0px); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // Highlight all eligible (draggable) tiles in wind yellow so it's clear which can move
+        const eligibleTiles = this.getEligibleTilesForSwap();
+        eligibleTiles.forEach(tile => {
+            this.highlightTile(tile, '#e8c84d', 3);
+            if (tile.element) tile.element.style.animation = 'telekinesisFloat 2.2s ease-in-out infinite';
+        });
+
         // Set up the telekinesis state so game-core/game-ui know about the rules
         window.telekinesisState = {
             active: true,
@@ -1580,11 +1605,15 @@ const ScrollEffects = {
         // Enable tile dragging
         window.tileMoveMode = true;
 
+        const unhighlightAll = () => eligibleTiles.forEach(tile => self.unhighlightTile(tile));
+
         // Finish handler — turn off tile move mode and clean up
         const finishTelekinesis = () => {
             window.tileMoveMode = false;
             const movesDone = MAX_MOVES - (window.telekinesisState?.movesLeft ?? 0);
             window.telekinesisState = null;
+
+            unhighlightAll();
 
             // Remove buttons
             const doneEl = document.getElementById('telekinesis-done-btn');
@@ -1610,12 +1639,13 @@ const ScrollEffects = {
             window.tileMoveMode = false;
             window.telekinesisState = null;
             window.finishTelekinesis = null;
+            unhighlightAll();
             const doneEl = document.getElementById('telekinesis-done-btn');
             if (doneEl && doneEl.parentNode) doneEl.parentNode.removeChild(doneEl);
             self.cancelSelectionMode();
         });
 
-        // Create done button
+        // Create done button — styled in wind yellow to match the tile highlights
         const doneBtn = document.createElement('button');
         doneBtn.id = 'telekinesis-done-btn';
         doneBtn.textContent = `Done (0/${MAX_MOVES})`;
@@ -1626,7 +1656,7 @@ const ScrollEffects = {
             transform: 'translateX(-50%)',
             zIndex: '2001',
             padding: '10px 24px',
-            backgroundColor: '#27ae60',
+            backgroundColor: '#c8a800',
             color: 'white',
             border: 'none',
             borderRadius: '8px',
@@ -1647,6 +1677,7 @@ const ScrollEffects = {
                 window.tileMoveMode = false;
                 window.telekinesisState = null;
                 window.finishTelekinesis = null;
+                unhighlightAll();
                 const d = document.getElementById('telekinesis-done-btn');
                 if (d && d.parentNode) d.parentNode.removeChild(d);
                 const c = document.getElementById('scroll-cancel-btn');
@@ -1654,7 +1685,7 @@ const ScrollEffects = {
             }
         };
 
-        updateStatus(`Telekinesis: drag tiles to move them (0/${MAX_MOVES}). Tiles must touch 2+ other tiles.`);
+        updateStatus(`Telekinesis: drag a highlighted tile to move it. Tiles must touch 2+ others after moving.`);
     },
 
     // ============================================
@@ -2348,12 +2379,17 @@ const ScrollEffects = {
             }
         } else {
             // Currently revealed -> hide it
-            tile.flipped = true;
-
-            // Update visual - need to recreate as flipped
+            // Note: recreateTileAsFlipped sets tile.flipped = true internally;
+            // do NOT set it here first or recreateTileAsFlipped's guard will bail early.
             if (typeof recreateTileAsFlipped === 'function') {
                 recreateTileAsFlipped(tile);
+            } else {
+                tile.flipped = true;
             }
+
+            // Tile flip is irreversible — clear undo history
+            lastMove = null;
+            window.lastScrollAction = null;
 
             // Broadcast
             if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
@@ -3399,70 +3435,73 @@ const ScrollEffects = {
         stone.element.style.pointerEvents = '';
     },
 
-    // Water III - Inspiring Draught: Select 1 deck, draw 2 from it, add to hand, then show ALL scrolls
-    // of that element and player chooses one to put back; that deck is then shuffled.
-    enterInspiringDraughtMode(casterIndex) {
-        const self = this;
+    // Water III - Inspiring Draught: Select 1 deck, draw 2, keep 1, put 1 back and shuffle.
+    enterInspiringDraughtMode(casterIndex, context) {
         const spellSystem = this.spellSystem;
         if (!spellSystem) return;
 
-        this.ensurePlayerScrollsStructure(casterIndex);
-        const playerScrolls = spellSystem.playerScrolls[casterIndex];
-        if (!playerScrolls) return;
+        const notifyComplete = () => {
+            if (context?.spell && typeof spellSystem.onSelectionEffectComplete === 'function') {
+                spellSystem.onSelectionEffectComplete(context.scrollName, 'Inspiring Draught', context.spell);
+            }
+        };
 
-        // Step 1: Select ONE deck to draw from
         this.showDeckSelectionModal(1, (selectedDecks) => {
             if (!selectedDecks || selectedDecks.length === 0) {
                 updateStatus('No deck selected.');
+                notifyComplete();
                 return;
             }
             const deckType = selectedDecks[0];
             const deck = spellSystem.scrollDecks?.[deckType];
             if (!deck || deck.length === 0) {
                 updateStatus('That deck has no scrolls!');
+                notifyComplete();
                 return;
             }
 
-            // Step 2: Draw up to 2 scrolls from that deck (add to hand immediately)
+            // Draw up to 2 — don't add to hand yet
             const drawnScrolls = [];
             for (let i = 0; i < 2 && deck.length > 0; i++) {
-                const scroll = deck.pop();
-                drawnScrolls.push(scroll);
-                playerScrolls.hand.add(scroll);
+                drawnScrolls.push(deck.pop());
             }
 
             if (drawnScrolls.length === 0) {
                 updateStatus('No scrolls available to draw!');
-                return;
-            }
-
-            // Step 3: Collect ALL scrolls the player has of this element (hand + active)
-            const getScrollElement = spellSystem.getScrollElement.bind(spellSystem);
-            const handOfType = [...playerScrolls.hand].filter(name => getScrollElement(name) === deckType);
-            const activeOfType = [...(playerScrolls.active || [])].filter(name => getScrollElement(name) === deckType);
-            const allOfElement = [...new Set([...handOfType, ...activeOfType])];
-
-            if (allOfElement.length === 0) {
-                updateStatus('No scrolls of that element to put back.');
-                if (spellSystem.updateScrollCount) spellSystem.updateScrollCount();
+                notifyComplete();
                 return;
             }
 
             const elementName = deckType.charAt(0).toUpperCase() + deckType.slice(1);
 
-            // Step 4: Show modal - choose one scroll to put back; deck will be shuffled
+            // Only drew 1 — keep it automatically
+            if (drawnScrolls.length === 1) {
+                this.ensurePlayerScrollsStructure(casterIndex);
+                spellSystem.playerScrolls[casterIndex].hand.add(drawnScrolls[0]);
+                updateStatus(`Drew 1 ${elementName} scroll (kept it).`);
+                if (spellSystem.updateScrollCount) spellSystem.updateScrollCount();
+                notifyComplete();
+                return;
+            }
+
+            // Drew 2 — show modal to choose which to put back
             this.showScrollSelectionModal(
-                allOfElement,
-                `Choose one scroll to put back into the ${elementName} deck (deck will be shuffled):`,
+                drawnScrolls,
+                `Choose one ${elementName} scroll to put back (the other goes to your hand):`,
                 (selectedToReturn) => {
-                    // Remove from hand or active
-                    playerScrolls.hand.delete(selectedToReturn);
-                    playerScrolls.active.delete(selectedToReturn);
-                    // Put back into deck and shuffle
-                    spellSystem.scrollDecks[deckType].push(selectedToReturn);
-                    this.shuffleDeck(spellSystem.scrollDecks[deckType]);
-                    updateStatus(`Put 1 scroll back into the ${elementName} deck and shuffled.`);
+                    this.ensurePlayerScrollsStructure(casterIndex);
+                    const playerScrolls = spellSystem.playerScrolls[casterIndex];
+                    drawnScrolls.forEach(scroll => {
+                        if (scroll === selectedToReturn) {
+                            spellSystem.scrollDecks[deckType].push(scroll);
+                            this.shuffleDeck(spellSystem.scrollDecks[deckType]);
+                        } else {
+                            playerScrolls.hand.add(scroll);
+                        }
+                    });
+                    updateStatus(`Drew 2 ${elementName} scrolls, put 1 back and shuffled.`);
                     if (spellSystem.updateScrollCount) spellSystem.updateScrollCount();
+                    notifyComplete();
                 }
             );
         });

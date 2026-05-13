@@ -894,15 +894,23 @@ class ResponseWindowSystem {
 
     // Helper methods that interface with the game state
     getPlayerAP(playerIndex) {
-        // In multiplayer, each player tracks their own AP via playerAPs
+        // For the local player, currentAP is always the live authoritative value.
+        // playerAPs[myPlayerIndex] can be a stale snapshot (e.g. from the start of their
+        // last turn), which would let the affordability check pass even when currentAP is 0
+        // and cause spendAP to drive AP negative.
+        if (typeof myPlayerIndex !== 'undefined' && playerIndex === myPlayerIndex
+                && typeof currentAP !== 'undefined') {
+            const localVoidAP = typeof voidAP !== 'undefined' ? voidAP : 0;
+            return currentAP + localVoidAP;
+        }
+        // For other players, use the synced playerAPs snapshot
         if (typeof playerAPs !== 'undefined' && playerAPs[playerIndex]) {
             const ap = playerAPs[playerIndex];
             return (ap.currentAP || 0) + (ap.voidAP || 0);
         }
-        // Fallback to global currentAP for single player or active player
+        // Fallback
         if (typeof currentAP !== 'undefined') {
-            const voidAP = typeof voidAPCount !== 'undefined' ? voidAPCount : 0;
-            return currentAP + voidAP;
+            return currentAP;
         }
         return 0;
     }

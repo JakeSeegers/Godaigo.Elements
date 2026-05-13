@@ -595,6 +595,39 @@
                 return false;
             }
 
+            // Internal undo helper — reverses a scroll move without broadcast or rule checks.
+            // 'from' and 'to' are the ORIGINAL move's from/to; this reverses it.
+            _undoScrollMove(scrollName, from, to, displacedScroll) {
+                const scrolls = this.getPlayerScrolls(false);
+                const element = this.getScrollElement(scrollName);
+
+                if (to === 'active') {
+                    // Undo hand → active: move back to hand
+                    if (scrolls.active.has(scrollName)) {
+                        scrolls.active.delete(scrollName);
+                        scrolls.hand.add(scrollName);
+                    }
+                } else if (to === 'common') {
+                    // Undo hand/active → common
+                    if (element && this.commonArea[element] === scrollName) {
+                        this.commonArea[element] = null;
+                        // If a scroll was displaced to deck, restore it to common area
+                        if (displacedScroll && element) {
+                            const deck = this.scrollDecks[element];
+                            const idx = deck ? deck.lastIndexOf(displacedScroll) : -1;
+                            if (idx !== -1) deck.splice(idx, 1);
+                            this.commonArea[element] = displacedScroll;
+                        }
+                    }
+                    // Restore scroll to its original area
+                    if (from === 'hand') scrolls.hand.add(scrollName);
+                    else if (from === 'active') scrolls.active.add(scrollName);
+                }
+
+                this.updateScrollCount();
+                if (typeof updateScrollDeckUI === 'function') try { updateScrollDeckUI(); } catch(e) {}
+            }
+
             // Discard a scroll from hand or active area to common area
             discardScroll(scrollName) {
                 const scrolls = this.getPlayerScrolls(false);
@@ -2332,7 +2365,11 @@
         let gameSessionColors = new Set(); // Colors used in the current game
         let currentAP = 5;
         let voidAP = 0; // Bonus AP from void stones (used first)
-        let lastMove = null; // Stores { prevPos: {x, y}, newPos: {x, y}, apCost: number }
+        // lastMove — one-step undo state.  shape depends on .type:
+        //   'move'        : { type, prevPos, prevCurrentAP, prevVoidAP }
+        //   'stone-place' : { type, stoneId, x, y, element }
+        //   'stone-break' : { type, x, y, element, prevCurrentAP, prevVoidAP }
+        let lastMove = null;
 
         // Track each player's AP for multiplayer display
         let playerAPs = []; // Each entry is { currentAP: 5, voidAP: 0 }
@@ -2474,7 +2511,7 @@
             } else {
                 const remainingCost = cost - voidAP;
                 voidAP = 0;
-                currentAP -= remainingCost;
+                currentAP = Math.max(0, currentAP - remainingCost); // clamp — never go negative
             }
             console.log(`⚡ spendAP after: voidAP=${voidAP}, currentAP=${currentAP}, total=${getTotalAP()}`);
             const apCountEl = document.getElementById('ap-count');
@@ -2581,6 +2618,18 @@
                 updateStatus(`Not enough AP! Need ${breakCost} AP to break ${stone.type} stone (have ${getTotalAP()} AP)`);
                 return;
             }
+
+            // Snapshot undo state before spending AP / removing stone
+            lastMove = {
+                type: 'stone-break',
+                stoneId: stone.id,
+                x: stone.x,
+                y: stone.y,
+                element: stone.type,
+                prevCurrentAP: currentAP,
+                prevVoidAP: voidAP
+            };
+            window.lastScrollAction = null; // a stone-break supersedes any pending scroll undo
 
             // Break the stone
             spendAP(breakCost);
@@ -4174,7 +4223,8 @@
                     broadcastGameAction('turn-change', {
                         playerIndex: activePlayerIndex,
                         turnStartedAt: startedAt,
-                        turnNumber: currentTurnNumber
+                        turnNumber: currentTurnNumber,
+                        revealedTiles: placedTiles.filter(t => !t.flipped && !t.isPlayerTile).map(t => ({ id: t.id, shrineType: t.shrineType }))
                     });
                         console.log(`📡 Broadcasted turn-change to player ${activePlayerIndex}`);
 
@@ -4458,6 +4508,10 @@
             // Update tile data
             tile.flipped = false;
             tile.element = tileGroup;
+
+            // Tile reveal is irreversible — clear undo history
+            lastMove = null;
+            window.lastScrollAction = null;
 
             // Catacomb tile reveal: refund 1 AP
             const isCatacombReveal = tile.shrineType === 'catacomb';
@@ -5410,7 +5464,8 @@ function clearPlayerPath() {
             broadcastGameAction('turn-change', {
                 playerIndex: activePlayerIndex,
                 turnStartedAt: started,
-                turnNumber: currentTurnNumber
+                turnNumber: currentTurnNumber,
+                revealedTiles: placedTiles.filter(t => !t.flipped && !t.isPlayerTile).map(t => ({ id: t.id, shrineType: t.shrineType }))
             });
 
             // Update local display as host

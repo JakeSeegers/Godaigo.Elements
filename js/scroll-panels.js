@@ -310,6 +310,8 @@ const ScrollPanelSystem = (() => {
                     if (window.isTutorialMode && window.TutorialMode?.onScrollMoved) {
                         window.TutorialMode.onScrollMoved(scrollName, 'hand', 'active');
                     }
+                    // Record undo state before moving
+                    window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'hand', to: 'active', displacedScroll: null };
                     setTimeout(() => { sp.moveToActive(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toActive);
@@ -325,6 +327,11 @@ const ScrollPanelSystem = (() => {
                     if (window.isTutorialMode && window.TutorialMode?.onScrollMoved) {
                         window.TutorialMode.onScrollMoved(scrollName, 'hand', 'common');
                     }
+                    // Capture any scroll that will be displaced from common area by this move
+                    const element = sp.getScrollElement?.(scrollName);
+                    const displaced = element ? (sp.commonArea?.[element] || null) : null;
+                    window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'hand', to: 'common', displacedScroll: displaced !== scrollName ? displaced : null };
+                    window.lastMove = null;
                     setTimeout(() => { sp.discardScroll(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toCommon);
@@ -342,6 +349,10 @@ const ScrollPanelSystem = (() => {
                     if (window.isTutorialMode && window.TutorialMode?.onScrollMoved) {
                         window.TutorialMode.onScrollMoved(scrollName, 'active', 'common');
                     }
+                    const element = sp.getScrollElement?.(scrollName);
+                    const displaced = element ? (sp.commonArea?.[element] || null) : null;
+                    window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'active', to: 'common', displacedScroll: displaced !== scrollName ? displaced : null };
+                    window.lastMove = null;
                     setTimeout(() => { sp.discardScroll(scrollName); refresh(); }, 60);
                 });
                 acts.appendChild(toCommon);
@@ -562,12 +573,15 @@ const ScrollPanelSystem = (() => {
         let hideTimer = null;
         let showTimer = null;
         let throbberEl = null;
+        let currentCard = null; // track which card we're hovering so child mouseover events don't restart the timer
 
         function clearThrobber() {
             if (throbberEl) { throbberEl.remove(); throbberEl = null; }
         }
 
         function showPreview(card) {
+            if (card === currentCard) return; // already tracking this card — don't restart the timer
+            currentCard = card;
             clearTimeout(hideTimer);
             clearTimeout(showTimer);
             clearThrobber();
@@ -645,6 +659,7 @@ const ScrollPanelSystem = (() => {
         }
 
         function hidePreview() {
+            currentCard = null;
             clearTimeout(showTimer);
             clearThrobber();
             hideTimer = setTimeout(() => { preview.style.display = 'none'; }, 80);
@@ -660,7 +675,11 @@ const ScrollPanelSystem = (() => {
         document.addEventListener('mouseout', e => {
             const card = e.target.closest('.fsp-card');
             if (card && card.closest('.fsp')) {
-                hidePreview();
+                // Only hide when the mouse truly leaves the card, not when moving between child elements
+                const related = e.relatedTarget;
+                if (!related || !card.contains(related)) {
+                    hidePreview();
+                }
             }
         });
         // Keep preview alive while the mouse is over it
