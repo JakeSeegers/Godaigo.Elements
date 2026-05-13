@@ -22,6 +22,8 @@
 
     const SOUNDS = {
         click:          BASE + 'clicksounds.mp3',
+        zipclick:       BASE + 'zipclick.mp3',
+        error:          BASE + 'error.mp3',
         activatescroll: BASE + 'activatescroll.mp3',
         breakstone:     BASE + 'breakstone.mp3',
         collectstones:  BASE + 'collectstones.mp3',

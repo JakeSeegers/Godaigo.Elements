@@ -1201,6 +1201,7 @@
                 } else if (draggedTileId !== null && draggedTileOriginalPos) {
                     // If this was a placed tile that couldn't be re-placed, restore it to its original position
                     const tkActive = window.telekinesisState && window.telekinesisState.active;
+                    window.SoundSystem?.play('error');
                     updateStatus(tkActive
                         ? 'Invalid placement! Tiles must touch at least 2 other tiles. Tile snapped back.'
                         : 'Invalid placement! Tile snapped back to original position.');
@@ -1274,6 +1275,7 @@
                         // Was a placed stone, couldn't place back
                         if (capturedOriginalPos) {
                             placeMovedStone(capturedOriginalPos.x, capturedOriginalPos.y, capturedStoneType, capturedStoneId);
+                            window.SoundSystem?.play('error');
                             updateStatus('Invalid placement! Stone returned to original spot.');
                         } else {
                             returnStoneToPool(capturedStoneType);
@@ -1459,10 +1461,12 @@
                     } else if (!moveCheck.canMove) {
                         console.log(`❌ Movement rejected: Path blocked at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)})`);
                         placePlayer(startPos.x, startPos.y);
+                        window.SoundSystem?.play('error');
                         updateStatus('Cannot move there!');
                     } else {
                         console.log(`❌ Movement rejected: Insufficient AP (need ${totalCost}, have ${getTotalAP()})`);
                         placePlayer(startPos.x, startPos.y);
+                        window.SoundSystem?.play('error');
                         updateStatus(`Not enough AP! (need ${totalCost}, have ${getTotalAP()})`);
                     }
                 } else {
@@ -3306,13 +3310,14 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
         const invBtn = document.getElementById('inventory-toggle');
         if (invBtn) invBtn.onclick = toggleInventory;
 document.getElementById('undo-move').onclick = function() {
-            window.SoundSystem?.play('click');
+            window.SoundSystem?.play('zipclick');
             // Resolve which action to undo: scroll-panel moves use window.lastScrollAction
             // (different closure), everything else uses lastMove.
             const scrollAction = window.lastScrollAction;
             const action = lastMove || (scrollAction ? { type: 'scroll-move', ...scrollAction } : null);
 
             if (!action) {
+                window.SoundSystem?.play('error');
                 updateStatus('Nothing to undo!');
                 return;
             }

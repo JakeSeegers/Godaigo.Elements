@@ -322,6 +322,7 @@ function canTakeAction() {
 
 // Show "not your turn" or "cascade pending" message
 function notYourTurn() {
+    window.SoundSystem?.play('error');
     // First check for pending cascade
     const playerIdx = isMultiplayer ? myPlayerIndex : activePlayerIndex;
     if (typeof spellSystem !== 'undefined' && spellSystem.hasPendingCascade(playerIdx)) {
