@@ -79,6 +79,16 @@
             updateHUD();
         }
 
+        // Play n footstep sounds spaced ~160ms apart (for multi-hex moves).
+        // Wind steps (cost 0) are excluded by the caller — only pass non-wind steps.
+        function playFootsteps(n) {
+            if (!n || n <= 0) return;
+            window.SoundSystem?.playFootstep();
+            for (let i = 1; i < n; i++) {
+                setTimeout(() => window.SoundSystem?.playFootstep(), i * 160);
+            }
+        }
+
         // Initialize scroll deck UI with right-click handlers
         function initializeScrollDeckUI() {
             const deckCards = document.querySelectorAll('.scroll-deck-card');
@@ -1388,7 +1398,8 @@
                         if (playerPath.slice(1).some(step => step.cost === 0)) {
                             window.SoundSystem?.play('windactivates');
                         }
-                        window.SoundSystem?.playFootstep();
+                        // One footstep per non-wind step (cost > 0)
+                        playFootsteps(playerPath.slice(1).filter(step => step.cost > 0).length);
                         placePlayer(finalPos.x, finalPos.y);
                         // Notify tutorial that the player has moved
                         if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
@@ -1993,7 +2004,8 @@
                                 prevVoidAP: voidAP
                             };
                             window.lastScrollAction = null;
-                            window.SoundSystem?.playFootstep();
+                            // One footstep per non-wind step (cost > 0)
+                            playFootsteps(playerPath.slice(1).filter(step => step.cost > 0).length);
                             placePlayer(finalPos.x, finalPos.y);
                             spendAP(totalCost);
                             movementSuccessful = true;
@@ -2876,7 +2888,8 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     if (actualCost >= 0 && actualCost <= getTotalAP()) {
                         lastMove = { type: 'move', prevPos: startPos, prevCurrentAP: currentAP, prevVoidAP: voidAP };
                         window.lastScrollAction = null;
-                        window.SoundSystem?.playFootstep();
+                        // Only play footstep if AP was spent (wind steps cost 0)
+                        if (actualCost > 0) window.SoundSystem?.playFootstep();
                         placePlayer(target.x, target.y);
                         if (window.isTutorialMode && window.TutorialMode?.onPlayerMoved) {
                             window.TutorialMode.onPlayerMoved(target.x, target.y);
