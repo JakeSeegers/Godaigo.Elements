@@ -1148,7 +1148,11 @@
                         endTurnBtn.disabled = false;
                     }
 
-                    if (window.ScrollPanelSystem) window.ScrollPanelSystem.refresh();
+                    // Do NOT call ScrollPanelSystem.refresh() here — rebuilding the card DOM
+                    // every 300ms destroys elements mid-hover and mid-click, which:
+                    //   • resets the 500ms hover-preview timer (spinner never resolves)
+                    //   • destroys the card element the user is about to click
+                    // The move buttons in the panels already call refresh() after each move.
                 }
 
                 endTurnBtn.addEventListener('click', () => {
