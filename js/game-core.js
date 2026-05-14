@@ -2603,6 +2603,15 @@
         }
 
         function attemptBreakStone(stoneId) {
+            // In multiplayer, only the active player can break stones
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
+                typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null &&
+                myPlayerIndex !== activePlayerIndex) {
+                updateStatus("It's not your turn!");
+                window.SoundSystem?.play('error');
+                return;
+            }
+
             const stone = placedStones.find(s => s.id === stoneId);
             if (!stone) {
                 console.log('❌ Stone not found');
