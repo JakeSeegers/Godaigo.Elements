@@ -1240,7 +1240,7 @@
                 if (stonePos.valid) {
                     if (capturedStoneId === null) {
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
-                        window.SoundSystem?.play('placestone');
+                        window.SoundSystem?.play(capturedStoneType === 'earth' ? 'placeearthstone' : 'placestone');
                         // Track for undo — stone ID is nextStoneId-1 after placeStone increments it
                         lastMove = {
                             type: 'stone-place',
@@ -1384,6 +1384,10 @@
                             prevVoidAP: voidAP
                         };
                         window.lastScrollAction = null;
+                        // If any step in the path passed through a wind stone (cost 0), fire the wind ability sound
+                        if (playerPath.slice(1).some(step => step.cost === 0)) {
+                            window.SoundSystem?.play('windactivates');
+                        }
                         window.SoundSystem?.playFootstep();
                         placePlayer(finalPos.x, finalPos.y);
                         // Notify tutorial that the player has moved
@@ -1904,6 +1908,7 @@
                     const stonePos = findValidStonePosition(world.x, world.y);
                     if (stonePos.valid) {
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
+                        window.SoundSystem?.play(capturedStoneType === 'earth' ? 'placeearthstone' : 'placestone');
 
                         if (capturedStoneId === null) {
                             playerPool[capturedStoneType]--;
@@ -2829,7 +2834,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     const type = stonePreviewType;
                     cancelStonePreview();
                     placeStone(pos.x, pos.y, type);
-                    window.SoundSystem?.play('placestone');
+                    window.SoundSystem?.play(type === 'earth' ? 'placeearthstone' : 'placestone');
                     lastMove = { type: 'stone-place', stoneId: nextStoneId - 1, x: pos.x, y: pos.y, element: type };
                     window.lastScrollAction = null;
                     stoneCounts[type]--;

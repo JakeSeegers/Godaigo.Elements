@@ -605,6 +605,7 @@
         _clickSnd.volume = 0.25;
         window.uiSoundEnabled   = localStorage.getItem('godaigo_ui_sound')   !== 'false';
         window.gameSoundEnabled = localStorage.getItem('godaigo_game_sound') !== 'false';
+        window.musicEnabled     = localStorage.getItem('godaigo_music')       !== 'false';
         // Buttons that play zipclick instead of the normal click sound
         const ZIPCLICK_BTN = '#undo-move, .fsp-close-btn, .fsp-collapse-btn, .scroll-browse-close, .btn-close';
         document.addEventListener('mousedown', e => {

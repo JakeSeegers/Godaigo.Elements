@@ -147,6 +147,9 @@
     // Run on DOMContentLoaded (or immediately if DOM is already ready)
     function run() {
         document.querySelectorAll('.board-area').forEach(buildParallax);
+        // Also inject into the lobby/login screen
+        const lobbyWrapper = document.getElementById('lobby-wrapper');
+        if (lobbyWrapper) buildParallax(lobbyWrapper);
     }
 
     if (document.readyState === 'loading') {

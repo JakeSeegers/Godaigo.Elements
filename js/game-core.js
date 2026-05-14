@@ -1361,6 +1361,7 @@
                 // Level 1 scrolls can only be used during the response window
                 const mainPhaseSpells = matchingSpells.filter(s => s.spell.level !== 1);
                 if (mainPhaseSpells.length === 0) {
+                    window.SoundSystem?.play('error');
                     updateStatus('Level 1 scrolls can only be used as responses.');
                     return false;
                 }
@@ -1380,6 +1381,7 @@
                 }
 
                 if (affordableSpells.length === 0) {
+                    window.SoundSystem?.play('error');
                     const minCost = Math.min(...matchingSpells.map(({ spell }) => this.getSpellCost(spell, activePlayerIndex)));
                     updateStatus(`Not enough AP! Need ${minCost} AP to cast.`);
                     return false;
@@ -6681,7 +6683,16 @@ function clearPlayerPath() {
         }
 
         function updateAllVoidNullificationVisuals() {
+            // Snapshot which stones already show a nullification indicator
+            const prevNullified = new Set();
+            placedStones.forEach(stone => {
+                if (stone.element.querySelector('.void-nullification-indicator')) {
+                    prevNullified.add(stone.id);
+                }
+            });
+
             // Update all stones to show if they're nullified by void
+            let anyNewNullification = false;
             placedStones.forEach(stone => {
                 // Remove any existing nullification indicator
                 const existingNullIndicator = stone.element.querySelector('.void-nullification-indicator');
@@ -6709,15 +6720,31 @@ function clearPlayerPath() {
                         // Insert before other elements
                         stone.element.insertBefore(nullIndicator, stone.element.firstChild);
 
+                        // Track if this is a newly-nullified stone
+                        if (!prevNullified.has(stone.id)) {
+                            anyNewNullification = true;
+                        }
+
                         console.log(`✨ ${stone.type} at (${stone.x.toFixed(1)}, ${stone.y.toFixed(1)}) is nullified by void`);
                     }
                 }
             });
+
+            // Play sound once if any stone became newly nullified
+            if (anyNewNullification) {
+                window.SoundSystem?.play('voidactivates');
+            }
         }
 
         function updateWaterStoneVisual(waterStone) {
             const effectiveType = getEffectiveStoneType(waterStone);
             const chainedAbility = getChainedAbility(waterStone.x, waterStone.y);
+
+            // Remember whether an adoption indicator existed BEFORE we clear it
+            const hadIndicator = !!(
+                waterStone.element.querySelector('.mimicry-indicator') ||
+                waterStone.element.querySelector('.chain-indicator')
+            );
 
             // Remove any existing indicators
             const existingIndicator = waterStone.element.querySelector('.mimicry-indicator');
@@ -6750,6 +6777,11 @@ function clearPlayerPath() {
 
                 // Insert before other elements
                 waterStone.element.insertBefore(indicator, waterStone.element.firstChild);
+
+                // Play adoption sound the first time this water stone gains an ability
+                if (!hadIndicator) {
+                    window.SoundSystem?.play('wateractivates');
+                }
 
                 if (isChained) {
                     console.log(`💧 Water at (${waterStone.x.toFixed(1)}, ${waterStone.y.toFixed(1)}) has chained ${displayAbility} ability`);

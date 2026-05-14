@@ -3445,6 +3445,23 @@ const ScrollEffects = {
             if (context?.spell && typeof spellSystem.onSelectionEffectComplete === 'function') {
                 spellSystem.onSelectionEffectComplete(context.scrollName, 'Inspiring Draught', context.spell);
             }
+            // Advance Psychic queue (and any other onComplete chain) now that selection is done
+            if (typeof context?.onComplete === 'function') {
+                context.onComplete();
+            }
+        };
+
+        // Helper: broadcast a kept scroll to other clients so the host's state stays in sync.
+        // Without this, the 3-second scroll-state-sync would overwrite the non-host player's
+        // hand with the host's stale snapshot (which doesn't include the newly drawn scroll).
+        const broadcastKept = (scrollName, deckType) => {
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                broadcastGameAction('scroll-collected', {
+                    playerIndex: casterIndex,
+                    scrollName,
+                    shrineType: deckType
+                });
+            }
         };
 
         this.showDeckSelectionModal(1, (selectedDecks) => {
@@ -3481,6 +3498,7 @@ const ScrollEffects = {
                 spellSystem.playerScrolls[casterIndex].hand.add(drawnScrolls[0]);
                 updateStatus(`Drew 1 ${elementName} scroll (kept it).`);
                 if (spellSystem.updateScrollCount) spellSystem.updateScrollCount();
+                broadcastKept(drawnScrolls[0], deckType);
                 notifyComplete();
                 return;
             }
@@ -3492,16 +3510,19 @@ const ScrollEffects = {
                 (selectedToReturn) => {
                     this.ensurePlayerScrollsStructure(casterIndex);
                     const playerScrolls = spellSystem.playerScrolls[casterIndex];
+                    let keptScroll = null;
                     drawnScrolls.forEach(scroll => {
                         if (scroll === selectedToReturn) {
                             spellSystem.scrollDecks[deckType].push(scroll);
                             this.shuffleDeck(spellSystem.scrollDecks[deckType]);
                         } else {
                             playerScrolls.hand.add(scroll);
+                            keptScroll = scroll;
                         }
                     });
                     updateStatus(`Drew 2 ${elementName} scrolls, put 1 back and shuffled.`);
                     if (spellSystem.updateScrollCount) spellSystem.updateScrollCount();
+                    if (keptScroll) broadcastKept(keptScroll, deckType);
                     notifyComplete();
                 }
             );

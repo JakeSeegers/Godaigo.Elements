@@ -373,6 +373,7 @@ async function _gami_emojisBuy(id) {
 function _renderSettings(content) {
     const uiSound   = localStorage.getItem('godaigo_ui_sound')   !== 'false';
     const gameSound = localStorage.getItem('godaigo_game_sound') !== 'false';
+    const music     = localStorage.getItem('godaigo_music')       !== 'false';
     const crt = window.crtOverlay ? window.crtOverlay.getOptions()
                                   : { scanlines: true, vignette: true, grain: true, flicker: true };
 
@@ -394,6 +395,14 @@ function _renderSettings(content) {
                 </div>
                 <button class="gami-toggle ${gameSound ? 'on' : 'off'}"
                         onclick="_gami_toggleSetting('game_sound', this)">${gameSound ? 'ON' : 'OFF'}</button>
+            </div>
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">Music</div>
+                    <div class="gami-settings-desc">Login screen background music</div>
+                </div>
+                <button class="gami-toggle ${music ? 'on' : 'off'}"
+                        onclick="_gami_toggleSetting('music', this)">${music ? 'ON' : 'OFF'}</button>
             </div>
             <div class="gami-settings-section-label">— Display —</div>
             <div class="gami-settings-row">
@@ -481,6 +490,18 @@ function _gami_toggleSetting(key, btn) {
     localStorage.setItem(`godaigo_${key}`, newVal ? 'true' : 'false');
     if (key === 'ui_sound')   window.uiSoundEnabled   = newVal;
     if (key === 'game_sound') window.gameSoundEnabled = newVal;
+    if (key === 'music') {
+        window.musicEnabled = newVal;
+        if (!newVal) {
+            window.SoundSystem?.fadeOutLoginMusic();
+        } else {
+            // Only restart if currently on the lobby/login screen
+            const lw = document.getElementById('lobby-wrapper');
+            if (lw && lw.style.display !== 'none') {
+                window.SoundSystem?.startLoginMusic();
+            }
+        }
+    }
     btn.textContent = newVal ? 'ON' : 'OFF';
     btn.className   = `gami-toggle ${newVal ? 'on' : 'off'}`;
 }
