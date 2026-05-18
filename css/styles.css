@@ -1964,7 +1964,7 @@ svg {
     flex: 1;
     color: var(--accent-gold);
     font-family: var(--font-pixel);
-    font-size: 14px;
+    font-size: 15px;
 }
 
 .tutorial-step-label {
@@ -1986,7 +1986,7 @@ svg {
     background: none;
     border: 1px solid #555;
     color: #bbb;
-    font-size: 14px;
+    font-size: 15px;
     cursor: pointer;
     padding: 2px 8px;
     border-radius: 3px;
@@ -2042,8 +2042,8 @@ svg {
     padding: 16px 20px;
     color: var(--text-primary);
     font-family: var(--font-terminal);
-    font-size: 22px;
-    line-height: 1.5;
+    font-size: 24px;
+    line-height: 1.55;
 }
 
 .tutorial-footer {
@@ -2074,8 +2074,8 @@ svg {
     color: var(--bg-dark);
     border: none;
     border-radius: 6px;
-    padding: 8px 24px;
-    font-size: 14px;
+    padding: 9px 26px;
+    font-size: 15px;
     font-weight: bold;
     cursor: pointer;
     transition: background 0.15s, transform 0.1s;

@@ -1397,6 +1397,9 @@
                         // If any step in the path passed through a wind stone (cost 0), fire the wind ability sound
                         if (playerPath.slice(1).some(step => step.cost === 0)) {
                             window.SoundSystem?.play('windactivates');
+                            if (window.isTutorialMode && window.TutorialMode?.onWindStoneUsed) {
+                                window.TutorialMode.onWindStoneUsed();
+                            }
                         }
                         // One footstep per non-wind step (cost > 0)
                         playFootsteps(playerPath.slice(1).filter(step => step.cost > 0).length);
