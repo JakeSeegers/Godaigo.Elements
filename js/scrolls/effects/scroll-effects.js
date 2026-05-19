@@ -2288,6 +2288,8 @@ const ScrollEffects = {
             });
         }
 
+        window.SoundSystem?.play('placetile');
+
         // Ensure pulse is cleared on the two swapped tiles
         this.unhighlightTile(tile1);
         this.unhighlightTile(tile2);
@@ -3128,8 +3130,20 @@ const ScrollEffects = {
             },
 
             cleanup() {
+                // Unhighlight tracked stones
                 if (self.selectionMode && self.selectionMode.highlightedStones) {
                     self.selectionMode.highlightedStones.forEach(s => self.unhighlightStone(s));
+                }
+                // Safety sweep: clear the stonePulse animation from any stone circle
+                // that slipped through (stale tracking, moved player, destroyed stones, etc.)
+                if (typeof placedStones !== 'undefined') {
+                    placedStones.forEach(s => {
+                        if (!s.element) return;
+                        const circle = s.element.querySelector('circle');
+                        if (circle && circle.style.animation && circle.style.animation.includes('stonePulse')) {
+                            self.unhighlightStone(s);
+                        }
+                    });
                 }
             }
         };
@@ -3244,7 +3258,9 @@ const ScrollEffects = {
             const available = typeof stonePools !== 'undefined' ? (stonePools[element] || 0) : 0;
 
             const btn = document.createElement('button');
-            btn.textContent = `${element.charAt(0).toUpperCase() + element.slice(1)} (${available} available)`;
+            btn.textContent = available > 0
+                ? `${element.charAt(0).toUpperCase() + element.slice(1)} (${available} available)`
+                : `${element.charAt(0).toUpperCase() + element.slice(1)} (source pool empty)`;
             btn.disabled = available <= 0;
             Object.assign(btn.style, {
                 display: 'block',
@@ -3303,6 +3319,12 @@ const ScrollEffects = {
             stonePools[newElement] = (stonePools[newElement] || 0) - 1;
         }
 
+        // Refresh HUD so pool counts reflect the swap immediately
+        if (typeof updateStoneCount === 'function') {
+            updateStoneCount('water');
+            updateStoneCount(newElement);
+        }
+
         // Update the stone's type and visual
         stone.type = newElement;
 
@@ -3318,18 +3340,26 @@ const ScrollEffects = {
             }
         }
 
-        // Update the stone's visual appearance - both color and symbol
+        // Update the stone's visual appearance — re-render as the new element type
         if (stone.element && typeof STONE_TYPES !== 'undefined' && STONE_TYPES[newElement]) {
+            const newColor = STONE_TYPES[newElement].color;
             const circle = stone.element.querySelector('circle');
-            const text = stone.element.querySelector('text');
-
             if (circle) {
-                circle.setAttribute('fill', STONE_TYPES[newElement].color);
+                const darkFill = typeof darkenHex === 'function'
+                    ? darkenHex(newColor, 0.55)
+                    : newColor;
+                circle.setAttribute('fill', darkFill);
+                circle.setAttribute('stroke', newColor);
             }
+            const stoneImg = stone.element.querySelector('image');
+            if (stoneImg) {
+                stoneImg.setAttribute('href', STONE_TYPES[newElement].img);
+            }
+        }
 
-            if (text) {
-                text.textContent = STONE_TYPES[newElement].symbol;
-            }
+        // Trigger fire destruction, void nullification, and water mimicry refresh
+        if (typeof window.applyStoneInteractionsAfterTransform === 'function') {
+            window.applyStoneInteractionsAfterTransform(stone.x, stone.y, newElement);
         }
 
         updateStatus(`Transformed water stone into ${newElement}!`);

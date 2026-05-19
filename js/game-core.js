@@ -4319,6 +4319,7 @@
                     selectionMode.handleStoneClick(stone);
                     return true; // Click was handled
                 }
+                return false; // No stone at click — don't consume the event, allow panning
             }
 
             // Check if this is a hex selection mode (e.g., Excavate teleport — any hex, not just tile center)
@@ -4612,6 +4613,47 @@
         // Expose placeStoneVisually and placedStones for tutorial scripted AI trap sequence
         window.placeStoneVisually = placeStoneVisually;
         window.placedStones = placedStones;
+        // Expose stone interaction pipeline for scroll effects (e.g. Control the Current transformation)
+        window.applyStoneInteractionsAfterTransform = function(x, y, newType) {
+            processStoneInteractions(x, y, newType);
+            recheckAllStoneInteractions();
+            updateAllWaterStoneVisuals();
+            updateAllVoidNullificationVisuals();
+        };
+
+        // Visual-only water stone transformation — called on receiving client in multiplayer
+        window.transformWaterStoneVisually = function(stoneX, stoneY, newElement) {
+            const stone = placedStones.find(s => Math.abs(s.x - stoneX) < 1 && Math.abs(s.y - stoneY) < 1);
+            if (!stone) return;
+
+            // Pool swap (mirrors what caster's client does in transformWaterStone)
+            stonePools.water = (stonePools.water || 0) + 1;
+            stonePools[newElement] = (stonePools[newElement] || 0) - 1;
+            if (typeof updateStoneCount === 'function') {
+                updateStoneCount('water');
+                updateStoneCount(newElement);
+            }
+
+            stone.type = newElement;
+
+            // Remove water-specific indicators
+            stone.element?.querySelector('.mimicry-indicator')?.remove();
+            stone.element?.querySelector('.chain-indicator')?.remove();
+
+            // Re-render circle and symbol to new element
+            if (stone.element && STONE_TYPES[newElement]) {
+                const newColor = STONE_TYPES[newElement].color;
+                const circle = stone.element.querySelector('circle');
+                if (circle) {
+                    circle.setAttribute('fill', darkenHex(newColor, 0.55));
+                    circle.setAttribute('stroke', newColor);
+                }
+                const img = stone.element.querySelector('image');
+                if (img) img.setAttribute('href', STONE_TYPES[newElement].img);
+            }
+
+            window.applyStoneInteractionsAfterTransform(stoneX, stoneY, newElement);
+        };
         // Expose tileMoveMode for scroll effects (e.g. Telekinesis)
         Object.defineProperty(window, 'tileMoveMode', {
             get() { return tileMoveMode; },
@@ -4658,6 +4700,7 @@
             tile.element = tileGroup;
             tile.shrineType = shrineType; // Update the tile's shrine type to match the revealed type
             console.log(`📄 flipTileVisually: Updated tile ${tileId} shrineType to ${shrineType}`);
+            window.SoundSystem?.play('tilereveal');
         }
 
         // Recreate a revealed tile as flipped (hidden) - used by Heavy Stomp scroll effect
@@ -4696,6 +4739,7 @@
             // Update tile data
             tile.flipped = true;
             tile.element = tileGroup;
+            window.SoundSystem?.play('placetile');
         }
 
         // Make it available globally for scroll effects
@@ -6723,16 +6767,15 @@ function clearPlayerPath() {
                         const nullIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                         nullIndicator.setAttribute('cx', 0);
                         nullIndicator.setAttribute('cy', 0);
-                        nullIndicator.setAttribute('r', STONE_SIZE + 3);
+                        nullIndicator.setAttribute('r', STONE_SIZE + 7);
                         nullIndicator.setAttribute('class', 'void-nullification-indicator');
                         nullIndicator.setAttribute('fill', 'none');
                         nullIndicator.setAttribute('stroke', STONE_TYPES['void'].color);
                         nullIndicator.setAttribute('stroke-width', '2');
-                        nullIndicator.setAttribute('stroke-dasharray', '2,2');
-                        nullIndicator.setAttribute('opacity', '0.6');
+                        nullIndicator.style.animation = `mimicryGlow 7s ease-in-out infinite`;
 
-                        // Insert before other elements
-                        stone.element.insertBefore(nullIndicator, stone.element.firstChild);
+                        // Append last so it renders on top of the stone circle
+                        stone.element.appendChild(nullIndicator);
 
                         // Track if this is a newly-nullified stone
                         if (!prevNullified.has(stone.id)) {
@@ -6779,18 +6822,39 @@ function clearPlayerPath() {
                 const indicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 indicator.setAttribute('cx', 0);
                 indicator.setAttribute('cy', 0);
-                indicator.setAttribute('r', STONE_SIZE + 3);
+                // r = STONE_SIZE + 7 keeps the ring outside the highlight stroke zone (max ~15px)
+                indicator.setAttribute('r', STONE_SIZE + 7);
                 indicator.setAttribute('class', isChained ? 'chain-indicator' : 'mimicry-indicator');
                 indicator.setAttribute('fill', 'none');
                 indicator.setAttribute('stroke', STONE_TYPES[displayAbility].color);
                 indicator.setAttribute('stroke-width', '2');
-                indicator.setAttribute('stroke-dasharray', isChained ? '5,2' : '3,3');
-                if (isChained) {
-                    indicator.setAttribute('opacity', '0.7');
+                // Solid ring — no dasharray for any indicator type
+
+                indicator.style.animation = `mimicryGlow 7s ease-in-out infinite`;
+
+                // Inject keyframes once
+                if (!document.getElementById('mimicry-glow-style')) {
+                    const style = document.createElement('style');
+                    style.id = 'mimicry-glow-style';
+                    style.textContent = `
+                        @keyframes mimicryGlow {
+                            0%, 100% {
+                                stroke-width: 1.8px;
+                                opacity: 0.6;
+                                filter: brightness(0.95);
+                            }
+                            50% {
+                                stroke-width: 2.4px;
+                                opacity: 0.8;
+                                filter: brightness(1.1);
+                            }
+                        }
+                    `;
+                    document.head.appendChild(style);
                 }
 
-                // Insert before other elements
-                waterStone.element.insertBefore(indicator, waterStone.element.firstChild);
+                // Append last so it renders on top of the stone circle and symbol
+                waterStone.element.appendChild(indicator);
 
                 // Play adoption sound the first time this water stone gains an ability
                 if (!hadIndicator) {
@@ -6940,6 +7004,9 @@ function clearPlayerPath() {
                     });
 
                     // Destroy all adjacent stones (voided or not)
+                    if (stonesToDestroy.length > 0) {
+                        window.SoundSystem?.play('fireactivates');
+                    }
                     stonesToDestroy.forEach(stone => {
                         window.effectsSystem?.play('fire_effect', stone.x, stone.y);
                         removeStone(stone.id);

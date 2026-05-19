@@ -1185,6 +1185,7 @@
                             });
                         }
 
+                        window.SoundSystem?.play('placetile');
                         tkState.movesLeft--;
                         tkState.movedTiles.push(draggedTileId);
                         console.log(`🔮 Telekinesis: ${tkState.maxMoves - tkState.movesLeft}/${tkState.maxMoves} moves`);
@@ -1875,6 +1876,7 @@
                                     movedPlayers: []
                                 });
                             }
+                            window.SoundSystem?.play('placetile');
                             tkStateTouch.movesLeft--;
                             tkStateTouch.movedTiles.push(draggedTileId);
                             const doneBtnT = document.getElementById('telekinesis-done-btn');
@@ -3688,6 +3690,20 @@ document.getElementById('undo-move').onclick = function() {
                 tab.addEventListener('click', () => switchTab(el));
                 tabBar.appendChild(tab);
             });
+
+            // Rulings tab
+            const rulingsTab = document.createElement('button');
+            rulingsTab.dataset.element = 'rulings';
+            rulingsTab.textContent = 'Rulings';
+            rulingsTab.style.cssText = `
+                font-family: var(--font-pixel); font-size: 9px;
+                padding: 6px 11px; border: 1px solid #aaa4;
+                background: transparent; color: #aaa8; cursor: pointer;
+                border-radius: 3px 3px 0 0; letter-spacing: 1px;
+            `;
+            rulingsTab.addEventListener('click', () => switchTab('rulings'));
+            tabBar.appendChild(rulingsTab);
+
             box.appendChild(tabBar);
 
             // Scroll list content
@@ -3699,19 +3715,77 @@ document.getElementById('undo-move').onclick = function() {
             document.body.appendChild(overlay);
 
             function switchTab(el) {
-                const c = elementColor(el);
+                const c = el === 'rulings' ? '#aaa' : elementColor(el);
 
                 // Update tab button styles
                 tabBar.querySelectorAll('button[data-element]').forEach(btn => {
-                    const bc = elementColor(btn.dataset.element);
+                    const bc = btn.dataset.element === 'rulings' ? '#aaa' : elementColor(btn.dataset.element);
                     const active = btn.dataset.element === el;
                     btn.style.background  = active ? `${bc}1a` : 'transparent';
                     btn.style.color       = active ? bc : `${bc}88`;
                     btn.style.borderColor = active ? bc : `${bc}44`;
                 });
 
-                // Build list
                 content.innerHTML = '';
+
+                // Rulings tab — render official scroll rulings
+                if (el === 'rulings') {
+                    const rulings = typeof SCROLL_RULINGS !== 'undefined' ? SCROLL_RULINGS : {};
+                    const scrollIds = Object.keys(rulings);
+                    if (scrollIds.length === 0) {
+                        content.innerHTML = `<div style="color:#ccc;font-family:var(--font-terminal);padding:20px;text-align:center;">No rulings recorded yet.</div>`;
+                        return;
+                    }
+                    const sectionLabel = document.createElement('div');
+                    sectionLabel.textContent = 'Official Scroll Rulings';
+                    sectionLabel.style.cssText = `font-family:var(--font-pixel);font-size:9px;color:#aaa;letter-spacing:2px;margin-bottom:12px;text-transform:uppercase;`;
+                    content.appendChild(sectionLabel);
+
+                    scrollIds.forEach(scrollId => {
+                        const pattern = spellSystem?.patterns?.[scrollId];
+                        const scrollRulings = rulings[scrollId];
+                        if (!pattern || !scrollRulings) return;
+                        const rc = elementColor(pattern.element);
+
+                        const card = document.createElement('div');
+                        card.style.cssText = `
+                            border-left: 3px solid ${rc}; background: ${rc}0d;
+                            border-radius: 0 4px 4px 0; padding: 10px 12px;
+                            margin-bottom: 8px;
+                        `;
+
+                        const nameRow = document.createElement('div');
+                        nameRow.style.cssText = `display:flex;align-items:baseline;gap:8px;margin-bottom:8px;`;
+                        const nameEl = document.createElement('span');
+                        nameEl.textContent = pattern.name;
+                        nameEl.style.cssText = `font-family:var(--font-terminal);font-size:17px;color:${rc};`;
+                        const lvl = document.createElement('span');
+                        lvl.textContent = `${pattern.element.charAt(0).toUpperCase() + pattern.element.slice(1)} Lv ${pattern.level}`;
+                        lvl.style.cssText = `font-family:var(--font-pixel);font-size:8px;color:#ccc;letter-spacing:1px;`;
+                        nameRow.appendChild(nameEl);
+                        nameRow.appendChild(lvl);
+                        card.appendChild(nameRow);
+
+                        scrollRulings.forEach(ruling => {
+                            const row = document.createElement('div');
+                            row.style.cssText = `display:flex;gap:8px;margin-bottom:6px;`;
+                            const bullet = document.createElement('span');
+                            bullet.textContent = '•';
+                            bullet.style.cssText = `color:${rc};font-size:14px;flex-shrink:0;margin-top:1px;`;
+                            const text = document.createElement('span');
+                            text.textContent = ruling;
+                            text.style.cssText = `font-family:var(--font-terminal);font-size:14px;color:#bbb;line-height:1.45;`;
+                            row.appendChild(bullet);
+                            row.appendChild(text);
+                            card.appendChild(row);
+                        });
+
+                        content.appendChild(card);
+                    });
+                    return;
+                }
+
+                // Build list
                 const scrollNames = (typeof SCROLL_DECKS !== 'undefined' && SCROLL_DECKS[el]) || [];
 
                 if (scrollNames.length === 0) {

@@ -1809,6 +1809,15 @@
                 breakStoneVisually(stoneId);
             });
 
+            // Listen for water stone transformation (Control the Current)
+            gameChannel.on('broadcast', { event: 'water-stone-transformed' }, ({ payload }) => {
+                console.log('📄 Received water stone transformation:', payload);
+                const { stoneX, stoneY, newElement } = payload;
+                if (typeof window.transformWaterStoneVisually === 'function') {
+                    window.transformWaterStoneVisually(stoneX, stoneY, newElement);
+                }
+            });
+
             // Listen for player tile placement events
             gameChannel.on('broadcast', { event: 'player-tile-place' }, ({ payload }) => {
                 console.log('📄 Received player tile placement:', payload);

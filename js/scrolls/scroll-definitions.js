@@ -286,8 +286,18 @@ const SCROLL_DECKS = {
                'CATACOMB_SCROLL_6', 'CATACOMB_SCROLL_7', 'CATACOMB_SCROLL_8', 'CATACOMB_SCROLL_9', 'CATACOMB_SCROLL_10']
 };
 
+// Formal rulings for scrolls — displayed in the Scroll Reference "Rulings" tab.
+// Keyed by scroll ID. Each entry is an array of ruling strings.
+const SCROLL_RULINGS = {
+    WATER_SCROLL_5: [
+        "If an element has no stones remaining in the source pool, you cannot transform a water stone into that element.",
+        "Each transformation pulls a replacement stone from the source pool — pool counts update immediately and affect all future placements this game."
+    ]
+};
+
 // Export for use in other modules
 if (typeof window !== 'undefined') {
     window.SCROLL_DEFINITIONS = SCROLL_DEFINITIONS;
     window.SCROLL_DECKS = SCROLL_DECKS;
+    window.SCROLL_RULINGS = SCROLL_RULINGS;
 }
