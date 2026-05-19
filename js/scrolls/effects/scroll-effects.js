@@ -1578,10 +1578,9 @@ const ScrollEffects = {
             style.id = 'telekinesis-style';
             style.textContent = `
                 @keyframes telekinesisFloat {
-                    0%   { opacity: 1;    transform: translateY(0px); }
-                    30%  { opacity: 0.75; transform: translateY(-2px); }
-                    70%  { opacity: 0.85; transform: translateY(1px); }
-                    100% { opacity: 1;    transform: translateY(0px); }
+                    0%,  100% { opacity: 1; }
+                    30%       { opacity: 0.75; }
+                    70%       { opacity: 0.85; }
                 }
             `;
             document.head.appendChild(style);
@@ -2372,7 +2371,8 @@ const ScrollEffects = {
         if (tile.flipped) {
             // Currently hidden -> reveal it
             if (typeof revealTile === 'function') {
-                revealTile(tile.id);
+                window.SoundSystem?.play('placetile');
+                revealTile(tile.id, true); // silent — Heavy Stomp uses placetile
                 // revealTile() sets its own status (including AP bonus message for catacomb tiles)
             } else {
                 // Manual reveal

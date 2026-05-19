@@ -4490,7 +4490,7 @@
         window.refreshAllTileOverlays = refreshAllTileOverlays;
         window.addTileOverlay = addTileOverlay;
 
-        function revealTile(tileId) {
+        function revealTile(tileId, silent = false) {
             const tile = placedTiles.find(t => t.id === tileId);
             if (!tile || !tile.flipped) {
                 console.log(`⚠️ revealTile called for tile ${tileId}, but tile is ${tile ? 'already revealed' : 'not found'}`);
@@ -4549,7 +4549,7 @@
             window.lastScrollAction = null;
 
             // Sound
-            window.SoundSystem?.play('tilereveal');
+            if (!silent) window.SoundSystem?.play('tilereveal');
 
             // Catacomb tile reveal: refund 1 AP
             const isCatacombReveal = tile.shrineType === 'catacomb';
