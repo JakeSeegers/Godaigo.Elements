@@ -7008,6 +7008,11 @@ function clearPlayerPath() {
                         window.SoundSystem?.play('fireactivates');
                     }
                     stonesToDestroy.forEach(stone => {
+                        // Snapshot into lastMove so undo can restore them
+                        if (lastMove && lastMove.type === 'stone-place') {
+                            if (!lastMove.destroyedByFire) lastMove.destroyedByFire = [];
+                            lastMove.destroyedByFire.push({ x: stone.x, y: stone.y, type: stone.type });
+                        }
                         window.effectsSystem?.play('fire_effect', stone.x, stone.y);
                         removeStone(stone.id);
                         updateStatus(`Fire destroyed ${stone.type} stone!`);

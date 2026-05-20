@@ -3381,6 +3381,15 @@ document.getElementById('undo-move').onclick = function() {
                         broadcastGameAction('stone-break', { stoneId: action.stoneId });
                     }
                 }
+                // Restore any stones that were destroyed by the fire placement
+                if (action.destroyedByFire && action.destroyedByFire.length > 0) {
+                    action.destroyedByFire.forEach(s => {
+                        placeStoneVisually(s.x, s.y, s.type);
+                        if (isMultiplayer) {
+                            broadcastGameAction('stone-place', { x: s.x, y: s.y, stoneType: s.type });
+                        }
+                    });
+                }
                 updateStatus(`Undid ${action.element} stone placement.`);
 
             } else if (action.type === 'stone-break') {
