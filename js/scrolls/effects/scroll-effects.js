@@ -1962,15 +1962,9 @@ const ScrollEffects = {
             const scrolls = sp.getPlayerScrolls(false);
             const scrollInfo = sp.patterns?.[scrollName];
 
-            if (scrolls.hand.size >= sp.MAX_HAND_SIZE) {
-                // Hand full — trigger cascade system
-                const canCascadeToActive = scrolls.active.size < sp.MAX_ACTIVE_SIZE;
-                sp.showCascadePrompt(scrollName, scrollInfo, element, canCascadeToActive);
-            } else {
-                // Hand has room — add directly
-                scrolls.hand.add(scrollName);
-                sp.updateScrollCount();
-            }
+            // Always add to hand — end-of-turn overflow handles cascade if needed
+            scrolls.hand.add(scrollName);
+            sp.updateScrollCount();
 
             if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
             if (typeof updateHUD === 'function') updateHUD();
