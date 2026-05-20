@@ -2850,49 +2850,6 @@
                 if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
             });
 
-            // Listen for water stone transformation (Control the Current - Water V)
-            gameChannel.on('broadcast', { event: 'water-stone-transformed' }, ({ payload }) => {
-                console.log('📄 Received water-stone-transformed:', payload);
-                const { stoneX, stoneY, newElement } = payload;
-
-                // Find the stone at this location
-                if (typeof placedStones !== 'undefined' && typeof STONE_TYPES !== 'undefined') {
-                    const stone = placedStones.find(s =>
-                        Math.abs(s.x - stoneX) < 1 && Math.abs(s.y - stoneY) < 1
-                    );
-
-                    if (stone && stone.element && STONE_TYPES[newElement]) {
-                        // Update stone type
-                        stone.type = newElement;
-
-                        // Remove any water stone indicators (mimicry/chain rings) before transformation
-                        const mimicryIndicator = stone.element.querySelector('.mimicry-indicator');
-                        if (mimicryIndicator) {
-                            mimicryIndicator.remove();
-                        }
-                        const chainIndicator = stone.element.querySelector('.chain-indicator');
-                        if (chainIndicator) {
-                            chainIndicator.remove();
-                        }
-
-                        // Update visual appearance - update both color and symbol
-                        const circle = stone.element.querySelector('circle');
-                        const text = stone.element.querySelector('text');
-
-                        if (circle) {
-                            circle.setAttribute('fill', STONE_TYPES[newElement].color);
-                        }
-
-                        if (text) {
-                            text.textContent = STONE_TYPES[newElement].symbol;
-                        }
-
-                        console.log(`🌀 Transformed water stone at (${stoneX.toFixed(1)}, ${stoneY.toFixed(1)}) to ${newElement}`);
-                    } else {
-                        console.warn(`⚠️ Could not find stone at (${stoneX}, ${stoneY}) to transform`);
-                    }
-                }
-            });
 
             // Listen for stones destroyed (Combust - Catacomb X)
             gameChannel.on('broadcast', { event: 'stones-destroyed' }, ({ payload }) => {
