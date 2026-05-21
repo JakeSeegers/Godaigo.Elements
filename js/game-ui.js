@@ -1250,6 +1250,7 @@
                 const stonePos = findValidStonePosition(world.x, world.y);
                 if (stonePos.valid) {
                     if (capturedStoneId === null) {
+                        window._pendingFireDestroys = [];
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
                         window.SoundSystem?.play(capturedStoneType === 'earth' ? 'placeearthstone' : 'placestone');
                         // Track for undo — stone ID is nextStoneId-1 after placeStone increments it
@@ -1258,8 +1259,10 @@
                             stoneId: nextStoneId - 1,
                             x: stonePos.x,
                             y: stonePos.y,
-                            element: capturedStoneType
+                            element: capturedStoneType,
+                            destroyedByFire: window._pendingFireDestroys
                         };
+                        window._pendingFireDestroys = null;
                         window.lastScrollAction = null;
                         console.log(`📤 Placing stone from deck: type=${capturedStoneType}, before=${stoneCounts[capturedStoneType]}`);
                         stoneCounts[capturedStoneType]--;
@@ -2850,9 +2853,11 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     const pos = stonePreviewPositions[stonePreviewIndex];
                     const type = stonePreviewType;
                     cancelStonePreview();
+                    window._pendingFireDestroys = [];
                     placeStone(pos.x, pos.y, type);
                     window.SoundSystem?.play(type === 'earth' ? 'placeearthstone' : 'placestone');
-                    lastMove = { type: 'stone-place', stoneId: nextStoneId - 1, x: pos.x, y: pos.y, element: type };
+                    lastMove = { type: 'stone-place', stoneId: nextStoneId - 1, x: pos.x, y: pos.y, element: type, destroyedByFire: window._pendingFireDestroys };
+                    window._pendingFireDestroys = null;
                     window.lastScrollAction = null;
                     stoneCounts[type]--;
                     updateStoneCount(type);

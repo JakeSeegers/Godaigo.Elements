@@ -7008,10 +7008,9 @@ function clearPlayerPath() {
                         window.SoundSystem?.play('fireactivates');
                     }
                     stonesToDestroy.forEach(stone => {
-                        // Snapshot into lastMove so undo can restore them
-                        if (lastMove && lastMove.type === 'stone-place') {
-                            if (!lastMove.destroyedByFire) lastMove.destroyedByFire = [];
-                            lastMove.destroyedByFire.push({ x: stone.x, y: stone.y, type: stone.type });
+                        // Collect for undo (game-ui.js attaches this to lastMove after placeStone returns)
+                        if (Array.isArray(window._pendingFireDestroys)) {
+                            window._pendingFireDestroys.push({ x: stone.x, y: stone.y, type: stone.type });
                         }
                         window.effectsSystem?.play('fire_effect', stone.x, stone.y);
                         removeStone(stone.id);
