@@ -2650,8 +2650,8 @@ const ScrollEffects = {
                 borderRadius: '10px',
                 padding: '20px',
                 color: 'white',
-                minWidth: '300px',
-                maxWidth: '420px',
+                minWidth: '340px',
+                maxWidth: '500px',
                 maxHeight: '80vh',
                 overflowY: 'auto'
             });
@@ -2671,43 +2671,84 @@ const ScrollEffects = {
             subtitle.style.textAlign = 'center';
             modal.appendChild(subtitle);
 
+            const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
             available.forEach(({ element, scrollName, index }) => {
-                const scrollInfo = sp?.patterns?.[scrollName];
-                if (!scrollInfo) return;
-                const info = STONE_TYPES_LOCAL[element] || { color: '#fff', symbol: '?' };
+                const def = sp?.patterns?.[scrollName];
+                if (!def) return;
+                const elColor = (STONE_TYPES_LOCAL[element] || {}).color || '#fff';
+                const iconSrc = window.STONE_TYPES?.[element]?.img || '';
+                const elLabel = element.charAt(0).toUpperCase() + element.slice(1);
+                const lvLabel = def.level ? 'Lv. ' + (ROMAN[def.level] || def.level) : '';
+                const metaText = [elLabel, lvLabel].filter(Boolean).join(' · ');
 
                 const card = document.createElement('div');
                 Object.assign(card.style, {
                     backgroundColor: '#2d2d44',
-                    border: `1px solid ${info.color}`,
-                    borderRadius: '8px',
-                    padding: '12px',
-                    marginBottom: '8px',
+                    border: `2px solid ${elColor}`,
+                    borderRadius: '10px',
+                    padding: '14px',
+                    marginBottom: '10px',
                     cursor: 'pointer',
-                    transition: 'border-color 0.15s, background-color 0.15s'
+                    transition: 'background-color 0.15s, transform 0.15s'
                 });
-                card.onmouseenter = () => card.style.backgroundColor = '#3d3d55';
-                card.onmouseleave = () => card.style.backgroundColor = '#2d2d44';
+                card.onmouseenter = () => { card.style.backgroundColor = '#3d3d55'; card.style.transform = 'scale(1.02)'; };
+                card.onmouseleave = () => { card.style.backgroundColor = '#2d2d44'; card.style.transform = 'scale(1)'; };
 
+                // ── Header: icon · name + meta ──────────────────────────
+                const hdr = document.createElement('div');
+                Object.assign(hdr.style, { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' });
+
+                if (iconSrc) {
+                    const icon = document.createElement('img');
+                    icon.src = iconSrc;
+                    Object.assign(icon.style, { width: '26px', height: '26px', flexShrink: '0' });
+                    hdr.appendChild(icon);
+                }
+
+                const titleWrap = document.createElement('div');
                 const nameEl = document.createElement('div');
-                nameEl.textContent = `${info.symbol} ${scrollInfo.name || scrollName}`;
-                nameEl.style.fontWeight = 'bold';
-                nameEl.style.color = info.color;
-                nameEl.style.marginBottom = '4px';
-                card.appendChild(nameEl);
+                nameEl.textContent = def.name || scrollName;
+                Object.assign(nameEl.style, { fontWeight: 'bold', color: elColor, fontSize: '15px' });
+                titleWrap.appendChild(nameEl);
 
-                const descEl = document.createElement('div');
-                descEl.textContent = scrollInfo.description || 'No description';
-                descEl.style.fontSize = '12px';
-                descEl.style.color = '#95a5a6';
-                card.appendChild(descEl);
+                if (metaText) {
+                    const metaEl = document.createElement('div');
+                    metaEl.textContent = metaText;
+                    Object.assign(metaEl.style, { fontSize: '11px', color: '#95a5a6', marginTop: '2px' });
+                    titleWrap.appendChild(metaEl);
+                }
+                hdr.appendChild(titleWrap);
+                card.appendChild(hdr);
 
+                // ── Description ─────────────────────────────────────────
+                if (def.description) {
+                    const descEl = document.createElement('div');
+                    descEl.textContent = def.description;
+                    Object.assign(descEl.style, { fontSize: '12px', color: '#bdc3c7', marginBottom: '8px' });
+                    card.appendChild(descEl);
+                }
+
+                // ── Pattern visual ───────────────────────────────────────
+                if (def.patterns && typeof sp.createPatternVisual === 'function') {
+                    try {
+                        const visual = sp.createPatternVisual(def, element);
+                        if (visual) {
+                            const patWrap = document.createElement('div');
+                            Object.assign(patWrap.style, {
+                                display: 'flex', justifyContent: 'center',
+                                margin: '8px 0', padding: '6px',
+                                backgroundColor: '#1a1a2e', borderRadius: '6px'
+                            });
+                            patWrap.appendChild(visual);
+                            card.appendChild(patWrap);
+                        }
+                    } catch (e) { /* skip if pattern rendering fails */ }
+                }
+
+                // ── Bonus line ───────────────────────────────────────────
                 const bonusEl = document.createElement('div');
-                bonusEl.textContent = `Draws 2 ${element} stones`;
-                bonusEl.style.fontSize = '11px';
-                bonusEl.style.color = info.color;
-                bonusEl.style.marginTop = '4px';
-                bonusEl.style.fontStyle = 'italic';
+                bonusEl.textContent = `Draws 2 ${elLabel} stones`;
+                Object.assign(bonusEl.style, { fontSize: '11px', color: elColor, marginTop: '6px', fontStyle: 'italic' });
                 card.appendChild(bonusEl);
 
                 card.onclick = () => {
