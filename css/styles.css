@@ -3550,6 +3550,18 @@ label, .hud-ap-label, .hud-ap-value {
     border-color: rgba(255,255,255,0.15);
 }
 
+/* Autofit toggle — active (on) state */
+.fsp-autofit-btn.fsp-autofit-active {
+    color: #b8a4f8;
+    background: rgba(148,88,244,0.15);
+    border-color: rgba(148,88,244,0.35);
+}
+.fsp-autofit-btn.fsp-autofit-active:hover {
+    color: #d0c0ff;
+    background: rgba(148,88,244,0.28);
+    border-color: rgba(148,88,244,0.55);
+}
+
 
 /* ---- Body ---- */
 .fsp-body {
@@ -3612,6 +3624,9 @@ label, .hud-ap-label, .hud-ap-value {
     flex-shrink: 0;
     width: 230px;
     min-width: 230px;
+    height: 400px;          /* uniform height — must match AUTOFIT_CARD_H in scroll-panels.js */
+    display: flex;
+    flex-direction: column;
 }
 .fsp-card:hover {
     background: rgba(255,255,255,0.06);
@@ -3699,29 +3714,30 @@ label, .hud-ap-label, .hud-ap-value {
     padding: 0 10px 8px;
 }
 
-/* Stone pattern — scale the ~230px createPatternVisual output down to ~106px */
+/* Stone pattern — expands to fill empty space in the card, visual scales to match */
 .fsp-card-pattern {
-    width: 106px;
-    height: 106px;
+    flex: 1;                    /* fill the gap between description and buttons */
+    min-height: 80px;
+    width: calc(100% - 18px);  /* full card width minus side margins */
+    margin: 0 9px 8px;
     overflow: hidden;
-    margin: 0 auto 8px;
     border-radius: 5px;
-    flex-shrink: 0;
     position: relative;
 }
 .fsp-card-pattern > div {
-    transform: scale(0.46);
+    transform: scale(0.92);    /* 212px / 230px — fills the container width */
     transform-origin: top left;
     pointer-events: none;
     margin-top: 0 !important;
 }
 
-/* Action buttons — stacked vertically so they don't overflow card width */
+/* Action buttons — stacked vertically, pinned to the bottom of the card */
 .fsp-card-actions {
     display: flex;
     flex-direction: column;
     gap: 4px;
     padding: 0 9px 8px;
+    margin-top: auto;   /* pushes buttons to bottom regardless of content height above */
 }
 
 .fsp-card-btn {

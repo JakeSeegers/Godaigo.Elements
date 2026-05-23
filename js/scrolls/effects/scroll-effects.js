@@ -1975,6 +1975,11 @@ const ScrollEffects = {
             if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
             if (typeof updateHUD === 'function') updateHUD();
 
+            // Open Hand panel + show toast (same as finding a scroll on a shrine)
+            if (typeof sp.showScrollNotification === 'function') {
+                sp.showScrollNotification(scrollInfo, element, scrollName);
+            }
+
             const displayName = scrollInfo?.name || scrollName;
             updateStatus(`Scholar's Insight: added "${displayName}" to your hand!`);
 

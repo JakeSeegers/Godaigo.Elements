@@ -12,7 +12,7 @@ const ScrollPanelSystem = (() => {
 
     // ---- Config ----
     const CAPACITY    = { hand: 2, active: 2, common: 5 };
-    const STORAGE_KEY = 'godaigo_scroll_panels_v6';  // bumped — common panel default moved on-screen
+    const STORAGE_KEY = 'godaigo_scroll_panels_v8';  // bumped — cards flex column, height 400, autofit on by default
     const EL_COLORS   = {
         earth: '#69d83a', water: '#5894f4', fire: '#ed1b43',
         wind: '#ffce00', void: '#9458f4', catacomb: '#9b59b6'
@@ -20,9 +20,9 @@ const ScrollPanelSystem = (() => {
 
     // Default positions — hand/active stacked left, common to the right
     const DEFAULTS = {
-        hand:   { x: 20,  y: 100, w: 520, h: 420, collapsed: false },
-        active: { x: 20,  y: 540, w: 520, h: 420, collapsed: false },
-        common: { x: 560, y: 100, w: 760, h: 420, collapsed: false }
+        hand:   { x: 20,  y: 100, w: 520, h: 420, collapsed: false, autofit: true },
+        active: { x: 20,  y: 540, w: 520, h: 420, collapsed: false, autofit: true },
+        common: { x: 560, y: 100, w: 760, h: 420, collapsed: false, autofit: true }
     };
 
     const panels = {};      // { id → { el, state, open } }
@@ -55,6 +55,7 @@ const ScrollPanelSystem = (() => {
             <div class="fsp-header" data-drag-handle>
                 <span class="fsp-title">${title}</span>
                 <span class="fsp-badge" id="fsp-badge-${id}">0/0</span>
+                <button class="fsp-btn fsp-autofit-btn"  title="Auto-fit height to content">↕</button>
                 <button class="fsp-btn fsp-collapse-btn" title="Collapse / expand">−</button>
                 <button class="fsp-btn fsp-close-btn"    title="Close">✕</button>
             </div>
@@ -71,6 +72,16 @@ const ScrollPanelSystem = (() => {
         // Wire buttons
         el.querySelector('.fsp-close-btn').addEventListener('click', e => { e.stopPropagation(); closePanel(id); });
         el.querySelector('.fsp-collapse-btn').addEventListener('click', e => { e.stopPropagation(); toggleCollapse(id); });
+
+        const autofitBtn = el.querySelector('.fsp-autofit-btn');
+        if (state.autofit !== false) autofitBtn.classList.add('fsp-autofit-active');
+        autofitBtn.addEventListener('click', e => { e.stopPropagation(); setAutofit(id, !panels[id].state.autofit); });
+
+        // Hide resize handle immediately if autofit is on and panel isn't collapsed
+        if (state.autofit !== false && !state.collapsed) {
+            const handle = el.querySelector('.fsp-resize-handle');
+            if (handle) handle.style.display = 'none';
+        }
 
         // Drag & resize
         _makeDraggable(el, el.querySelector('[data-drag-handle]'), id);
@@ -163,7 +174,7 @@ const ScrollPanelSystem = (() => {
             el.style.height = '';
         } else {
             if (body)   body.style.display   = '';
-            if (handle) handle.style.display = '';
+            if (handle) handle.style.display = (state.autofit !== false) ? 'none' : '';
             if (btn)    btn.textContent       = '−';
             if (state.h) el.style.height = state.h + 'px';
         }
@@ -401,6 +412,45 @@ const ScrollPanelSystem = (() => {
         return card;
     }
 
+    // ---- Autofit ----
+    // Width  = body_padding + n_cards × card_width + (n_cards−1) × gap
+    // Height = header_height + card_height + body_padding
+    // AUTOFIT_CARD_H must stay in sync with CSS `.fsp-card { height: 280px }`
+    const AUTOFIT_CARD_W = 230;
+    const AUTOFIT_CARD_H = 400;  // must match CSS .fsp-card { height: 400px }
+    const AUTOFIT_GAP    = 8;
+    const AUTOFIT_PAD    = 16;   // 8px left + 8px right body padding
+
+    function fitPanel(id) {
+        const p      = panels[id];
+        if (!p || !p.el || p.state.collapsed || p.state.autofit === false) return;
+        const body   = document.getElementById('fsp-body-' + id);
+        const header = p.el.querySelector('.fsp-header');
+        if (!body || !header) return;
+
+        // Count rendered cards (empty → 1 child fsp-empty div → minimum 1-card width)
+        const n = Math.max(1, body.children.length);
+        const w = AUTOFIT_PAD + n * AUTOFIT_CARD_W + (n - 1) * AUTOFIT_GAP;
+        const h = header.offsetHeight + AUTOFIT_CARD_H + AUTOFIT_PAD;
+
+        p.el.style.width  = w + 'px';
+        p.el.style.height = h + 'px';
+        p.state.w = w;
+        p.state.h = h;
+    }
+
+    function setAutofit(id, on) {
+        const p = panels[id];
+        if (!p) return;
+        p.state.autofit = on;
+        const btn    = p.el.querySelector('.fsp-autofit-btn');
+        const handle = p.el.querySelector('.fsp-resize-handle');
+        if (btn)    btn.classList.toggle('fsp-autofit-active', on);
+        if (handle) handle.style.display = (on || p.state.collapsed) ? 'none' : '';
+        if (on) fitPanel(id);
+        saveState();
+    }
+
     // ---- Render ----
     function renderPanel(id) {
         const sp   = window.spellSystem;
@@ -408,37 +458,32 @@ const ScrollPanelSystem = (() => {
         if (!body || !sp) return;
 
         body.innerHTML = '';
-        const frag = document.createDocumentFragment();
+        const frag  = document.createDocumentFragment();
+        let   empty = false;
 
         if (id === 'hand') {
             const scrolls = [...(sp.handScrolls || [])];
             _updateBadge('hand', scrolls.length, CAPACITY.hand);
-            if (!scrolls.length) {
-                body.innerHTML = '<div class="fsp-empty">Hand is empty</div>';
-                return;
-            }
-            scrolls.forEach(n => { const c = _buildCard(n, 'hand');   if (c) frag.appendChild(c); });
+            if (!scrolls.length) { empty = true; body.innerHTML = '<div class="fsp-empty">Hand is empty</div>'; }
+            else scrolls.forEach(n => { const c = _buildCard(n, 'hand');   if (c) frag.appendChild(c); });
 
         } else if (id === 'active') {
             const scrolls = [...(sp.activeScrolls || [])];
             _updateBadge('active', scrolls.length, CAPACITY.active);
-            if (!scrolls.length) {
-                body.innerHTML = '<div class="fsp-empty">No active scrolls</div>';
-                return;
-            }
-            scrolls.forEach(n => { const c = _buildCard(n, 'active'); if (c) frag.appendChild(c); });
+            if (!scrolls.length) { empty = true; body.innerHTML = '<div class="fsp-empty">No active scrolls</div>'; }
+            else scrolls.forEach(n => { const c = _buildCard(n, 'active'); if (c) frag.appendChild(c); });
 
         } else if (id === 'common') {
             const scrolls = typeof sp.getCommonAreaScrolls === 'function' ? sp.getCommonAreaScrolls() : [];
             _updateBadge('common', scrolls.length, CAPACITY.common);
-            if (!scrolls.length) {
-                body.innerHTML = '<div class="fsp-empty">Common area is empty</div>';
-                return;
-            }
-            scrolls.forEach(n => { const c = _buildCard(n, 'common'); if (c) frag.appendChild(c); });
+            if (!scrolls.length) { empty = true; body.innerHTML = '<div class="fsp-empty">Common area is empty</div>'; }
+            else scrolls.forEach(n => { const c = _buildCard(n, 'common'); if (c) frag.appendChild(c); });
         }
 
-        body.appendChild(frag);
+        if (!empty) body.appendChild(frag);
+
+        // Autofit: snap height to content after rendering
+        if (panels[id]?.state?.autofit !== false) fitPanel(id);
     }
 
     function refresh() {
@@ -614,6 +659,7 @@ const ScrollPanelSystem = (() => {
             // Clone the card DOM (fast) then replace the pattern with a fresh
             // animated instance — cloneNode gives a static snapshot, not live animation
             const clone = card.cloneNode(true);
+            clone.style.height = 'auto';   // preview is not height-constrained
             clone.querySelector('.fsp-card-actions')?.remove();
             const elColor = card.style.getPropertyValue('--el-color');
             if (elColor) clone.style.setProperty('--el-color', elColor);
