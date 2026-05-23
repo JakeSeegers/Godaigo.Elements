@@ -125,6 +125,14 @@ class ResponseWindowSystem {
      * @param {function} onComplete - Callback when response window closes
      */
     openResponseWindow(scrollData, casterIndex, onComplete) {
+        // Scroll definition opts out of response window entirely (e.g. Excavate)
+        const _castDef = this.spellSystem?.patterns?.[scrollData.name];
+        if (_castDef?.skipResponseWindow) {
+            console.log(`Response window skipped - ${scrollData.name} has skipResponseWindow`);
+            if (onComplete) onComplete({ skipped: true, responses: [] });
+            return;
+        }
+
         const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 0;
         const hasOtherPlayer = numPlayers > 1;
         if (!hasOtherPlayer) {

@@ -1435,6 +1435,7 @@ const ScrollEffects = {
             name: 'Excavate',
             description: 'You, your scrolls, and stones cannot be the target of any scroll until your next turn. Your scrolls cannot be responded to this turn. At the beginning of your next turn, you may teleport to any unoccupied hex.',
             isCounter: false,
+            skipResponseWindow: true,
             priority: 4,
             execute(casterIndex, context, system) {
                 console.log(`⛏️ Excavate activated by player ${casterIndex}`);
