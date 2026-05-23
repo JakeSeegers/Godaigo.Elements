@@ -6773,6 +6773,7 @@ function clearPlayerPath() {
                         nullIndicator.setAttribute('stroke', STONE_TYPES['void'].color);
                         nullIndicator.setAttribute('stroke-width', '2');
                         nullIndicator.style.animation = `mimicryGlow 7s ease-in-out infinite`;
+                        nullIndicator.style.willChange = 'opacity';
 
                         // Append last so it renders on top of the stone circle
                         stone.element.appendChild(nullIndicator);
@@ -6831,6 +6832,7 @@ function clearPlayerPath() {
                 // Solid ring — no dasharray for any indicator type
 
                 indicator.style.animation = `mimicryGlow 7s ease-in-out infinite`;
+                indicator.style.willChange = 'opacity';
 
                 // Inject keyframes once
                 if (!document.getElementById('mimicry-glow-style')) {
@@ -6838,16 +6840,8 @@ function clearPlayerPath() {
                     style.id = 'mimicry-glow-style';
                     style.textContent = `
                         @keyframes mimicryGlow {
-                            0%, 100% {
-                                stroke-width: 1.8px;
-                                opacity: 0.6;
-                                filter: brightness(0.95);
-                            }
-                            50% {
-                                stroke-width: 2.4px;
-                                opacity: 0.8;
-                                filter: brightness(1.1);
-                            }
+                            0%, 100% { stroke-width: 1.8px; opacity: 0.6; }
+                            50%       { stroke-width: 2.4px; opacity: 0.8; }
                         }
                     `;
                     document.head.appendChild(style);
