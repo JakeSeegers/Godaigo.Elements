@@ -323,107 +323,107 @@ class ResponseWindowSystem {
      * Create a scroll card for the response modal
      */
     createScrollCard(scrollInfo) {
-        const card = document.createElement('div');
-        const elementColor = this.getElementColor(scrollInfo.definition?.element);
+        const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+        const def = scrollInfo.definition;
+        const element = def?.element || 'earth';
+        const elementColor = this.getElementColor(element);
+        const iconSrc = window.STONE_TYPES?.[element]?.img || '';
+        const elLabel = element ? element.charAt(0).toUpperCase() + element.slice(1) : '';
+        const lvLabel = def?.level ? 'Lv. ' + (ROMAN[def.level] || def.level) : '';
+        const metaText = [elLabel, lvLabel].filter(Boolean).join(' · ');
 
         // Determine border color based on scroll type
         let borderColor = elementColor;
-        if (scrollInfo.isCounter) {
-            borderColor = '#e74c3c'; // Red for counter
-        } else if (scrollInfo.isResponse) {
-            borderColor = '#f39c12'; // Orange for response
-        }
+        if (scrollInfo.isCounter) borderColor = '#e74c3c';
+        else if (scrollInfo.isResponse) borderColor = '#f39c12';
 
+        const card = document.createElement('div');
         Object.assign(card.style, {
             backgroundColor: '#2d2d44',
             border: '2px solid ' + borderColor,
             borderRadius: '10px',
-            padding: '15px',
+            padding: '14px',
             marginBottom: '10px',
             cursor: 'pointer',
             transition: 'all 0.2s'
         });
+        card.onmouseenter = () => { card.style.backgroundColor = '#3d3d54'; card.style.transform = 'scale(1.02)'; };
+        card.onmouseleave = () => { card.style.backgroundColor = '#2d2d44'; card.style.transform = 'scale(1)'; };
 
-        card.onmouseenter = () => {
-            card.style.backgroundColor = '#3d3d54';
-            card.style.transform = 'scale(1.02)';
-        };
-        card.onmouseleave = () => {
-            card.style.backgroundColor = '#2d2d44';
-            card.style.transform = 'scale(1)';
-        };
-
-        // Header
+        // ── Header: icon · name + meta · badges ──────────────────────────
         const headerDiv = document.createElement('div');
-        headerDiv.style.display = 'flex';
-        headerDiv.style.justifyContent = 'space-between';
-        headerDiv.style.alignItems = 'center';
+        Object.assign(headerDiv.style, { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' });
 
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = scrollInfo.definition?.name || scrollInfo.name;
-        nameSpan.style.fontWeight = 'bold';
-        nameSpan.style.color = elementColor;
-        nameSpan.style.fontSize = '16px';
-        headerDiv.appendChild(nameSpan);
-
-        if (scrollInfo.isCounter) {
-            const counterBadge = document.createElement('span');
-            counterBadge.textContent = 'COUNTER';
-            Object.assign(counterBadge.style, {
-                backgroundColor: '#e74c3c',
-                color: 'white',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                fontSize: '10px',
-                fontWeight: 'bold'
-            });
-            headerDiv.appendChild(counterBadge);
-        } else if (scrollInfo.isResponse) {
-            const responseBadge = document.createElement('span');
-            responseBadge.textContent = 'RESPONSE';
-            Object.assign(responseBadge.style, {
-                backgroundColor: '#f39c12',
-                color: 'white',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                fontSize: '10px',
-                fontWeight: 'bold'
-            });
-            headerDiv.appendChild(responseBadge);
+        if (iconSrc) {
+            const icon = document.createElement('img');
+            icon.src = iconSrc;
+            Object.assign(icon.style, { width: '26px', height: '26px', flexShrink: '0' });
+            headerDiv.appendChild(icon);
         }
 
-        if (scrollInfo.fromCommonArea) {
-            const commonBadge = document.createElement('span');
-            commonBadge.textContent = 'COMMON';
-            Object.assign(commonBadge.style, {
-                backgroundColor: '#9b59b6',
-                color: 'white',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                fontSize: '10px',
-                fontWeight: 'bold',
-                marginLeft: '5px'
-            });
-            headerDiv.appendChild(commonBadge);
+        const titleWrap = document.createElement('div');
+        Object.assign(titleWrap.style, { flex: '1', minWidth: '0' });
+
+        const nameSpan = document.createElement('div');
+        nameSpan.textContent = def?.name || scrollInfo.name;
+        Object.assign(nameSpan.style, { fontWeight: 'bold', color: elementColor, fontSize: '15px' });
+        titleWrap.appendChild(nameSpan);
+
+        if (metaText) {
+            const metaSpan = document.createElement('div');
+            metaSpan.textContent = metaText;
+            Object.assign(metaSpan.style, { fontSize: '11px', color: '#95a5a6', marginTop: '2px' });
+            titleWrap.appendChild(metaSpan);
         }
+        headerDiv.appendChild(titleWrap);
+
+        // Badges (counter / response / common)
+        const badgesWrap = document.createElement('div');
+        Object.assign(badgesWrap.style, { display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: '0' });
+        const makeBadge = (text, bg) => {
+            const b = document.createElement('span');
+            b.textContent = text;
+            Object.assign(b.style, { backgroundColor: bg, color: 'white', padding: '2px 7px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' });
+            return b;
+        };
+        if (scrollInfo.isCounter)      badgesWrap.appendChild(makeBadge('COUNTER',  '#e74c3c'));
+        if (scrollInfo.isResponse)     badgesWrap.appendChild(makeBadge('RESPONSE', '#f39c12'));
+        if (scrollInfo.fromCommonArea) badgesWrap.appendChild(makeBadge('COMMON',   '#9b59b6'));
+        if (badgesWrap.children.length) headerDiv.appendChild(badgesWrap);
 
         card.appendChild(headerDiv);
 
-        // Description
-        const descDiv = document.createElement('div');
-        descDiv.textContent = scrollInfo.definition?.description || '';
-        descDiv.style.fontSize = '12px';
-        descDiv.style.color = '#bdc3c7';
-        descDiv.style.marginTop = '8px';
-        card.appendChild(descDiv);
+        // ── Description ───────────────────────────────────────────────────
+        if (def?.description) {
+            const descDiv = document.createElement('div');
+            descDiv.textContent = def.description;
+            Object.assign(descDiv.style, { fontSize: '12px', color: '#bdc3c7', marginBottom: '8px' });
+            card.appendChild(descDiv);
+        }
 
-        // Cost info
-        const costDiv = document.createElement('div');
+        // ── Pattern visual ────────────────────────────────────────────────
+        const sp = window.spellSystem;
+        if (def?.patterns && sp && typeof sp.createPatternVisual === 'function') {
+            try {
+                const visual = sp.createPatternVisual(def, element);
+                if (visual) {
+                    const patWrap = document.createElement('div');
+                    Object.assign(patWrap.style, {
+                        display: 'flex', justifyContent: 'center',
+                        margin: '8px 0', padding: '6px',
+                        backgroundColor: '#1a1a2e', borderRadius: '6px'
+                    });
+                    patWrap.appendChild(visual);
+                    card.appendChild(patWrap);
+                }
+            } catch (e) { /* skip if pattern rendering fails */ }
+        }
+
+        // ── AP cost ───────────────────────────────────────────────────────
         const displayCost = (scrollInfo && typeof scrollInfo.cost === 'number') ? scrollInfo.cost : 2;
+        const costDiv = document.createElement('div');
         costDiv.textContent = `${displayCost} AP`;
-        costDiv.style.fontSize = '12px';
-        costDiv.style.color = '#f39c12';
-        costDiv.style.marginTop = '5px';
+        Object.assign(costDiv.style, { fontSize: '12px', color: '#f39c12', marginTop: '6px' });
         card.appendChild(costDiv);
 
         // Click to respond
