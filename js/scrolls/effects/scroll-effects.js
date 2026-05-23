@@ -1283,23 +1283,32 @@ const ScrollEffects = {
 
         CATACOMB_SCROLL_3: {
             name: 'Call to Adventure',
-            description: 'Until end of turn, when you reveal a tile, immediately draw Elemental Stones as if you had ended your turn on that tile\'s center.',
+            description: 'You may flip one unoccupied tile. Until end of turn, when you reveal a tile, immediately draw Elemental Stones as if you had ended your turn on that tile\'s center.',
             isCounter: false,
             priority: 3,
             execute(casterIndex, context, system) {
                 console.log(`🗺️ Call to Adventure activated by player ${casterIndex}`);
 
+                // Buff persists for the rest of the turn
                 system.activeBuffs.callToAdventure = {
                     expiresThisTurn: true,
                     playerIndex: casterIndex
                 };
 
-                const message = 'Call to Adventure: revealing tiles will grant shrine stones this turn!';
-                updateStatus(message);
+                updateStatus('Call to Adventure: choose a tile to flip, then revealing tiles will grant shrine stones!');
+
+                // Reuse Heavy Stomp tile-flip mechanic (filters for unoccupied tiles)
+                const completionPayload = context?.scrollName ? {
+                    scrollName: context.scrollName,
+                    effectName: 'Call to Adventure',
+                    spell: context.spell
+                } : null;
+                system.enterTileFlipMode(casterIndex, completionPayload, context?.onComplete);
 
                 return {
                     success: true,
-                    message: message
+                    requiresSelection: true,
+                    message: 'Select a tile to flip...'
                 };
             }
         },
