@@ -1433,7 +1433,7 @@ const ScrollEffects = {
 
         CATACOMB_SCROLL_4: {
             name: 'Excavate',
-            description: 'End your turn. You, your scrolls, and stones cannot be the target of any scroll until your next turn. At the beginning of your turn, you may teleport to any unoccupied hex.',
+            description: 'You, your scrolls, and stones cannot be the target of any scroll until your next turn. Your scrolls cannot be responded to this turn. At the beginning of your next turn, you may teleport to any unoccupied hex.',
             isCounter: false,
             priority: 4,
             execute(casterIndex, context, system) {
@@ -1449,7 +1449,12 @@ const ScrollEffects = {
                     playerIndex: casterIndex
                 };
 
-                const message = 'Excavate! You are immune to scrolls until your next turn. Your turn will now end.';
+                // Scrolls cast this turn cannot be responded to
+                system.activeBuffs.excavateNoResponse = {
+                    playerIndex: casterIndex
+                };
+
+                const message = 'Excavate! You are immune to scrolls until your next turn. Your scrolls cannot be responded to this turn.';
                 updateStatus(message);
 
                 // Broadcast immunity buff to other clients
@@ -1458,15 +1463,6 @@ const ScrollEffects = {
                         playerIndex: casterIndex
                     });
                 }
-
-                // Programmatically end the turn after the current scroll resolution completes
-                setTimeout(() => {
-                    const endTurnBtn = document.getElementById('end-turn');
-                    if (endTurnBtn) {
-                        console.log('⛏️ Excavate: triggering end turn');
-                        endTurnBtn.click();
-                    }
-                }, 100);
 
                 return {
                     success: true,
@@ -5192,12 +5188,24 @@ const ScrollEffects = {
         return buff && buff.playerIndex === playerIndex;
     },
 
+    // Returns true if the given caster's scrolls cannot be responded to this turn
+    hasExcavateNoResponse(playerIndex) {
+        const buff = this.activeBuffs.excavateNoResponse;
+        return buff && buff.playerIndex === playerIndex;
+    },
+
     // Clear Excavate immunity and trigger teleport option when a player's turn starts
     clearExcavateForPlayer(playerIndex) {
         const buff = this.activeBuffs.excavate;
         if (buff && buff.playerIndex === playerIndex) {
             delete this.activeBuffs.excavate;
             console.log(`⛏️ Excavate immunity cleared for player ${playerIndex}`);
+        }
+        // Also clear the no-response buff (it only applied to the previous turn)
+        const nrBuff = this.activeBuffs.excavateNoResponse;
+        if (nrBuff && nrBuff.playerIndex === playerIndex) {
+            delete this.activeBuffs.excavateNoResponse;
+            console.log(`⛏️ Excavate no-response buff cleared for player ${playerIndex}`);
         }
     },
 

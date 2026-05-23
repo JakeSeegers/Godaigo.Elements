@@ -107,7 +107,7 @@ const CATACOMB_SCROLL_EFFECTS = {
     1: { name: 'Mudslide', description: 'Until end of turn, earth and water stones act as wind stones for movement (free movement).' },
     2: { name: 'Mine', description: 'If the center of this pattern is an elemental shrine, that shrine produces twice as many stones this turn (cannot exceed 5).' },
     3: { name: 'Call to Adventure', description: 'Until end of turn, when you reveal a tile, immediately draw Elemental Stones as if you had ended your turn on that tile\'s center.' },
-    4: { name: 'Excavate', description: 'End your turn. You, your scrolls, and stones cannot be the target of any scroll until your next turn. At the beginning of your turn, you may teleport to any unoccupied hex.' },
+    4: { name: 'Excavate', description: 'You, your scrolls, and stones cannot be the target of any scroll until your next turn. Your scrolls cannot be responded to this turn. At the beginning of your next turn, you may teleport to any unoccupied hex.' },
     5: { name: 'Steam Vents', description: 'Until end of turn, spending an AP to move allows you to move two spaces instead of one.' },
     6: { name: 'Seed the Skies', description: 'Gather up to 5 water stones. This turn, you may place water and wind stones on any valid hex (not just adjacent).' },
     7: { name: 'Reflecting Pool', description: 'Regain 2 AP for each different stone type within 5 spaces of you. This can be used once per turn.' },

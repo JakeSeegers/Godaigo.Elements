@@ -149,6 +149,13 @@ class ResponseWindowSystem {
             return;
         }
 
+        // Excavate: caster's scrolls cannot be responded to this turn
+        if (window.spellSystem?.scrollEffects?.hasExcavateNoResponse?.(casterIndex)) {
+            console.log('Response window skipped - caster has Excavate no-response buff');
+            if (onComplete) onComplete({ skipped: true, responses: [] });
+            return;
+        }
+
         this.isResponseWindowOpen = true;
         this.currentCaster = casterIndex;
         this.pendingScrollData = scrollData;

@@ -2799,6 +2799,9 @@
                     spellSystem.scrollEffects.activeBuffs.excavateTeleport = {
                         playerIndex: playerIndex
                     };
+                    spellSystem.scrollEffects.activeBuffs.excavateNoResponse = {
+                        playerIndex: playerIndex
+                    };
                 }
             });
 
