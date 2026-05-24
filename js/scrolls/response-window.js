@@ -62,10 +62,8 @@ class ResponseWindowSystem {
         const activeScrolls = Array.from(playerScrolls.active || []);
         const commonScrolls = this.spellSystem.getCommonAreaScrolls();
         const allCastableScrolls = [...activeScrolls, ...commonScrolls];
-
-        if (allCastableScrolls.length === 0) {
-            return { canRespond: false, validScrolls: [], reason: 'No scrolls in active area or common area' };
-        }
+        // Note: do NOT early-return here when allCastableScrolls is empty —
+        // the player may still have a response scroll in their hand (checked below).
 
         // Check which scrolls have valid patterns on the board
         const validScrolls = [];
@@ -326,26 +324,49 @@ class ResponseWindowSystem {
         const responseCheck = this.canPlayerRespond(myIndex);
 
         if (responseCheck.canRespond) {
-            // Show available response scrolls
-            const scrollsSection = document.createElement('div');
-            scrollsSection.style.marginBottom = '20px';
+            // Split into active/common scrolls vs hand scrolls
+            const activeScrolls = responseCheck.validScrolls.filter(s => !s.fromHand);
+            const handScrolls   = responseCheck.validScrolls.filter(s =>  s.fromHand);
 
-            const scrollsHeader = document.createElement('h3');
-            scrollsHeader.textContent = 'Your Available Responses (ranked by priority):';
-            scrollsHeader.style.color = '#16a085';
-            scrollsHeader.style.marginBottom = '15px';
-            scrollsSection.appendChild(scrollsHeader);
+            // Sort highest-rank first within each group
+            const sortByRank = arr => [...arr].sort((a, b) => getScrollElementRank(b.name) - getScrollElementRank(a.name));
 
-            // Sort highest-rank first so the player sees their strongest option at top
-            const sorted = [...responseCheck.validScrolls].sort(
-                (a, b) => getScrollElementRank(b.name) - getScrollElementRank(a.name)
-            );
-            sorted.forEach(scrollInfo => {
-                const scrollCard = this.createScrollCard(scrollInfo);
-                scrollsSection.appendChild(scrollCard);
-            });
+            // ── Active / common scrolls ───────────────────────────────────
+            if (activeScrolls.length > 0) {
+                const scrollsSection = document.createElement('div');
+                scrollsSection.style.marginBottom = '20px';
 
-            modal.appendChild(scrollsSection);
+                const scrollsHeader = document.createElement('h3');
+                scrollsHeader.textContent = 'Your Available Responses:';
+                scrollsHeader.style.color = '#16a085';
+                scrollsHeader.style.marginBottom = '15px';
+                scrollsSection.appendChild(scrollsHeader);
+
+                sortByRank(activeScrolls).forEach(si => scrollsSection.appendChild(this.createScrollCard(si)));
+                modal.appendChild(scrollsSection);
+            }
+
+            // ── Hand scrolls (deployable to active) ──────────────────────
+            if (handScrolls.length > 0) {
+                const handSection = document.createElement('div');
+                handSection.style.marginBottom = '20px';
+
+                const handHeader = document.createElement('h3');
+                handHeader.style.color = '#e67e22';
+                handHeader.style.marginBottom = '8px';
+                handHeader.textContent = handScrolls.length === 1
+                    ? 'You have a response scroll in your Hand:'
+                    : 'You have response scrolls in your Hand:';
+                handSection.appendChild(handHeader);
+
+                const handNote = document.createElement('p');
+                handNote.style.cssText = 'font-size:12px; color:#bdc3c7; margin:0 0 12px 0;';
+                handNote.textContent = 'You have an open Active Area slot — you may move one of these to your Active Area and respond with it.';
+                handSection.appendChild(handNote);
+
+                sortByRank(handScrolls).forEach(si => handSection.appendChild(this.createScrollCard(si)));
+                modal.appendChild(handSection);
+            }
         } else {
             // Show why player can't respond
             const noResponseDiv = document.createElement('div');
@@ -458,8 +479,6 @@ class ResponseWindowSystem {
         if (scrollInfo.isCounter)      badgesWrap.appendChild(makeBadge('COUNTER',  '#e74c3c'));
         if (scrollInfo.isResponse)     badgesWrap.appendChild(makeBadge('RESPONSE', '#f39c12'));
         if (scrollInfo.fromCommonArea) badgesWrap.appendChild(makeBadge('COMMON',   '#9b59b6'));
-        if (scrollInfo.fromHand)       badgesWrap.appendChild(makeBadge('IN HAND',  '#e67e22'));
-        else if (!scrollInfo.fromCommonArea) badgesWrap.appendChild(makeBadge('ACTIVE', '#16a085'));
         if (badgesWrap.children.length) headerDiv.appendChild(badgesWrap);
 
         card.appendChild(headerDiv);
@@ -496,14 +515,6 @@ class ResponseWindowSystem {
         costDiv.textContent = `${displayCost} AP`;
         Object.assign(costDiv.style, { fontSize: '12px', color: '#f39c12', marginTop: '6px' });
         card.appendChild(costDiv);
-
-        // Hand-scroll note
-        if (scrollInfo.fromHand) {
-            const handNote = document.createElement('div');
-            handNote.textContent = '📋 Will move from Hand → Active Area';
-            Object.assign(handNote.style, { fontSize: '11px', color: '#e67e22', marginTop: '4px', fontStyle: 'italic' });
-            card.appendChild(handNote);
-        }
 
         // Click to respond
         card.onclick = () => this.playerResponds(scrollInfo);
