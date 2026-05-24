@@ -458,7 +458,8 @@ class ResponseWindowSystem {
         if (scrollInfo.isCounter)      badgesWrap.appendChild(makeBadge('COUNTER',  '#e74c3c'));
         if (scrollInfo.isResponse)     badgesWrap.appendChild(makeBadge('RESPONSE', '#f39c12'));
         if (scrollInfo.fromCommonArea) badgesWrap.appendChild(makeBadge('COMMON',   '#9b59b6'));
-        if (scrollInfo.fromHand) badgesWrap.appendChild(makeBadge('IN HAND', '#e67e22'));
+        if (scrollInfo.fromHand)       badgesWrap.appendChild(makeBadge('IN HAND',  '#e67e22'));
+        else if (!scrollInfo.fromCommonArea) badgesWrap.appendChild(makeBadge('ACTIVE', '#16a085'));
         if (badgesWrap.children.length) headerDiv.appendChild(badgesWrap);
 
         card.appendChild(headerDiv);
