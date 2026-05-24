@@ -999,7 +999,7 @@ const ScrollEffects = {
          */
         WIND_SCROLL_4: {
             name: 'Take Flight',
-            description: 'Teleport target player to an unoccupied space of your choice. Move Take Flight to the common area.',
+            description: 'Teleport any player to an unoccupied space of your choice. If targeting an opponent, Take Flight goes to their hand. If targeting yourself, it stays in your active area.',
             isCounter: false,
             priority: 4,
 
@@ -4262,10 +4262,9 @@ const ScrollEffects = {
         const self = this;
         const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 1;
 
-        // Build list of all players (including self, but exclude Excavate-immune opponents)
+        // Build list of all players (self + opponents, skip Excavate-immune opponents)
         const allPlayers = [];
         for (let i = 0; i < numPlayers; i++) {
-            // Allow self-targeting, but skip immune opponents
             if (i !== casterIndex && this.hasExcavateImmunity(i)) continue;
             allPlayers.push(i);
         }
@@ -4392,30 +4391,32 @@ const ScrollEffects = {
                 updateStatus(`Take Flight! Teleported ${targetName} to a new location.`);
                 console.log(`🌬️ Take Flight: player ${targetPlayerIndex} teleported to (${destX.toFixed(1)}, ${destY.toFixed(1)})`);
 
-                // Broadcast teleport in multiplayer
+                // Disposition: opponent gets the scroll in their hand; self-target keeps it in active area
+                const scrollName = completionPayload?.scrollName || 'WIND_SCROLL_4';
+                if (self.spellSystem && targetPlayerIndex !== casterIndex) {
+                    const casterScrolls = self.spellSystem.playerScrolls[casterIndex];
+                    if (casterScrolls?.active.has(scrollName)) {
+                        casterScrolls.active.delete(scrollName);
+                    }
+                    self.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
+                    self.spellSystem.playerScrolls[targetPlayerIndex].hand.add(scrollName);
+                    self.spellSystem.updateScrollCount();
+                    updateCommonAreaUI();
+                    if (typeof window.ScrollPanelSystem?.renderPanel === 'function') {
+                        window.ScrollPanelSystem.renderPanel('hand');
+                    }
+                }
+                // If self-targeting, scroll stays in active area — no action needed
+
+                // Broadcast teleport + scroll disposition in multiplayer
                 if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
                     broadcastGameAction('take-flight', {
+                        casterIndex: casterIndex,
                         targetPlayerIndex: targetPlayerIndex,
+                        scrollName: scrollName,
                         x: destX,
                         y: destY
                     });
-                }
-
-                // Disposition: goes to opponent's hand if targeting another player, stays in active area if self
-                if (self.spellSystem) {
-                    const scrollName = completionPayload?.scrollName || 'WIND_SCROLL_4';
-                    if (targetPlayerIndex !== casterIndex) {
-                        // Remove from caster's active area and add to target's hand
-                        const casterScrolls = self.spellSystem.playerScrolls[casterIndex];
-                        if (casterScrolls?.active.has(scrollName)) {
-                            casterScrolls.active.delete(scrollName);
-                        }
-                        self.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
-                        self.spellSystem.playerScrolls[targetPlayerIndex].hand.add(scrollName);
-                        self.spellSystem.updateScrollCount();
-                        updateCommonAreaUI();
-                    }
-                    // If self-targeting, scroll stays in active area — no action needed
                 }
 
                 // Signal completion

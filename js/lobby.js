@@ -1738,11 +1738,12 @@
             // Take Flight (Wind IV): teleport a player to a new position
             gameChannel.on('broadcast', { event: 'take-flight' }, ({ payload }) => {
                 console.log('📄 Received take-flight:', payload);
-                const { targetPlayerIndex, x, y } = payload;
+                const { casterIndex: tfCaster, targetPlayerIndex, scrollName: tfScroll, x, y } = payload;
+
+                // Move the pawn
                 if (typeof movePlayerVisually === 'function') {
                     movePlayerVisually(targetPlayerIndex, x, y, 0);
                 } else {
-                    // Fallback
                     const target = playerPositions[targetPlayerIndex];
                     if (target) {
                         target.x = x;
@@ -1753,6 +1754,22 @@
                     }
                 }
                 console.log(`🌬️ Take Flight: player ${targetPlayerIndex} teleported to (${x.toFixed(1)}, ${y.toFixed(1)})`);
+
+                // Sync scroll disposition: remove from caster's active, add to opponent's hand
+                if (tfCaster !== undefined && tfScroll && targetPlayerIndex !== tfCaster && window.spellSystem) {
+                    const casterScrolls = window.spellSystem.playerScrolls[tfCaster];
+                    if (casterScrolls?.active.has(tfScroll)) {
+                        casterScrolls.active.delete(tfScroll);
+                    }
+                    window.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
+                    window.spellSystem.playerScrolls[targetPlayerIndex].hand.add(tfScroll);
+                    window.spellSystem.updateScrollCount();
+                    if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+                    if (typeof window.ScrollPanelSystem?.renderPanel === 'function') {
+                        window.ScrollPanelSystem.renderPanel('hand');
+                    }
+                    console.log(`🌬️ Take Flight scroll sync: ${tfScroll} moved to player ${targetPlayerIndex}'s hand`);
+                }
             });
 
             // Catacomb/Freedom teleport: sync shrine teleports
@@ -2550,11 +2567,11 @@
 
             gameChannel.on('broadcast', { event: 'scroll-response' }, ({ payload }) => {
                 console.log('📄 Received scroll response:', payload);
-                const { scrollName, playerIndex, isCounter } = payload;
+                const { scrollName, playerIndex, isCounter, fromHand } = payload;
 
-                // Update response window state
+                // Update response window state (passes fromHand so hand→active move is synced)
                 if (spellSystem.responseWindow) {
-                    spellSystem.responseWindow.handleRemoteResponse(scrollName, playerIndex, isCounter);
+                    spellSystem.responseWindow.handleRemoteResponse(scrollName, playerIndex, isCounter, fromHand ?? false);
                 }
             });
 

@@ -1,16 +1,35 @@
 /**
  * Response Window System for Godaigo
  *
- * When a player casts a scroll, a "response window" opens allowing ONE other player
- * to respond with their own scroll.
+ * When a player casts a scroll, a "response window" opens allowing ALL other players
+ * with valid response scrolls to respond simultaneously. After all eligible players
+ * have either responded or passed, the winner is determined by element rank:
+ *   Void (5) > Wind (4) > Fire (3) > Water (2) > Earth (1)
+ * Only the highest-ranked response executes. Ties are impossible because each scroll
+ * exists only once in the game.
+ *
+ * New rule: A response scroll that is in a player's HAND can be moved to their active
+ * area during the response window, but only if they have an open active slot. The
+ * response window includes these hand scrolls as clickable options with a badge.
  *
  * Rules:
  * - Response costs normal 2 AP
- * - Responder must have valid scroll in active area AND valid pattern on board
- * - Earth I (Iron Stance) can counter any scroll
- * - Response window can be skipped if no player has a valid response
- * - Only ONE response is allowed, then the stack resolves immediately
+ * - Responder must have valid scroll (active, common, or hand+open-slot) AND valid pattern
+ * - Earth I (Iron Stance) / Void I (Psychic) are counter scrolls — they cancel the original
+ * - All other response scrolls execute alongside the original
+ * - All non-caster players submit (respond or pass) before resolution begins
  */
+
+// Element rank for response arbitration: higher = wins over lower
+const ELEMENT_RANK = { void: 5, wind: 4, fire: 3, water: 2, earth: 1 };
+
+/**
+ * Get the element rank for a scroll name like 'WIND_SCROLL_1' → 4
+ */
+function getScrollElementRank(scrollName) {
+    const element = (scrollName || '').split('_')[0].toLowerCase();
+    return ELEMENT_RANK[element] ?? 0;
+}
 
 class ResponseWindowSystem {
     constructor(spellSystem) {
@@ -84,6 +103,37 @@ class ResponseWindowSystem {
                 }
             } else {
                 console.log(`  ↳ ${scrollName}: pattern NOT matched for player ${playerIndex}`);
+            }
+        }
+
+        // Also check hand scrolls — usable if active area has an open slot
+        // (new rule: response scrolls in hand can be moved to active during the response window)
+        const hasOpenActiveSlot = (playerScrolls.active?.size ?? 0) < (this.spellSystem.MAX_ACTIVE_SIZE ?? 2);
+        if (hasOpenActiveSlot) {
+            for (const scrollName of (playerScrolls.hand || new Set())) {
+                const patternOk = this.checkPatternForPlayer(scrollName, playerIndex);
+                if (patternOk) {
+                    const scrollDef = this.spellSystem.patterns[scrollName];
+                    const isCounter = scrollDef?.canCounter === 'any';
+                    const isResponse = scrollDef?.isResponse === true;
+                    if (isCounter || isResponse) {
+                        const cost = this.spellSystem?.getSpellCost ? this.spellSystem.getSpellCost(scrollDef, playerIndex) : 2;
+                        if (playerAP < cost) {
+                            console.log(`  ↳ ${scrollName} (hand): pattern OK, isResponse=${isResponse} but can't afford (AP=${playerAP}, cost=${cost})`);
+                            continue;
+                        }
+                        validScrolls.push({
+                            name: scrollName,
+                            definition: scrollDef,
+                            isCounter,
+                            isResponse,
+                            fromCommonArea: false,
+                            fromHand: true,
+                            cost
+                        });
+                        console.log(`  ↳ ${scrollName} (hand): valid response — will move to active on use`);
+                    }
+                }
             }
         }
 
@@ -281,12 +331,16 @@ class ResponseWindowSystem {
             scrollsSection.style.marginBottom = '20px';
 
             const scrollsHeader = document.createElement('h3');
-            scrollsHeader.textContent = 'Your Available Responses:';
+            scrollsHeader.textContent = 'Your Available Responses (ranked by priority):';
             scrollsHeader.style.color = '#16a085';
             scrollsHeader.style.marginBottom = '15px';
             scrollsSection.appendChild(scrollsHeader);
 
-            responseCheck.validScrolls.forEach(scrollInfo => {
+            // Sort highest-rank first so the player sees their strongest option at top
+            const sorted = [...responseCheck.validScrolls].sort(
+                (a, b) => getScrollElementRank(b.name) - getScrollElementRank(a.name)
+            );
+            sorted.forEach(scrollInfo => {
                 const scrollCard = this.createScrollCard(scrollInfo);
                 scrollsSection.appendChild(scrollCard);
             });
@@ -404,6 +458,7 @@ class ResponseWindowSystem {
         if (scrollInfo.isCounter)      badgesWrap.appendChild(makeBadge('COUNTER',  '#e74c3c'));
         if (scrollInfo.isResponse)     badgesWrap.appendChild(makeBadge('RESPONSE', '#f39c12'));
         if (scrollInfo.fromCommonArea) badgesWrap.appendChild(makeBadge('COMMON',   '#9b59b6'));
+        if (scrollInfo.fromHand) badgesWrap.appendChild(makeBadge('IN HAND', '#e67e22'));
         if (badgesWrap.children.length) headerDiv.appendChild(badgesWrap);
 
         card.appendChild(headerDiv);
@@ -441,6 +496,14 @@ class ResponseWindowSystem {
         Object.assign(costDiv.style, { fontSize: '12px', color: '#f39c12', marginTop: '6px' });
         card.appendChild(costDiv);
 
+        // Hand-scroll note
+        if (scrollInfo.fromHand) {
+            const handNote = document.createElement('div');
+            handNote.textContent = '📋 Will move from Hand → Active Area';
+            Object.assign(handNote.style, { fontSize: '11px', color: '#e67e22', marginTop: '4px', fontStyle: 'italic' });
+            card.appendChild(handNote);
+        }
+
         // Click to respond
         card.onclick = () => this.playerResponds(scrollInfo);
 
@@ -448,12 +511,13 @@ class ResponseWindowSystem {
     }
 
     /**
-     * Handle player choosing to respond with a scroll
-     * NOTE: Only ONE response is allowed per scroll cast - no stack continuation
+     * Handle player choosing to respond with a scroll.
+     * If the scroll is fromHand, it is moved to the active area first.
+     * Resolution is deferred until ALL eligible players have responded or passed.
      */
     playerResponds(scrollInfo) {
         const myIndex = typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : activePlayerIndex;
-        console.log(`playerResponds called: myIndex=${myIndex}, scroll=${scrollInfo.name}`);
+        console.log(`playerResponds called: myIndex=${myIndex}, scroll=${scrollInfo.name}, fromHand=${scrollInfo.fromHand}`);
 
         // Double check they can still afford it
         const myAP = this.getPlayerAP(myIndex);
@@ -464,6 +528,17 @@ class ResponseWindowSystem {
         if (myAP < cost) {
             this.showResponseError(`Not enough AP! Need ${cost}, have ${myAP}`);
             return;
+        }
+
+        // If scroll is in hand, move it to active area now
+        if (scrollInfo.fromHand && this.spellSystem) {
+            const pScrolls = this.spellSystem.playerScrolls[myIndex];
+            if (pScrolls) {
+                pScrolls.hand.delete(scrollInfo.name);
+                pScrolls.active.add(scrollInfo.name);
+                this.spellSystem.updateScrollCount();
+                console.log(`  Moved ${scrollInfo.name} from hand to active area`);
+            }
         }
 
         // Spend the AP for the response
@@ -485,23 +560,25 @@ class ResponseWindowSystem {
         });
         console.log(`  Added to response stack, stack size: ${this.responseStack.length}`);
 
-        // Broadcast response in multiplayer
+        // Mark this player as submitted (same pool as passes)
+        this.respondingPlayers.add(myIndex);
+
+        // Broadcast response in multiplayer (includes fromHand so receiver can sync state)
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
             this.broadcastResponse(scrollInfo, myIndex);
             console.log(`  Broadcasted response`);
         }
 
-        // Close the current modal
+        // Close the current modal and show "waiting" screen while others decide
         this.closeResponseModal();
 
-        const isCasterClient = !isMultiplayer || myIndex === this.currentCaster;
+        const isCasterClient = !(typeof isMultiplayer !== 'undefined' && isMultiplayer) || myIndex === this.currentCaster;
         if (isCasterClient) {
-            // Only ONE response allowed - immediately resolve the stack
-            console.log(`  One response received (caster client), resolving stack immediately`);
-            this.resolveResponseStack();
+            // Wait for all other eligible players before arbitrating
+            console.log(`  Response submitted (caster client) — waiting for all players`);
+            this.checkAllPlayersResponded();
         } else {
-            // Non-caster: we sent our response, now wait for the caster
-            // to receive it, resolve, and broadcast 'response-resolved'
+            // Non-caster: sent our response, wait for caster to arbitrate and broadcast result
             console.log(`  Response sent, waiting for caster to resolve`);
             this.clearResponseTimeout();
         }
@@ -522,13 +599,8 @@ class ResponseWindowSystem {
         const isCasterClient = !isMultiplayer || myIndex === this.currentCaster;
 
         if (isCasterClient) {
-            // Caster's client: check if all others responded, then resolve
-            const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 1;
-            if (this.respondingPlayers.size >= numPlayers) {
-                this.resolveResponseStack();
-            } else {
-                this.showWaitingForOthers();
-            }
+            // Caster's client: check if all non-casters have submitted
+            this.checkAllPlayersResponded();
         } else {
             // Non-caster's client: just close the modal and wait for
             // the caster to resolve and broadcast 'response-resolved'
@@ -996,7 +1068,8 @@ class ResponseWindowSystem {
             broadcastGameAction('scroll-response', {
                 scrollName: scrollInfo.name,
                 playerIndex: playerIndex,
-                isCounter: scrollInfo.isCounter
+                isCounter: scrollInfo.isCounter,
+                fromHand: scrollInfo.fromHand ?? false
             });
         }
     }
@@ -1095,11 +1168,26 @@ class ResponseWindowSystem {
     }
 
     /**
-     * Handle a remote player responding with a scroll
-     * NOTE: Only ONE response is allowed - resolve immediately after receiving it
+     * Handle a remote player responding with a scroll.
+     * Defers resolution until all eligible players have submitted.
+     * @param {string} scrollName
+     * @param {number} playerIndex
+     * @param {boolean} isCounter
+     * @param {boolean} fromHand - if true, move scroll from hand to active on this client
      */
-    handleRemoteResponse(scrollName, playerIndex, isCounter) {
-        console.log(`Remote player ${playerIndex} responded with ${scrollName}`);
+    handleRemoteResponse(scrollName, playerIndex, isCounter, fromHand = false) {
+        console.log(`Remote player ${playerIndex} responded with ${scrollName} (fromHand=${fromHand})`);
+
+        // If scroll came from hand, sync the hand→active move on this client
+        if (fromHand && this.spellSystem) {
+            const pScrolls = this.spellSystem.playerScrolls[playerIndex];
+            if (pScrolls) {
+                pScrolls.hand.delete(scrollName);
+                pScrolls.active.add(scrollName);
+                this.spellSystem.updateScrollCount();
+                if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+            }
+        }
 
         const scrollDef = this.spellSystem.patterns[scrollName];
         this.responseStack.push({
@@ -1107,20 +1195,20 @@ class ResponseWindowSystem {
             casterIndex: playerIndex,
             isCounter: isCounter,
             isResponse: scrollDef?.isResponse || false,
+            fromCommonArea: false,
             isOriginal: false
         });
 
-        // Close current modal
-        this.closeResponseModal();
+        // Mark this player as submitted
+        this.respondingPlayers.add(playerIndex);
 
-        // Only the caster's client should resolve the response stack.
-        // Non-caster clients wait for the 'response-resolved' broadcast.
+        // Only the caster's client arbitrates. Non-caster clients wait for 'response-resolved'.
         const myIndex = typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : null;
         const isCasterClient = !(typeof isMultiplayer !== 'undefined' && isMultiplayer) || myIndex === this.currentCaster;
         if (isCasterClient) {
-            // Only ONE response allowed - immediately resolve the stack
-            console.log(`  One response received from remote player (caster client), resolving stack immediately`);
-            this.resolveResponseStack();
+            // Wait for all other eligible players before resolving
+            console.log(`  Response from player ${playerIndex} received (caster client) — checking all submitted`);
+            this.checkAllPlayersResponded();
         } else {
             console.log(`  Response received, waiting for caster to resolve`);
             this.clearResponseTimeout();
@@ -1128,11 +1216,11 @@ class ResponseWindowSystem {
     }
 
     /**
-     * Check if all players have responded and resolve if so
+     * Check if all non-caster players have submitted (responded or passed).
+     * Only the caster's client calls this; non-casters wait for 'response-resolved'.
+     * When all have submitted, arbitrates by element rank and resolves.
      */
     checkAllPlayersResponded() {
-        // Only the caster's client should resolve the response stack.
-        // Non-caster clients wait for the 'response-resolved' broadcast.
         const myIndex = typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : null;
         const isCasterClient = !(typeof isMultiplayer !== 'undefined' && isMultiplayer) || myIndex === this.currentCaster;
         if (!isCasterClient) {
@@ -1141,21 +1229,49 @@ class ResponseWindowSystem {
 
         const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 1;
 
-        // Count how many non-caster players should respond
+        // All non-caster players must submit (respond or pass) before we arbitrate
         let expectedResponders = 0;
         for (let i = 0; i < numPlayers; i++) {
-            if (i !== this.currentCaster) {
-                expectedResponders++;
-            }
+            if (i !== this.currentCaster) expectedResponders++;
         }
-
-        const requiredResponders = expectedResponders + 1; // include caster (already counted)
-        console.log(`Response check: ${this.respondingPlayers.size} responded, ${requiredResponders} expected`);
+        const requiredResponders = expectedResponders + 1; // +1 for caster (already in set)
+        console.log(`Response check: ${this.respondingPlayers.size} submitted, ${requiredResponders} expected`);
 
         if (this.respondingPlayers.size >= requiredResponders) {
-            // All players have responded - resolve the stack
-            this.resolveResponseStack();
+            // All players have submitted — arbitrate by element rank
+            this._arbitrateAndResolve();
+        } else {
+            // Still waiting — show the waiting screen if we're not already
+            this.showWaitingForOthers();
         }
+    }
+
+    /**
+     * Sort submitted responses by element rank (Void > Wind > Fire > Water > Earth).
+     * Only the highest-ranked response executes; others' AP is already spent.
+     * Then delegates to resolveResponseStack() for effect execution and broadcast.
+     */
+    _arbitrateAndResolve() {
+        // Separate responses from original
+        const responses = this.responseStack.filter(e => !e.isOriginal);
+        const original  = this.responseStack.find(e => e.isOriginal);
+
+        if (responses.length > 1) {
+            // Sort descending by element rank
+            responses.sort((a, b) =>
+                getScrollElementRank(b.scrollData?.name) - getScrollElementRank(a.scrollData?.name)
+            );
+            const winner  = responses[0];
+            const losers  = responses.slice(1);
+            console.log(`⚖️ Arbitration: winner = ${winner.scrollData?.name} (rank ${getScrollElementRank(winner.scrollData?.name)})`);
+            losers.forEach(l => console.log(`  ✗ Loser (AP spent, no effect): ${l.scrollData?.name}`));
+            // Rebuild stack: original first, then winner (pop() is LIFO → winner resolved first)
+            this.responseStack = [];
+            if (original) this.responseStack.push(original);
+            this.responseStack.push(winner);
+        }
+        // If 0 or 1 responses, stack is already correct — just resolve
+        this.resolveResponseStack();
     }
 }
 
