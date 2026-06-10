@@ -41,6 +41,7 @@ class ResponseWindowSystem {
         this.respondingPlayers = new Set(); // Players who have passed or responded
         this.responseTimeout = null;
         this.RESPONSE_TIMEOUT_MS = 15000; // 15 seconds to respond
+        this.PSYCHIC_RANSOM_AP = 2; // AP the original caster may pay to negate Psychic
         this.responseModalElement = null;
     }
 
@@ -755,6 +756,146 @@ class ResponseWindowSystem {
     }
 
     /**
+     * Generate a unique id for one resolved response/counter event. The same
+     * logical event reaches clients via several broadcast paths, so the id
+     * lets ScrollEffects.addPendingBuff dedup echoes without collapsing a
+     * genuine repeat (e.g. the same scroll Psychic'd twice in one turn).
+     */
+    generateEventId() {
+        return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    }
+
+    /**
+     * Ask the original caster whether to pay AP to negate Psychic.
+     * Runs only on the original caster's client (the one that arbitrates and
+     * resolves the stack), so no extra multiplayer round-trip is needed.
+     * Defaults to declining (counter + steal proceed) when the timer expires.
+     */
+    showPsychicRansomPrompt(psychicEntry, originalScroll, onDecision) {
+        const cost = this.PSYCHIC_RANSOM_AP;
+        const responderName = this.getPlayerName(psychicEntry.casterIndex);
+        const origDef = originalScroll.scrollData?.definition
+            || this.spellSystem?.patterns?.[originalScroll.scrollData?.name];
+        const origName = origDef?.name || originalScroll.scrollData?.name;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'psychic-ransom-overlay';
+        Object.assign(overlay.style, {
+            position: 'fixed',
+            top: '0', left: '0', right: '0', bottom: '0',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            zIndex: '2100',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+        });
+
+        const modal = document.createElement('div');
+        Object.assign(modal.style, {
+            backgroundColor: '#1a1a2e',
+            border: '3px solid #9458f4',
+            borderRadius: '15px',
+            padding: '25px',
+            minWidth: '400px',
+            maxWidth: '550px',
+            color: 'white',
+            textAlign: 'center',
+            boxShadow: '0 0 30px rgba(148, 88, 244, 0.5)'
+        });
+
+        const title = document.createElement('h2');
+        title.textContent = 'PSYCHIC!';
+        title.style.color = '#9458f4';
+        title.style.margin = '0 0 15px 0';
+        modal.appendChild(title);
+
+        const info = document.createElement('div');
+        info.style.fontSize = '16px';
+        info.style.marginBottom = '15px';
+        info.innerHTML = `<strong>${responderName}</strong> cast Psychic to counter and steal <span style="color: ${this.getElementColor(origDef?.element)}">${origName}</span>.<br><br>Pay <strong>${cost} AP</strong> to negate Psychic? Your scroll will resolve normally.`;
+        modal.appendChild(info);
+
+        const timerDiv = document.createElement('div');
+        timerDiv.style.fontSize = '20px';
+        timerDiv.style.fontWeight = 'bold';
+        timerDiv.style.color = '#f39c12';
+        timerDiv.textContent = `${Math.ceil(this.RESPONSE_TIMEOUT_MS / 1000)}s`;
+        modal.appendChild(timerDiv);
+
+        let decided = false;
+        let remaining = this.RESPONSE_TIMEOUT_MS;
+        let timerInterval = null;
+
+        const decide = (paid) => {
+            if (decided) return;
+            decided = true;
+            if (timerInterval) clearInterval(timerInterval);
+            overlay.remove();
+            if (paid) {
+                // This client belongs to the original caster, so the global
+                // spendAP inside spendPlayerAP charges the right player
+                this.spendPlayerAP(originalScroll.casterIndex, cost);
+                if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof syncPlayerState === 'function') {
+                    syncPlayerState();
+                }
+                if (typeof updateStatus === 'function') {
+                    updateStatus(`Paid ${cost} AP — Psychic negated! Your scroll resolves.`);
+                }
+            }
+            onDecision(paid);
+        };
+
+        timerInterval = setInterval(() => {
+            remaining -= 1000;
+            timerDiv.textContent = `${Math.ceil(remaining / 1000)}s`;
+            if (remaining <= 5000) timerDiv.style.color = '#e74c3c';
+            if (remaining <= 0) decide(false); // timeout = decline
+        }, 1000);
+
+        const buttonRow = document.createElement('div');
+        Object.assign(buttonRow.style, {
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '15px',
+            marginTop: '20px'
+        });
+
+        const payBtn = document.createElement('button');
+        payBtn.textContent = `Pay ${cost} AP — Negate Psychic`;
+        Object.assign(payBtn.style, {
+            padding: '12px 24px',
+            fontSize: '15px',
+            backgroundColor: '#27ae60',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+        });
+        payBtn.onclick = () => decide(true);
+        buttonRow.appendChild(payBtn);
+
+        const declineBtn = document.createElement('button');
+        declineBtn.textContent = 'Decline — let it be stolen';
+        Object.assign(declineBtn.style, {
+            padding: '12px 24px',
+            fontSize: '15px',
+            backgroundColor: '#7f8c8d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+        });
+        declineBtn.onclick = () => decide(false);
+        buttonRow.appendChild(declineBtn);
+
+        modal.appendChild(buttonRow);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    }
+
+    /**
      * Resolve the response stack (LIFO order)
      * FIFO for resolution: responses resolve first, then original scroll
      */
@@ -762,12 +903,8 @@ class ResponseWindowSystem {
         this.clearResponseTimeout();
         this.closeResponseModal();
 
-        // Process stack - responses first, then original
-        const results = [];
-        let cancelled = false;
-        let originalScroll = null;
-
         // Separate responses from original
+        let originalScroll = null;
         const responses = [];
         while (this.responseStack.length > 0) {
             const entry = this.responseStack.pop();
@@ -778,16 +915,65 @@ class ResponseWindowSystem {
             }
         }
 
+        // Psychic ransom: the original caster may pay AP to negate Psychic so
+        // their scroll resolves normally. Only the original caster's client
+        // resolves the stack, so the prompt is purely local — other clients
+        // just keep waiting for the response-resolved broadcast. No prompt if
+        // the caster can't afford it (the counter + steal proceed as normal).
+        const psychicEntry = responses.find(e => e.isCounter && e.scrollData?.name === 'VOID_SCROLL_1');
+        if (psychicEntry && originalScroll && this.getPlayerAP(originalScroll.casterIndex) >= this.PSYCHIC_RANSOM_AP) {
+            this.showPsychicRansomPrompt(psychicEntry, originalScroll, (paid) => {
+                this.finishResponseResolution(responses, originalScroll, paid);
+            });
+            return;
+        }
+
+        this.finishResponseResolution(responses, originalScroll, false);
+    }
+
+    /**
+     * Apply the resolution decided by resolveResponseStack (and by the Psychic
+     * ransom prompt, when one was shown).
+     * @param {boolean} ransomPaid - The original caster paid to negate Psychic
+     */
+    finishResponseResolution(responses, originalScroll, ransomPaid) {
+        const results = [];
+        let cancelled = false;
+
         // Process responses first (FIFO - they were added in order)
         for (const entry of responses) {
             const scrollDef = entry.scrollData?.definition || this.spellSystem?.patterns?.[entry.scrollData?.name];
 
-            if (entry.isCounter) {
+            if (ransomPaid && entry.isCounter && entry.scrollData?.name === 'VOID_SCROLL_1') {
+                // Ransom paid: Psychic is negated — no counter, no steal, and its
+                // effect is never executed (so no pending steal gets queued).
+                // The scroll still moves to the common area: it was cast.
+                const negatedEntry = {
+                    ...entry,
+                    result: 'counter-negated',
+                    eventId: this.generateEventId()
+                };
+                results.push(negatedEntry);
+
+                if (typeof window !== 'undefined' && window.logScrollEvent) {
+                    window.logScrollEvent('counter_negated', {
+                        casterIndex: entry.casterIndex,
+                        scrollName: entry.scrollData?.name,
+                        triggeringScroll: originalScroll?.scrollData?.name || null,
+                        ransomAP: this.PSYCHIC_RANSOM_AP
+                    });
+                }
+
+                // Dispatch so the scroll-resolved listener moves Psychic to the
+                // common area WITHOUT running its effect
+                this.executeScrollEffect(negatedEntry, originalScroll);
+            } else if (entry.isCounter) {
                 // This is a counter - it cancels the original scroll
                 cancelled = true;
                 const counterEntry = {
                     ...entry,
-                    result: 'countered-original'
+                    result: 'countered-original',
+                    eventId: this.generateEventId()
                 };
                 results.push(counterEntry);
 
@@ -811,7 +997,8 @@ class ResponseWindowSystem {
                 // It executes but does NOT cancel the original
                 const resolvedEntry = {
                     ...entry,
-                    result: 'response-resolved'
+                    result: 'response-resolved',
+                    eventId: this.generateEventId()
                 };
                 results.push(resolvedEntry);
 
@@ -1110,7 +1297,8 @@ class ResponseWindowSystem {
                     scrollName: r.scrollData?.name,
                     casterIndex: r.casterIndex,
                     result: r.result,
-                    isResponse: r.isResponse
+                    isResponse: r.isResponse,
+                    eventId: r.eventId || null
                 })),
                 triggeringScroll: originalScroll ? {
                     name: originalScroll.scrollData?.name,
