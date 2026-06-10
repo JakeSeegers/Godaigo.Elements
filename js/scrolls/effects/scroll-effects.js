@@ -312,23 +312,19 @@ const ScrollEffects = {
                         updateStatus('Reflect failed: Cannot reflect Reflect!');
                         return { success: false, reason: 'Cannot reflect Reflect' };
                     }
-                    // Initialize array if needed, then push this reflect to the stack
-                    if (!Array.isArray(system.activeBuffs.reflectPending)) {
-                        system.activeBuffs.reflectPending = [];
-                    }
-                    system.activeBuffs.reflectPending.push({
-                        playerIndex: casterIndex,
-                        scrollName: triggeringScroll.name,
-                        definition: triggeringScroll.definition
-                    });
+                    // Queue via the central helper — dedups if this entry already
+                    // arrived through another path (e.g. reflect-buff-applied broadcast)
+                    const added = system.addPendingBuff('reflect', casterIndex, triggeringScroll.name, triggeringScroll.definition, context?.eventId || null);
                     updateStatus(`Reflect: At the beginning of your next turn, you will activate ${triggeringScroll.definition?.name || triggeringScroll.name}.`);
 
-                    // Broadcast Reflect buff in multiplayer
-                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                    // Broadcast Reflect buff in multiplayer — only from the execution that
+                    // actually queued the entry, never from a broadcast-driven re-execution
+                    if (added && !context?.fromRemote && typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
                         broadcastGameAction('reflect-buff-applied', {
                             playerIndex: casterIndex,
                             scrollName: triggeringScroll.name,
-                            scrollDefinition: triggeringScroll.definition
+                            scrollDefinition: triggeringScroll.definition,
+                            eventId: context?.eventId || null
                         });
                     }
 
@@ -1173,7 +1169,7 @@ const ScrollEffects = {
 
         VOID_SCROLL_1: {
             name: 'Psychic',
-            description: 'Counter the previous scroll, then play it during your turn. Move Psychic to the common area.',
+            description: 'Counter the previous scroll, then play it during your turn — unless its caster pays 2 AP to negate Psychic. Move Psychic to the common area.',
             isCounter: true,
             priority: 1,
 
@@ -1192,22 +1188,19 @@ const ScrollEffects = {
                     }
 
                     // Store the countered scroll to be played at the beginning of
-                    // the caster's next turn. Initialize array if needed, then push.
-                    if (!Array.isArray(system.activeBuffs.psychicPending)) {
-                        system.activeBuffs.psychicPending = [];
-                    }
-                    system.activeBuffs.psychicPending.push({
-                        playerIndex: casterIndex,
-                        scrollName: triggeringScroll.name,
-                        definition: triggeringScroll.definition
-                    });
+                    // the caster's next turn. Queue via the central helper — dedups
+                    // if this entry already arrived through another path (e.g. the
+                    // psychic-buff-applied broadcast or a double resolution).
+                    const added = system.addPendingBuff('psychic', casterIndex, triggeringScroll.name, triggeringScroll.definition, context?.eventId || null);
 
-                    // Broadcast Psychic buff in multiplayer
-                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                    // Broadcast Psychic buff in multiplayer — only from the execution that
+                    // actually queued the entry, never from a broadcast-driven re-execution
+                    if (added && !context?.fromRemote && typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
                         broadcastGameAction('psychic-buff-applied', {
                             playerIndex: casterIndex,
                             scrollName: triggeringScroll.name,
-                            scrollDefinition: triggeringScroll.definition
+                            scrollDefinition: triggeringScroll.definition,
+                            eventId: context?.eventId || null
                         });
                     }
 
@@ -2915,6 +2908,59 @@ const ScrollEffects = {
         this.stonesPlacedThisTurn = 0;
     },
 
+    // Single entry point for queueing a deferred Psychic/Reflect activation.
+    // ALL writers (effect execution and multiplayer broadcast handlers) must go
+    // through here: the same logical event can reach a client via multiple paths
+    // (local execute, psychic/reflect-buff-applied broadcast, or a double
+    // resolution caused by the response-timeout race). Each resolution is
+    // stamped with a unique eventId by the response window, so echoes of one
+    // event are deduped by id while a genuine repeat (the same player
+    // countering the same scroll name twice before their turn) gets a fresh id
+    // and queues normally. Entries arriving without an id (unexpected path)
+    // fall back to {playerIndex, scrollName} dedup, which errs on dropping.
+    // Returns true if a new entry was queued, false if it was a duplicate.
+    addPendingBuff(kind, playerIndex, scrollName, definition, eventId = null) {
+        const key = kind === 'psychic' ? 'psychicPending' : 'reflectPending';
+        if (!Array.isArray(this.activeBuffs[key])) {
+            this.activeBuffs[key] = [];
+        }
+        const queue = this.activeBuffs[key];
+        const existing = eventId
+            ? queue.find(p => p.eventId === eventId)
+            : queue.find(p => p.playerIndex === playerIndex && p.scrollName === scrollName);
+        if (existing) {
+            // Keep the more complete definition if the echo carries one
+            if (!existing.definition && definition) {
+                existing.definition = definition;
+            }
+            console.warn(`📜 addPendingBuff: skipped duplicate ${kind} entry for player ${playerIndex}: ${scrollName} (eventId=${eventId || 'none'})`);
+            return false;
+        }
+        queue.push({ playerIndex, scrollName, definition, eventId });
+        console.log(`📜 addPendingBuff: queued ${kind} activation for player ${playerIndex}: ${scrollName} (eventId=${eventId || 'none'})`);
+        return true;
+    },
+
+    // Remove a pending entry that another client just consumed (replayed at the
+    // start of the owner's turn). Only one client runs processPsychicPending/
+    // processReflectPending per turn change; every other client clears its copy
+    // here when the psychic/reflect-triggered broadcast arrives, so queues stay
+    // in sync and a later consumer (e.g. after a disconnect changes which client
+    // processes the turn change) cannot replay long-consumed entries.
+    removePendingBuff(kind, playerIndex, scrollName, eventId = null) {
+        const key = kind === 'psychic' ? 'psychicPending' : 'reflectPending';
+        const queue = this.activeBuffs[key];
+        if (!Array.isArray(queue) || queue.length === 0) return;
+        let idx = eventId ? queue.findIndex(p => p.eventId === eventId) : -1;
+        if (idx === -1) {
+            idx = queue.findIndex(p => p.playerIndex === playerIndex && p.scrollName === scrollName);
+        }
+        if (idx !== -1) {
+            queue.splice(idx, 1);
+            console.log(`📜 removePendingBuff: cleared consumed ${kind} entry for player ${playerIndex}: ${scrollName}`);
+        }
+    },
+
     // At start of a player's turn: if they have pending Reflects, run all stored scrolls and count as water activation.
     // Returns array of { triggered: true, playerIndex, scrollName, definition } for all reflects processed so caller can broadcast.
     // Interactive scrolls (requiresSelection) are chained sequentially via onComplete callbacks.
@@ -2970,6 +3016,7 @@ const ScrollEffects = {
                 broadcastGameAction('reflect-triggered', {
                     playerIndex: playerIndex,
                     scrollName: scrollName,
+                    eventId: pending.eventId || null,
                     element: fullDef?.element,
                     elements: fullDef?.element === 'catacomb' ? fullDef?.patterns?.[0]?.map(p => p.type) : null,
                     isCatacomb: fullDef?.element === 'catacomb'
@@ -3072,6 +3119,7 @@ const ScrollEffects = {
                 broadcastGameAction('psychic-triggered', {
                     playerIndex,
                     scrollName,
+                    eventId: pending.eventId || null,
                     element: fullDef?.element,
                     elements: fullDef?.element === 'catacomb' ? fullDef?.patterns?.[0]?.map(p => p.type) : null,
                     isCatacomb: fullDef?.element === 'catacomb'

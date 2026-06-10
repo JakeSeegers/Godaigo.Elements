@@ -168,7 +168,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (effect) {
                             spellSystem.scrollEffects.execute(scrollName, entry.casterIndex, {
                                 spell: scrollDef,
-                                triggeringScroll: entry.triggeringScroll
+                                triggeringScroll: entry.triggeringScroll,
+                                eventId: entry.eventId || null
                             });
 
                             // Track activated element(s) for win condition (response scrolls count too!)
@@ -227,7 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             spellSystem.scrollEffects.execute(scrollName, counterCasterIdx, {
                                 spell: scrollDef,
                                 scrollName: scrollName,
-                                triggeringScroll: entry.triggeringScroll
+                                triggeringScroll: entry.triggeringScroll,
+                                eventId: entry.eventId || null
                             });
 
                             // Track activated element(s) for win condition (counter scrolls count too!)
@@ -290,6 +292,21 @@ document.addEventListener('DOMContentLoaded', () => {
                             spellSystem.discardToCommonArea(scrollName);
                         }
                     }
+                    spellSystem.updateScrollCount();
+                    if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+                } else if (entry.result === 'counter-negated') {
+                    // Psychic ransom paid: the counter fizzled (no steal — its effect
+                    // is never executed), and the original scroll resolves separately.
+                    // Psychic was still cast, so it leaves the responder's active
+                    // scrolls and moves to the common area.
+                    const counterCasterIdx = entry.casterIndex;
+                    console.log(`Counter scroll negated by ransom: ${scrollName}, counter-caster: ${counterCasterIdx}`);
+                    spellSystem.ensurePlayerScrollsStructure(counterCasterIdx);
+                    const counterScrolls = spellSystem.playerScrolls[counterCasterIdx];
+                    if (counterScrolls.active.has(scrollName)) {
+                        counterScrolls.active.delete(scrollName);
+                    }
+                    spellSystem.discardToCommonArea(scrollName);
                     spellSystem.updateScrollCount();
                     if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
                 }
