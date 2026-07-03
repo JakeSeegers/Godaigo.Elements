@@ -106,6 +106,13 @@ const ScrollEffects = {
         return this.effects[scrollName] || null;
     },
 
+    // Hard ceiling for synchronous effect→effect chains (Reflect duplicating a
+    // scroll, Sacrificial Pyre activating one, etc.). Anything deeper than this
+    // is a loop bug, not a legitimate play. User-paced chains (modal clicks)
+    // start a fresh call stack, so they are not limited by this.
+    MAX_EFFECT_CHAIN_DEPTH: 4,
+    _chainDepth: 0,
+
     // Execute a scroll's effect
     execute(scrollName, casterIndex, context = {}) {
         const effect = this.getEffect(scrollName);
@@ -114,11 +121,18 @@ const ScrollEffects = {
             return { success: false, reason: 'No effect defined' };
         }
 
+        this._chainDepth++;
         try {
+            if (this._chainDepth > this.MAX_EFFECT_CHAIN_DEPTH) {
+                console.error(`Effect chain too deep (${this._chainDepth}) while executing ${scrollName} — aborting to prevent a loop`);
+                return { success: false, reason: 'Effect chain too deep' };
+            }
             return effect.execute(casterIndex, context, this);
         } catch (err) {
             console.error(`Error executing scroll effect ${scrollName}:`, err);
             return { success: false, reason: err.message };
+        } finally {
+            this._chainDepth--;
         }
     },
 

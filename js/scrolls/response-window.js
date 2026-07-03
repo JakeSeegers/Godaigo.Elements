@@ -42,6 +42,7 @@ class ResponseWindowSystem {
         this.responseTimeout = null;
         this.RESPONSE_TIMEOUT_MS = 15000; // 15 seconds to respond
         this.PSYCHIC_RANSOM_AP = 2; // AP the original caster may pay to negate Psychic
+        this._resolving = false; // Guards resolveResponseStack against double resolution
         this.responseModalElement = null;
     }
 
@@ -213,6 +214,7 @@ class ResponseWindowSystem {
             return;
         }
 
+        this._resolving = false;
         this.isResponseWindowOpen = true;
         this.currentCaster = casterIndex;
         this.pendingScrollData = scrollData;
@@ -900,6 +902,15 @@ class ResponseWindowSystem {
      * FIFO for resolution: responses resolve first, then original scroll
      */
     resolveResponseStack() {
+        // Re-entrancy guard: the timeout force-resolve and a late response/pass
+        // can both trigger resolution — only the first may proceed. Also covers
+        // the window where the Psychic ransom prompt is open (resolution started
+        // but not finished). Reset when a new response window opens.
+        if (this._resolving) {
+            console.warn('resolveResponseStack: resolution already in progress — ignoring duplicate trigger');
+            return;
+        }
+        this._resolving = true;
         this.clearResponseTimeout();
         this.closeResponseModal();
 
@@ -1050,14 +1061,31 @@ class ResponseWindowSystem {
         this.pendingScrollData = null;
         this.currentCaster = null;
 
+        // Defensive: cross-effect coupling flags must not survive the resolution
+        // that set them — a stale flag would mis-redirect a future cast of the
+        // same scroll. All consumers ran synchronously above (the scroll-resolved
+        // dispatch), so anything still set here is an unconsumed leftover.
+        const fx = this.spellSystem?.scrollEffects;
+        if (fx?.pendingForceCommonArea) {
+            console.warn('Clearing unconsumed pendingForceCommonArea:', fx.pendingForceCommonArea);
+            delete fx.pendingForceCommonArea;
+        }
+        if (fx?.pendingCommonAreaRedirect) {
+            console.warn('Clearing unconsumed pendingCommonAreaRedirect:', fx.pendingCommonAreaRedirect);
+            fx.pendingCommonAreaRedirect = null;
+        }
+
         // Broadcast resolution to all clients so they close their windows
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
             this.broadcastResponseResolved(results, originalScroll);
         }
 
-        // Call completion callback
-        if (this.onCompleteCallback) {
-            this.onCompleteCallback({
+        // Call completion callback exactly once — a stale callback re-invoked by
+        // a duplicate resolution would re-apply the original scroll's effects
+        const onComplete = this.onCompleteCallback;
+        this.onCompleteCallback = null;
+        if (onComplete) {
+            onComplete({
                 skipped: false,
                 responses: results
             });
@@ -1328,6 +1356,7 @@ class ResponseWindowSystem {
      * Show response modal for a non-casting player (called when receiving broadcast)
      */
     showResponseModalForOtherPlayer(scrollData, casterIndex) {
+        this._resolving = false;
         this.isResponseWindowOpen = true;
         this.currentCaster = casterIndex;
         this.pendingScrollData = scrollData;
@@ -1361,6 +1390,12 @@ class ResponseWindowSystem {
      */
     handleRemotePass(playerIndex) {
         console.log(`Remote player ${playerIndex} passed`);
+
+        // Late arrival after resolution started — nothing left to count
+        if (this._resolving) {
+            console.warn(`Late pass from player ${playerIndex} ignored — resolution already in progress`);
+            return;
+        }
         this.respondingPlayers.add(playerIndex);
 
         // Check if all non-caster players have responded
@@ -1377,6 +1412,13 @@ class ResponseWindowSystem {
      */
     handleRemoteResponse(scrollName, playerIndex, isCounter, fromHand = false) {
         console.log(`Remote player ${playerIndex} responded with ${scrollName} (fromHand=${fromHand})`);
+
+        // Late arrival: resolution already started (e.g. timeout force-resolve
+        // crossed with this broadcast) — do not mutate the stack mid-resolution
+        if (this._resolving) {
+            console.warn(`Late response from player ${playerIndex} ignored — resolution already in progress`);
+            return;
+        }
 
         // If scroll came from hand, sync the hand→active move on this client
         if (fromHand && this.spellSystem) {
