@@ -4567,6 +4567,11 @@
             const effectiveType = spellSystem.scrollEffects?.getEffectiveTileElement?.(tile) ?? tile.shrineType;
             const scrollInfo = spellSystem.onTileRevealed(effectiveType);
 
+            // Adaptive music: grow the Joytone playlist with this element's theme.
+            // Uses the raw shrineType (not effectiveType) because that's what the
+            // tile-flip broadcast carries — keeps the sequence identical on all clients.
+            window.JoytoneBridge?.onTileRevealed(tile.shrineType, tile.id);
+
             // Call to Adventure: immediately draw shrine stones when revealing a tile
             const ctaBuff = spellSystem.scrollEffects?.activeBuffs?.callToAdventure;
             const elementalTypes = ['earth', 'water', 'fire', 'wind', 'void'];

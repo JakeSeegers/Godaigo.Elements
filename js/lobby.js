@@ -1701,6 +1701,8 @@
                 if (tile) {
                     console.log(`✅ Found tile ${tileId}, flipping to ${shrineType}`);
                     flipTileVisually(tile, shrineType);
+                    // Adaptive music: remote flip grows the same Joytone sequence locally
+                    window.JoytoneBridge?.onTileRevealed(shrineType, tileId);
                     // Re-apply Wandering River indicator if this tile was transformed (flip replaced the element)
                     if (typeof placedTiles !== 'undefined' && spellSystem && spellSystem.scrollEffects) {
                         const tileObj = placedTiles.find(t => Number(t.id) === Number(tileId));
@@ -1978,6 +1980,8 @@
                             if (el && typeof flipTileVisually === 'function') {
                                 console.log(`🔄 turn-change sync: catching missed tile-flip for tile ${id} (${shrineType})`);
                                 flipTileVisually(el, shrineType);
+                                // Adaptive music: catch the missed riff too (deduped by tileId)
+                                window.JoytoneBridge?.onTileRevealed(shrineType, id);
                             }
                         }
                     });

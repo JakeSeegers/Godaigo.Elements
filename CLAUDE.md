@@ -32,6 +32,7 @@ CLAUDE.md  (you are here)
 ├── js/INDEX.md              ← All game JS modules, window globals, load order
 │   └── js/scrolls/INDEX.md  ← Scroll system: definitions, effects, response window
 ├── css/INDEX.md             ← Stylesheet responsibilities and token locations
+├── joytone/                 ← Embedded Joytone music app (iframe; driven by js/joytone-bridge.js)
 ├── docs/INDEX.md            ← Game design doc pointer, design decisions
 └── planning/current.md      ← Live task state (branch, files, next steps)
 ```
@@ -48,6 +49,8 @@ Order matters — later scripts depend on earlier ones.
 4. scroll-effects.js       ← ScrollEffects namespace (depends on scroll-definitions)
 5. response-window.js      ← ResponseWindowSystem (depends on scroll-effects)
 6. multiplayer-state.js    ← Shared MP state (myPlayerId, currentGameId, etc.)
+6b. sounds.js              ← window.SoundSystem — SFX + login music
+6c. joytone-bridge.js      ← window.JoytoneBridge — adaptive music via hidden joytone/ iframe (Shift+J+T popup)
 7. game-core.js            ← SpellSystem, placeTile, revealTile, addAP, movement
 8. game-ui.js              ← HUD, drag-drop handlers, panel toggles, scroll deck UI
 9. parallax.js             ← Animated background (no game deps)

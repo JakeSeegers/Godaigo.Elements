@@ -9,6 +9,9 @@
 `4.10.progresscheck` → remote: `JakeSeegers/Godaigo.Elements`
 
 ## Last Committed Work
+- Joytone adaptive music integration: `joytone/` (embedded music app + MIDI/sf2 assets),
+  `js/joytone-bridge.js` (hidden iframe, Shift+J+T popup, tile-reveal → seeded riff,
+  per-player mute/volume in Settings). Details: js/INDEX.md § joytone-bridge.js.
 - Tutorial system: player places own tile, explores freely, first flip forced to Earth
 - Distributed docs system: CLAUDE.md, js/INDEX.md, js/scrolls/INDEX.md, css/INDEX.md,
   docs/INDEX.md, planning/current.md, .claude/skills/sync-docs.md

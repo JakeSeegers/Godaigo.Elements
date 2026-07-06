@@ -22,6 +22,8 @@
 | `emoji-system.js` | ~500 | 83 emojis across 6 gold tiers, purchase validation, pawn overlay display |
 | `cosmetics-system.js` | ~300 | Name colour cosmetics (6 tiers), localStorage persistence, equip/purchase logic |
 | `crt-overlay.js` | ~400 | Canvas CRT effects: scanlines, vignette, grain, flicker. Per-user Supabase prefs. |
+| `sounds.js` | ~220 | `window.SoundSystem`: SFX playback, footsteps, login-screen music (muted-autoplay trick) |
+| `joytone-bridge.js` | ~200 | `window.JoytoneBridge`: adaptive in-game music. Hidden iframe of `joytone/index.html` (full Joytone DAW). Boots the Five-Elements theme on game start (Grow + Drummer ON); each tile reveal appends a seeded riff of that element (seed = `gameId:tileId` → identical sequence on every client, each variation added at most once). Shift+J+T toggles the sequencer popup. Per-player mute/volume in Settings (localStorage `godaigo_joytone_*`). Talks to `window.JoytoneAPI`, an adapter appended inside `joytone/index.html`. |
 
 ---
 
@@ -155,6 +157,8 @@ window.gami                 // gamification service
 window.crtOverlay           // CRT effect manager
 window.emojiSystem          // emoji reactions
 window.cosmeticsSystem      // name colour cosmetics
+window.SoundSystem          // SFX + login music
+window.JoytoneBridge        // adaptive music (onTileRevealed, setMuted, setVolume, togglePopup)
 
 // Debug
 window.dumpGameDebug()      // full state dump

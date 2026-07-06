@@ -374,6 +374,9 @@ function _renderSettings(content) {
     const uiSound   = localStorage.getItem('godaigo_ui_sound')   !== 'false';
     const gameSound = localStorage.getItem('godaigo_game_sound') !== 'false';
     const music     = localStorage.getItem('godaigo_music')       !== 'false';
+    const joytoneMuted = window.JoytoneBridge ? window.JoytoneBridge.isMuted()
+                                              : localStorage.getItem('godaigo_joytone_muted') === 'true';
+    const joytoneVol   = Math.round((window.JoytoneBridge ? window.JoytoneBridge.getVolume() : 1) * 100);
     const crt = window.crtOverlay ? window.crtOverlay.getOptions()
                                   : { scanlines: true, vignette: true, grain: true, flicker: true };
 
@@ -403,6 +406,23 @@ function _renderSettings(content) {
                 </div>
                 <button class="gami-toggle ${music ? 'on' : 'off'}"
                         onclick="_gami_toggleSetting('music', this)">${music ? 'ON' : 'OFF'}</button>
+            </div>
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">Adaptive Music</div>
+                    <div class="gami-settings-desc">In-game Joytone soundtrack (grows as tiles flip) — only affects you</div>
+                </div>
+                <button class="gami-toggle ${joytoneMuted ? 'off' : 'on'}"
+                        onclick="_gami_toggleJoytoneMute(this)">${joytoneMuted ? 'OFF' : 'ON'}</button>
+            </div>
+            <div class="gami-settings-row">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">Adaptive Music Volume</div>
+                    <div class="gami-settings-desc">Your personal volume for the Joytone soundtrack</div>
+                </div>
+                <input type="range" min="0" max="100" step="1" value="${joytoneVol}"
+                       style="width:110px;accent-color:#5566cc;cursor:pointer"
+                       oninput="_gami_joytoneVolume(this)">
             </div>
             <div class="gami-settings-section-label">— Display —</div>
             <div class="gami-settings-row">
@@ -458,6 +478,7 @@ function _renderSettings(content) {
                     <div class="gami-keybind-row"><kbd>H</kbd><span>Toggle Hand panel</span></div>
                     <div class="gami-keybind-row"><kbd>A</kbd><span>Toggle Active panel</span></div>
                     <div class="gami-keybind-row"><kbd>C</kbd><span>Toggle Common panel</span></div>
+                    <div class="gami-keybind-row"><kbd>Shift+J+T</kbd><span>Toggle Joytone music sequencer</span></div>
                 </div>
                 <div class="gami-keybind-group">
                     <div class="gami-keybind-group-title">Scroll Navigation</div>
@@ -482,6 +503,17 @@ function _gami_toggleCrt(key, btn) {
     window.crtOverlay.saveForUser(window.gami?.userId || null);
     btn.textContent = newVal ? 'ON' : 'OFF';
     btn.className   = `gami-toggle ${newVal ? 'on' : 'off'}`;
+}
+
+function _gami_toggleJoytoneMute(btn) {
+    const newMuted = !window.JoytoneBridge?.isMuted();
+    window.JoytoneBridge?.setMuted(newMuted);
+    btn.textContent = newMuted ? 'OFF' : 'ON';
+    btn.className   = `gami-toggle ${newMuted ? 'off' : 'on'}`;
+}
+
+function _gami_joytoneVolume(input) {
+    window.JoytoneBridge?.setVolume((+input.value || 0) / 100);
 }
 
 function _gami_toggleSetting(key, btn) {
