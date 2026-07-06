@@ -5445,15 +5445,24 @@ init();
     if (bridgeGain && audioCtx) bridgeGain.gain.setTargetAtTime(_muted ? 0 : _volume, audioCtx.currentTime, 0.03);
   }
 
+  let pendingPlay = false; // autoplay was blocked at boot — start on next gesture
+
   async function unlock() {
     await ensureAudio();
     installBridgeGain();
-    return !!audioCtx && audioCtx.state === 'running';
+    const ok = !!audioCtx && audioCtx.state === 'running';
+    if (ok && pendingPlay) {
+      pendingPlay = false;
+      if (booted && !isPlaying) startPlayback(0);
+    }
+    return ok;
   }
 
   // Fresh start for a new game: load the baked theme (replacing anything
   // restored from localStorage), force Grow + Drummer ON, start looping.
-  // Must be called from / soon after a user gesture so audio can unlock.
+  // A new game means default settings, so a powered-off engine comes back on.
+  // booted = theme data is loaded; riffs collect even while audio is blocked
+  // or powered off, and playback joins in on the next unlock.
   async function boot() {
     if (booted) return true;
     stopPlayback();
@@ -5466,10 +5475,12 @@ init();
     if (!_drummerMode) toggleDrummerMode();
     refreshAfterThemeLoad('☯ Godaigo game start — theme loaded, Grow + Drummer on');
     loadManifest().catch(() => {});   // warm the drummer library
+    booted = true;
+    if (!powerOn) await togglePower();
     const ok = await unlock();
-    if (ok && !isPlaying) startPlayback(0);
-    booted = ok;
-    return ok;
+    if (ok) { if (!isPlaying) startPlayback(0); }
+    else pendingPlay = true;
+    return true;
   }
 
   // Append one riff for a revealed tile. All randomness (orchestration pick,
@@ -5525,6 +5536,7 @@ init();
   function stopAll() {
     stopPlayback();
     booted = false;
+    pendingPlay = false;
     usedGenerations.clear();
   }
 
@@ -5534,9 +5546,29 @@ init();
   }
 
   function getState() {
-    return { booted, playing: isPlaying, muted: _muted, volume: _volume,
+    return { booted, playing: isPlaying, powered: powerOn, muted: _muted, volume: _volume,
              used: [...usedGenerations], sections: project?.sectionOrder?.length || 0 };
   }
+
+  // ⏻ Power button during a game: powering off freezes the engine, so this
+  // player's soundtrack falls out of sync with everyone else's. Warn first
+  // (capture phase runs before the button's own toggle handler; cancelling
+  // stops the toggle). Riffs still collect while off; powering back on
+  // auto-resumes the playlist from the top.
+  document.addEventListener('click', (e) => {
+    const btn = document.getElementById('btn-power');
+    if (!booted || !btn || !(e.target === btn || btn.contains(e.target))) return;
+    if (powerOn) {
+      const ok = window.confirm(
+        'Power off the music engine?\n\n' +
+        'Your soundtrack will fall out of sync with the other players until you power ' +
+        'back on. (New tile riffs still collect while it\'s off.)');
+      if (!ok) { e.stopImmediatePropagation(); e.preventDefault(); }
+    } else {
+      // Powering back on — restart the accumulated playlist
+      setTimeout(() => { if (powerOn && booted && !isPlaying) startPlayback(0); }, 150);
+    }
+  }, true);
 
   window.JoytoneAPI = { boot, addTileTheme, setVolume, setMute, stop: stopAll, unlock, onShown, getState };
 })();
