@@ -630,6 +630,17 @@ let playStartBeat    = 0;     // beat position at play press
 let scheduleCursor   = 0;     // beat position of scheduler lookahead cursor
 let currentSectionPlayIdx = 0;// index into project.sectionOrder
 let sectionBeatOffset = 0;    // beat offset where current section started
+
+// Reverse-reverb pre-roll pass: a second cursor that walks REVREV_PREROLL
+// seconds ahead of the main scheduler. Phrase-leading notes on tracks with a
+// Rev-verse send get a silent "seed" copy fed into the reverse convolver that
+// early — its crescendo then culminates exactly at the real note's onset,
+// so the reverb audibly creeps IN before the line (not just bloom after it).
+const REVREV_PREROLL = 2.6;   // seconds — must match the reverse IR length
+const REVREV_GAP     = 1.0;   // beats of silence that make a note phrase-leading
+let ghostCursor      = 0;     // beat cursor of the pre-roll pass
+let ghostSectionIdx  = 0;
+let ghostBeatOffset  = 0;
 let pendingMidiSwap   = null; // { sectionId, applyFn } — deferred MIDI import
 
 // Piano roll view
@@ -1115,6 +1126,10 @@ class TrackEngine {
     this.dryGain   = ctx.createGain(); this.dryGain.gain.value = 1;
     this.rvSend    = ctx.createGain(); this.rvSend.gain.value = track.reverbSend * track.effects.reverbMix;
     this.rrSend    = ctx.createGain(); this.rrSend.gain.value = track.effects.revrevSend || 0;
+    // Pre-roll ghost input: seeds played here reach ONLY the reverse convolver
+    // (no dry path), so the lead-in swell is heard without an early dry note.
+    this.rrGhostIn = ctx.createGain(); this.rrGhostIn.gain.value = track.effects.revrevSend || 0;
+    this.rrGhostIn.connect(sharedRevRev);
     this.dlySend   = ctx.createGain(); this.dlySend.gain.value = track.effects.delayMix;
 
     // Per-track delay line. The old shared delay made one track's delay-time/feedback
@@ -1164,6 +1179,7 @@ class TrackEngine {
   }
 
   dest() { return this.trackGain; }
+  ghostDest() { return this.rrGhostIn; }
 
   apply(track) {
     const anySolo = Object.values(activeTracks()).some(t => t.soloed);
@@ -1186,6 +1202,7 @@ class TrackEngine {
     );
     this.rvSend.gain.setTargetAtTime(track.reverbSend * track.effects.reverbMix, audioCtx.currentTime, 0.02);
     this.rrSend.gain.setTargetAtTime(track.effects.revrevSend || 0, audioCtx.currentTime, 0.02);
+    this.rrGhostIn.gain.setTargetAtTime(track.effects.revrevSend || 0, audioCtx.currentTime, 0.02);
     this.dlySend.gain.setTargetAtTime(track.effects.delayMix, audioCtx.currentTime, 0.02);
     this.delay.delayTime.setTargetAtTime(
       trackDelayTime(track),
@@ -1214,7 +1231,7 @@ class TrackEngine {
       this.trackGain, this.panner, this.eqHPF, this.eqLow, this.eqMid, this.eqHigh,
       this.derezCrusher, this.filter,
       this.saturator, this.saturatorDry, this.saturatorWet, this.satBus,
-      this.dryGain, this.rvSend, this.rrSend, this.dlySend, this.delay,
+      this.dryGain, this.rvSend, this.rrSend, this.rrGhostIn, this.dlySend, this.delay,
       this.delayFeedback, this.lfoGain
     ]) { try { node.disconnect(); } catch(e) {} }
   }
@@ -1790,6 +1807,9 @@ function startPlayback(fromBeat) {
   scheduleCursor = playStartBeat;
   currentSectionPlayIdx = Math.max(0, project.sectionOrder.indexOf(activeSectionId));
   sectionBeatOffset = 0;
+  ghostCursor = playStartBeat;
+  ghostSectionIdx = currentSectionPlayIdx;
+  ghostBeatOffset = 0;
   schedInterval = setInterval(scheduleAhead, SCHED_MS);
   document.getElementById('btn-play').textContent = '⏸ Pause';
   document.getElementById('btn-play').classList.add('playing');
@@ -1813,9 +1833,92 @@ function currentBeat() {
   return playStartBeat + secToBeat(audioCtx.currentTime - playStartCtxTime);
 }
 
+// A note is phrase-leading when no other note on the track ends within
+// REVREV_GAP beats before it starts inside the same loop repetition (i.e. it
+// opens the phrase — "the first word of the line"). Repetition/section starts
+// deliberately count as leaders even when the previous rep ran right up to
+// them: a continuous drone then gets one creeping lead-in per section instead
+// of none. Chord notes sharing a start all qualify.
+function isRevRevPhraseLeader(track, note) {
+  const start = note.beatStart;
+  for (const n of track.notes) {
+    if (n === note) continue;
+    if (n.beatStart < start && n.beatStart + n.duration > start - REVREV_GAP) return false;
+  }
+  return true;
+}
+
+// Feed one silent seed of the note into the reverse convolver REVREV_PREROLL
+// early; the flipped IR turns it into a crescendo that peaks at the real onset.
+function scheduleRevRevGhost(track, note, noteTime, now, engine) {
+  const seedTime = noteTime - REVREV_PREROLL;
+  if (seedTime < now + 0.02) return; // not enough runway (e.g. right after Play)
+  const seedDur = Math.min(beatToSec(note.duration), 1.2);
+  playTrackMidiNote(track, note.midiNote, seedDur, seedTime, engine.ghostDest(), note.velocity);
+}
+
+// Pre-roll pass: identical section walk to scheduleAhead's main loop, but
+// REVREV_PREROLL further ahead, and it only emits ghost seeds.
+function scheduleRevRevGhosts(now) {
+  const ghostUntil = secToBeat(now + LOOKAHEAD + REVREV_PREROLL - playStartCtxTime) + playStartBeat;
+
+  while (ghostCursor < ghostUntil) {
+    const secId = project.sectionOrder[ghostSectionIdx % project.sectionOrder.length];
+    const section = project.sections[secId];
+    if (!section) { ghostCursor += 1; continue; }
+
+    const secLenBeats = Math.max(1, section.lengthBars * 4);
+    const beatInSec   = ghostCursor - ghostBeatOffset;
+
+    if (beatInSec >= secLenBeats) {
+      ghostBeatOffset += secLenBeats;
+      ghostSectionIdx++;
+      continue;
+    }
+
+    const sliceEnd = Math.min(beatInSec + SCHED_MS/1000 * project.tempo/60 + 0.01, secLenBeats);
+    const anySolo = Object.values(section.tracks).some(t=>t.soloed);
+
+    for (const track of Object.values(section.tracks)) {
+      if ((track.effects?.revrevSend || 0) <= 0.01) continue;
+      if (track.muted || (anySolo && !track.soloed)) continue;
+      if (!track.notes.length) continue;
+      const engine = getOrCreateEngine(track);
+
+      let rawLen = 0;
+      for (const n of track.notes) rawLen = Math.max(rawLen, n.beatStart + n.duration);
+      const trackLenBeats = Math.max(4, Math.ceil(rawLen / 4) * 4);
+
+      const startLoop = Math.floor(beatInSec / trackLenBeats);
+      const endLoop   = Math.floor((sliceEnd - 0.0001) / trackLenBeats);
+
+      for (let loop = startLoop; loop <= endLoop; loop++) {
+        for (const note of track.notes) {
+          const noteBeat = loop * trackLenBeats + note.beatStart;
+          if (noteBeat >= beatInSec && noteBeat < sliceEnd && noteBeat < secLenBeats &&
+              isRevRevPhraseLeader(track, note)) {
+            const t = playStartCtxTime + beatToSec(ghostBeatOffset + noteBeat - playStartBeat);
+            scheduleRevRevGhost(track, note, t, now, engine);
+          }
+        }
+      }
+    }
+
+    ghostCursor = ghostBeatOffset + sliceEnd;
+    if (sliceEnd >= secLenBeats) {
+      ghostBeatOffset += secLenBeats;
+      ghostSectionIdx++;
+    } else {
+      break;
+    }
+  }
+}
+
 function scheduleAhead() {
   const now = audioCtx.currentTime;
   const lookUntilBeat = secToBeat(now + LOOKAHEAD - playStartCtxTime) + playStartBeat;
+
+  scheduleRevRevGhosts(now);
 
   while (scheduleCursor < lookUntilBeat) {
     // which section are we in?
@@ -4662,9 +4765,15 @@ async function bounceWav() {
       if (track.muted || (anySolo && !track.soloed)) continue;
       track.effects = { ...DEFAULT_FX(), ...(track.effects || {}) };
       const engine = new TrackEngine(track);
+      const hasRevRev = (track.effects.revrevSend || 0) > 0.01;
       for (const note of track.notes) {
         const t = tOffset + note.beatStart * 60 / bpm;
         playTrackMidiNote(track, note.midiNote, note.duration*60/bpm, t, engine.dest(), note.velocity);
+        // Reverse-reverb pre-roll seed (matches the live scheduler's ghosts)
+        if (hasRevRev && t - REVREV_PREROLL >= 0 && isRevRevPhraseLeader(track, note)) {
+          playTrackMidiNote(track, note.midiNote, Math.min(note.duration*60/bpm, 1.2),
+                            t - REVREV_PREROLL, engine.ghostDest(), note.velocity);
+        }
       }
     }
     tOffset += secLenSecs;
