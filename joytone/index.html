@@ -908,14 +908,21 @@ async function ensureAudio() {
   sharedRevRev.connect(revRevReturn);
   sharedDelay.connect(delayReturn);
 
-  // Reverb HP filter (prevents mud) + LP (keeps the tail dark, not ringy).
-  // The reverse-reverb return shares the same filtering so its swell sits in
-  // the same sonic space as the forward tail.
+  // Reverb HP filter (prevents mud) + LP (keeps the tail dark, not ringy)
   const rvHp = audioCtx.createBiquadFilter();
   rvHp.type = 'highpass'; rvHp.frequency.value = 180;
   const rvLp = audioCtx.createBiquadFilter();
   rvLp.type = 'lowpass'; rvLp.frequency.value = 4500; rvLp.Q.value = 0.4;
-  reverbReturn.connect(rvHp); revRevReturn.connect(rvHp); rvHp.connect(rvLp);
+  reverbReturn.connect(rvHp); rvHp.connect(rvLp);
+
+  // The reverse-reverb return gets its own, DARKER filtering (LP 2800 vs the
+  // forward verb's 4500): a swell is anticipation, not information — capping
+  // its highs guarantees no seed pitch can ever turn the creep-in shrill.
+  const rrHp = audioCtx.createBiquadFilter();
+  rrHp.type = 'highpass'; rrHp.frequency.value = 180;
+  const rrLp = audioCtx.createBiquadFilter();
+  rrLp.type = 'lowpass'; rrLp.frequency.value = 2800; rrLp.Q.value = 0.4;
+  revRevReturn.connect(rrHp); rrHp.connect(rrLp);
 
   compressor = audioCtx.createDynamicsCompressor();
   compressor.threshold.value = -18; compressor.ratio.value = 6;
@@ -936,6 +943,7 @@ async function ensureAudio() {
   bassBoost.gain.value      = project.masterFx.bassGain;
 
   rvLp.connect(bassBoost);
+  rrLp.connect(bassBoost);
   delayReturn.connect(bassBoost);
   masterBus.connect(bassBoost);
   bassBoost.connect(compressor);
@@ -1128,9 +1136,9 @@ class TrackEngine {
     this.rrSend    = ctx.createGain(); this.rrSend.gain.value = track.effects.revrevSend || 0;
     // Pre-roll ghost input: seeds played here reach ONLY the reverse convolver
     // (no dry path), so the lead-in swell is heard without an early dry note.
-    // Runs hotter than the tail-bloom send — dark/quiet voices (the lowpassed
-    // bass drone) need the boost for their creep-in to read over the mix.
-    this.rrGhostIn = ctx.createGain(); this.rrGhostIn.gain.value = (track.effects.revrevSend || 0) * 1.6;
+    // Level is the Rev-verse amount; the per-PITCH boost/cut happens per seed
+    // in scheduleRevRevGhost (low dark notes boosted, high notes tamed).
+    this.rrGhostIn = ctx.createGain(); this.rrGhostIn.gain.value = track.effects.revrevSend || 0;
     this.rrGhostIn.connect(sharedRevRev);
     this.dlySend   = ctx.createGain(); this.dlySend.gain.value = track.effects.delayMix;
 
@@ -1204,7 +1212,7 @@ class TrackEngine {
     );
     this.rvSend.gain.setTargetAtTime(track.reverbSend * track.effects.reverbMix, audioCtx.currentTime, 0.02);
     this.rrSend.gain.setTargetAtTime(track.effects.revrevSend || 0, audioCtx.currentTime, 0.02);
-    this.rrGhostIn.gain.setTargetAtTime((track.effects.revrevSend || 0) * 1.6, audioCtx.currentTime, 0.02);
+    this.rrGhostIn.gain.setTargetAtTime(track.effects.revrevSend || 0, audioCtx.currentTime, 0.02);
     this.dlySend.gain.setTargetAtTime(track.effects.delayMix, audioCtx.currentTime, 0.02);
     this.delay.delayTime.setTargetAtTime(
       trackDelayTime(track),
@@ -1852,14 +1860,29 @@ function isRevRevPhraseLeader(track, note) {
 
 // Feed one silent seed of the note into the reverse convolver REVREV_PREROLL
 // early; the flipped IR turns it into a crescendo that peaks at the real onset.
-// The seed plays an OCTAVE UP: the pre-verb only gestures at the note, and an
-// octave-up wash cuts through where a dark bass drone's own register would be
-// buried (it stays harmonically the same note).
+// PITCH-AWARE: ears get dramatically more sensitive with pitch, so a flat
+// seed level reads as a whisper on a low bass drone but a sudden blast on a
+// high horn/chip line. Low, dark notes get lifted an octave (so their swell
+// escapes the sub-bass mud) and boosted; from there the seed gain tapers off
+// as pitch rises — a swell must announce its note, never overpower it.
 function scheduleRevRevGhost(track, note, noteTime, now, engine) {
   const seedTime = noteTime - REVREV_PREROLL;
   if (seedTime < now + 0.02) return; // not enough runway (e.g. right after Play)
   const seedDur = Math.min(beatToSec(note.duration), 1.2);
-  playTrackMidiNote(track, Math.min(note.midiNote + 12, 108), seedDur, seedTime, engine.ghostDest(), note.velocity);
+  const lift = note.midiNote < 52 ? 12 : 0;          // register lift for dark low notes only
+  const midi = Math.min(note.midiNote + lift, 108);
+  // 1.6× at/below MIDI 50, sliding down to 0.5× at/above MIDI 90 (post-lift)
+  const k = Math.min(1, Math.max(0, (midi - 50) / 40));
+  const seedGain = audioCtx.createGain();
+  seedGain.gain.value = 1.6 - k * 1.1;
+  seedGain.connect(engine.ghostDest());
+  playTrackMidiNote(track, midi, seedDur, seedTime, seedGain, note.velocity);
+  // Free the per-seed node once the seed has fully sounded (live ctx only —
+  // offline render contexts are discarded wholesale after the bounce).
+  if (typeof OfflineAudioContext === 'undefined' || !(audioCtx instanceof OfflineAudioContext)) {
+    setTimeout(() => { try { seedGain.disconnect(); } catch (e) {} },
+               Math.max(0, seedTime - now + seedDur + 0.5) * 1000);
+  }
 }
 
 // Pre-roll pass: identical section walk to scheduleAhead's main loop, but
@@ -4743,6 +4766,9 @@ async function bounceWav() {
   oDelay.connect(oDlyFB); oDlyFB.connect(oDelay);
   const oRvRet  = oCtx.createGain(); oRvRet.gain.value = 0.5; oReverb.connect(oRvRet);
   const oRrRet  = oCtx.createGain(); oRrRet.gain.value = 0.6; oRevRev.connect(oRrRet);
+  // Darker cap on the reverse-reverb return (mirrors the live rrLp @ 2800)
+  const oRrLp   = oCtx.createBiquadFilter();
+  oRrLp.type = 'lowpass'; oRrLp.frequency.value = 2800; oRrLp.Q.value = 0.4;
   const oDlRet  = oCtx.createGain(); oDlRet.gain.value = 0.4; oDelay.connect(oDlRet);
   const oComp   = oCtx.createDynamicsCompressor();
   oComp.threshold.value=project.masterFx.compThreshold ?? -18; oComp.ratio.value=project.masterFx.compRatio ?? 6; oComp.knee.value=8;
@@ -4750,7 +4776,7 @@ async function bounceWav() {
   oLim.threshold.value=project.masterFx.limiterCeiling ?? -1; oLim.ratio.value=20; oLim.knee.value=0; oLim.attack.value=0.001; oLim.release.value=0.05;
   const oBus    = oCtx.createGain(); oBus.gain.value = 1.0;                              // unity into the dynamics
   const oOut    = oCtx.createGain(); oOut.gain.value = project.masterFx.masterVolume;    // VOL: post-dynamics output trim
-  oRvRet.connect(oComp); oRrRet.connect(oComp); oDlRet.connect(oComp); oBus.connect(oComp);
+  oRvRet.connect(oComp); oRrRet.connect(oRrLp); oRrLp.connect(oComp); oDlRet.connect(oComp); oBus.connect(oComp);
   oComp.connect(oLim); oLim.connect(oOut); oOut.connect(oCtx.destination);
 
   // Schedule all sections
@@ -4774,10 +4800,10 @@ async function bounceWav() {
       for (const note of track.notes) {
         const t = tOffset + note.beatStart * 60 / bpm;
         playTrackMidiNote(track, note.midiNote, note.duration*60/bpm, t, engine.dest(), note.velocity);
-        // Reverse-reverb pre-roll seed (matches the live scheduler's ghosts)
-        if (hasRevRev && t - REVREV_PREROLL >= 0 && isRevRevPhraseLeader(track, note)) {
-          playTrackMidiNote(track, Math.min(note.midiNote + 12, 108), Math.min(note.duration*60/bpm, 1.2),
-                            t - REVREV_PREROLL, engine.ghostDest(), note.velocity);
+        // Reverse-reverb pre-roll seed — same pitch-aware path as live playback
+        // (now = -0.02 admits any seed with seedTime >= 0 on the offline timeline)
+        if (hasRevRev && isRevRevPhraseLeader(track, note)) {
+          scheduleRevRevGhost(track, note, t, -0.02, engine);
         }
       }
     }
