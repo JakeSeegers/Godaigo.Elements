@@ -1,370 +1,282 @@
 // ============================================================
-// bot.js — Scripted test bot for Godaigo
+// bot.js — Stage 1 utility bot for Godaigo (docs/bot-roadmap.md)
 // ============================================================
 // HOW TO USE:
-//   Press Shift+R during an active game to execute one bot action
-//   on behalf of the current active player.
+//   Shift+R  → execute ONE bot action for the active player
+//   Shift+B  → play out the WHOLE turn (loops actions until end of turn)
+//   Console  → window.BotSystem.step() / .turn() / .rank() / .WEIGHTS
 //
-// PRIORITY ORDER (per Shift+R press):
-//   1. Cast a scroll if its pattern is already satisfied
-//   2. Place one missing stone toward the best castable pattern
-//   3. If standing on a shrine centre → end turn to collect stones
-//   4. Move one hex step toward the nearest collectible shrine
-//   5. Fallback: end turn
+// HOW IT DECIDES (Stage 1 of the roadmap — no lookahead yet):
+//   1. BotState.legalActions() enumerates every legal action
+//   2. scoreAction() gives each a utility: Σ weight × feature
+//   3. argmax wins. All strategy knobs live in WEIGHTS — tune the table,
+//      not the code. Stage 3a evolution writes better weights to
+//      localStorage['godaigo_bot_weights'], loaded over defaults at startup.
 //
-// LOAD ORDER: after lobby.js (depends on game-core.js + lobby.js globals)
+// Observation/actuation is bot-state.js (window.BotState). This file must
+// never touch game internals directly except through BotState + snapshot.
+//
+// LOAD ORDER: after bot-state.js (which is after lobby.js)
 // ============================================================
 
 (function () {
     'use strict';
 
-    // ----------------------------------------------------------------
-    // Logging helper
-    // ----------------------------------------------------------------
-    function log(...args) {
-        console.log('🤖 [Bot]', ...args);
-    }
+    function log(...args) { console.log('🤖 [Bot]', ...args); }
+
+    const ELEMENTS = ['earth', 'water', 'fire', 'wind', 'void'];
+    const POOL_CAP = 5;
 
     // ----------------------------------------------------------------
-    // Helpers: position of the active player
+    // WEIGHTS — the single tuning surface. Stage 3a evolves this table.
+    // Positive = more attractive. Rough scale: 100 ≈ "clearly best action".
     // ----------------------------------------------------------------
-    function botPos() {
-        const player = playerPositions[activePlayerIndex];
-        if (!player) return null;
-        return { x: player.x, y: player.y };
-    }
+    const DEFAULT_WEIGHTS = {
+        // casting
+        castBase:          100,  // any satisfied pattern is usually worth firing
+        castUnactivated:    80,  // scroll element not yet activated (win progress!)
+        castDeadElement:   -60,  // source pool empty → effect fires but NO win credit
+        castLevel:           2,  // per scroll level — mild preference for big scrolls
 
-    // Convert player pixel position to an integer axial hex coordinate.
-    // Uses pixelToHex + hexRound (both defined in game-core.js).
-    function botHex(px, py) {
-        return pixelToHex(px, py, TILE_SIZE);
-    }
+        // stone placement toward a pattern
+        placeBase:          20,
+        placeProgress:      45,  // × fraction of the variant complete AFTER this stone
+        placeUnactivated:   25,  // building toward an unactivated element
+        placeDeadElement:  -30,  // building toward an element with an empty source pool
 
-    // ----------------------------------------------------------------
-    // BFS: find a walkable path from (sx,sy) to (tx,ty).
-    // Returns an array of steps [{x, y, cost}], or null if unreachable.
-    // ----------------------------------------------------------------
-    function botFindPath(sx, sy, tx, ty) {
-        const allHexes = getAllHexagonPositions();
-        const THRESH = 5;
+        // movement
+        moveBase:            2,
+        moveShrineValue:    30,  // × (target shrine value ÷ (1 + remaining path cost))
+        moveApPenalty:      -1,  // × step cost — cheap steps preferred
+        moveExplore:        18,  // step lands on an unrevealed tile (reveals it — draws a scroll)
+        moveExploreGradient: 0.15, // × px closed toward the nearest unrevealed tile
 
-        let startHex = null, endHex = null;
-        for (const h of allHexes) {
-            if (Math.hypot(h.x - sx, h.y - sy) < THRESH) startHex = h;
-            if (Math.hypot(h.x - tx, h.y - ty) < THRESH) endHex   = h;
+        // ending the turn
+        endTurnBase:         1,  // always a legal fallback, never attractive by itself
+        endTurnOnShrine:    55,  // standing on a collectible shrine centre: end = collect
+        endTurnLowAp:        6,  // + when AP ≤ 1 — nothing useful left to do
+
+        // shrine valuation (used inside move/endTurn features)
+        shrineNeed:          1.0, // × (capacity − pool[element])
+        shrineUnactivated:   2.5, // element not yet activated
+        shrineDeadSource:  -3.0,  // source pool empty — collection yields nothing
+    };
+
+    // Evolved weights (Stage 3a) override defaults without code edits
+    let WEIGHTS = { ...DEFAULT_WEIGHTS };
+    try {
+        const saved = JSON.parse(localStorage.getItem('godaigo_bot_weights') || 'null');
+        if (saved && typeof saved === 'object') {
+            WEIGHTS = { ...DEFAULT_WEIGHTS, ...saved };
+            log('Loaded evolved weights from localStorage');
         }
-        if (!startHex || !endHex) return null;
-        if (startHex.key === endHex.key) return [];
+    } catch (e) { /* corrupt save — keep defaults */ }
 
-        const visited = new Set([startHex.key]);
-        const queue   = [{ hex: startHex, path: [] }];
+    // ----------------------------------------------------------------
+    // Derived state helpers (read ONLY from the snapshot — never from
+    // game internals, and never from hidden information)
+    // ----------------------------------------------------------------
+    function me(snap) { return snap.players[snap.turn.activePlayerIndex]; }
 
-        while (queue.length > 0) {
-            const { hex, path } = queue.shift();
+    function scrollElement(name) {
+        return window.SCROLL_DEFINITIONS?.[name]?.element || null;
+    }
 
-            // neighbours = all hex positions within one hex step (~35 px)
-            const neighbours = allHexes.filter(h => {
-                if (visited.has(h.key)) return false;
-                const d = Math.hypot(h.x - hex.x, h.y - hex.y);
-                return d > THRESH && d < 40;
-            });
+    // Worth of collecting at a shrine of this element right now
+    function shrineValue(snap, element) {
+        const self = me(snap);
+        if (!self) return 0;
+        const need = Math.max(0, POOL_CAP - (self.pool[element] || 0));
+        if (need === 0) return 0;                       // pool already full
+        let v = WEIGHTS.shrineNeed * need;
+        if (!self.activated.includes(element)) v += WEIGHTS.shrineUnactivated * need;
+        if ((snap.sourcePool[element] || 0) <= 0) v += WEIGHTS.shrineDeadSource * need;
+        return Math.max(0, v);
+    }
 
-            for (const nb of neighbours) {
-                const mv = canPlayerMoveToHex(nb.x, nb.y, false);
-                if (!mv.canMove) continue;
+    // Collectible shrine tiles: revealed, elemental, and worth something
+    function collectibleShrines(snap) {
+        return snap.tiles.filter(t =>
+            t.revealed && !t.isPlayerTile &&
+            ELEMENTS.includes(t.shrineType) &&
+            shrineValue(snap, t.shrineType) > 0);
+    }
 
-                const step = { x: nb.x, y: nb.y, cost: mv.cost ?? 1 };
-                const newPath = [...path, step];
-
-                if (nb.key === endHex.key) return newPath;
-
-                visited.add(nb.key);
-                queue.push({ hex: nb, path: newPath });
-            }
-        }
-        return null; // unreachable
+    function shrineUnderfoot(snap) {
+        const self = me(snap);
+        if (!self) return null;
+        return collectibleShrines(snap).find(t => Math.hypot(t.x - self.x, t.y - self.y) < 5) || null;
     }
 
     // ----------------------------------------------------------------
-    // Move the active player one hex step (direct state update).
-    // Mirrors what movePlayerAlongPath() does without requiring a drag.
+    // scoreAction — the Stage-1 utility function. Tune WEIGHTS, not this.
     // ----------------------------------------------------------------
-    function botMoveStep(x, y, cost) {
-        const pi     = activePlayerIndex;
-        const player = playerPositions[pi];
-        if (!player) { log('Player pawn not found'); return false; }
+    function scoreAction(a, snap, ctx) {
+        const self = me(snap);
+        switch (a.type) {
 
-        if (getTotalAP() < cost) {
-            log(`Not enough AP (need ${cost}, have ${getTotalAP()})`);
-            return false;
-        }
-
-        // Update pawn position
-        player.x = x;
-        player.y = y;
-        player.element.setAttribute('transform', `translate(${x}, ${y})`);
-
-        // Spend AP + update HUD
-        spendAP(cost);
-
-        // Reveal tiles underneath (lobby.js)
-        if (typeof handlePlayerLanding === 'function') handlePlayerLanding(x, y);
-
-        // Broadcast in multiplayer (lobby.js)
-        if (typeof broadcastPlayerMovement === 'function') {
-            broadcastPlayerMovement(pi, x, y, cost);
-        }
-
-        log(`Moved to (${x.toFixed(1)}, ${y.toFixed(1)}) — cost ${cost} AP, ${getTotalAP()} AP remaining`);
-        return true;
-    }
-
-    // ----------------------------------------------------------------
-    // Find the nearest revealed elemental shrine whose pool isn't full.
-    // ----------------------------------------------------------------
-    const ELEMENTAL_TYPES = ['earth', 'water', 'fire', 'wind', 'void'];
-
-    function botFindTargetShrine() {
-        const pos = botPos();
-        if (!pos) return null;
-
-        let best = null, bestDist = Infinity;
-
-        for (const tile of placedTiles) {
-            if (tile.isPlayerTile)                                    continue;
-            if (tile.flipped)                                         continue; // unvisited
-            if (!ELEMENTAL_TYPES.includes(tile.shrineType))           continue;
-
-            // Skip if player pool is already at capacity for this type
-            const cap = (typeof playerPoolCapacity !== 'undefined' ? playerPoolCapacity : {})[tile.shrineType] ?? 5;
-            if ((playerPool[tile.shrineType] || 0) >= cap)            continue;
-
-            const d = Math.hypot(tile.x - pos.x, tile.y - pos.y);
-            if (d < bestDist) { bestDist = d; best = tile; }
-        }
-        return best;
-    }
-
-    // ----------------------------------------------------------------
-    // Find the best scroll to build toward.
-    //
-    // Returns { scrollName, stones: [{x, y, type}], def } where
-    // `stones` lists the pixel positions that need stones placed for
-    // the chosen pattern variant, OR null if nothing buildable.
-    //
-    // Uses the same hex-round math as checkPattern() so positions
-    // are guaranteed to match when castSpell() validates them.
-    // ----------------------------------------------------------------
-    function botPickScrollTarget() {
-        if (!window.spellSystem || !window.SCROLL_DEFINITIONS) return null;
-
-        const pos = botPos();
-        if (!pos) return null;
-
-        const playerHex = botHex(pos.x, pos.y);
-        const { hand }  = window.spellSystem.getPlayerScrolls(false);
-        const allHexes  = getAllHexagonPositions();
-
-        for (const scrollName of hand) {
-            const def = window.SCROLL_DEFINITIONS[scrollName];
-            if (!def || !Array.isArray(def.patterns)) continue;
-
-            // Level 1 scrolls can only be used as responses — skip
-            if (def.level === 1) continue;
-
-            for (const variant of def.patterns) {
-                // Compute exact pixel positions using the same formula as checkPattern()
-                const stonePositions = variant.map(req => {
-                    const px = hexToPixel(playerHex.q + req.q, playerHex.r + req.r, TILE_SIZE);
-                    return { x: px.x, y: px.y, type: req.type };
-                });
-
-                // All positions must land on valid hex cells on the board
-                const allOnBoard = stonePositions.every(sp =>
-                    allHexes.some(h => Math.hypot(h.x - sp.x, h.y - sp.y) < 5)
-                );
-                if (!allOnBoard) continue;
-
-                // Bot must have at least one stone that still needs placing
-                const anyMissing = stonePositions.some(sp => {
-                    const alreadyThere = placedStones.some(
-                        s => s.type === sp.type && Math.hypot(s.x - sp.x, s.y - sp.y) < 5
-                    );
-                    return !alreadyThere && (playerPool[sp.type] || 0) > 0;
-                });
-
-                if (anyMissing) {
-                    return { scrollName, stones: stonePositions, def };
+            case 'cast': {
+                const el = scrollElement(a.scroll);
+                const def = window.SCROLL_DEFINITIONS?.[a.scroll];
+                let s = WEIGHTS.castBase + WEIGHTS.castLevel * (def?.level || 0);
+                if (el && ELEMENTS.includes(el)) {
+                    const dead = (snap.sourcePool[el] || 0) <= 0;
+                    if (dead) s += WEIGHTS.castDeadElement;          // no win credit
+                    else if (!self.activated.includes(el)) s += WEIGHTS.castUnactivated;
                 }
+                return s;
             }
+
+            case 'placeStone': {
+                const el = scrollElement(a.scroll);
+                let s = WEIGHTS.placeBase + WEIGHTS.placeProgress * (a.progress || 0);
+                if (el && ELEMENTS.includes(el)) {
+                    if ((snap.sourcePool[el] || 0) <= 0) s += WEIGHTS.placeDeadElement;
+                    else if (!self.activated.includes(el)) s += WEIGHTS.placeUnactivated;
+                }
+                return s;
+            }
+
+            case 'move': {
+                // Value = best shrine reachable via this step: worth ÷ remaining cost.
+                // ctx.paths caches Dijkstra results per target for this decision.
+                let best = 0;
+                for (const t of ctx.shrines) {
+                    const path = ctx.paths.get(t.id);
+                    if (!path || !path.length) continue;
+                    const first = path[0];
+                    if (Math.hypot(first.x - a.x, first.y - a.y) >= 5) continue; // step isn't on this path
+                    const remaining = path.reduce((c, p) => c + p.cost, 0);
+                    const v = shrineValue(snap, t.shrineType) / (1 + remaining);
+                    if (v > best) best = v;
+                }
+                // Exploration: landing on an unrevealed tile flips it (scroll draw!);
+                // otherwise reward closing distance to the nearest hidden tile.
+                let explore = 0;
+                if (ctx.hiddenTiles.length) {
+                    const onHidden = ctx.hiddenTiles.some(t => Math.hypot(t.x - a.x, t.y - a.y) < 70);
+                    if (onHidden) explore += WEIGHTS.moveExplore;
+                    else {
+                        const distFrom = p => Math.min(...ctx.hiddenTiles.map(t => Math.hypot(t.x - p.x, t.y - p.y)));
+                        explore += WEIGHTS.moveExploreGradient * (distFrom(self) - distFrom(a));
+                    }
+                }
+                return WEIGHTS.moveBase + WEIGHTS.moveShrineValue * best
+                     + WEIGHTS.moveApPenalty * a.cost + explore;
+            }
+
+            case 'endTurn': {
+                let s = WEIGHTS.endTurnBase;
+                if (ctx.onShrine) {
+                    s += WEIGHTS.endTurnOnShrine
+                       + shrineValue(snap, ctx.onShrine.shrineType);
+                }
+                if (snap.turn.ap <= 1) s += WEIGHTS.endTurnLowAp;
+                return s;
+            }
+
+            default: return -Infinity;
         }
-        return null;
+    }
+
+    // Rank all legal actions for the current position (debug + decision core)
+    function rankActions() {
+        const snap = window.BotState.snapshot();
+        const self = me(snap);
+        if (!self) return [];
+
+        const ctx = {
+            shrines: collectibleShrines(snap),
+            onShrine: shrineUnderfoot(snap),
+            hiddenTiles: snap.tiles.filter(t => !t.revealed && !t.isPlayerTile),
+            paths: new Map(),
+        };
+        for (const t of ctx.shrines) {
+            ctx.paths.set(t.id, window.BotState.findPath(self.x, self.y, t.x, t.y));
+        }
+
+        return window.BotState.legalActions()
+            .map(a => ({ action: a, score: scoreAction(a, snap, ctx) }))
+            .sort((x, y) => y.score - x.score);
     }
 
     // ----------------------------------------------------------------
-    // Check if the current stone layout satisfies ANY castable scroll
-    // that the bot has (hand or active area). Returns the scroll name
-    // or null.
-    // ----------------------------------------------------------------
-    function botFindCastableScroll() {
-        if (!window.spellSystem) return null;
-
-        const { hand, active } = window.spellSystem.getPlayerScrolls(false);
-        const candidates       = [...active, ...hand]; // prefer already-active scrolls
-
-        for (const name of candidates) {
-            if (window.spellSystem.checkPattern(name)) return name;
-        }
-        return null;
-    }
-
-    // ----------------------------------------------------------------
-    // Place one stone for the bot's target pattern.
-    // Deducts from playerPool + updates UI + syncs MP state.
-    // ----------------------------------------------------------------
-    function botPlaceStone(x, y, type) {
-        if ((playerPool[type] || 0) <= 0) {
-            log(`No ${type} stones in pool`);
-            return false;
-        }
-
-        log(`Placing ${type} stone at (${x.toFixed(1)}, ${y.toFixed(1)})`);
-        placeStone(x, y, type);
-
-        // Deduct from player pool (mirrors game-ui.js drag-drop logic)
-        playerPool[type]--;
-        if (typeof updateStoneCount === 'function') updateStoneCount(type);
-        if (typeof syncPlayerState  === 'function') syncPlayerState();
-
-        return true;
-    }
-
-    // ----------------------------------------------------------------
-    // Main bot action — called once per Shift+R press.
+    // One bot step: pick argmax, apply it. Returns the applied action or null.
     // ----------------------------------------------------------------
     function botAct() {
-        const pos = botPos();
-        if (!pos) {
-            log('Active player pawn not found on board');
-            return;
+        if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
+            typeof myPlayerIndex !== 'undefined' && activePlayerIndex !== myPlayerIndex) {
+            log('Not this client\'s turn — refusing to act (multiplayer guard)');
+            return null;
         }
 
-        const px = pos.x, py = pos.y;
-        log(`=== Bot step | pos=(${px.toFixed(1)},${py.toFixed(1)}) AP=${getTotalAP()} ===`);
+        const ranked = rankActions();
+        if (!ranked.length) { log('No legal actions found'); return null; }
 
-        // ── Priority 1: Cast if pattern is satisfied ─────────────────
-        const castable = botFindCastableScroll();
-        if (castable) {
-            // Ensure the scroll is in the active area before casting
-            const { hand } = window.spellSystem.getPlayerScrolls(false);
-            if (hand.has(castable)) {
-                window.spellSystem.moveToActive(castable);
-            }
-            log(`Casting ${castable}`);
-            window.spellSystem.castSpell();
-            return;
-        }
+        const { action, score } = ranked[0];
+        const label = action.type === 'cast'       ? `cast ${action.scroll}`
+                    : action.type === 'placeStone' ? `place ${action.stoneType} for ${action.scroll} (${Math.round((action.progress||0)*100)}%)`
+                    : action.type === 'move'       ? `move to (${action.x.toFixed(0)},${action.y.toFixed(0)}) cost ${action.cost}`
+                    : 'end turn';
+        log(`Best action [${score.toFixed(1)}]: ${label}  (of ${ranked.length} candidates)`);
 
-        // ── Priority 2: Place one stone toward a scroll pattern ───────
-        const scrollTarget = botPickScrollTarget();
-        if (scrollTarget) {
-            for (const sp of scrollTarget.stones) {
-                const alreadyThere = placedStones.some(
-                    s => s.type === sp.type && Math.hypot(s.x - sp.x, s.y - sp.y) < 5
-                );
-                if (!alreadyThere && (playerPool[sp.type] || 0) > 0) {
-                    botPlaceStone(sp.x, sp.y, sp.type);
-                    return;
-                }
-            }
-        }
-
-        // ── Priority 3: Collect — if on shrine centre, end turn ───────
-        const onShrine = placedTiles.find(t =>
-            !t.isPlayerTile &&
-            !t.flipped &&
-            ELEMENTAL_TYPES.includes(t.shrineType) &&
-            Math.hypot(t.x - px, t.y - py) < 5
-        );
-        if (onShrine) {
-            log(`On ${onShrine.shrineType} shrine centre — ending turn to collect`);
-            const btn = document.getElementById('end-turn');
-            if (btn && !btn.disabled) btn.click();
-            return;
-        }
-
-        // ── Priority 4: Move one step toward nearest shrine ───────────
-        if (getTotalAP() > 0) {
-            const shrine = botFindTargetShrine();
-            if (shrine) {
-                const path = botFindPath(px, py, shrine.x, shrine.y);
-                if (path && path.length > 0) {
-                    const step = path[0];
-                    if (getTotalAP() >= step.cost) {
-                        botMoveStep(step.x, step.y, step.cost);
-                        return;
-                    }
-                } else if (path && path.length === 0) {
-                    // Already at shrine (shouldn't reach here due to priority 3, but be safe)
-                    log('Already at shrine (path empty), ending turn');
-                    const btn = document.getElementById('end-turn');
-                    if (btn && !btn.disabled) btn.click();
-                    return;
-                } else {
-                    log(`No walkable path to ${shrine.shrineType} shrine`);
-                }
-            } else {
-                log('No collectible shrine found (all full or no revealed shrines)');
-            }
-        } else {
-            log('Out of AP — cannot move');
-        }
-
-        // ── Priority 5: Fallback — end turn ───────────────────────────
-        log('No better action available — ending turn');
-        const btn = document.getElementById('end-turn');
-        if (btn && !btn.disabled) {
-            btn.click();
-        } else {
-            log('End turn button not available (may already be disabled or not your turn)');
-        }
+        const res = window.BotState.applyAction(action);
+        if (!res.ok) { log(`Action failed: ${res.reason}`); return null; }
+        return action;
     }
 
     // ----------------------------------------------------------------
-    // Keyboard binding: Shift+R
-    // Same guards as game-ui.js to prevent firing in lobby / text inputs.
+    // Whole-turn autopilot: loop steps until the turn ends (or safety cap).
+    // Async with a small delay so reveals/casts/HUD settle between actions.
+    // ----------------------------------------------------------------
+    let _turnRunning = false;
+    async function botTurn() {
+        if (_turnRunning) { log('Turn already running'); return; }
+        _turnRunning = true;
+        const startingPlayer = activePlayerIndex;
+        try {
+            for (let i = 0; i < 30; i++) {                    // safety cap
+                if (activePlayerIndex !== startingPlayer) break; // turn passed
+                const applied = botAct();
+                if (!applied) break;
+                if (applied.type === 'endTurn') break;
+                await new Promise(r => setTimeout(r, 350));
+            }
+        } finally {
+            _turnRunning = false;
+        }
+        log('Turn autopilot finished');
+    }
+
+    // ----------------------------------------------------------------
+    // Keyboard: Shift+R = one step, Shift+B = whole turn.
+    // Same guards as game-ui.js (no lobby, no text inputs).
     // ----------------------------------------------------------------
     document.addEventListener('keydown', function (e) {
-        if (e.key !== 'R' || !e.shiftKey) return;
+        if (!e.shiftKey) return;
+        const key = e.key.toUpperCase();
+        if (key !== 'R' && key !== 'B') return;
 
-        // Don't fire while typing
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
-
-        // Don't fire unless the game is actually running
         if (!document.getElementById('game-layout')?.classList.contains('active')) return;
 
         e.preventDefault();
-        log('Shift+R pressed — executing one bot step');
-        botAct();
+        if (key === 'R') { log('Shift+R — one bot step'); botAct(); }
+        else             { log('Shift+B — bot plays out the turn'); botTurn(); }
     });
 
     // ----------------------------------------------------------------
-    // Public API (for browser-console debugging)
+    // Public API (console debugging + Stage 2/3 hooks)
     // ----------------------------------------------------------------
     window.BotSystem = {
-        /** Manually trigger one bot step */
-        step:        botAct,
-        /** Return the nearest collectible shrine tile */
-        findShrine:  botFindTargetShrine,
-        /** Return current bot (active player) position */
-        pos:         botPos,
-        /** Return the scroll the bot is currently building toward */
-        pickScroll:  botPickScrollTarget,
-        /** Check if any scroll is castable right now */
-        castable:    botFindCastableScroll,
+        step:  botAct,        // one action
+        turn:  botTurn,       // play out the whole turn
+        rank:  rankActions,   // scored candidate list (top = what step() would do)
+        score: scoreAction,   // (action, snapshot, ctx) → utility
+        WEIGHTS,              // live tuning surface (Stage 3a evolves this)
+        DEFAULT_WEIGHTS,
     };
 
-    log('Loaded — press Shift+R in-game to advance one bot step');
-
+    log('Loaded — Shift+R = one bot step, Shift+B = full bot turn');
 })();

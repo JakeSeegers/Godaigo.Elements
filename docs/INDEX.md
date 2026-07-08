@@ -9,6 +9,7 @@
 | File | Purpose |
 |------|---------|
 | `game-design-document.md` | Canonical game rules: tile mechanics, shrine system, scroll patterns, win conditions, stone abilities, elemental hierarchy, balance notes |
+| `bot-roadmap.md` | Bot improvement pathway (Stages 0–3, written for AI executors). Stage status, API contracts for `BotState`/`BotSystem`, gotchas (globals not on window, pool aliases), and step-by-step specs for the forward model, self-play arena, and learning stages |
 
 ---
 

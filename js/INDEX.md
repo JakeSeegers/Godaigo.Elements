@@ -23,6 +23,8 @@
 | `cosmetics-system.js` | ~300 | Name colour cosmetics (6 tiers), localStorage persistence, equip/purchase logic |
 | `crt-overlay.js` | ~400 | Canvas CRT effects: scanlines, vignette, grain, flicker. Per-user Supabase prefs. |
 | `sounds.js` | ~220 | `window.SoundSystem`: SFX playback, footsteps, login-screen music (muted-autoplay trick) |
+| `bot-state.js` | ~280 | `window.BotState`: bot observation/actuation layer — `snapshot()` (pure-JSON state, hidden info masked), `legalActions()`, `applyAction()`, Dijkstra `findPath()`. No strategy. Stage 0 of `docs/bot-roadmap.md` |
+| `bot.js` | ~280 | `window.BotSystem`: utility-scored bot. Scores every legal action via `WEIGHTS` table (win-condition aware: unactivated elements, empty-source-pool rule, exploration). Shift+R = one step, Shift+B = full turn. Stage 1 of `docs/bot-roadmap.md` |
 | `joytone-bridge.js` | ~200 | `window.JoytoneBridge`: adaptive in-game music. Hidden iframe of `joytone/index.html` (full Joytone DAW). Boots the Five-Elements theme on game start (Grow + Drummer ON); each tile reveal appends a seeded riff of that element (seed = `gameId:tileId` → identical sequence on every client, each variation added at most once). Shift+J+T toggles the sequencer popup. Per-player mute/volume in Settings (localStorage `godaigo_joytone_*`). Talks to `window.JoytoneAPI`, an adapter appended inside `joytone/index.html`. |
 
 ---
@@ -159,6 +161,8 @@ window.emojiSystem          // emoji reactions
 window.cosmeticsSystem      // name colour cosmetics
 window.SoundSystem          // SFX + login music
 window.JoytoneBridge        // adaptive music (onTileRevealed, setMuted, setVolume, togglePopup)
+window.BotState             // bot observation/actuation (snapshot, legalActions, applyAction)
+window.BotSystem            // bot strategy (step, turn, rank, WEIGHTS)
 
 // Debug
 window.dumpGameDebug()      // full state dump

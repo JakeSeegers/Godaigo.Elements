@@ -61,7 +61,9 @@ Order matters — later scripts depend on earlier ones.
 14. tutorial-mode.js       ← Interactive tutorial (depends on lobby.js + game-core.js)
 15. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 16. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
-17. bot.js                 ← Scripted test bot; Shift+R = one bot step (depends on game-core + lobby)
+17. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
+18. bot.js                 ← window.BotSystem — utility-scored bot; Shift+R = one step, Shift+B = full turn
+                             Roadmap for smarter stages: docs/bot-roadmap.md
 ```
 
 ---
