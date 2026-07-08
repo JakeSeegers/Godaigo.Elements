@@ -437,10 +437,19 @@ const RULER_H     = 24;   // px — time ruler height
 const ROW_H       = 14;   // px default row height (one semitone)
 const MIDI_MIN    = 21;   // A0
 const MIDI_MAX    = 108;  // C8
-const LOOKAHEAD   = 0.3;  // seconds scheduler looks ahead — wider buffer so a
+let LOOKAHEAD     = 0.3;  // seconds scheduler looks ahead — wider buffer so a
                          // brief main-thread stall (opening a panel) or focus
                          // change doesn't starve the scheduler into a dropout.
                          // Kept modest so live note triggering stays responsive.
+                         // Background tabs throttle setInterval to ≥1s, which
+                         // starves a 0.3s buffer every tick (heard as stutter /
+                         // crackle) — so the buffer widens while hidden and is
+                         // topped up immediately, then snaps back on return.
+const LOOKAHEAD_VISIBLE = 0.3, LOOKAHEAD_HIDDEN = 3.0;
+document.addEventListener('visibilitychange', () => {
+  LOOKAHEAD = document.hidden ? LOOKAHEAD_HIDDEN : LOOKAHEAD_VISIBLE;
+  if (isPlaying && audioCtx) scheduleAhead(); // refill before throttling bites
+});
 const SCHED_MS    = 25;   // scheduler interval ms (frequent ticks = fast recovery)
 const PPQ         = 480;  // pulses per quarter note
 
@@ -560,8 +569,25 @@ function buildBitCrushCurve(bits) {
   return curve;
 }
 
+// Final safety soft-clipper: the output "limiter" is a DynamicsCompressor whose
+// 1ms attack lets transient spikes overshoot 0dBFS; stacked notes at the same
+// frequencies then hard-clip at the destination (heard as crackle/clicks).
+// This curve is EXACTLY linear below ±0.8 (normal program level ~0.6 passes
+// untouched) and rounds anything above into a smooth knee that never exceeds ±1.
+function buildSoftClipCurve() {
+  const N = 32768, KNEE = 0.8;
+  const curve = new Float32Array(N + 1);
+  for (let i = 0; i <= N; i++) {
+    const x = (i * 2 / N) - 1;
+    const ax = Math.abs(x);
+    curve[i] = ax <= KNEE ? x : Math.sign(x) * (KNEE + (1 - KNEE) * Math.tanh((ax - KNEE) / (1 - KNEE)));
+  }
+  return curve;
+}
+
 let masterBus     = null;     // GainNode — unity sum into the dynamics chain
 let masterOut     = null;     // GainNode — VOL: final output trim AFTER comp/limiter/derez
+let softClip      = null;     // WaveShaper — transparent overshoot guard, last node before destination
 let sharedReverb  = null;     // ConvolverNode
 let sharedDelay   = null;     // DelayNode
 let reverbReturn  = null;     // GainNode
@@ -915,13 +941,19 @@ async function ensureAudio() {
     masterOut.gain.value = project.masterFx.masterVolume;
     derezDryGain.connect(masterOut);
     derezWetGain.connect(masterOut);
-    masterOut.connect(audioCtx.destination);
+    softClip = audioCtx.createWaveShaper();
+    softClip.curve = buildSoftClipCurve();
+    softClip.oversample = '2x';
+    masterOut.connect(softClip);
+    softClip.connect(audioCtx.destination);
   }
 
   // Tape hiss routes AFTER compressor so loud notes don't pump it
   startTapeHiss(audioCtx, outputLimiter);
-  // Procedural crackles go to the same post-comp point
-  startCrackleEngine(audioCtx, outputLimiter);
+  // Procedural crackles go to the same post-comp point.
+  // Skipped inside the Godaigo iframe: deliberate vinyl-dust pops read as a
+  // defect during a game (players already reported "crackling").
+  if (window.self === window.top) startCrackleEngine(audioCtx, outputLimiter);
 }
 
 // Procedural vinyl crackles — random micro-impulses, mid-focused bandpass
@@ -5433,13 +5465,16 @@ init();
 
   // Volume/mute live on a separate gain AFTER masterOut so the app's own
   // FX-state recalls (which rewrite masterOut.gain) can never undo them.
+  // Chain: masterOut → bridgeGain → softClip → destination (the soft-clipper
+  // must stay last so parent volume can't push overshoots past it).
   function installBridgeGain() {
     if (!audioCtx || !masterOut || bridgeGain) return;
     bridgeGain = audioCtx.createGain();
     bridgeGain.gain.value = _muted ? 0 : _volume;
     masterOut.disconnect();
     masterOut.connect(bridgeGain);
-    bridgeGain.connect(audioCtx.destination);
+    if (softClip) bridgeGain.connect(softClip);
+    else bridgeGain.connect(audioCtx.destination);
   }
   function applyBridgeGain() {
     if (bridgeGain && audioCtx) bridgeGain.gain.setTargetAtTime(_muted ? 0 : _volume, audioCtx.currentTime, 0.03);
@@ -5547,6 +5582,7 @@ init();
 
   function getState() {
     return { booted, playing: isPlaying, powered: powerOn, muted: _muted, volume: _volume,
+             lookahead: LOOKAHEAD, softClip: !!softClip,
              used: [...usedGenerations], sections: project?.sectionOrder?.length || 0 };
   }
 
