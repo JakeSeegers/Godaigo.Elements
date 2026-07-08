@@ -1128,7 +1128,9 @@ class TrackEngine {
     this.rrSend    = ctx.createGain(); this.rrSend.gain.value = track.effects.revrevSend || 0;
     // Pre-roll ghost input: seeds played here reach ONLY the reverse convolver
     // (no dry path), so the lead-in swell is heard without an early dry note.
-    this.rrGhostIn = ctx.createGain(); this.rrGhostIn.gain.value = track.effects.revrevSend || 0;
+    // Runs hotter than the tail-bloom send — dark/quiet voices (the lowpassed
+    // bass drone) need the boost for their creep-in to read over the mix.
+    this.rrGhostIn = ctx.createGain(); this.rrGhostIn.gain.value = (track.effects.revrevSend || 0) * 1.6;
     this.rrGhostIn.connect(sharedRevRev);
     this.dlySend   = ctx.createGain(); this.dlySend.gain.value = track.effects.delayMix;
 
@@ -1202,7 +1204,7 @@ class TrackEngine {
     );
     this.rvSend.gain.setTargetAtTime(track.reverbSend * track.effects.reverbMix, audioCtx.currentTime, 0.02);
     this.rrSend.gain.setTargetAtTime(track.effects.revrevSend || 0, audioCtx.currentTime, 0.02);
-    this.rrGhostIn.gain.setTargetAtTime(track.effects.revrevSend || 0, audioCtx.currentTime, 0.02);
+    this.rrGhostIn.gain.setTargetAtTime((track.effects.revrevSend || 0) * 1.6, audioCtx.currentTime, 0.02);
     this.dlySend.gain.setTargetAtTime(track.effects.delayMix, audioCtx.currentTime, 0.02);
     this.delay.delayTime.setTargetAtTime(
       trackDelayTime(track),
@@ -1850,11 +1852,14 @@ function isRevRevPhraseLeader(track, note) {
 
 // Feed one silent seed of the note into the reverse convolver REVREV_PREROLL
 // early; the flipped IR turns it into a crescendo that peaks at the real onset.
+// The seed plays an OCTAVE UP: the pre-verb only gestures at the note, and an
+// octave-up wash cuts through where a dark bass drone's own register would be
+// buried (it stays harmonically the same note).
 function scheduleRevRevGhost(track, note, noteTime, now, engine) {
   const seedTime = noteTime - REVREV_PREROLL;
   if (seedTime < now + 0.02) return; // not enough runway (e.g. right after Play)
   const seedDur = Math.min(beatToSec(note.duration), 1.2);
-  playTrackMidiNote(track, note.midiNote, seedDur, seedTime, engine.ghostDest(), note.velocity);
+  playTrackMidiNote(track, Math.min(note.midiNote + 12, 108), seedDur, seedTime, engine.ghostDest(), note.velocity);
 }
 
 // Pre-roll pass: identical section walk to scheduleAhead's main loop, but
@@ -4771,7 +4776,7 @@ async function bounceWav() {
         playTrackMidiNote(track, note.midiNote, note.duration*60/bpm, t, engine.dest(), note.velocity);
         // Reverse-reverb pre-roll seed (matches the live scheduler's ghosts)
         if (hasRevRev && t - REVREV_PREROLL >= 0 && isRevRevPhraseLeader(track, note)) {
-          playTrackMidiNote(track, note.midiNote, Math.min(note.duration*60/bpm, 1.2),
+          playTrackMidiNote(track, Math.min(note.midiNote + 12, 108), Math.min(note.duration*60/bpm, 1.2),
                             t - REVREV_PREROLL, engine.ghostDest(), note.velocity);
         }
       }
