@@ -521,7 +521,16 @@ const DEFAULT_FX = () => ({
   lfoDepth:0.0,  lfoRate:1.0,
   wowDepth:0.003,                     // wow/flutter: ~0.3% pitch deviation
   distDrive:0.08, distMix:0.07,       // subtle always-on tape saturation
+  revrevSend:0.0,                     // reverse-reverb send (drones default this on)
 });
+
+// Drone voices get the reverse reverb by default — their long held notes are
+// exactly where the creeping swell shines. Applied wherever tracks are built
+// or loaded, keyed off the label so renamed/custom tracks opt in the same way.
+const DRONE_REVREV_DEFAULT = 0.45;
+function droneRevRevDefault(label) {
+  return /drone/i.test(label || '') ? DRONE_REVREV_DEFAULT : 0;
+}
 
 // Per-instrument filter profile overrides (lo-fi character)
 const INST_FILTER = {
@@ -589,8 +598,10 @@ let masterBus     = null;     // GainNode — unity sum into the dynamics chain
 let masterOut     = null;     // GainNode — VOL: final output trim AFTER comp/limiter/derez
 let softClip      = null;     // WaveShaper — transparent overshoot guard, last node before destination
 let sharedReverb  = null;     // ConvolverNode
+let sharedRevRev  = null;     // ConvolverNode — time-flipped IR: reverb swells INTO the note
 let sharedDelay   = null;     // DelayNode
 let reverbReturn  = null;     // GainNode
+let revRevReturn  = null;     // GainNode — reverse-reverb return level
 let delayReturn   = null;     // GainNode
 let compressor    = null;
 let outputLimiter = null;
@@ -821,6 +832,11 @@ function normalizeProjectData() {
       // Retired MP3 sample voices in old saves → closest synthesized voice.
       track.instrument = normalizeInstrument(track.instrument);
       delete track.sample;
+      // Old saves predate revrevSend — give drone tracks their default before
+      // the DEFAULT_FX merge would pin them to 0.
+      if ((track.effects || {}).revrevSend == null) {
+        (track.effects = track.effects || {}).revrevSend = droneRevRevDefault(track.label);
+      }
       track.effects = {
         ...DEFAULT_FX(),
         ...(INST_FILTER[track.instrument] || {}),
@@ -865,22 +881,30 @@ async function ensureAudio() {
   sharedReverb = audioCtx.createConvolver();
   sharedReverb.buffer = buildReverbIR(audioCtx, 2.0);
 
+  // Reverse-reverb bus: parallel to the normal verb, fed per-track by rrSend
+  sharedRevRev = audioCtx.createConvolver();
+  sharedRevRev.buffer = buildReverseReverbIR(audioCtx, 2.6);
+
   sharedDelay = audioCtx.createDelay(2.0);
   sharedDelay.delayTime.value = 0.375;
   const delayFB = audioCtx.createGain(); delayFB.gain.value = 0.35;
   sharedDelay.connect(delayFB); delayFB.connect(sharedDelay);
 
   reverbReturn = audioCtx.createGain(); reverbReturn.gain.value = 0.5;
+  revRevReturn = audioCtx.createGain(); revRevReturn.gain.value = 0.6;
   delayReturn  = audioCtx.createGain(); delayReturn.gain.value  = 0.4;
   sharedReverb.connect(reverbReturn);
+  sharedRevRev.connect(revRevReturn);
   sharedDelay.connect(delayReturn);
 
-  // Reverb HP filter (prevents mud) + LP (keeps the tail dark, not ringy)
+  // Reverb HP filter (prevents mud) + LP (keeps the tail dark, not ringy).
+  // The reverse-reverb return shares the same filtering so its swell sits in
+  // the same sonic space as the forward tail.
   const rvHp = audioCtx.createBiquadFilter();
   rvHp.type = 'highpass'; rvHp.frequency.value = 180;
   const rvLp = audioCtx.createBiquadFilter();
   rvLp.type = 'lowpass'; rvLp.frequency.value = 4500; rvLp.Q.value = 0.4;
-  reverbReturn.connect(rvHp); rvHp.connect(rvLp);
+  reverbReturn.connect(rvHp); revRevReturn.connect(rvHp); rvHp.connect(rvLp);
 
   compressor = audioCtx.createDynamicsCompressor();
   compressor.threshold.value = -18; compressor.ratio.value = 6;
@@ -1090,6 +1114,7 @@ class TrackEngine {
 
     this.dryGain   = ctx.createGain(); this.dryGain.gain.value = 1;
     this.rvSend    = ctx.createGain(); this.rvSend.gain.value = track.reverbSend * track.effects.reverbMix;
+    this.rrSend    = ctx.createGain(); this.rrSend.gain.value = track.effects.revrevSend || 0;
     this.dlySend   = ctx.createGain(); this.dlySend.gain.value = track.effects.delayMix;
 
     // Per-track delay line. The old shared delay made one track's delay-time/feedback
@@ -1127,9 +1152,11 @@ class TrackEngine {
     this.saturatorWet.connect(this.satBus);
     this.satBus.connect(this.dryGain);
     this.satBus.connect(this.rvSend);
+    this.satBus.connect(this.rrSend);
     this.satBus.connect(this.dlySend);
     this.dryGain.connect(masterBus);
     this.rvSend.connect(sharedReverb);
+    this.rrSend.connect(sharedRevRev);
     this.dlySend.connect(this.delay);
     this.delay.connect(this.delayFeedback);
     this.delayFeedback.connect(this.delay);
@@ -1158,6 +1185,7 @@ class TrackEngine {
       audioCtx.currentTime, 0.02
     );
     this.rvSend.gain.setTargetAtTime(track.reverbSend * track.effects.reverbMix, audioCtx.currentTime, 0.02);
+    this.rrSend.gain.setTargetAtTime(track.effects.revrevSend || 0, audioCtx.currentTime, 0.02);
     this.dlySend.gain.setTargetAtTime(track.effects.delayMix, audioCtx.currentTime, 0.02);
     this.delay.delayTime.setTargetAtTime(
       trackDelayTime(track),
@@ -1186,7 +1214,7 @@ class TrackEngine {
       this.trackGain, this.panner, this.eqHPF, this.eqLow, this.eqMid, this.eqHigh,
       this.derezCrusher, this.filter,
       this.saturator, this.saturatorDry, this.saturatorWet, this.satBus,
-      this.dryGain, this.rvSend, this.dlySend, this.delay,
+      this.dryGain, this.rvSend, this.rrSend, this.dlySend, this.delay,
       this.delayFeedback, this.lfoGain
     ]) { try { node.disconnect(); } catch(e) {} }
   }
@@ -1234,6 +1262,15 @@ function buildReverbIR(ctx, decay) {
       d[i] = lp * Math.pow(1-i/len, decay*1.2) * 2.2;
     }
   }
+  return buf;
+}
+
+// Reverse-reverb IR: the same room, time-flipped. Convolving with it makes
+// each note's reverb CRESCENDO into the sound instead of trailing off — the
+// live equivalent of the studio bounce → reverse → reverb → reverse trick.
+function buildReverseReverbIR(ctx, decay) {
+  const buf = buildReverbIR(ctx, decay);
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) buf.getChannelData(ch).reverse();
   return buf;
 }
 
@@ -2259,7 +2296,8 @@ function renderTrackHeaders() {
       <div class="fx-row"><label title="Saturation drive: pushes the signal into soft distortion/tape warmth.">Sat drive</label><input type="range" class="fx-slider" data-fx="distDrive" min="0" max="1" step="0.01" value="${fx.distDrive}" title="Saturation drive: higher values add more grit, warmth, and harmonic distortion."></div>
       <div class="fx-row"><label title="Saturation mix: blends the saturated signal with the clean signal.">Sat mix</label><input type="range" class="fx-slider" data-fx="distMix" min="0" max="1" step="0.01" value="${fx.distMix}" title="Saturation mix: 0 is clean, 1 is fully saturated."></div>
       <div class="fx-row"><label title="LFO depth: how strongly the low-frequency oscillator moves the filter cutoff.">LFO depth</label><input type="range" class="fx-slider" data-fx="lfoDepth" min="0" max="1" step="0.01" value="${fx.lfoDepth}" title="LFO depth: higher values create more filter movement/wobble."></div>
-      <div class="fx-row"><label title="LFO rate: how fast the low-frequency oscillator moves.">LFO rate</label><input type="range" class="fx-slider" data-fx="lfoRate" min="0.1" max="20" step="0.1" value="${fx.lfoRate}" title="LFO rate: lower is slow movement, higher is faster wobble/tremble."></div>`;
+      <div class="fx-row"><label title="LFO rate: how fast the low-frequency oscillator moves.">LFO rate</label><input type="range" class="fx-slider" data-fx="lfoRate" min="0.1" max="20" step="0.1" value="${fx.lfoRate}" title="LFO rate: lower is slow movement, higher is faster wobble/tremble."></div>
+      <div class="fx-row"><label title="Reverse reverb: convolves the track with a time-flipped room impulse, so the reverb swells INTO each note instead of trailing off — the classic bounce → reverse → reverb → reverse studio trick, live. Drone tracks default this on.">Rev-verse</label><input type="range" class="fx-slider" data-fx="revrevSend" min="0" max="1" step="0.01" value="${fx.revrevSend ?? 0}" title="Reverse reverb send: 0 is off; higher values make the creeping pre-swell more prominent."></div>`;
 
     const eqPanel = document.createElement('div');
     eqPanel.className = 'track-fx track-eq';
@@ -3740,10 +3778,13 @@ function makeThemeProject({ transpose=0, transpose2=null, splitIndex=3, tempo=TH
         notes   = buildDronePattern(inSec, lo, tr,
                     (orch && THEME_COMP[orch]?.drone) || 'classic');
         effects = { ...DEFAULT_FX(), filterType:'lowpass', filterCutoff:700, filterRes:0.9,
-                    reverbMix:0.25, reverbDecay:2.4 };
+                    reverbMix:0.25, reverbDecay:2.4,
+                    revrevSend: DRONE_REVREV_DEFAULT };
         volume  = 0.5;
         reverbSend = 0.18;
       }
+      // Any other drone voice picks up the reverse-reverb default by label
+      if (!effects.revrevSend) effects.revrevSend = droneRevRevDefault(td.name);
 
       const tid = uid();
       secObj.tracks[tid] = {
@@ -4588,10 +4629,12 @@ async function bounceWav() {
   // Recreate master chain in offline context
   const oNoise = createNoiseBuffer(oCtx);
   const oReverb = oCtx.createConvolver(); oReverb.buffer = buildReverbIR(oCtx, 2);
+  const oRevRev = oCtx.createConvolver(); oRevRev.buffer = buildReverseReverbIR(oCtx, 2.6);
   const oDelay  = oCtx.createDelay(2); oDelay.delayTime.value = 0.375;
   const oDlyFB  = oCtx.createGain(); oDlyFB.gain.value = 0.35;
   oDelay.connect(oDlyFB); oDlyFB.connect(oDelay);
   const oRvRet  = oCtx.createGain(); oRvRet.gain.value = 0.5; oReverb.connect(oRvRet);
+  const oRrRet  = oCtx.createGain(); oRrRet.gain.value = 0.6; oRevRev.connect(oRrRet);
   const oDlRet  = oCtx.createGain(); oDlRet.gain.value = 0.4; oDelay.connect(oDlRet);
   const oComp   = oCtx.createDynamicsCompressor();
   oComp.threshold.value=project.masterFx.compThreshold ?? -18; oComp.ratio.value=project.masterFx.compRatio ?? 6; oComp.knee.value=8;
@@ -4599,15 +4642,16 @@ async function bounceWav() {
   oLim.threshold.value=project.masterFx.limiterCeiling ?? -1; oLim.ratio.value=20; oLim.knee.value=0; oLim.attack.value=0.001; oLim.release.value=0.05;
   const oBus    = oCtx.createGain(); oBus.gain.value = 1.0;                              // unity into the dynamics
   const oOut    = oCtx.createGain(); oOut.gain.value = project.masterFx.masterVolume;    // VOL: post-dynamics output trim
-  oRvRet.connect(oComp); oDlRet.connect(oComp); oBus.connect(oComp);
+  oRvRet.connect(oComp); oRrRet.connect(oComp); oDlRet.connect(oComp); oBus.connect(oComp);
   oComp.connect(oLim); oLim.connect(oOut); oOut.connect(oCtx.destination);
 
   // Schedule all sections
   let tOffset = 0;
   const savedCtx = audioCtx, savedNoise = noiseBuffer, savedBus = masterBus,
-        savedRev = sharedReverb, savedDly = sharedDelay, savedDelayReturn = delayReturn;
+        savedRev = sharedReverb, savedRevRev = sharedRevRev, savedDly = sharedDelay,
+        savedDelayReturn = delayReturn;
   audioCtx = oCtx; noiseBuffer = oNoise; masterBus = oBus;
-  sharedReverb = oReverb; sharedDelay = oDelay; delayReturn = oDlRet;
+  sharedReverb = oReverb; sharedRevRev = oRevRev; sharedDelay = oDelay; delayReturn = oDlRet;
 
   for (const secId of project.sectionOrder) {
     const sec = project.sections[secId];
@@ -4627,7 +4671,8 @@ async function bounceWav() {
   }
 
   audioCtx = savedCtx; noiseBuffer = savedNoise; masterBus = savedBus;
-  sharedReverb = savedRev; sharedDelay = savedDly; delayReturn = savedDelayReturn;
+  sharedReverb = savedRev; sharedRevRev = savedRevRev; sharedDelay = savedDly;
+  delayReturn = savedDelayReturn;
 
   const rendered = await oCtx.startRendering();
   const blob = audioBufferToWav(rendered);
