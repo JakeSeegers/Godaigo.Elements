@@ -24,7 +24,12 @@
       "Bash(findstr /n /i \"stone-break\\\\|breakstone\\\\|breakCost\\\\|break stone\\\\|spendAP.*break\\\\|stone.*remove\\\\|removeStone\" js\\\\game-core.js)",
       "Bash(findstr /n /i \"applyScroll\\\\|castSpell\\\\|execute.*scroll\\\\|scroll.*execute\\\\|onScrollCast\" js\\\\game-core.js)",
       "Bash(powershell -Command \"Select-String -Path 'js\\\\game-core.js' -Pattern 'drawStonesToPool|giveStones|awardStones|playerPools\\\\[.*\\\\]\\\\s*=\\\\s*Math|Math.min.*playerPool|Shrine replenishment|shrine replenishment|replenishment' | Select-Object -First 20\")",
-      "Bash(powershell -Command \"Select-String -Path 'js\\\\game-core.js' -Pattern 'stones\\\\.' | Select-Object -First 20\")"
+      "Bash(powershell -Command \"Select-String -Path 'js\\\\game-core.js' -Pattern 'stones\\\\.' | Select-Object -First 20\")",
+      "WebSearch",
+      "Bash(grep -nE \"^\\\\s*\\\\\\(function|^\\\\s*\\\\}\\\\\\)\\\\\\(\\\\\\)|window\\\\.spendAP|window\\\\.currentAP|^let |^var |^\\\\s{0,4}function spendAP\" js/game-core.js)",
+      "Bash(node --check js/scrolls/response-window.js)",
+      "Bash(node --check js/bot-driver.js)",
+      "Bash(node --check js/multiplayer-state.js)"
     ]
   },
   "hooks": {

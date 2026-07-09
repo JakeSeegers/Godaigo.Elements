@@ -58,9 +58,23 @@
     // Impersonation: temporarily become the bot so every existing
     // myPlayerIndex-based gate and broadcast identifies as the bot.
     // ----------------------------------------------------------------
+    // While impersonating a bot, the host's own player index + response AP are
+    // preserved here so the response window can still let the host react to the
+    // bot's spells AS THEMSELVES (see response-window.js localResponderIndex /
+    // getPlayerAP). Null whenever no bot is being driven.
+    let driverRealIndex = null;
+    let driverAP = null; // { currentAP, voidAP } — the host's spendable response AP
+
     async function asBot(botIndex, fn) {
         const realIndex = myPlayerIndex;
         const realColor = playerColor;
+        // Snapshot the host's identity + leftover AP BEFORE driveBotTurn clobbers
+        // currentAP with the bot's fresh 5 AP.
+        driverRealIndex = realIndex;
+        driverAP = {
+            currentAP: (typeof currentAP === 'number') ? currentAP : 0,
+            voidAP:    (typeof voidAP === 'number') ? voidAP : 0,
+        };
         myPlayerIndex = botIndex;
         const row = (typeof allPlayersData !== 'undefined')
             ? allPlayersData.find(p => p.player_index === botIndex) : null;
@@ -71,8 +85,23 @@
         } finally {
             myPlayerIndex = realIndex;
             playerColor = realColor;
+            driverRealIndex = null;
+            driverAP = null;
             if (typeof updateEndTurnButtonVisibility === 'function') updateEndTurnButtonVisibility();
             if (typeof updateTurnDisplay === 'function') updateTurnDisplay();
+        }
+    }
+
+    // Spend from the host's preserved response AP (void first, mirroring spendAP).
+    function spendDriverAP(cost) {
+        if (!driverAP) return;
+        let remaining = cost;
+        if (driverAP.voidAP >= remaining) {
+            driverAP.voidAP -= remaining;
+        } else {
+            remaining -= driverAP.voidAP;
+            driverAP.voidAP = 0;
+            driverAP.currentAP = Math.max(0, driverAP.currentAP - remaining);
         }
     }
 
@@ -221,6 +250,10 @@
         isBot: (i) => botIndexSet().has(i),
         botIndices: botIndexSet,
         controlsActivePlayer: () => iAmDriver() && botIndexSet().has(activePlayerIndex),
+        // Response-window integration: identity + AP of the host behind a bot.
+        driverRealIndex: () => driverRealIndex,
+        getDriverAP: () => driverAP ? (driverAP.currentAP + driverAP.voidAP) : 0,
+        spendDriverAP,
         _placeBotTile: placeBotTile,
         _driveBotTurn: driveBotTurn,
     };

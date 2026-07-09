@@ -2664,9 +2664,8 @@
                     for (const result of payload.results) {
                         if (result.result === 'response-resolved' && result.isResponse) {
                             console.log(`ℹ️ Processing remote response scroll: ${result.scrollName}`);
-                            // Only execute the response scroll effect on the RESPONDER's client.
-                            // The responder's client owns the pools/decks that need modifying.
-                            if (spellSystem.scrollEffects && result.casterIndex === myPlayerIndex) {
+
+                            if (spellSystem.scrollEffects) {
                                 const scrollDef = spellSystem.patterns?.[result.scrollName];
                                 // Ensure triggeringScroll has its definition (resolve from
                                 // broadcast payload or local patterns)
@@ -2674,36 +2673,41 @@
                                 if (!trigScroll.definition && trigScroll.name) {
                                     trigScroll.definition = spellSystem.patterns?.[trigScroll.name];
                                 }
+
+                                // Execute on ALL clients receiving this broadcast — response effects
+                                // like Lamplight set pendingHandRedirect which must be set before we
+                                // call handleScrollDisposition for the triggering scroll below.
                                 spellSystem.scrollEffects.execute(result.scrollName, result.casterIndex, {
                                     spell: scrollDef,
                                     triggeringScroll: trigScroll
                                 });
 
-                                // Track activated element for win condition (response scrolls count too!)
-                                spellSystem.ensurePlayerScrollsStructure(result.casterIndex);
-                                const activatedEls = (scrollDef?.element === 'catacomb' && scrollDef?.patterns?.[0])
-                                    ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
-                                    : scrollDef?.element ? [scrollDef.element] : [];
-                                activatedEls.forEach(el => {
-                                    spellSystem.playerScrolls[result.casterIndex].activated.add(el);
-                                });
-                                if (typeof updatePlayerElementSymbols === 'function') {
-                                    updatePlayerElementSymbols(result.casterIndex);
-                                }
-
-                                // Broadcast activation so the caster's client (and any others)
-                                // updates this player's shrine win-condition symbols
-                                if (activatedEls.length > 0 && typeof broadcastGameAction === 'function') {
-                                    broadcastGameAction('scroll-effect', {
-                                        playerIndex: result.casterIndex,
-                                        scrollName: result.scrollName,
-                                        effectName: scrollDef?.name || result.scrollName,
-                                        element: scrollDef?.element,
-                                        activatedElements: activatedEls
+                                // Element tracking + broadcast only on the responder's own client
+                                if (result.casterIndex === myPlayerIndex) {
+                                    // Track activated element for win condition (response scrolls count too!)
+                                    spellSystem.ensurePlayerScrollsStructure(result.casterIndex);
+                                    const activatedEls = (scrollDef?.element === 'catacomb' && scrollDef?.patterns?.[0])
+                                        ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
+                                        : scrollDef?.element ? [scrollDef.element] : [];
+                                    activatedEls.forEach(el => {
+                                        spellSystem.playerScrolls[result.casterIndex].activated.add(el);
                                     });
+                                    if (typeof updatePlayerElementSymbols === 'function') {
+                                        updatePlayerElementSymbols(result.casterIndex);
+                                    }
+
+                                    // Broadcast activation so the caster's client (and any others)
+                                    // updates this player's shrine win-condition symbols
+                                    if (activatedEls.length > 0 && typeof broadcastGameAction === 'function') {
+                                        broadcastGameAction('scroll-effect', {
+                                            playerIndex: result.casterIndex,
+                                            scrollName: result.scrollName,
+                                            effectName: scrollDef?.name || result.scrollName,
+                                            element: scrollDef?.element,
+                                            activatedElements: activatedEls
+                                        });
+                                    }
                                 }
-                            } else {
-                                console.log(`ℹ️ Skipping response effect for ${result.scrollName} (responder is player ${result.casterIndex}, I am ${myPlayerIndex})`);
                             }
                         } else if (result.result === 'countered-original') {
                             // Counter scroll (like Psychic or Iron Stance) resolved on the non-caster client.
@@ -2733,6 +2737,19 @@
                                 spellSystem.updateScrollCount();
                             }
                         }
+                    }
+
+                    // Consume any pending hand redirect (e.g. set by Unbidden Lamplight above).
+                    // On non-caster clients, the original scroll's handleScrollDisposition never
+                    // fires via the CustomEvent chain, so we call it explicitly here to redirect
+                    // the triggering scroll to the Lamplight caster's hand.
+                    const rd = spellSystem.scrollEffects?.pendingHandRedirect;
+                    if (rd && payload.triggeringScroll?.name && rd.scrollName === payload.triggeringScroll.name) {
+                        console.log(`🔀 Consuming pendingHandRedirect: ${rd.scrollName} → player ${rd.redirectToPlayerIndex}'s hand`);
+                        spellSystem.handleScrollDisposition(
+                            payload.triggeringScroll.name,
+                            payload.triggeringScroll.fromCommonArea ?? false
+                        );
                     }
                 }
             });

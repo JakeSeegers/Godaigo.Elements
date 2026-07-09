@@ -161,45 +161,71 @@ document.addEventListener('DOMContentLoaded', () => {
                     // In multiplayer, only execute the response effect on the responder's own client.
                     // The caster's client resolves the stack but shouldn't modify another player's pools.
                     // Non-caster/non-responder clients receive the effect via the 'response-resolved' broadcast.
-                    const isLocalPlayer = !isMultiplayer || (typeof myPlayerIndex !== 'undefined' && myPlayerIndex === entry.casterIndex);
+                    // When the host is driving a bot it impersonates the bot's myPlayerIndex; if the HOST
+                    // itself responded (as the driver), match on the driver's real index so its own
+                    // response scroll is still tracked locally.
+                    const _localIdx = (typeof window !== 'undefined' && window.BotDriver
+                        && typeof window.BotDriver.driverRealIndex === 'function'
+                        && window.BotDriver.driverRealIndex() != null)
+                        ? window.BotDriver.driverRealIndex()
+                        : (typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : undefined);
+                    const isLocalPlayer = !isMultiplayer || (typeof _localIdx !== 'undefined' && _localIdx === entry.casterIndex);
 
-                    if (isLocalPlayer && spellSystem.scrollEffects) {
+                    if (spellSystem.scrollEffects) {
                         const effect = spellSystem.scrollEffects.getEffect(scrollName);
                         if (effect) {
+                            // Execute on ALL clients — response effects like Lamplight set global state
+                            // (pendingHandRedirect) that must exist on the caster's client before the
+                            // original scroll's handleScrollDisposition runs.
                             spellSystem.scrollEffects.execute(scrollName, entry.casterIndex, {
                                 spell: scrollDef,
                                 triggeringScroll: entry.triggeringScroll
                             });
 
-                            // Track activated element(s) for win condition (response scrolls count too!)
-                            spellSystem.ensurePlayerScrollsStructure(entry.casterIndex);
-                            if (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0]) {
-                                // Catacomb scrolls activate each component element
-                                const elements = new Set(scrollDef.patterns[0].map(pos => pos.type));
-                                elements.forEach(el => spellSystem.playerScrolls[entry.casterIndex].activated.add(el));
-                            } else {
-                                spellSystem.playerScrolls[entry.casterIndex].activated.add(scrollDef.element);
-                            }
-                            if (typeof updatePlayerElementSymbols === 'function') {
-                                updatePlayerElementSymbols(entry.casterIndex);
-                            }
+                            if (isLocalPlayer) {
+                                // Track activated element(s) for win condition (response scrolls count too!)
+                                spellSystem.ensurePlayerScrollsStructure(entry.casterIndex);
+                                if (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0]) {
+                                    // Catacomb scrolls activate each component element
+                                    const elements = new Set(scrollDef.patterns[0].map(pos => pos.type));
+                                    elements.forEach(el => spellSystem.playerScrolls[entry.casterIndex].activated.add(el));
+                                } else {
+                                    spellSystem.playerScrolls[entry.casterIndex].activated.add(scrollDef.element);
+                                }
+                                if (typeof updatePlayerElementSymbols === 'function') {
+                                    updatePlayerElementSymbols(entry.casterIndex);
+                                }
 
-                            // Broadcast the activation in multiplayer
-                            if (isMultiplayer && typeof broadcastGameAction === 'function') {
-                                const activatedElements = (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0])
-                                    ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
-                                    : [scrollDef.element];
-                                broadcastGameAction('scroll-effect', {
-                                    playerIndex: entry.casterIndex,
-                                    scrollName: scrollName,
-                                    effectName: effect.name,
-                                    element: scrollDef.element,
-                                    activatedElements: activatedElements
-                                });
+                                // Broadcast the activation in multiplayer
+                                if (isMultiplayer && typeof broadcastGameAction === 'function') {
+                                    const activatedElements = (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0])
+                                        ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
+                                        : [scrollDef.element];
+                                    broadcastGameAction('scroll-effect', {
+                                        playerIndex: entry.casterIndex,
+                                        scrollName: scrollName,
+                                        effectName: effect.name,
+                                        element: scrollDef.element,
+                                        activatedElements: activatedElements
+                                    });
+                                }
+
+                                // Win-condition check for the responder (a non-counter response
+                                // scroll like Lamplight/Reflect can be a player's 5th element).
+                                // The responder's own client added to `activated` above but does
+                                // not receive its own scroll-effect broadcast (self: false), so
+                                // check here — mirroring the counter-scroll branch below.
+                                if (spellSystem.playerScrolls[entry.casterIndex].activated.size === 5) {
+                                    console.log(`🏆 Win condition met for responder player ${entry.casterIndex} (response scroll)`);
+                                    if (typeof spellSystem.showLevelComplete === 'function') {
+                                        spellSystem.showLevelComplete(entry.casterIndex);
+                                    }
+                                    if (typeof handleGameOver === 'function') {
+                                        handleGameOver(entry.casterIndex);
+                                    }
+                                }
                             }
                         }
-                    } else {
-                        console.log(`Skipping response effect execution for ${scrollName} (responder is player ${entry.casterIndex}, I am ${myPlayerIndex})`);
                     }
 
                     // Handle scroll disposition for the response scroll

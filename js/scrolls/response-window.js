@@ -44,6 +44,60 @@ class ResponseWindowSystem {
         this.responseModalElement = null;
     }
 
+    // ── Bot-aware identity helpers ─────────────────────────────────────────
+    // When the HOST is driving a bot player, BotDriver temporarily swaps the
+    // shared `myPlayerIndex` to the bot's index for the whole bot turn. For the
+    // response window that produces two distinct roles on ONE client:
+    //   • the *responder* is the human sitting at this screen (the driver), who
+    //     must still be able to react to the bot's spell, and
+    //   • the *arbitrator* (caster client) is still this client, because it runs
+    //     the bot that cast the scroll and no one else can resolve the stack.
+    // For every non-bot client both helpers fall back to plain `myPlayerIndex`,
+    // so human-vs-human play is unchanged.
+
+    /** The human player acting at this screen (the driver when impersonating a bot). */
+    localResponderIndex() {
+        const driverIdx = (typeof window !== 'undefined' && window.BotDriver
+            && typeof window.BotDriver.driverRealIndex === 'function')
+            ? window.BotDriver.driverRealIndex() : null;
+        if (driverIdx != null) return driverIdx;
+        return (typeof myPlayerIndex !== 'undefined' && myPlayerIndex != null)
+            ? myPlayerIndex : activePlayerIndex;
+    }
+
+    /** Whether this client is responsible for arbitrating/resolving the stack. */
+    isArbitratorClient() {
+        if (!(typeof isMultiplayer !== 'undefined' && isMultiplayer)) return true;
+        const mine = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex != null)
+            ? myPlayerIndex : activePlayerIndex;
+        return mine === this.currentCaster;
+    }
+
+    /**
+     * Present the response opportunity to the local human responder.
+     * Shows the response modal (or bluff window) if they have something to play,
+     * otherwise submits a pass immediately so the stack resolves without forcing
+     * everyone to sit through the full countdown.
+     */
+    presentResponderView(scrollData, casterIndex) {
+        const myIndex = this.localResponderIndex();
+        const responseCheck = this.canPlayerRespond(myIndex);
+        if (responseCheck.canRespond) {
+            this.showResponseModal();
+            this.startResponseTimeout();
+        } else if (this.canPlayerBluff(myIndex)) {
+            this.showBluffModal();
+            this.startResponseTimeout();
+        } else {
+            // Nothing playable — auto-pass so we don't block on the timer.
+            this.respondingPlayers.add(myIndex);
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
+                this.broadcastPass(myIndex);
+            }
+            this.checkAllPlayersResponded();
+        }
+    }
+
     /**
      * Check if a player can respond to a scroll
      * @param {number} playerIndex - The player to check
@@ -143,6 +197,63 @@ class ResponseWindowSystem {
     }
 
     /**
+     * Check whether a player qualifies for the bluff response window.
+     *
+     * A player can bluff when they have a hand scroll with a matching formation and
+     * enough AP to theoretically respond — even if their specific scroll is not a
+     * response or counter type. Showing the window lets them appear to consider a
+     * response without leaking that they actually cannot play one.
+     *
+     * Only meaningful in multiplayer (no hidden information in single-player).
+     *
+     * @param {number} playerIndex
+     * @returns {boolean}
+     */
+    canPlayerBluff(playerIndex) {
+        // Bluffing only matters in multiplayer — in single-player scroll contents are known
+        if (typeof isMultiplayer === 'undefined' || !isMultiplayer) return false;
+
+        const playerAP = this.getPlayerAP(playerIndex);
+        if (playerAP < 2) return false;
+
+        const playerScrolls = this.spellSystem.playerScrolls[playerIndex];
+        if (!playerScrolls) return false;
+
+        const playerPos = this.getPlayerPosition(playerIndex);
+        if (!playerPos) return false;
+
+        // Must have an open active slot (same condition as the hand-deploy rule, so
+        // the deception is plausible — they could theoretically move a scroll from hand)
+        const hasOpenActiveSlot = (playerScrolls.active?.size ?? 0) < (this.spellSystem.MAX_ACTIVE_SIZE ?? 2);
+        if (!hasOpenActiveSlot) return false;
+
+        // Collect elements of scrolls in this player's hand
+        const handScrolls = [...(playerScrolls.hand || new Set())];
+        if (handScrolls.length === 0) return false;
+
+        const handElements = new Set(
+            handScrolls.map(s => this.spellSystem.patterns?.[s]?.element).filter(Boolean)
+        );
+
+        // The bluff is plausible when:
+        //   (a) the player has a hand scroll whose element matches a known response/counter scroll, AND
+        //   (b) that response/counter scroll's board pattern is currently formed for this player.
+        //
+        // Opponents see: "they have a [element] scroll in hand + that element's response formation is up."
+        // They cannot tell the specific scroll — hence the deception.
+        for (const [scrollName, scrollDef] of Object.entries(this.spellSystem.patterns || {})) {
+            const isCounter  = scrollDef?.canCounter === 'any';
+            const isResponse = scrollDef?.isResponse  === true;
+            if (!isCounter && !isResponse) continue;
+            if (!handElements.has(scrollDef.element)) continue;
+            if (this.checkPatternForPlayer(scrollName, playerIndex)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Check if any player can respond (used to skip response window)
      * @param {number} excludePlayer - Player to exclude from check (the caster cannot respond to their own scroll)
      * @returns {boolean}
@@ -232,18 +343,19 @@ class ResponseWindowSystem {
             this.broadcastResponseWindowOpened(scrollData, casterIndex);
         }
 
-        // For the caster, show "waiting for responses" instead of the response modal
-        const myIndex = typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : activePlayerIndex;
-        if (myIndex === casterIndex) {
-            // Caster waits for others
+        // Decide what THIS client shows. Normally the caster's own client waits
+        // for others. But when the caster is a bot driven from this client, the
+        // human at this screen (the driver) is a responder, not the caster — so
+        // present the response opportunity to them instead of a dead wait screen.
+        const responderIndex = this.localResponderIndex();
+        if (responderIndex === casterIndex) {
+            // This client's human actually cast the scroll — wait for others.
             this.showWaitingForResponses(scrollData);
+            this.startResponseTimeout();
         } else {
-            // Non-caster sees the response modal
-            this.showResponseModal();
+            // Host driving the bot caster: the human here can respond.
+            this.presentResponderView(scrollData, casterIndex);
         }
-
-        // Start timeout timer
-        this.startResponseTimeout();
     }
 
     /**
@@ -319,8 +431,8 @@ class ResponseWindowSystem {
 
         modal.appendChild(header);
 
-        // Check if current player can respond
-        const myIndex = typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : activePlayerIndex;
+        // Check if current player can respond (the driver's human when running a bot)
+        const myIndex = this.localResponderIndex();
         const responseCheck = this.canPlayerRespond(myIndex);
 
         if (responseCheck.canRespond) {
@@ -408,6 +520,115 @@ class ResponseWindowSystem {
 
         this.responseModalElement = overlay;
     }
+
+    /**
+     * Show a minimal response window for a player who qualifies for a bluff.
+     *
+     * Externally identical to the real response window — same header, timer, and
+     * Pass button — but with no scroll cards. Only the private note (visible only
+     * on this player's screen) reveals that there is nothing to actually play.
+     * The player can sit here as long as they like before clicking Pass, making
+     * opponents think they may be considering a response.
+     */
+    showBluffModal() {
+        if (this.responseModalElement) {
+            this.responseModalElement.remove();
+        }
+
+        // Overlay — visually identical to the real response window overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'response-window-overlay';
+        Object.assign(overlay.style, {
+            position: 'fixed',
+            top: '0', left: '0', right: '0', bottom: '0',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            zIndex: '2000',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+        });
+
+        // Modal — same appearance as the real response modal
+        const modal = document.createElement('div');
+        modal.id = 'response-window-modal';
+        Object.assign(modal.style, {
+            backgroundColor: '#1a1a2e',
+            border: '3px solid #e94560',
+            borderRadius: '15px',
+            padding: '25px',
+            minWidth: '450px',
+            maxWidth: '600px',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            color: 'white',
+            boxShadow: '0 0 30px rgba(233, 69, 96, 0.5)'
+        });
+
+        // Header — identical to real window so observers can't distinguish
+        const header = document.createElement('div');
+        header.style.textAlign = 'center';
+        header.style.marginBottom = '20px';
+
+        const title = document.createElement('h2');
+        title.textContent = 'RESPONSE WINDOW';
+        title.style.color = '#e94560';
+        title.style.margin = '0 0 10px 0';
+        title.style.textTransform = 'uppercase';
+        title.style.letterSpacing = '3px';
+        header.appendChild(title);
+
+        const scrollDef = this.spellSystem.patterns[this.pendingScrollData?.name];
+        const scrollInfo = document.createElement('div');
+        scrollInfo.innerHTML = `<strong>${this.getPlayerName(this.currentCaster)}</strong> cast <span style="color: ${this.getElementColor(scrollDef?.element)}">${scrollDef?.name || this.pendingScrollData?.name}</span>`;
+        scrollInfo.style.fontSize = '16px';
+        scrollInfo.style.marginBottom = '10px';
+        header.appendChild(scrollInfo);
+
+        const timerDiv = document.createElement('div');
+        timerDiv.id = 'response-timer';
+        timerDiv.style.fontSize = '24px';
+        timerDiv.style.fontWeight = 'bold';
+        timerDiv.style.color = '#f39c12';
+        timerDiv.textContent = `${Math.ceil(this.RESPONSE_TIMEOUT_MS / 1000)}s`;
+        header.appendChild(timerDiv);
+
+        modal.appendChild(header);
+
+        // Private note — only this player sees it; no scroll cards are shown
+        const note = document.createElement('p');
+        note.style.cssText = 'text-align:center; color:#7f8c8d; font-style:italic; margin: 10px 0 20px 0; font-size:14px;';
+        note.textContent = 'You have no response scrolls — pass when ready.';
+        modal.appendChild(note);
+
+        // Pass button — wired to the same playerPasses path as the real window
+        const myIndex = this.localResponderIndex();
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = 'display:flex; justify-content:center; margin-top:10px;';
+
+        const passBtn = document.createElement('button');
+        passBtn.textContent = 'Pass (No Response)';
+        Object.assign(passBtn.style, {
+            padding: '12px 30px',
+            fontSize: '16px',
+            backgroundColor: '#7f8c8d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+        });
+        passBtn.onmouseenter = () => passBtn.style.backgroundColor = '#95a5a6';
+        passBtn.onmouseleave = () => passBtn.style.backgroundColor = '#7f8c8d';
+        passBtn.onclick = () => this.playerPasses(myIndex);
+        buttonContainer.appendChild(passBtn);
+        modal.appendChild(buttonContainer);
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        this.responseModalElement = overlay;
+    }
+
 
     /**
      * Create a scroll card for the response modal
@@ -528,7 +749,7 @@ class ResponseWindowSystem {
      * Resolution is deferred until ALL eligible players have responded or passed.
      */
     playerResponds(scrollInfo) {
-        const myIndex = typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : activePlayerIndex;
+        const myIndex = this.localResponderIndex();
         console.log(`playerResponds called: myIndex=${myIndex}, scroll=${scrollInfo.name}, fromHand=${scrollInfo.fromHand}`);
 
         // Double check they can still afford it
@@ -584,7 +805,7 @@ class ResponseWindowSystem {
         // Close the current modal and show "waiting" screen while others decide
         this.closeResponseModal();
 
-        const isCasterClient = !(typeof isMultiplayer !== 'undefined' && isMultiplayer) || myIndex === this.currentCaster;
+        const isCasterClient = this.isArbitratorClient();
         if (isCasterClient) {
             // Wait for all other eligible players before arbitrating
             console.log(`  Response submitted (caster client) — waiting for all players`);
@@ -607,8 +828,7 @@ class ResponseWindowSystem {
             this.broadcastPass(playerIndex);
         }
 
-        const myIndex = typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : null;
-        const isCasterClient = !isMultiplayer || myIndex === this.currentCaster;
+        const isCasterClient = this.isArbitratorClient();
 
         if (isCasterClient) {
             // Caster's client: check if all non-casters have submitted
@@ -993,6 +1213,18 @@ class ResponseWindowSystem {
 
     // Helper methods that interface with the game state
     getPlayerAP(playerIndex) {
+        // Host driving a bot: while impersonating, the shared `currentAP` belongs
+        // to the BOT, not to the host. The host's own response AP is preserved by
+        // BotDriver — read it from there so the host can afford (and correctly
+        // spend) responses to the bot's spells.
+        const driverIdx = (typeof window !== 'undefined' && window.BotDriver
+            && typeof window.BotDriver.driverRealIndex === 'function')
+            ? window.BotDriver.driverRealIndex() : null;
+        if (driverIdx != null && playerIndex === driverIdx
+                && typeof window.BotDriver.getDriverAP === 'function') {
+            return window.BotDriver.getDriverAP();
+        }
+
         // For the local player, currentAP is always the live authoritative value.
         // playerAPs[myPlayerIndex] can be a stale snapshot (e.g. from the start of their
         // last turn), which would let the affordability check pass even when currentAP is 0
@@ -1015,6 +1247,17 @@ class ResponseWindowSystem {
     }
 
     spendPlayerAP(playerIndex, amount) {
+        // Host driving a bot: spend from the host's preserved response AP so the
+        // global spendAP (which mutates the impersonated bot's currentAP) is not
+        // charged for the host's response.
+        const driverIdx = (typeof window !== 'undefined' && window.BotDriver
+            && typeof window.BotDriver.driverRealIndex === 'function')
+            ? window.BotDriver.driverRealIndex() : null;
+        if (driverIdx != null && playerIndex === driverIdx
+                && typeof window.BotDriver.spendDriverAP === 'function') {
+            window.BotDriver.spendDriverAP(amount);
+            return;
+        }
         if (typeof spendAP === 'function') {
             spendAP(amount);
         }
@@ -1115,7 +1358,8 @@ class ResponseWindowSystem {
                 triggeringScroll: originalScroll ? {
                     name: originalScroll.scrollData?.name,
                     casterIndex: originalScroll.casterIndex,
-                    definition: trigDef
+                    definition: trigDef,
+                    fromCommonArea: originalScroll.scrollData?.fromCommonArea ?? originalScroll.fromCommonArea ?? false
                 } : null
             });
         }
@@ -1152,20 +1396,12 @@ class ResponseWindowSystem {
             isOriginal: true
         }];
 
-        // Only show the modal if THIS player can respond; otherwise auto-pass
-        const myIndex = typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : activePlayerIndex;
-        const responseCheck = this.canPlayerRespond(myIndex);
-        if (responseCheck.canRespond) {
-            this.showResponseModal();
-            this.startResponseTimeout();
-        } else {
-            if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
-                this.broadcastPass(myIndex);
-            }
-            // Mark as responded locally so caster can resolve
-            this.respondingPlayers.add(myIndex);
-            this.checkAllPlayersResponded();
-        }
+        // Determine what this player can do:
+        //   canRespond → show the real response window with scroll options
+        //   canBluff   → show a minimal window (no scroll options) so they can pass
+        //                at their leisure without leaking that they have nothing to play
+        //   neither    → auto-pass instantly
+        this.presentResponderView(scrollData, casterIndex);
     }
 
     /**
