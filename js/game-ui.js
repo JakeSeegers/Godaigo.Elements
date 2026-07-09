@@ -3991,6 +3991,10 @@ document.getElementById('undo-move').onclick = function() {
                 panel.appendChild(makeBtn('Toggle Deck Browser', () => {
                     if (typeof window.showdeck === 'function') window.showdeck();
                 }));
+                panel.appendChild(makeBtn('Download Action Log', () => {
+                    if (typeof window.ActionLog?.download === 'function') window.ActionLog.download();
+                    else updateStatus('Action log not available');
+                }));
 
                 // Place Anywhere toggle — uses the same globalPlacement buff as Avalanche,
                 // but with expiresThisTurn:false so it persists until toggled off.
