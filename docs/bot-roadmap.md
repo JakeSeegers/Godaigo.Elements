@@ -12,6 +12,7 @@
 |-------|------|--------|-------|
 | 0 | Game-state API (snapshot / legal actions / apply) | **DONE** | `js/bot-state.js` |
 | 1 | Utility-scored bot (replaces rule ladder) | **DONE** | `js/bot.js` |
+| 1.5 | Multiplayer bot player (host-driven) | **DONE** | `js/bot-driver.js` + lobby.js `toggleBotPlayer()` |
 | 2 | Forward model + lookahead search | TODO | `js/bot-sim.js` (new) |
 | 3a | Weight evolution via self-play arena | TODO | `js/bot-arena.js` (new) |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
@@ -147,6 +148,31 @@ Feature summary (see `scoreAction()` in bot.js for the authoritative list):
   shrine worth grows with (capacity − pool) and unactivated-element need.
 - endTurn: small floor value; + big bonus when standing on a collectible shrine
   centre (ending the turn IS the collect action).
+
+---
+
+## STAGE 1.5 — Multiplayer bot player (DONE — contract reference)
+
+A bot is an ordinary `players` table row whose username starts with
+`window.BOT_USERNAME_PREFIX` ('🤖'). Host-only lobby button "🤖 Add Bot"
+(`toggleBotPlayer()` in lobby.js) inserts/removes it (`is_ready: true`).
+Because it's a real row it counts everywhere: player count, Start-button
+condition, index/color assignment, `totalPlayers`, turn order.
+
+The HOST's browser is the bot's client (`js/bot-driver.js`): a 700ms watcher
+notices bot turns and IMPERSONATES the bot — temporarily reassigning the
+shared lexical bindings `myPlayerIndex` and `playerColor` — so every existing
+`isMyTurn()` / `canTakeAction()` / broadcast path identifies as the bot. The
+driver resets the bot's AP at turn start (the turn-change handler only resets
+the local player's), places the bot's player tile during the placement phase,
+and force-ends stuck turns as a safety net.
+
+Keep-alive: the host heartbeats bot rows' `last_seen`; the disconnect sweep
+skips `isBotUsername()` rows.
+
+v1 limits (acceptable, fix opportunistically): bot hand-overflow modal falls
+to the host to resolve; bots never play response scrolls; the host's HUD
+mirrors the bot while it acts.
 
 ---
 

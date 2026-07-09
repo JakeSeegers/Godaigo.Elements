@@ -25,6 +25,7 @@
 | `sounds.js` | ~220 | `window.SoundSystem`: SFX playback, footsteps, login-screen music (muted-autoplay trick) |
 | `bot-state.js` | ~280 | `window.BotState`: bot observation/actuation layer — `snapshot()` (pure-JSON state, hidden info masked), `legalActions()`, `applyAction()`, Dijkstra `findPath()`. No strategy. Stage 0 of `docs/bot-roadmap.md` |
 | `bot.js` | ~280 | `window.BotSystem`: utility-scored bot. Scores every legal action via `WEIGHTS` table (win-condition aware: unactivated elements, empty-source-pool rule, exploration). Shift+R = one step, Shift+B = full turn. Stage 1 of `docs/bot-roadmap.md` |
+| `bot-driver.js` | ~200 | `window.BotDriver`: multiplayer bot player. Bot = a `players` row with username prefix `🤖` (host-only "Add Bot" lobby button → `toggleBotPlayer()` in lobby.js). The host's client drives it: a watcher impersonates the bot's `myPlayerIndex`/`playerColor` (shared lexical bindings) during its placement + turns so all existing isMyTurn/broadcast paths just work. Host heartbeats bot rows; disconnect sweep skips them. |
 | `joytone-bridge.js` | ~200 | `window.JoytoneBridge`: adaptive in-game music. Hidden iframe of `joytone/index.html` (full Joytone DAW). Boots the Five-Elements theme on game start (Grow + Drummer ON); each tile reveal appends a seeded riff of that element (seed = `gameId:tileId` → identical sequence on every client, each variation added at most once). Shift+J+T toggles the sequencer popup. Per-player mute/volume in Settings (localStorage `godaigo_joytone_*`). Talks to `window.JoytoneAPI`, an adapter appended inside `joytone/index.html`. |
 
 ---
@@ -163,6 +164,8 @@ window.SoundSystem          // SFX + login music
 window.JoytoneBridge        // adaptive music (onTileRevealed, setMuted, setVolume, togglePopup)
 window.BotState             // bot observation/actuation (snapshot, legalActions, applyAction)
 window.BotSystem            // bot strategy (step, turn, rank, WEIGHTS)
+window.BotDriver            // multiplayer bot player driver (host client only)
+window.isBotUsername(u)     // true when a players-row username marks a bot (🤖 prefix)
 
 // Debug
 window.dumpGameDebug()      // full state dump

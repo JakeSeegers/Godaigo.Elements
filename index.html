@@ -222,6 +222,15 @@
                     </button>
                 </div>
 
+                <!-- Host-only: add a bot player (driven by the host's browser in-game) -->
+                <div id="bot-controls" style="display: none; margin-top: 10px;">
+                    <button id="add-bot-button" onclick="toggleBotPlayer()"
+                            title="Adds a computer player to the room. It counts as a normal player; your browser plays its turns."
+                            style="padding: 8px 20px; font-size: 15px; background: #607D8B; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
+                        🤖 Add Bot
+                    </button>
+                </div>
+
                 <p id="lobby-instruction" style="color: #999; margin-top: 8px; font-size: 14px;">
                     The host can start the game when 2–5 players have joined
                 </p>
@@ -601,6 +610,7 @@
     <script src="js/cosmetics-system.js" charset="UTF-8"></script>
     <script src="js/bot-state.js" charset="UTF-8"></script>
     <script src="js/bot.js" charset="UTF-8"></script>
+    <script src="js/bot-driver.js" charset="UTF-8"></script>
     <script>
     (function() {
         const _clickSnd = new Audio('sounds/clicksounds.mp3');

@@ -1259,6 +1259,16 @@
                     hostSettings.style.display = 'none';
                 }
 
+                // Host-only bot controls — visible even when the host is alone
+                // (adding a bot is how a solo host reaches the 2-player minimum)
+                const botControls = document.getElementById('bot-controls');
+                const addBotBtn   = document.getElementById('add-bot-button');
+                if (botControls && addBotBtn) {
+                    const botCount = players.filter(p => window.isBotUsername?.(p.username)).length;
+                    botControls.style.display = (isHost && (botCount > 0 || totalCount < 5)) ? 'block' : 'none';
+                    addBotBtn.textContent = botCount > 0 ? '🤖 Remove Bot' : '🤖 Add Bot';
+                }
+
                 // Update status
                 const statusDiv = document.getElementById('lobby-status');
 
@@ -1280,6 +1290,44 @@
                 console.error('Error updating player list:', error);
             }
         }
+
+        // ── Bot players (host-only) ──────────────────────────────────
+        // A bot is a plain `players` row whose username carries the bot
+        // prefix (window.BOT_USERNAME_PREFIX, set by js/bot-driver.js).
+        // It has no client of its own: the HOST's browser drives its
+        // placement and turns (see js/bot-driver.js). From the lobby's
+        // perspective it counts as a player for everything — player count,
+        // colors, turn order, start conditions.
+        async function toggleBotPlayer() {
+            if (!isHost || !currentGameId) return;
+            try {
+                const { data: players, error } = await supabase
+                    .from('players')
+                    .select('id, username')
+                    .eq('game_id', currentGameId);
+                if (error) throw error;
+
+                const bots = (players || []).filter(p => window.isBotUsername?.(p.username));
+                if (bots.length > 0) {
+                    // Remove the most recently added bot (direct DELETE is blocked by RLS)
+                    await supabase.rpc('remove_player', { p_player_id: bots[bots.length - 1].id });
+                    console.log('🤖 Bot removed from lobby');
+                } else {
+                    if ((players || []).length >= 5) { alert('Room is full!'); return; }
+                    await supabase.from('players').insert([{
+                        username: (window.BOT_USERNAME_PREFIX || '🤖') + ' Bot',
+                        is_ready: true, // bots are always ready
+                        game_id: currentGameId
+                    }]);
+                    console.log('🤖 Bot added to lobby');
+                }
+                updatePlayerList();
+            } catch (e) {
+                console.error('Bot toggle failed:', e);
+                alert('Could not add/remove bot: ' + e.message);
+            }
+        }
+        window.toggleBotPlayer = toggleBotPlayer;
 
         // Host starts the game manually
         async function hostStartGame() {
@@ -1538,6 +1586,15 @@
                         .from('players')
                         .update({ last_seen: new Date().toISOString() })
                         .eq('id', myPlayerId);
+                    // Bots have no client — the host heartbeats them so cleanup
+                    // sweeps never mistake them for disconnected players.
+                    if (isHost && currentGameId && typeof window.BOT_USERNAME_PREFIX === 'string') {
+                        await supabase
+                            .from('players')
+                            .update({ last_seen: new Date().toISOString() })
+                            .eq('game_id', currentGameId)
+                            .like('username', window.BOT_USERNAME_PREFIX + '%');
+                    }
                 } catch (e) { /* ignore */ }
             };
             beat(); // Fire immediately so last_seen is never NULL
@@ -1570,6 +1627,8 @@
                         .eq('game_id', currentGameId)
                         .neq('id', myPlayerId); // never self-evict
                     const stalePlayers = (allPlayers || []).filter(p => {
+                        // Bots have no client of their own — never evict them
+                        if (window.isBotUsername?.(p.username)) return false;
                         // Use last_seen if available, fall back to created_at
                         const ref = p.last_seen || p.created_at;
                         return ref < staleThreshold;
