@@ -36,6 +36,9 @@
         castBase:          100,  // any satisfied pattern is usually worth firing
         castUnactivated:    80,  // scroll element not yet activated (win progress!)
         castDeadElement:   -60,  // source pool empty → effect fires but NO win credit
+        castAlreadyWon:    -120, // element already activated — no win-condition value left;
+                                 // without this the bot loops forever re-casting a satisfied
+                                 // pattern instead of exploring for the elements it still needs
         castLevel:           2,  // per scroll level — mild preference for big scrolls
 
         // stone placement toward a pattern
@@ -135,8 +138,9 @@
                 let s = WEIGHTS.castBase + WEIGHTS.castLevel * (def?.level || 0);
                 if (el && ELEMENTS.includes(el)) {
                     const dead = (snap.sourcePool[el] || 0) <= 0;
-                    if (dead) s += WEIGHTS.castDeadElement;          // no win credit
-                    else if (!self.activated.includes(el)) s += WEIGHTS.castUnactivated;
+                    if (self.activated.includes(el)) s += WEIGHTS.castAlreadyWon; // no more win credit here
+                    else if (dead) s += WEIGHTS.castDeadElement;                  // no win credit
+                    else s += WEIGHTS.castUnactivated;
                 }
                 return s;
             }
