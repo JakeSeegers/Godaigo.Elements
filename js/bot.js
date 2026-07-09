@@ -220,6 +220,19 @@
     // ----------------------------------------------------------------
     let _plan = null; // { scroll, anchor:{q,r}, cells:[{q,r,x,y,type}] }
 
+    // Some cells never accept a stone no matter how many times we place one —
+    // e.g. an adjacent active fire stone destroys whatever non-fire/non-void
+    // stone lands next to it (game-core.js processStoneInteractions). The bot
+    // doesn't model that rule directly (DO-NOT: no game-rules duplication in
+    // bot.js) — instead it notices the cell stays empty after repeated
+    // attempts and blacklists it, both for the current plan and future ones.
+    // Without this the bot loops forever: place → destroyed → still missing →
+    // place again, burning its whole pool and every turn's AP for zero progress.
+    const cellKey = c => `${c.x.toFixed(1)},${c.y.toFixed(1)},${c.type}`;
+    const cellFailCount = new Map();
+    const cursedCells = new Set();
+    const CELL_FAIL_LIMIT = 2;
+
     function makePlan(snap) {
         const self = me(snap);
         if (!self || !self.hand) return null;
@@ -236,6 +249,7 @@
                     return { q: pHex.q + req.q, r: pHex.r + req.r, x: px.x, y: px.y, type: req.type };
                 });
                 if (!cells.every(c => grid.some(h => Math.hypot(h.x - c.x, h.y - c.y) < 5))) continue;
+                if (cells.some(c => cursedCells.has(cellKey(c)))) continue; // known-doomed cell — skip this variant
                 let placed = 0, blocked = false;
                 const need = {};
                 for (const c of cells) {
@@ -298,9 +312,32 @@
         const missing = _plan.cells.filter(c =>
             !placedStones.some(st => st.type === c.type && Math.hypot(st.x - c.x, st.y - c.y) < 5));
 
+        // Did our last attempt actually stick? If the cell we just tried to
+        // fill is still missing, something (e.g. an adjacent fire stone)
+        // destroyed it on placement. Count the failure; past the limit,
+        // blacklist the cell and abandon this plan rather than loop forever.
+        if (_plan._lastTargetKey) {
+            const stillMissing = missing.some(c => cellKey(c) === _plan._lastTargetKey);
+            if (stillMissing) {
+                const fails = (cellFailCount.get(_plan._lastTargetKey) || 0) + 1;
+                cellFailCount.set(_plan._lastTargetKey, fails);
+                if (fails >= CELL_FAIL_LIMIT) {
+                    log(`Cell ${_plan._lastTargetKey} failed to hold a stone ${fails}x — blacklisting and abandoning plan`);
+                    cursedCells.add(_plan._lastTargetKey);
+                    _plan = null;
+                    return null;
+                }
+            } else {
+                cellFailCount.delete(_plan._lastTargetKey);
+            }
+            _plan._lastTargetKey = null;
+        }
+
         if (missing.length) {
             for (const c of missing) {
+                if (cursedCells.has(cellKey(c))) continue;
                 if (typeof isInPlacementRange === 'function' && isInPlacementRange(c.x, c.y, c.type)) {
+                    _plan._lastTargetKey = cellKey(c);
                     return { type: 'placeStone', x: c.x, y: c.y, stoneType: c.type, scroll: _plan.scroll,
                              progress: (_plan.cells.length - missing.length + 1) / _plan.cells.length };
                 }

@@ -175,6 +175,35 @@ Feature summary (see `scoreAction()` in bot.js for the authoritative list):
 - endTurn: small floor value; + big bonus when standing on a collectible shrine
   centre (ending the turn IS the collect action).
 
+**FIXED bugs found via direct play-testing (not code review — run the bot for
+10+ turns and watch what it actually does):**
+- **Infinite re-cast loop.** `cast` scored the same regardless of whether the
+  element was already in `self.activated` — since a satisfied pattern usually
+  stays satisfied on the board, the bot would recast an already-won scroll
+  forever instead of exploring for elements it still needed (observed:
+  plateaued at 2/5 elements, never progressed). Fixed with `castAlreadyWon`
+  (-120), well below `endTurn`/`move`.
+- **Cursed-cell placement loop.** In a 2-bot test, one bot got stuck placing
+  the same stone at the same hex every action, forever (source pool cycling
+  13→25 while nothing ever stuck). Root cause: an adjacent active fire stone
+  (`processStoneInteractions` in game-core.js) destroyed the stone immediately
+  after every placement, and the plan logic just saw "still missing" and
+  retried the identical doomed cell. Rather than modeling fire-adjacency
+  rules in bot.js (would duplicate game logic — see DO-NOT list), added a
+  failure-counting blacklist: if the cell targeted last cycle is still
+  missing on this cycle, count it; past `CELL_FAIL_LIMIT` (2), blacklist the
+  cell and abandon the plan. `makePlan()` skips any variant using a
+  blacklisted cell. This is a general "reality disagrees with the plan
+  repeatedly, stop trusting it" safety net — it doesn't need to know *why*
+  a cell won't hold a stone, just that it doesn't.
+
+Both found by literally running `window.BotSystem.turn()` in a loop in the
+browser console and inspecting `snapshot()`/`rank()` between turns — cheaper
+and more revealing than reasoning about the scoring code in the abstract.
+Worth repeating before investing in Stage 2/3a: structural bugs like these
+make weight-tuning or lookahead search pointless (a smarter search over a
+broken scorer just finds the same bugs faster).
+
 ---
 
 ## STAGE 1.5 — Multiplayer bot player (DONE — contract reference)
