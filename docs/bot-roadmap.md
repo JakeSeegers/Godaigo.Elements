@@ -25,7 +25,7 @@ different concerns and neither blocks the other:
 | 0 | Game-state API (snapshot / legal actions / apply) | **DONE** | `js/bot-state.js` |
 | 1 | Utility-scored bot (replaces rule ladder) | **DONE** | `js/bot.js` |
 | 1.5 | Multiplayer bot player (host-driven) | **DONE** | `js/bot-driver.js` + lobby.js `toggleBotPlayer()` |
-| R1 | Narrow driver to pure adapter (audit only, likely already true) | TODO | `js/bot-driver.js` |
+| R1 | Narrow driver to pure adapter | **DONE** | `js/bot-driver.js` |
 | R2 | One backend path for move validation/submission | TODO | Supabase edge function (new) |
 | R3 | Backend-authoritative turn validation | TODO | Supabase edge function + game-core.js call sites |
 | R4 | Replace host-browser impersonation with backend-driven bot turns | TODO | `js/bot-driver.js` (removed), backend service |
@@ -240,12 +240,23 @@ contract (`BotState.snapshot/legalActions/applyAction`) already IS the seam;
 these stages move what sits on each side of that seam without touching
 `bot.js` scoring logic.
 
-### R1 — Audit the driver is a pure adapter (TODO, likely mostly done)
-Check `js/bot-driver.js` contains ONLY: detect bot turn → snapshot →
-call into `BotSystem` for a decision → `BotState.applyAction()` → restore host
-identity. If any scoring/weights/heuristics have leaked into bot-driver.js,
-move them into `bot.js` first. This is a read-through-and-confirm task, not
-new code, given Stage 1.5 was already built with this separation in mind.
+### R1 — Audit the driver is a pure adapter (DONE)
+Audited `js/bot-driver.js`. Turn-driving (`asBot`, `driveBotTurn`, the watcher)
+was already clean — detect, snapshot, `BotSystem` decision,
+`BotState.applyAction()`, restore identity, no leaked strategy.
+
+One real leak found and fixed: the placement-phase path
+(`pickBotTilePosition()` + `placeBotTile()`) implemented an actual heuristic
+(place adjacent to the tile cluster, closest to centroid) directly in the
+driver, and executed it by calling `placeTile()`/`broadcastGameAction()`
+directly, bypassing `BotState.applyAction()` entirely — the only path in the
+whole driver that did. Fixed by adding `placeTile` to the Stage 0 vocabulary:
+`bot-state.js`'s `legalActions()` now enumerates candidate hexes during
+placement phase (`placementCandidates()`), `bot.js` scores them
+(`placeTileBase`/`placeTileCentroidPenalty` weights — same "closest to
+centroid" preference, now tunable), and `applyAction()` executes the chosen
+one. `bot-driver.js`'s `placeBotTile()` is now just `asBot(botIndex, () =>
+window.BotSystem.step())`, identical in shape to `driveBotTurn()`.
 
 ### R2 — One backend path for move validation (TODO)
 Add a single Supabase edge function that accepts `{gameId, playerIndex, action}`

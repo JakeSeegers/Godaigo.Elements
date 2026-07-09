@@ -106,46 +106,16 @@
     }
 
     // ----------------------------------------------------------------
-    // Placement phase: put the bot's player tile on a free hex adjacent
-    // to the existing cluster (closest to the board centroid = compact).
+    // Placement phase: choice of where to put the bot's player tile is
+    // BotSystem's decision (bot-state.js enumerates candidates as
+    // {type:'placeTile', ...}, bot.js scores them) — this driver only
+    // impersonates and lets BotSystem.step() pick + apply one.
     // ----------------------------------------------------------------
-    function pickBotTilePosition() {
-        const S = TILE_SIZE * 4; // large tile hex size
-        if (!placedTiles.length) return null;
-        const cx = placedTiles.reduce((s, t) => s + t.x, 0) / placedTiles.length;
-        const cy = placedTiles.reduce((s, t) => s + t.y, 0) / placedTiles.length;
-        const candidates = [];
-        for (const t of placedTiles) {
-            const h = pixelToHex(t.x, t.y, S);
-            for (const [dq, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]]) {
-                const p = hexToPixel(h.q + dq, h.r + dr, S);
-                if (placedTiles.some(o => Math.hypot(o.x - p.x, o.y - p.y) < 40)) continue; // occupied
-                if (candidates.some(c => Math.hypot(c.x - p.x, c.y - p.y) < 40)) continue;  // dupe
-                candidates.push(p);
-            }
-        }
-        if (!candidates.length) return null;
-        candidates.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
-        return candidates[0];
-    }
-
     async function placeBotTile(botIndex) {
-        const pos = pickBotTilePosition();
-        if (!pos) { log('No free position for bot tile!'); return; }
-        log(`Placing bot ${botIndex}'s player tile at (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
+        log(`Placing bot ${botIndex}'s player tile via BotSystem`);
         await asBot(botIndex, async () => {
-            // Same two steps as the human drag-drop path in game-ui.js:
-            // placeTile handles pawn creation + placement bookkeeping/broadcasts,
-            // and 'player-tile-place' shows the tile on the other clients.
-            placeTile(pos.x, pos.y, 0, false, 'player');
-            if (typeof broadcastGameAction === 'function') {
-                broadcastGameAction('player-tile-place', {
-                    x: pos.x, y: pos.y,
-                    playerIndex: botIndex,
-                    color: playerColor,
-                    cosmetics: null
-                });
-            }
+            const applied = window.BotSystem.step();
+            if (!applied) log(`No legal placement action found for bot ${botIndex}`);
         });
     }
 

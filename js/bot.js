@@ -62,6 +62,10 @@
         discardDeadElement: 30,  // source pool empty — no win credit ever again
         discardLevel:       -5,  // × scroll level — prefer to KEEP higher-level scrolls
 
+        // placement phase: where to put the bot's starting player tile
+        placeTileBase:            10,
+        placeTileCentroidPenalty: -0.05, // × distance to cluster centroid — prefer compact placement
+
         // shrine valuation (used inside move/endTurn features)
         shrineNeed:          1.0, // × (capacity − pool[element])
         shrineUnactivated:   2.5, // element not yet activated
@@ -120,6 +124,10 @@
     function scoreAction(a, snap, ctx) {
         const self = me(snap);
         switch (a.type) {
+
+            case 'placeTile': {
+                return WEIGHTS.placeTileBase + WEIGHTS.placeTileCentroidPenalty * (a.distToCentroid || 0);
+            }
 
             case 'cast': {
                 const el = scrollElement(a.scroll);
@@ -327,6 +335,16 @@
     // Rank all legal actions for the current position (debug + decision core)
     function rankActions() {
         const snap = window.BotState.snapshot();
+        const legal = window.BotState.legalActions();
+
+        // Placement phase: no pawn placed yet, so me(snap) is null — the only
+        // legal actions are placeTile candidates, scored without needing self.
+        if (legal.length && legal[0].type === 'placeTile') {
+            return legal
+                .map(a => ({ action: a, score: scoreAction(a, snap, {}) }))
+                .sort((x, y) => y.score - x.score);
+        }
+
         const self = me(snap);
         if (!self) return [];
 
@@ -340,7 +358,7 @@
             ctx.paths.set(t.id, window.BotState.findPath(self.x, self.y, t.x, t.y));
         }
 
-        return window.BotState.legalActions()
+        return legal
             .map(a => ({ action: a, score: scoreAction(a, snap, ctx) }))
             .sort((x, y) => y.score - x.score);
     }
@@ -403,9 +421,11 @@
         if (!ranked.length) { log('No legal actions found'); return null; }
 
         const { action, score } = ranked[0];
-        const label = action.type === 'cast'       ? `cast ${action.scroll}`
-                    : action.type === 'placeStone' ? `place ${action.stoneType} for ${action.scroll} (${Math.round((action.progress||0)*100)}%)`
-                    : action.type === 'move'       ? `move to (${action.x.toFixed(0)},${action.y.toFixed(0)}) cost ${action.cost}`
+        const label = action.type === 'placeTile'      ? `place player tile at (${action.x.toFixed(0)},${action.y.toFixed(0)})`
+                    : action.type === 'cast'           ? `cast ${action.scroll}`
+                    : action.type === 'placeStone'     ? `place ${action.stoneType} for ${action.scroll} (${Math.round((action.progress||0)*100)}%)`
+                    : action.type === 'move'           ? `move to (${action.x.toFixed(0)},${action.y.toFixed(0)}) cost ${action.cost}`
+                    : action.type === 'discardScroll'  ? `discard ${action.scroll} (from ${action.from})`
                     : 'end turn';
         log(`Best action [${score.toFixed(1)}]: ${label}  (of ${ranked.length} candidates)`);
 

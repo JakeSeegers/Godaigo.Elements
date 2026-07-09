@@ -145,6 +145,7 @@
     // ----------------------------------------------------------------
     // Legal action enumeration for the ACTIVE player.
     // Canonical forms — the only vocabulary bot strategy may use:
+    //   {type:'placeTile', x, y, distToCentroid}                    // placement phase only
     //   {type:'cast', scroll}
     //   {type:'placeStone', x, y, stoneType, scroll, progress}
     //   {type:'move', x, y, cost}
@@ -153,7 +154,36 @@
     // NOT yet enumerated (Stage 2+): catacomb teleports, scroll-effect
     // sub-choices.
     // ----------------------------------------------------------------
+
+    // Free hexes adjacent to the existing placed-tile cluster, on the LARGE
+    // player-tile hex grid (TILE_SIZE * 4) — distinct from hexGrid()'s small
+    // board grid used for in-turn movement. Player tiles have no pawn/AP yet,
+    // so this is enumerated separately from the mid-turn actions below.
+    function placementCandidates() {
+        const S = TILE_SIZE * 4;
+        if (!placedTiles.length) return [];
+        const cx = placedTiles.reduce((s, t) => s + t.x, 0) / placedTiles.length;
+        const cy = placedTiles.reduce((s, t) => s + t.y, 0) / placedTiles.length;
+        const candidates = [];
+        for (const t of placedTiles) {
+            const h = pixelToHex(t.x, t.y, S);
+            for (const [dq, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]]) {
+                const p = hexToPixel(h.q + dq, h.r + dr, S);
+                if (placedTiles.some(o => Math.hypot(o.x - p.x, o.y - p.y) < 40)) continue; // occupied
+                if (candidates.some(c => Math.hypot(c.x - p.x, c.y - p.y) < 40)) continue;  // dupe
+                candidates.push({ x: p.x, y: p.y, distToCentroid: Math.hypot(p.x - cx, p.y - cy) });
+            }
+        }
+        return candidates;
+    }
+
     function legalActions() {
+        // ── placement phase: this player hasn't placed their tile yet ──
+        if (typeof isPlacementPhase !== 'undefined' && isPlacementPhase &&
+            typeof playerTilesPlaced !== 'undefined' && !playerTilesPlaced.has(activePlayerIndex)) {
+            return placementCandidates().map(c => ({ type: 'placeTile', x: c.x, y: c.y, distToCentroid: c.distToCentroid }));
+        }
+
         const actions = [];
         const player = playerPositions[activePlayerIndex];
         if (!player) return actions;
@@ -270,6 +300,21 @@
         }
 
         switch (a?.type) {
+            case 'placeTile': {
+                if (typeof isPlacementPhase === 'undefined' || !isPlacementPhase) {
+                    return { ok: false, reason: 'not placement phase' };
+                }
+                placeTile(a.x, a.y, 0, false, 'player');
+                if (typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('player-tile-place', {
+                        x: a.x, y: a.y,
+                        playerIndex: activePlayerIndex,
+                        color: playerColor,
+                        cosmetics: null
+                    });
+                }
+                return { ok: true };
+            }
             case 'cast': {
                 const scrolls = window.spellSystem.getPlayerScrolls(false);
                 if (scrolls.hand.has(a.scroll)) window.spellSystem.moveToActive(a.scroll);
