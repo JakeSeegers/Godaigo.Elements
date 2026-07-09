@@ -4237,6 +4237,7 @@
                             playerIndex: 0,
                             turnStartedAt: startedAt
                         });
+                        if (typeof persistCurrentTurnIndex === 'function') persistCurrentTurnIndex(0);
 
                         if (isMyTurn()) {
                             updateStatus(`All tiles placed! It's your turn!`);
