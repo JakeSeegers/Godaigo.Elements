@@ -690,6 +690,13 @@
 
         window.showEndTurnPrompt = function () {
             if (endTurnPromptShown) return;
+            // Bot turns decide when to end on their own (BotSystem's own scoring
+            // already weighs endTurn against remaining actions) — this modal is a
+            // human nudge only. asBot() swaps myPlayerIndex to the bot's index
+            // while impersonating, so isMyTurn() reads true and this would
+            // otherwise block the host's screen for every bot turn that spends
+            // its AP to 0 (the same class of bug as the scroll-overflow stall).
+            if (window.BotDriver?.controlsActivePlayer?.()) return;
             const endTurnBtn = document.getElementById('end-turn');
             if (!endTurnBtn || endTurnBtn.disabled) return;
 
