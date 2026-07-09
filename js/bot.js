@@ -179,6 +179,132 @@
         }
     }
 
+    // ----------------------------------------------------------------
+    // Pattern plan (Stage 1.75): scroll patterns anchor to the hex the
+    // caster STANDS ON when casting, and stones may only be placed
+    // adjacent to the pawn — so multi-hex patterns need a plan: fix an
+    // anchor (the casting spot), walk around placing each cell, return
+    // to the anchor, cast. Without this the anchor drifts as the pawn
+    // moves and the bot scatters stones that never complete anything.
+    // ----------------------------------------------------------------
+    let _plan = null; // { scroll, anchor:{q,r}, cells:[{q,r,x,y,type}] }
+
+    function makePlan(snap) {
+        const self = me(snap);
+        if (!self || !self.hand) return null;
+        const pHex = pixelToHex(self.x, self.y, TILE_SIZE);
+        const grid = window.BotState.hexGrid();
+        let best = null;
+        for (const name of self.hand) {
+            const def = window.SCROLL_DEFINITIONS?.[name];
+            if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
+            const el = def.element;
+            for (const variant of def.patterns) {
+                const cells = variant.map(req => {
+                    const px = hexToPixel(pHex.q + req.q, pHex.r + req.r, TILE_SIZE);
+                    return { q: pHex.q + req.q, r: pHex.r + req.r, x: px.x, y: px.y, type: req.type };
+                });
+                if (!cells.every(c => grid.some(h => Math.hypot(h.x - c.x, h.y - c.y) < 5))) continue;
+                let placed = 0, blocked = false;
+                const need = {};
+                for (const c of cells) {
+                    const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
+                    if (s && s.type === c.type) placed++;
+                    else if (s) { blocked = true; break; }
+                    else need[c.type] = (need[c.type] || 0) + 1;
+                }
+                if (blocked) continue;
+                // The pool must cover every missing stone NOW — half-built
+                // shapes the bot can't finish are worse than nothing
+                if (Object.entries(need).some(([t, n]) => (self.pool[t] || 0) < n)) continue;
+                let score = placed * 10;
+                if (!self.activated.includes(el) && (snap.sourcePool[el] || 0) > 0) score += 20;
+                if ((snap.sourcePool[el] || 0) <= 0) score -= 50; // no win credit
+                if (!best || score > best.score) best = { score, scroll: name, anchor: pHex, cells };
+            }
+        }
+        return best ? { scroll: best.scroll, anchor: best.anchor, cells: best.cells } : null;
+    }
+
+    function planValid(snap) {
+        if (!_plan) return false;
+        const self = me(snap);
+        if (!self) return false;
+        const holding = (self.hand || []).includes(_plan.scroll) || self.active.includes(_plan.scroll);
+        if (!holding) return false;
+        for (const c of _plan.cells) {
+            const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
+            if (s && s.type !== c.type) return false;                       // cell corrupted
+            if (!s && (self.pool[c.type] || 0) <= 0) return false;          // can't supply anymore
+        }
+        return true;
+    }
+
+    // One walkable step toward any hex adjacent to `cell` (avoiding standing
+    // on cells the plan still needs to fill). Returns a move action or null.
+    function stepTowardCell(self, cell, missing, ap) {
+        const grid = window.BotState.hexGrid();
+        let bestPath = null;
+        for (const h of grid) {
+            const d = Math.hypot(h.x - cell.x, h.y - cell.y);
+            if (d <= 5 || d >= 40) continue;                                 // must be adjacent to the cell
+            if (missing.some(m => Math.hypot(m.x - h.x, m.y - h.y) < 5)) continue; // don't stand on an unfilled cell
+            const path = window.BotState.findPath(self.x, self.y, h.x, h.y);
+            if (!path || !path.length) continue;
+            const cost = path.reduce((c, p) => c + p.cost, 0);
+            if (!bestPath || cost < bestPath.cost) bestPath = { cost, step: path[0] };
+        }
+        if (bestPath && bestPath.step.cost <= ap) {
+            return { type: 'move', x: bestPath.step.x, y: bestPath.step.y, cost: bestPath.step.cost };
+        }
+        return null;
+    }
+
+    // The next concrete action the plan dictates, or null (fall back to scoring)
+    function planNextAction(snap) {
+        if (!_plan || !planValid(snap)) { _plan = null; return null; }
+        const self = me(snap);
+        const missing = _plan.cells.filter(c =>
+            !placedStones.some(st => st.type === c.type && Math.hypot(st.x - c.x, st.y - c.y) < 5));
+
+        if (missing.length) {
+            for (const c of missing) {
+                if (typeof isInPlacementRange === 'function' && isInPlacementRange(c.x, c.y, c.type)) {
+                    return { type: 'placeStone', x: c.x, y: c.y, stoneType: c.type, scroll: _plan.scroll,
+                             progress: (_plan.cells.length - missing.length + 1) / _plan.cells.length };
+                }
+            }
+            if (snap.turn.ap > 0) {
+                // fill the farthest-from-anchor cells first so placed stones
+                // (earth blocks movement!) don't wall off the rest of the shape
+                const aPx = hexToPixel(_plan.anchor.q, _plan.anchor.r, TILE_SIZE);
+                const ordered = [...missing].sort((a, b) =>
+                    Math.hypot(b.x - aPx.x, b.y - aPx.y) - Math.hypot(a.x - aPx.x, a.y - aPx.y));
+                for (const c of ordered) {
+                    const mv = stepTowardCell(self, c, missing, snap.turn.ap);
+                    if (mv) return mv;
+                }
+            }
+            return null; // out of AP / unreachable — generic scoring takes over
+        }
+
+        // Shape complete → return to the anchor and cast
+        const aPx = hexToPixel(_plan.anchor.q, _plan.anchor.r, TILE_SIZE);
+        if (Math.hypot(self.x - aPx.x, self.y - aPx.y) >= 5) {
+            if (snap.turn.ap > 0) {
+                const path = window.BotState.findPath(self.x, self.y, aPx.x, aPx.y);
+                if (path && path.length && path[0].cost <= snap.turn.ap) {
+                    return { type: 'move', x: path[0].x, y: path[0].y, cost: path[0].cost };
+                }
+            }
+            return null;
+        }
+        if (snap.turn.ap >= 2 && window.spellSystem.checkPattern(_plan.scroll)) {
+            return { type: 'cast', scroll: _plan.scroll };
+        }
+        return null;
+    }
+
     // Rank all legal actions for the current position (debug + decision core)
     function rankActions() {
         const snap = window.BotState.snapshot();
@@ -210,6 +336,28 @@
             return null;
         }
 
+        // The pattern plan takes priority: it's the only way multi-hex
+        // patterns ever complete under the adjacent-only placement rule
+        const snap = window.BotState.snapshot();
+        if (!_plan || !planValid(snap)) {
+            _plan = makePlan(snap);
+            if (_plan) log(`New plan: build ${_plan.scroll} anchored at hex (${_plan.anchor.q},${_plan.anchor.r})`);
+        }
+        const planAction = _plan ? planNextAction(snap) : null;
+        if (planAction) {
+            const label = planAction.type === 'cast' ? `cast ${planAction.scroll}`
+                        : planAction.type === 'placeStone' ? `place ${planAction.stoneType} for ${planAction.scroll}`
+                        : `move to (${planAction.x.toFixed(0)},${planAction.y.toFixed(0)})`;
+            log(`Plan action: ${label}`);
+            const r = window.BotState.applyAction(planAction);
+            if (r.ok) {
+                if (planAction.type === 'cast') _plan = null; // plan fulfilled
+                return planAction;
+            }
+            log(`Plan action failed (${r.reason}) — falling back to scoring`);
+            _plan = null;
+        }
+
         const ranked = rankActions();
         if (!ranked.length) { log('No legal actions found'); return null; }
 
@@ -226,6 +374,51 @@
     }
 
     // ----------------------------------------------------------------
+    // Quiescence: after a cast, multiplayer opens a ~15s response window;
+    // some scroll effects enter selection modes or cascade prompts that
+    // wait for input. The bot must NOT take its next action (or end its
+    // turn) until this machinery settles — otherwise the stack resolves
+    // after the turn has passed, attributed to the wrong player.
+    // Resolves what it can (cascade prompt), cancels what it can't drive
+    // (selection modes), and waits out the rest.
+    // ----------------------------------------------------------------
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    async function waitForQuiescence() {
+        const deadline = Date.now() + 25000;
+        while (Date.now() < deadline) {
+            // Cascade prompt (scroll drawn onto a full hand): choose like a
+            // player would — keep the new scroll usable if possible
+            const cascade = document.getElementById('cascade-popup');
+            if (cascade) {
+                const buttons = [...cascade.querySelectorAll('button')];
+                const pick = buttons.find(b => b.textContent === 'To Active') ||
+                             buttons.find(b => b.textContent === 'To Common');
+                if (pick) { log(`Cascade prompt: choosing "${pick.textContent}"`); pick.click(); }
+                await sleep(250);
+                continue;
+            }
+            // Selection modes (Sacrificial Pyre, Telekinesis, Take Flight, …)
+            // need input the bot can't give yet — cancel so the turn never wedges
+            const se = window.spellSystem?.scrollEffects;
+            if (se?.selectionMode || window.takeFlightState) {
+                log('Cancelling a selection mode the bot cannot drive');
+                se?.cancelSelectionMode?.();
+                if (window.takeFlightState) window.takeFlightState = null;
+                await sleep(250);
+                continue;
+            }
+            // Response window after a cast (multiplayer): wait the stack out
+            if (window.spellSystem?.responseWindow?.isResponseWindowOpen) {
+                await sleep(400);
+                continue;
+            }
+            return; // quiet — safe to act again
+        }
+        log('waitForQuiescence timed out — proceeding anyway');
+    }
+
+    // ----------------------------------------------------------------
     // Whole-turn autopilot: loop steps until the turn ends (or safety cap).
     // Async with a small delay so reveals/casts/HUD settle between actions.
     // ----------------------------------------------------------------
@@ -237,10 +430,12 @@
         try {
             for (let i = 0; i < 30; i++) {                    // safety cap
                 if (activePlayerIndex !== startingPlayer) break; // turn passed
+                await waitForQuiescence();
+                if (activePlayerIndex !== startingPlayer) break;
                 const applied = botAct();
                 if (!applied) break;
                 if (applied.type === 'endTurn') break;
-                await new Promise(r => setTimeout(r, 350));
+                await sleep(350);
             }
         } finally {
             _turnRunning = false;
@@ -274,6 +469,7 @@
         turn:  botTurn,       // play out the whole turn
         rank:  rankActions,   // scored candidate list (top = what step() would do)
         score: scoreAction,   // (action, snapshot, ctx) → utility
+        waitForQuiescence,    // settle response windows / selection modes / cascades
         WEIGHTS,              // live tuning surface (Stage 3a evolves this)
         DEFAULT_WEIGHTS,
     };

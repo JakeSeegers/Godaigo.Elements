@@ -161,7 +161,9 @@
         const scrolls = window.spellSystem?.getPlayerScrolls?.(false);
 
         // ── cast: any hand/active scroll whose pattern is satisfied now ──
-        if (scrolls) {
+        // Casting costs 2 AP (activateScroll validates it — don't offer casts
+        // the game will reject).
+        if (scrolls && ap >= 2) {
             for (const name of [...scrolls.active, ...scrolls.hand]) {
                 const def = window.SCROLL_DEFINITIONS?.[name];
                 if (!def || def.level === 1) continue; // level 1 = response-only
@@ -199,6 +201,10 @@
                     if (blocked) continue;
                     for (const c of missing) {
                         if ((pool[c.type] || 0) <= 0) continue;
+                        // Same placement-range rule the drag-drop UI enforces —
+                        // out-of-range placements would desync other clients
+                        if (typeof isInPlacementRange === 'function' &&
+                            !isInPlacementRange(c.x, c.y, c.type)) continue;
                         const key = `${c.x.toFixed(1)},${c.y.toFixed(1)},${c.type}`;
                         if (seen.has(key)) continue;
                         seen.add(key);

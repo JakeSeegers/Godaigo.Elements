@@ -170,9 +170,26 @@ and force-ends stuck turns as a safety net.
 Keep-alive: the host heartbeats bot rows' `last_seen`; the disconnect sweep
 skips `isBotUsername()` rows.
 
+The bot does NOT need a separate Supabase login/session. Its `players` row IS
+its identity; all in-game sync is broadcast-based and keyed by
+`activePlayerIndex` (`syncPlayerState` → 'player-state-update'), which
+impersonation satisfies. Anything actually keyed by `myPlayerId` (heartbeat,
+ready flag) is lobby plumbing the host handles on the bot's behalf.
+
+Async cast machinery: `BotSystem.waitForQuiescence()` runs between bot
+actions. It (a) auto-resolves cascade prompts by clicking `#cascade-popup`
+buttons (prefers "To Active"), (b) cancels scroll selection modes
+(`scrollEffects.selectionMode`, `window.takeFlightState`) the bot can't
+drive, and (c) waits out the multiplayer response window
+(`spellSystem.responseWindow.isResponseWindowOpen`, ~15s) so the stack
+resolves while the bot is still impersonated. Legality guards in
+bot-state.js mirror the UI: casts need ≥2 AP, stone placements must pass
+`isInPlacementRange()`.
+
 v1 limits (acceptable, fix opportunistically): bot hand-overflow modal falls
-to the host to resolve; bots never play response scrolls; the host's HUD
-mirrors the bot while it acts.
+to the host to resolve (rare now that cascades auto-resolve); bots never play
+response scrolls; selection-mode scrolls are cast but their optional targeted
+effect is cancelled; the host's HUD mirrors the bot while it acts.
 
 ---
 

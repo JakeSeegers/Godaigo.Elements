@@ -171,6 +171,15 @@
             // Not my turn next — still restore void AP to MY pool's baseline
             refreshVoidAP();
         }
+
+        // While impersonated, the stone panel and scroll counts rendered the
+        // BOT's resources — re-render them for the local player now.
+        try {
+            if (typeof playerPool !== 'undefined' && typeof updateStoneCount === 'function') {
+                Object.keys(playerPool).forEach(updateStoneCount);
+            }
+            window.spellSystem?.updateScrollCount?.();
+        } catch (e) { /* cosmetic only */ }
     }
 
     // ----------------------------------------------------------------
