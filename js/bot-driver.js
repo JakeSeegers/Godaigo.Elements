@@ -152,6 +152,25 @@
                 if (btn && !btn.disabled) btn.click();
             }
         });
+
+        // The bot spent from this client's shared currentAP counter, and the
+        // end-turn flow's local AP reset is gated on
+        // activePlayerIndex === myPlayerIndex — which compared against the
+        // BOT's index while impersonated. So when the bot hands the turn to
+        // THIS player, redo what the turn-change handler would have done:
+        // full AP, pips, and void AP recomputed from MY pool (not the bot's).
+        if (typeof activePlayerIndex !== 'undefined' && activePlayerIndex === myPlayerIndex) {
+            currentAP = 5;
+            const apEl = document.getElementById('ap-count');
+            if (apEl) apEl.textContent = currentAP;
+            if (typeof updateApPips === 'function') updateApPips(currentAP);
+            if (typeof refreshVoidAP === 'function') refreshVoidAP();
+            if (typeof syncPlayerState === 'function') syncPlayerState();
+            if (typeof updateStatus === 'function') updateStatus('Your turn!');
+        } else if (typeof refreshVoidAP === 'function') {
+            // Not my turn next — still restore void AP to MY pool's baseline
+            refreshVoidAP();
+        }
     }
 
     // ----------------------------------------------------------------
