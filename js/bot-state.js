@@ -148,9 +148,10 @@
     //   {type:'cast', scroll}
     //   {type:'placeStone', x, y, stoneType, scroll, progress}
     //   {type:'move', x, y, cost}
+    //   {type:'discardScroll', scroll, from:'hand'|'active'}
     //   {type:'endTurn'}
     // NOT yet enumerated (Stage 2+): catacomb teleports, scroll-effect
-    // sub-choices, hand→common moves.
+    // sub-choices.
     // ----------------------------------------------------------------
     function legalActions() {
         const actions = [];
@@ -159,6 +160,27 @@
         const ap = getTotalAP();
         const pool = playerPools[activePlayerIndex] || {};
         const scrolls = window.spellSystem?.getPlayerScrolls?.(false);
+
+        // ── overflow gate: hand/active over capacity blocks everything else ──
+        // The end-of-turn overflow modal only resolves through discards; if we
+        // let cast/move/endTurn stay legal here the caller could act (or end
+        // the turn) while still over capacity, which either wedges the UI
+        // modal or clicks End Turn into a no-op. Discard-only until resolved.
+        if (scrolls) {
+            const maxHand = window.spellSystem.MAX_HAND_SIZE;
+            const maxActive = window.spellSystem.MAX_ACTIVE_SIZE;
+            const handOver = scrolls.hand.size > maxHand;
+            const activeOver = scrolls.active.size > maxActive;
+            if (handOver || activeOver) {
+                if (handOver) for (const name of scrolls.hand) {
+                    actions.push({ type: 'discardScroll', scroll: name, from: 'hand' });
+                }
+                if (activeOver) for (const name of scrolls.active) {
+                    actions.push({ type: 'discardScroll', scroll: name, from: 'active' });
+                }
+                return actions;
+            }
+        }
 
         // ── cast: any hand/active scroll whose pattern is satisfied now ──
         // Casting costs 2 AP (activateScroll validates it — don't offer casts
@@ -276,6 +298,10 @@
                     broadcastPlayerMovement(activePlayerIndex, a.x, a.y, a.cost);
                 }
                 return { ok: true };
+            }
+            case 'discardScroll': {
+                const ok = window.spellSystem.discardScroll(a.scroll);
+                return ok ? { ok: true } : { ok: false, reason: `${a.scroll} not in hand/active` };
             }
             case 'endTurn': {
                 const btn = document.getElementById('end-turn');

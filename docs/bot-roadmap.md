@@ -6,6 +6,18 @@
 
 ---
 
+## TWO INDEPENDENT TRACKS
+
+This roadmap now has two tracks that can progress in parallel — they touch
+different concerns and neither blocks the other:
+
+- **STRATEGY TRACK** (Stages 2–3c below): makes the bot *smarter* — lookahead,
+  weight evolution, learning. Runs fine inside the current host-browser model.
+- **RUNTIME TRACK** (Stages R1–R5, new section below STAGE 1.5): moves *where*
+  the bot executes — off the host player's browser and onto a backend, so a
+  human host is no longer required for bots to play. Does not change bot
+  intelligence at all; Stage 1's `scoreAction()` moves verbatim.
+
 ## STAGE STATUS
 
 | Stage | Name | Status | Files |
@@ -13,6 +25,11 @@
 | 0 | Game-state API (snapshot / legal actions / apply) | **DONE** | `js/bot-state.js` |
 | 1 | Utility-scored bot (replaces rule ladder) | **DONE** | `js/bot.js` |
 | 1.5 | Multiplayer bot player (host-driven) | **DONE** | `js/bot-driver.js` + lobby.js `toggleBotPlayer()` |
+| R1 | Narrow driver to pure adapter (audit only, likely already true) | TODO | `js/bot-driver.js` |
+| R2 | One backend path for move validation/submission | TODO | Supabase edge function (new) |
+| R3 | Backend-authoritative turn validation | TODO | Supabase edge function + game-core.js call sites |
+| R4 | Replace host-browser impersonation with backend-driven bot turns | TODO | `js/bot-driver.js` (removed), backend service |
+| R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | TODO | `js/bot-sim.js` (new) |
 | 3a | Weight evolution via self-play arena | TODO | `js/bot-arena.js` (new) |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
@@ -124,8 +141,17 @@ Action forms (the ONLY vocabulary later stages may use):
 { type:'cast',       scroll:'EARTH_SCROLL_3' }
 { type:'placeStone', x, y, stoneType:'earth', scroll, progress } // progress = placed/total after this stone
 { type:'move',       x, y, cost }                                // one adjacent hex step
+{ type:'discardScroll', scroll, from:'hand'|'active' }           // only legal while hand/active is over capacity
 { type:'endTurn' }
 ```
+
+`legalActions()` gates on overflow: when hand/active is over
+`spellSystem.MAX_HAND_SIZE`/`MAX_ACTIVE_SIZE`, it returns discard-only actions
+(cast/placeStone/move/endTurn are withheld) until the bot discards back down.
+`bot.js`'s `botAct()` checks this before even consulting the pattern-plan
+(which calls `applyAction()` directly and would otherwise bypass the gate).
+This is what lets the bot resolve its own end-of-turn scroll overflow instead
+of surfacing `showEndTurnOverflowModal()` — see the fixed bug below.
 
 Not yet enumerated (Stage 2+ work): catacomb teleports, scroll-effect
 sub-choices (target selection inside effects), hand→common moves.
@@ -186,10 +212,81 @@ resolves while the bot is still impersonated. Legality guards in
 bot-state.js mirror the UI: casts need ≥2 AP, stone placements must pass
 `isInPlacementRange()`.
 
-v1 limits (acceptable, fix opportunistically): bot hand-overflow modal falls
-to the host to resolve (rare now that cascades auto-resolve); bots never play
-response scrolls; selection-mode scrolls are cast but their optional targeted
-effect is cancelled; the host's HUD mirrors the bot while it acts.
+v1 limits (acceptable, fix opportunistically): bots never play response
+scrolls; selection-mode scrolls are cast but their optional targeted effect is
+cancelled; the host's HUD mirrors the bot while it acts.
+
+**FIXED (was a v1 limit):** bot hand/active overflow at end of turn used to
+surface `showEndTurnOverflowModal()` on the host's screen. That modal is
+fire-and-forget (not awaited), so `asBot()`'s `finally` restored the host's
+real identity *before* the modal resolved — the host then saw their OWN
+scrolls (not the bot's) in the Hand/Active panels, and discarding them never
+reduced the bot's overflow (`getPlayerScrolls(false)` is keyed on
+`activePlayerIndex`, still the bot), so the banner's End Turn button stayed
+disabled forever and the game stalled. Fixed by giving the bot a
+`discardScroll` action (Stage 0 vocabulary, above) and gating
+`legalActions()`/`botAct()` so the bot discards down to capacity BEFORE ever
+clicking End Turn — the modal now never appears for a bot turn.
+
+---
+
+## RUNTIME TRACK — moving bot execution off the host browser
+
+Motivation: today the host's browser is both a human client and the bot's
+runtime (impersonation swaps `myPlayerIndex`/`playerColor`). That's fine for
+dev but means a bot game requires a human host tab to stay open, and any host
+UI bug can leak into bot turns. The fix is layered, not a rewrite — Stage 0's
+contract (`BotState.snapshot/legalActions/applyAction`) already IS the seam;
+these stages move what sits on each side of that seam without touching
+`bot.js` scoring logic.
+
+### R1 — Audit the driver is a pure adapter (TODO, likely mostly done)
+Check `js/bot-driver.js` contains ONLY: detect bot turn → snapshot →
+call into `BotSystem` for a decision → `BotState.applyAction()` → restore host
+identity. If any scoring/weights/heuristics have leaked into bot-driver.js,
+move them into `bot.js` first. This is a read-through-and-confirm task, not
+new code, given Stage 1.5 was already built with this separation in mind.
+
+### R2 — One backend path for move validation (TODO)
+Add a single Supabase edge function that accepts `{gameId, playerIndex, action}`
+(the same canonical action shape from Stage 0) and re-validates it against
+server-held game state before it's allowed to write to `game_room`/`players`.
+Start with ONE action type (e.g. `endTurn` or `cast`) — this is a proof of
+path, not a full rewrite. The browser (human or bot-driver) keeps producing
+actions exactly as it does now; it just also asks the backend to bless them.
+
+### R3 — Backend-authoritative validation (TODO)
+Extend R2's edge function to cover all action types in the Stage 0 vocabulary
+(`cast`, `placeStone`, `move`, `endTurn`). Once the backend can independently
+recompute "is this action legal from this snapshot," the browser's role
+shrinks to rendering + input capture; illegal actions get rejected
+server-side instead of trusted client-side. Do this incrementally per action
+type — ship each one behind the others still being client-trusted.
+
+### R4 — Replace host-browser impersonation (TODO)
+Once R3 is solid, bot turns no longer need a browser pretending to be the
+bot: the backend can call the same validated action path directly using the
+bot's `playerIndex`, driven by a scheduled/triggered function instead of
+`bot-driver.js`'s 700ms watcher. At this point `bot-driver.js` can be
+deleted — its job (impersonate, apply, restore) no longer exists once the
+backend applies bot actions directly.
+
+### R5 — Server-side bot execution + bot-vs-bot (TODO)
+Run `bot.js`'s `scoreAction()`/pick logic inside the backend function/service
+(same pure code, new host environment — Node or a Supabase edge function).
+Once no human browser is required to drive a bot, two bot players can play
+each other with zero open tabs. This unlocks self-play at scale for Stage 3a's
+arena (`js/bot-arena.js`) to run server-side instead of in a suppressed page.
+
+**Sequencing relative to the Strategy Track:** R1–R5 can run interleaved with
+Stages 2/3 at any point — they don't depend on each other. Recommended order
+if working both: do R1 (cheap audit) any time, R2 next real backend step,
+then pick up whichever track has more immediate value (smarter bot vs. bot
+independent of host browser).
+
+**Do NOT** attempt R4/R5 before R2/R3 land — moving execution backend-side
+before the backend can validate actions just relocates the trust problem
+instead of fixing it.
 
 ---
 
@@ -292,3 +389,8 @@ model-free RL. Do not attempt without the arena (3a) as the evaluation gate.
 - Do NOT block the main thread with long loops — yield between arena games
   (`await new Promise(r => setTimeout(r))`).
 - Do NOT trust `stoneCounts` to be the source pool (it isn't; use `window.stonePools`).
+- Do NOT let Runtime Track code (R2+) reach into DOM state or bot-driver.js
+  internals — it only knows the Stage-0 snapshot/action vocabulary, same as
+  the strategy code.
+- Do NOT skip straight to R4/R5 (removing impersonation, server-side bots)
+  before R2/R3 (backend validation) exist — see Runtime Track sequencing note.

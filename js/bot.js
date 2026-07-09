@@ -56,6 +56,12 @@
         endTurnOnShrine:    55,  // standing on a collectible shrine centre: end = collect
         endTurnLowAp:        6,  // + when AP ≤ 1 — nothing useful left to do
 
+        // discarding to resolve hand/active overflow (only offered when over capacity)
+        discardBase:        10,
+        discardActivated:   40,  // element already won — this copy has less value
+        discardDeadElement: 30,  // source pool empty — no win credit ever again
+        discardLevel:       -5,  // × scroll level — prefer to KEEP higher-level scrolls
+
         // shrine valuation (used inside move/endTurn features)
         shrineNeed:          1.0, // × (capacity − pool[element])
         shrineUnactivated:   2.5, // element not yet activated
@@ -172,6 +178,19 @@
                        + shrineValue(snap, ctx.onShrine.shrineType);
                 }
                 if (snap.turn.ap <= 1) s += WEIGHTS.endTurnLowAp;
+                return s;
+            }
+
+            case 'discardScroll': {
+                const el = scrollElement(a.scroll);
+                const def = window.SCROLL_DEFINITIONS?.[a.scroll];
+                let s = WEIGHTS.discardBase + WEIGHTS.discardLevel * (def?.level || 0);
+                if (el && ELEMENTS.includes(el)) {
+                    if (self.activated.includes(el)) s += WEIGHTS.discardActivated;
+                    if ((snap.sourcePool[el] || 0) <= 0) s += WEIGHTS.discardDeadElement;
+                }
+                // Never discard the scroll the current build plan needs
+                if (_plan && a.scroll === _plan.scroll) s -= 1000;
                 return s;
             }
 
@@ -336,9 +355,31 @@
             return null;
         }
 
+        const snap = window.BotState.snapshot();
+
+        // Hand/active overflow must resolve before anything else — including
+        // the pattern plan below, which calls applyAction() directly and would
+        // otherwise bypass legalActions()'s discard-only gate while over
+        // capacity (see bot-state.js legalActions() overflow gate).
+        const self0 = me(snap);
+        if (self0) {
+            const maxHand = window.spellSystem?.MAX_HAND_SIZE ?? 2;
+            const maxActive = window.spellSystem?.MAX_ACTIVE_SIZE ?? 2;
+            if (self0.handCount > maxHand || self0.activeCount > maxActive) {
+                const ranked = rankActions(); // legalActions() returns discards only right now
+                if (ranked.length) {
+                    const { action } = ranked[0];
+                    log(`Resolving scroll overflow: discard ${action.scroll} (from ${action.from})`);
+                    const r = window.BotState.applyAction(action);
+                    if (r.ok) return action;
+                    log(`Discard failed (${r.reason})`);
+                }
+                return null;
+            }
+        }
+
         // The pattern plan takes priority: it's the only way multi-hex
         // patterns ever complete under the adjacent-only placement rule
-        const snap = window.BotState.snapshot();
         if (!_plan || !planValid(snap)) {
             _plan = makePlan(snap);
             if (_plan) log(`New plan: build ${_plan.scroll} anchored at hex (${_plan.anchor.q},${_plan.anchor.r})`);
