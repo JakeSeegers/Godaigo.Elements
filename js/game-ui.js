@@ -3057,6 +3057,25 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 return;
             }
 
+            // R2 (docs/bot-roadmap.md, Runtime Track): shadow-mode backend validator.
+            // Asks the server (which only knows the LAST persisted turn owner — see
+            // persistCurrentTurnIndex below) whether it agrees this player currently
+            // holds the turn. Logged only, never blocks — proves the backend-authority
+            // path works before anything is made to depend on it.
+            if (isMultiplayer && typeof supabase !== 'undefined' && currentGameId) {
+                const endingPlayerIndex = activePlayerIndex;
+                supabase.functions.invoke('validate-end-turn', {
+                    body: { gameId: currentGameId, playerIndex: endingPlayerIndex }
+                }).then(({ data, error }) => {
+                    if (error) { console.warn('⚠️ [R2 shadow-validator] call failed:', error); return; }
+                    if (data?.legal === false) {
+                        console.warn(`⚠️ [R2 shadow-validator] DISAGREEMENT — DB says turn belongs to player ${data.currentTurnIndex}, client ended turn for player ${endingPlayerIndex}`);
+                    } else {
+                        console.log(`✅ [R2 shadow-validator] confirmed endTurn legal for player ${endingPlayerIndex}`);
+                    }
+                });
+            }
+
             isEndingTurn = true;
 
             // Replenish shrine stones BEFORE clearing buffs (Mine buff doubles output)
@@ -3123,6 +3142,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                                 turnStartedAt: startedAt,
                                 turnNumber: currentTurnNumber
                             });
+                            persistCurrentTurnIndex(activePlayerIndex);
                         }
 
                         // Wandering River ends at the beginning of your next turn: clear when we switch TO that player
@@ -3242,6 +3262,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         turnStartedAt: startedAt,
                         turnNumber: currentTurnNumber
                     });
+                    persistCurrentTurnIndex(activePlayerIndex);
                 }
 
                 // Wandering River ends at the beginning of your next turn

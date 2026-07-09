@@ -2659,6 +2659,19 @@
                     spellSystem.responseWindow.handleRemoteResolved();
                 }
 
+                // Sync the one-per-turn response guard on non-arbitrator clients: if any
+                // resolved result is a oncePerTurn scroll, lock out further response scrolls
+                // for the rest of this turn (matches the arbitrator's resolveResponseStack).
+                if (spellSystem.scrollEffects && Array.isArray(payload.results)) {
+                    const usedOncePerTurn = payload.results.some(r =>
+                        (r.result === 'response-resolved' || r.result === 'countered-original') &&
+                        spellSystem.patterns?.[r.scrollName]?.oncePerTurn
+                    );
+                    if (usedOncePerTurn) {
+                        spellSystem.scrollEffects.responseScrollUsedThisTurn = true;
+                    }
+                }
+
                 // Process response scroll effects (like Unbidden Lamplight / Reflect)
                 if (payload.results && payload.triggeringScroll) {
                     for (const result of payload.results) {
@@ -3355,6 +3368,21 @@
                 event: event,
                 payload: payload
             });
+        }
+
+        // R2 (docs/bot-roadmap.md, Runtime Track): persist whose turn it is so a
+        // backend validator has something real to check against. Turn-passing
+        // itself still runs entirely on the broadcastGameAction realtime channel
+        // above — this is an additive, fire-and-forget side write, never gates
+        // gameplay if it fails.
+        function persistCurrentTurnIndex(playerIndex) {
+            if (!isMultiplayer || typeof supabase === 'undefined' || !currentGameId) return;
+            supabase.from('game_room')
+                .update({ current_turn_index: playerIndex })
+                .eq('id', currentGameId)
+                .then(({ error }) => {
+                    if (error) console.warn('⚠️ Failed to persist current_turn_index:', error);
+                });
         }
 
         // Start multiplayer game

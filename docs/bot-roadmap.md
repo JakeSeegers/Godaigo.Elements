@@ -26,7 +26,7 @@ different concerns and neither blocks the other:
 | 1 | Utility-scored bot (replaces rule ladder) | **DONE** | `js/bot.js` |
 | 1.5 | Multiplayer bot player (host-driven) | **DONE** | `js/bot-driver.js` + lobby.js `toggleBotPlayer()` |
 | R1 | Narrow driver to pure adapter | **DONE** | `js/bot-driver.js` |
-| R2 | One backend path for move validation/submission | TODO | Supabase edge function (new) |
+| R2 | One backend path for move validation (shadow-mode, `endTurn` only) | **DONE** | `validate-end-turn` edge fn + `persistCurrentTurnIndex()` |
 | R3 | Backend-authoritative turn validation | TODO | Supabase edge function + game-core.js call sites |
 | R4 | Replace host-browser impersonation with backend-driven bot turns | TODO | `js/bot-driver.js` (removed), backend service |
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
@@ -258,13 +258,40 @@ centroid" preference, now tunable), and `applyAction()` executes the chosen
 one. `bot-driver.js`'s `placeBotTile()` is now just `asBot(botIndex, () =>
 window.BotSystem.step())`, identical in shape to `driveBotTurn()`.
 
-### R2 — One backend path for move validation (TODO)
-Add a single Supabase edge function that accepts `{gameId, playerIndex, action}`
-(the same canonical action shape from Stage 0) and re-validates it against
-server-held game state before it's allowed to write to `game_room`/`players`.
-Start with ONE action type (e.g. `endTurn` or `cast`) — this is a proof of
-path, not a full rewrite. The browser (human or bot-driver) keeps producing
-actions exactly as it does now; it just also asks the backend to bless them.
+### R2 — One backend path for move validation (DONE, shadow-mode)
+Deployed a Supabase edge function (`validate-end-turn`, project
+`lovybwpypkaarstnvkbz`) that accepts `{gameId, playerIndex}` and checks it
+against `game_room.current_turn_index` — the first real server-held-state
+check, scoped to one action type (`endTurn`) as the roadmap intended.
+
+**Prerequisite discovered mid-implementation:** `game_room.current_turn_index`
+existed as a column but was only ever written at game start/reset and at
+game-end (winner display) — never during actual turn-to-turn play, which runs
+entirely on the `broadcastGameAction` realtime channel and never touches the
+DB. A validator checking a column nobody updates mid-game would be validating
+against permanently stale data, so this had to be fixed first: added
+`persistCurrentTurnIndex(playerIndex)` (`js/lobby.js`, next to
+`broadcastGameAction`) and wired it into all four `turn-change` broadcast
+sites (`js/game-ui.js` ×2 — the overflow-modal and non-overflow endTurn
+paths — and `js/game-core.js` ×2 — placement-phase advance and the
+turn-timeout kick handler). It's an additive fire-and-forget side write; if it
+fails, only a console warning fires, nothing about turn-passing itself
+changes.
+
+**Current wiring is shadow-mode only, as the roadmap specified** ("proof of
+path, not a full rewrite"): `js/game-ui.js`'s end-turn click handler calls
+`supabase.functions.invoke('validate-end-turn', ...)` with the OLD
+`activePlayerIndex` (the player who's ending their turn) right before
+advancing state, and only logs the result (`console.log` on agreement,
+`console.warn` on disagreement) — it never blocks or gates ending the turn.
+Verified end-to-end in the browser: correct CORS handling (edge function
+needs an explicit `OPTIONS` handler — Supabase functions don't add this for
+you), correct `legal:true`/`legal:false` responses against a real
+`game_room` row, and correct client-side logging for both cases.
+
+**Not yet done, deliberately deferred to R3:** nothing actually enforces the
+validator's answer, and only `endTurn` is covered. R3 extends this to real
+enforcement across the full action vocabulary.
 
 ### R3 — Backend-authoritative validation (TODO)
 Extend R2's edge function to cover all action types in the Stage 0 vocabulary

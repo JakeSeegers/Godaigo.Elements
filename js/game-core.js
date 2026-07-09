@@ -4260,6 +4260,7 @@
                         turnNumber: currentTurnNumber,
                         revealedTiles: placedTiles.filter(t => !t.flipped && !t.isPlayerTile).map(t => ({ id: t.id, shrineType: t.shrineType }))
                     });
+                    if (typeof persistCurrentTurnIndex === 'function') persistCurrentTurnIndex(activePlayerIndex);
                         console.log(`📡 Broadcasted turn-change to player ${activePlayerIndex}`);
 
                         if (canPlaceTile()) {
@@ -5553,6 +5554,7 @@ function clearPlayerPath() {
                 turnNumber: currentTurnNumber,
                 revealedTiles: placedTiles.filter(t => !t.flipped && !t.isPlayerTile).map(t => ({ id: t.id, shrineType: t.shrineType }))
             });
+            if (typeof persistCurrentTurnIndex === 'function') persistCurrentTurnIndex(activePlayerIndex);
 
             // Update local display as host
             if (isPlacementPhase) {
