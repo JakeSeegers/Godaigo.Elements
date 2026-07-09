@@ -196,8 +196,19 @@ Feature summary (see `scoreAction()` in bot.js for the authoritative list):
   blacklisted cell. This is a general "reality disagrees with the plan
   repeatedly, stop trusting it" safety net — it doesn't need to know *why*
   a cell won't hold a stone, just that it doesn't.
+- **Movement oscillation.** Found via a real game's downloaded action log
+  (`js/action-log.js` — see Runtime Track note below): the bot ping-ponged
+  between two hexes every single turn from turn ~4 onward, never casting,
+  placing, or exploring again for the rest of the game. Root cause: the two
+  hexes were *exactly* equidistant (151px) from the only remaining reachable
+  unrevealed tile, so `moveExploreGradient`'s distance-closed term scored
+  both directions identically — a true tie with nothing to break it. Fixed
+  with `moveRevisitPenalty` (-25): a small rolling history (`_recentPositions`,
+  last 4 hexes, persists across turn boundaries on purpose — that's where the
+  oscillation was observed) that penalizes stepping back onto a recently
+  visited hex, breaking ties toward new ground instead of alternating forever.
 
-Both found by literally running `window.BotSystem.turn()` in a loop in the
+All three found by literally running `window.BotSystem.turn()`/`.step()` in a loop in the
 browser console and inspecting `snapshot()`/`rank()` between turns — cheaper
 and more revealing than reasoning about the scoring code in the abstract.
 Worth repeating before investing in Stage 2/3a: structural bugs like these

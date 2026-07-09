@@ -53,6 +53,11 @@
         moveApPenalty:      -1,  // × step cost — cheap steps preferred
         moveExplore:        18,  // step lands on an unrevealed tile (reveals it — draws a scroll)
         moveExploreGradient: 0.15, // × px closed toward the nearest unrevealed tile
+        moveRevisitPenalty: -25,  // stepping onto a hex visited in the last few moves —
+                                  // breaks ties that would otherwise oscillate forever
+                                  // (e.g. two hexes exactly equidistant from the only
+                                  // remaining unrevealed tile have IDENTICAL scores
+                                  // with nothing else to prefer one over the other)
 
         // ending the turn
         endTurnBase:         1,  // always a legal fallback, never attractive by itself
@@ -179,8 +184,10 @@
                         explore += WEIGHTS.moveExploreGradient * (distFrom(self) - distFrom(a));
                     }
                 }
+                const revisit = (ctx.recentPositions || []).some(p => Math.hypot(p.x - a.x, p.y - a.y) < 5)
+                    ? WEIGHTS.moveRevisitPenalty : 0;
                 return WEIGHTS.moveBase + WEIGHTS.moveShrineValue * best
-                     + WEIGHTS.moveApPenalty * a.cost + explore;
+                     + WEIGHTS.moveApPenalty * a.cost + explore + revisit;
             }
 
             case 'endTurn': {
@@ -219,6 +226,19 @@
     // moves and the bot scatters stones that never complete anything.
     // ----------------------------------------------------------------
     let _plan = null; // { scroll, anchor:{q,r}, cells:[{q,r,x,y,type}] }
+
+    // Recent-move history — anti-oscillation tie-breaker. Two hexes can be
+    // EXACTLY equidistant from the only reachable unrevealed tile (or shrine),
+    // giving move-there and move-back identical scores with nothing else to
+    // prefer one over the other; without this the bot alternates between them
+    // forever, even across turn boundaries. Persists across turns deliberately
+    // (that's exactly where the oscillation was observed in practice).
+    const RECENT_POS_LIMIT = 4;
+    const _recentPositions = []; // ring buffer of {x,y}, oldest first
+    function recordVisited(x, y) {
+        _recentPositions.push({ x, y });
+        if (_recentPositions.length > RECENT_POS_LIMIT) _recentPositions.shift();
+    }
 
     // Some cells never accept a stone no matter how many times we place one —
     // e.g. an adjacent active fire stone destroys whatever non-fire/non-void
@@ -394,6 +414,7 @@
             onShrine: shrineUnderfoot(snap),
             hiddenTiles: snap.tiles.filter(t => !t.revealed && !t.isPlayerTile),
             paths: new Map(),
+            recentPositions: _recentPositions,
         };
         for (const t of ctx.shrines) {
             ctx.paths.set(t.id, window.BotState.findPath(self.x, self.y, t.x, t.y));
@@ -452,6 +473,7 @@
             const r = window.BotState.applyAction(planAction);
             if (r.ok) {
                 if (planAction.type === 'cast') _plan = null; // plan fulfilled
+                if (planAction.type === 'move') recordVisited(planAction.x, planAction.y);
                 return planAction;
             }
             log(`Plan action failed (${r.reason}) — falling back to scoring`);
@@ -472,6 +494,7 @@
 
         const res = window.BotState.applyAction(action);
         if (!res.ok) { log(`Action failed: ${res.reason}`); return null; }
+        if (action.type === 'move') recordVisited(action.x, action.y);
         return action;
     }
 
