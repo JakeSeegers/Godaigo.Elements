@@ -6,9 +6,21 @@
 ---
 
 ## Active Branch
-`4.10.progresscheck` → remote: `JakeSeegers/Godaigo.Elements`
+`claude/win-screen-trigger-bug-3iv5dx` → remote: `JakeSeegers/Godaigo.Elements`
+(previous work base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **NEW WIN CONDITION (rules change):** winning now requires activating all 5 elements
+  AND returning the pawn to the centre of your own player tile (the "player shrine").
+  Single gate: `checkWinCondition(playerIndex, {announce})` in `game-core.js` (also on
+  `window`). All former `activated.size === 5` checks route through it; movement paths
+  (placePlayer move branch, broadcastPlayerMovement, movePlayerVisually) call it on
+  arrival. Includes: shrine beacon (pulsing ring on the player tile), "return to your
+  shrine" status prompt, bot support (`WEIGHTS.moveReturnHome`, snapshot tiles carry
+  `playerIndex`), tutorial + docs text updates.
+  This also fixes the original bug where a `requiresSelection` scroll (e.g. Control the
+  Current) as the 5th element never triggered the win screen — the win check now runs
+  before the early return in `applyScrollEffects()`.
 - Joytone adaptive music integration: `joytone/` (embedded music app + MIDI/sf2 assets),
   `js/joytone-bridge.js` (hidden iframe, Shift+J+T popup, tile-reveal → seeded riff,
   per-player mute/volume in Settings). Details: js/INDEX.md § joytone-bridge.js.
@@ -85,4 +97,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-04-25*
+*Last updated: 2026-07-10*

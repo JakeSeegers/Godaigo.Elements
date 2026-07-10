@@ -39,6 +39,8 @@ ResponseWindowSystem.openWindow(castData)           [response-window.js]
     │
     ▼
 Win condition tracked in spellSystem.activated Set
+(win = all 5 elements activated + pawn returned to own player-tile centre;
+ gate: checkWinCondition() in game-core.js)
 ```
 
 ---

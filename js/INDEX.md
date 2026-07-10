@@ -40,6 +40,7 @@
 - `activateScroll(scrollId, playerIndex)` — validates pattern + 2 AP, fires effect, tracks win condition
 
 ### Key standalone functions
+- `checkWinCondition(playerIndex, {announce})` — THE win gate (also `window.checkWinCondition`): all 5 elements activated AND pawn on own player-tile centre ("player shrine"). Called from every activation path and every movement-completion path (placePlayer move branch, broadcastPlayerMovement in lobby.js, movePlayerVisually). `announce:true` prompts the local player to return home when elements are complete. Helpers: `isPlayerAtOwnShrine()`, `getPlayerShrineTile()`, `updateShrineReturnBeacon()`.
 - `hexToPixel(q, r, size)` → `{x, y}` — flat-top hex math. `size=TILE_SIZE(20)` for stones, `size=TILE_SIZE*4(80)` for tiles
 - `pixelToHex(x, y, size)` → `{q, r}`
 - `placeTile(x, y, rotation, flipped, shrineType, isPlayerTile, skipMP, forcedId)` — creates SVG tile group, assigns color, calls `placePlayer()` for player tiles. Fires `TutorialMode.onPlayerTilePlaced()` hook.

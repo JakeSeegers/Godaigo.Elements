@@ -428,14 +428,9 @@
                     if (typeof updatePlayerElementSymbols === 'function') {
                         activatedChangedPlayers.forEach(playerIdx => {
                             updatePlayerElementSymbols(playerIdx);
-                            // Win condition: all 5 elements activated
-                            if (this.playerScrolls?.[playerIdx]?.activated?.size === 5) {
+                            // Win condition: all 5 elements activated + returned to own shrine
+                            if (checkWinCondition(playerIdx, { announce: true })) {
                                 console.log(`🏆 Win condition met for player ${playerIdx} (detected via state sync)`);
-                                this.showLevelComplete(playerIdx);
-                                if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
-                                    typeof handleGameOver === 'function') {
-                                    handleGameOver(playerIdx);
-                                }
                             }
                         });
                     }
@@ -1615,6 +1610,13 @@
                         }
                         updatePlayerElementSymbols(activePlayerIndex);
 
+                        // Win check BEFORE the requiresSelection early return —
+                        // the element is already activated above, and the player
+                        // may already be standing on their shrine. (Previously the
+                        // early return skipped the win check entirely if the
+                        // selection was never completed.)
+                        checkWinCondition(activePlayerIndex, { announce: true });
+
                         // If effect requires selection, don't continue with broadcast yet
                         if (result.requiresSelection) {
                             return; // Selection mode will call onSelectionEffectComplete when done
@@ -1636,13 +1638,8 @@
                             syncPlayerState();
                         }
 
-                        // Check win condition
-                        if (this.getPlayerScrolls(false).activated.size === 5) {
-                            this.showLevelComplete(activePlayerIndex);
-                            if (isMultiplayer) {
-                                handleGameOver(activePlayerIndex);
-                            }
-                        }
+                        // Win condition already checked above (before the
+                        // requiresSelection early return).
                         return;
                     } else {
                         console.warn(`📜 No effect defined for scroll "${name}" – using default (give stones). Add effect in scroll-effects.js for "${name}".`);
@@ -1727,15 +1724,8 @@
                     syncPlayerState();
                 }
 
-                // Check if THIS player has won (activated all 5 elements)
-                if (this.getPlayerScrolls(false).activated.size === 5) {
-                    this.showLevelComplete(activePlayerIndex);
-
-                    // In multiplayer, mark game as finished in database
-                    if (isMultiplayer) {
-                        handleGameOver(activePlayerIndex);
-                    }
-                }
+                // Check if THIS player has won (all 5 elements + returned to shrine)
+                checkWinCondition(activePlayerIndex, { announce: true });
             }
 
             // Called by scroll effects when a selection-based effect (e.g. Shifting Sands) is completed
@@ -1770,12 +1760,7 @@
                     });
                     if (typeof syncPlayerState === 'function') syncPlayerState();
                 }
-                if (this.getPlayerScrolls(false).activated.size === 5) {
-                    this.showLevelComplete(activePlayerIndex);
-                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof handleGameOver === 'function') {
-                        handleGameOver(activePlayerIndex);
-                    }
-                }
+                checkWinCondition(activePlayerIndex, { announce: true });
             }
 
             // Handle scroll disposition after casting
@@ -1878,7 +1863,7 @@
                 box.appendChild(playerName);
 
                 const msg = document.createElement('div');
-                msg.textContent = 'You have mastered all five elements!';
+                msg.textContent = 'All five elements mastered — and returned to the shrine!';
                 msg.className = 'game-over-msg';
                 box.appendChild(msg);
 
@@ -4211,6 +4196,14 @@
                         playerPositions[myPlayerIndex] = placed;
                         console.log(`🔧 Relocated local pawn to playerPositions[${myPlayerIndex}]`);
                     }
+                    // Same correction for the tile record: placeTile captured
+                    // playerPositions.length as the owner index, which is wrong
+                    // if a remote tile arrived first. The shrine-return win
+                    // condition looks tiles up by playerIndex, so fix it here.
+                    const ownTile = placedTiles[placedTiles.length - 1];
+                    if (ownTile && ownTile.isPlayerTile) {
+                        ownTile.playerIndex = myPlayerIndex;
+                    }
                 }
 
                 // In multiplayer, broadcast tile placement and track placement phase
@@ -5076,6 +5069,9 @@ function clearPlayerPath() {
                 if (spellSystem && spellSystem.scrollEffects && typeof spellSystem.scrollEffects.refreshWaterTransformHighlights === 'function') {
                     spellSystem.scrollEffects.refreshWaterTransformHighlights();
                 }
+
+                // Shrine-return win: arriving home with all five elements activated wins
+                checkWinCondition(activePlayerIndex);
             }
 
             // Update catacomb teleport indicators
@@ -5223,6 +5219,11 @@ function clearPlayerPath() {
             player.element = playerGroup;
 
             console.log(`📄 Moved player ${playerIndex} to (${x.toFixed(1)}, ${y.toFixed(1)}), spent ${apSpent} AP`);
+
+            // Shrine-return win: a remote player arriving home with all five
+            // elements activated wins (redundant with the winner's own client's
+            // game-over broadcast, but keeps observers correct if it's lost).
+            checkWinCondition(playerIndex);
         }
 
         // Visual-only stone break (called when receiving broadcast from other players)
@@ -5668,6 +5669,104 @@ function clearPlayerPath() {
                 resources: activeResources
             });
         }
+
+        // ============================================================
+        // WIN CONDITION — activate all 5 elements AND return the pawn
+        // to the centre of your own player tile (the "player shrine").
+        // Every code path that can complete the win (scroll activation,
+        // movement, state sync, broadcasts) funnels through
+        // checkWinCondition() below.
+        // ============================================================
+
+        function getPlayerShrineTile(playerIndex) {
+            return placedTiles.find(t => t.isPlayerTile && t.playerIndex === playerIndex) || null;
+        }
+
+        function isPlayerAtOwnShrine(playerIndex) {
+            const pos = playerPositions[playerIndex];
+            const tile = getPlayerShrineTile(playerIndex);
+            if (!pos || !tile) return false;
+            return Math.hypot(pos.x - tile.x, pos.y - tile.y) < 5;
+        }
+
+        // Single win-condition gate. Returns true when the win fired.
+        // Safe to call repeatedly from any path: showLevelComplete and
+        // handleGameOver both guard against double-fire.
+        // opts.announce — when the elements are complete but the pawn is
+        // not home yet, prompt the local player to return to their shrine
+        // (used by activation-time callers; movement callers stay quiet).
+        function checkWinCondition(playerIndex, opts = {}) {
+            if (playerIndex === null || playerIndex === undefined) return false;
+            const scrolls = (typeof spellSystem !== 'undefined' && spellSystem)
+                ? spellSystem.playerScrolls?.[playerIndex] : null;
+            if (!scrolls || !scrolls.activated || scrolls.activated.size < 5) return false;
+
+            if (!isPlayerAtOwnShrine(playerIndex)) {
+                // Elements complete, pawn not home — beacon the shrine (public
+                // info, like the element pips) and nudge the local player.
+                updateShrineReturnBeacon(playerIndex, true);
+                if (opts.announce) notifyReturnToShrine(playerIndex);
+                return false;
+            }
+
+            updateShrineReturnBeacon(playerIndex, false);
+            const isLocalWinner = !isMultiplayer ||
+                (typeof myPlayerIndex !== 'undefined' && playerIndex === myPlayerIndex);
+            if (isLocalWinner) {
+                spellSystem.showLevelComplete(playerIndex);
+            }
+            if (isMultiplayer && typeof handleGameOver === 'function') {
+                handleGameOver(playerIndex);
+            }
+            return true;
+        }
+
+        function notifyReturnToShrine(playerIndex) {
+            const isLocal = !isMultiplayer ||
+                (typeof myPlayerIndex !== 'undefined' && playerIndex === myPlayerIndex);
+            if (!isLocal) return;
+            updateStatus('🏠 All five elements activated! Return to the centre of your player shrine to win!');
+        }
+
+        // Pulsing ring on the player's shrine centre while they still need
+        // to walk home to claim the win. Removed once the win fires.
+        function updateShrineReturnBeacon(playerIndex, show) {
+            const tile = getPlayerShrineTile(playerIndex);
+            if (!tile || !tile.element) return;
+            const existing = tile.element.querySelector('.shrine-return-beacon');
+            if (!show) {
+                if (existing) existing.remove();
+                return;
+            }
+            if (existing) return;
+            const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            ring.setAttribute('class', 'shrine-return-beacon');
+            ring.setAttribute('cx', 0);
+            ring.setAttribute('cy', 0);
+            ring.setAttribute('r', TILE_SIZE);
+            ring.setAttribute('fill', 'none');
+            ring.setAttribute('stroke', playerPositions[playerIndex]?.color || '#f0c040');
+            ring.setAttribute('stroke-width', '3');
+            ring.style.pointerEvents = 'none';
+            const animR = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+            animR.setAttribute('attributeName', 'r');
+            animR.setAttribute('values', `${TILE_SIZE * 0.6};${TILE_SIZE * 1.4};${TILE_SIZE * 0.6}`);
+            animR.setAttribute('dur', '1.6s');
+            animR.setAttribute('repeatCount', 'indefinite');
+            ring.appendChild(animR);
+            const animO = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+            animO.setAttribute('attributeName', 'stroke-opacity');
+            animO.setAttribute('values', '0.9;0.3;0.9');
+            animO.setAttribute('dur', '1.6s');
+            animO.setAttribute('repeatCount', 'indefinite');
+            ring.appendChild(animO);
+            tile.element.appendChild(ring);
+        }
+
+        // Expose for modules outside the shared lexical scope (bot files, handlers)
+        window.checkWinCondition = checkWinCondition;
+        window.isPlayerAtOwnShrine = isPlayerAtOwnShrine;
+        window.getPlayerShrineTile = getPlayerShrineTile;
 
         // Show tooltip with player's AP and resources
         function updatePlayerElementSymbols(playerIndex = null) {

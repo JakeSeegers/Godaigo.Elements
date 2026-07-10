@@ -61,6 +61,11 @@
                                   // recency so undoing your immediately previous move is
                                   // penalized far more than a revisit from several steps back
 
+        // returning home — with all 5 elements activated the win now requires
+        // standing on the centre of the bot's own player tile (player shrine),
+        // so walking home dominates everything else once the set is complete
+        moveReturnHome:    400,  // × 1/(1 + remaining path cost to own shrine)
+
         // ending the turn
         endTurnBase:         1,  // always a legal fallback, never attractive by itself
         endTurnOnShrine:    55,  // standing on a collectible shrine centre: end = collect
@@ -186,9 +191,19 @@
                         explore += WEIGHTS.moveExploreGradient * (distFrom(self) - distFrom(a));
                     }
                 }
+                // Going home: all 5 elements activated → the only thing that
+                // still wins is standing on the bot's own shrine centre.
+                let home = 0;
+                if (ctx.homePath && ctx.homePath.length) {
+                    const first = ctx.homePath[0];
+                    if (Math.hypot(first.x - a.x, first.y - a.y) < 5) {
+                        const remaining = ctx.homePath.reduce((c, p) => c + p.cost, 0);
+                        home = WEIGHTS.moveReturnHome / (1 + remaining);
+                    }
+                }
                 const revisit = revisitPenalty(ctx.recentPositions || [], a, WEIGHTS.moveRevisitPenalty);
                 return WEIGHTS.moveBase + WEIGHTS.moveShrineValue * best
-                     + WEIGHTS.moveApPenalty * a.cost + explore + revisit;
+                     + WEIGHTS.moveApPenalty * a.cost + explore + revisit + home;
             }
 
             case 'endTurn': {
@@ -277,6 +292,9 @@
     function makePlan(snap) {
         const self = me(snap);
         if (!self || !self.hand) return null;
+        // All 5 elements activated — no cast adds win credit anymore; don't
+        // start new builds, let move-scoring's homePath term walk the bot home
+        if (ELEMENTS.every(el => self.activated.includes(el))) return null;
         const pHex = pixelToHex(self.x, self.y, TILE_SIZE);
         const grid = window.BotState.hexGrid();
         let best = null;
@@ -436,9 +454,19 @@
             hiddenTiles: snap.tiles.filter(t => !t.revealed && !t.isPlayerTile),
             paths: new Map(),
             recentPositions: _recentPositions,
+            homePath: null,
         };
         for (const t of ctx.shrines) {
             ctx.paths.set(t.id, window.BotState.findPath(self.x, self.y, t.x, t.y));
+        }
+        // All 5 elements activated → path back to the bot's own player shrine
+        if (ELEMENTS.every(el => self.activated.includes(el))) {
+            const homeTile = snap.tiles.find(t =>
+                t.isPlayerTile && t.playerIndex === snap.turn.activePlayerIndex);
+            if (homeTile) {
+                const path = window.BotState.findPath(self.x, self.y, homeTile.x, homeTile.y);
+                if (path && path.length) ctx.homePath = path;
+            }
         }
 
         return legal

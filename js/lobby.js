@@ -2148,13 +2148,11 @@
                 const activatedStr = activatedElements ? activatedElements.join(', ') : element;
                 updateStatus(`${playerName} used ${effectName}! Activated: ${activatedStr}`);
 
-                // Check win condition — all 5 elements activated
-                if (spellSystem.playerScrolls[playerIndex].activated.size === 5) {
+                // Check win condition — all 5 elements activated + returned to own shrine.
+                // checkWinCondition handles observer clients too: handleGameOver →
+                // showGameOverToAll shows the win screen, and both are double-fire safe.
+                if (typeof checkWinCondition === 'function' && checkWinCondition(playerIndex)) {
                     console.log(`🏆 Win condition met for player ${playerIndex} (detected via scroll-effect broadcast)`);
-                    // For the winner's own echo: showLevelComplete already ran locally and
-                    // showGameOverToAll is guarded by #game-over-notification. Safe to call again.
-                    // For observers: handleGameOver → showGameOverToAll shows the win screen.
-                    handleGameOver(playerIndex);
                 }
             });
 
@@ -2225,11 +2223,8 @@
                     const displayName = scrollName ? (scrollName.replace(/_/g, ' ').toLowerCase()) : 'scroll';
                     updateStatus(`🪞 ${playerName}'s Reflect triggered: activated ${displayName} (counts as water only).`);
 
-                    if (activated.size === 5 && playerIndex === myPlayerIndex) {
-                        spellSystem.showLevelComplete(playerIndex);
-                        if (typeof handleGameOver === 'function') {
-                            handleGameOver(playerIndex);
-                        }
+                    if (playerIndex === myPlayerIndex && typeof checkWinCondition === 'function') {
+                        checkWinCondition(playerIndex, { announce: true });
                     }
 
                     // For non-interactive scrolls, advance the queue immediately
@@ -2308,11 +2303,8 @@
                     const displayName = scrollName ? (scrollName.replace(/_/g, ' ').toLowerCase()) : 'scroll';
                     updateStatus(`🔮 ${playerName}'s Psychic triggered: activated ${displayName} (counts as void only).`);
 
-                    if (activated.size === 5 && playerIndex === myPlayerIndex) {
-                        spellSystem.showLevelComplete(playerIndex);
-                        if (typeof handleGameOver === 'function') {
-                            handleGameOver(playerIndex);
-                        }
+                    if (playerIndex === myPlayerIndex && typeof checkWinCondition === 'function') {
+                        checkWinCondition(playerIndex, { announce: true });
                     }
 
                     // For non-interactive scrolls, advance the queue immediately
@@ -2707,6 +2699,12 @@
                                     });
                                     if (typeof updatePlayerElementSymbols === 'function') {
                                         updatePlayerElementSymbols(result.casterIndex);
+                                    }
+
+                                    // Response scroll can be this player's 5th element — and this
+                                    // client never receives its own scroll-effect broadcast
+                                    if (typeof checkWinCondition === 'function') {
+                                        checkWinCondition(result.casterIndex, { announce: true });
                                     }
 
                                     // Broadcast activation so the caster's client (and any others)
@@ -3263,6 +3261,10 @@
         // this function as a named hook so it is safe to define it once here.
         function broadcastPlayerMovement(playerIndex, x, y, apSpent) {
             broadcastGameAction('player-move', { playerIndex, x, y, apSpent });
+            // Shrine-return win check for the movement paths that funnel through
+            // here (bot moves, path-based movement). Drag/tap moves are covered
+            // by the same check inside placePlayer().
+            if (typeof checkWinCondition === 'function') checkWinCondition(playerIndex);
         }
 
         // Called by game-core.js executeMovement() after landing on a hex.

@@ -65,6 +65,7 @@
                 x: +t.x.toFixed(1), y: +t.y.toFixed(1),
                 revealed: !t.flipped,
                 isPlayerTile: !!t.isPlayerTile,
+                playerIndex: t.isPlayerTile ? (t.playerIndex ?? null) : null, // public — whose shrine
                 // MASKED when face-down — reading it would be cheating
                 shrineType: t.flipped ? null : t.shrineType,
             })),

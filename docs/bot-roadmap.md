@@ -61,10 +61,15 @@ different concerns and neither blocks the other:
      what some older notes say — it is another alias of the display player's pool.
 
 3. **Win condition** = a player's `spellSystem.playerScrolls[i].activated` Set
-   contains all five of `earth, water, fire, wind, void`. Casting a scroll of an
-   element whose SOURCE pool is 0 should still fire the effect but NOT award the
-   win-condition element (see `planning/current.md` task 2 — check whether that
-   rule is implemented in `applyScrollEffects()` before relying on it).
+   contains all five of `earth, water, fire, wind, void` AND their pawn stands on
+   the centre of their own player tile (the "player shrine"). The shared gate is
+   `checkWinCondition(playerIndex)` in game-core.js; movement paths call it on
+   arrival. Bot support: snapshot tiles carry `playerIndex` for player tiles, and
+   bot.js walks home via `WEIGHTS.moveReturnHome` once all five are activated.
+   Casting a scroll of an element whose SOURCE pool is 0 should still fire the
+   effect but NOT award the win-condition element (see `planning/current.md`
+   task 2 — check whether that rule is implemented in `applyScrollEffects()`
+   before relying on it).
 
 4. **Scroll rules the bot must respect:**
    - `SCROLL_DEFINITIONS[name].level === 1` → response-only, never proactively castable.

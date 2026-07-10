@@ -18,7 +18,10 @@
 > Read the full GDD for balance decisions. This is a quick-reference extract.
 
 ### Win condition
-Activate one scroll of each element type: Earth, Water, Fire, Wind, Void.
+Activate one scroll of each element type (Earth, Water, Fire, Wind, Void), then
+return your pawn to the centre of your own player tile (the "player shrine").
+Both parts are required — the win fires the moment the pawn stands on the shrine
+centre with all five elements activated (gate: `checkWinCondition()` in game-core.js).
 Catacomb scrolls are dual-type and count toward two conditions simultaneously.
 
 ### Elemental rank (high to low)
