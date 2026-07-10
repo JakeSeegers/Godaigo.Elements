@@ -1470,7 +1470,8 @@
 
                 const scrollData = { name, spell, fromCommonArea, casterIndex: activePlayerIndex };
 
-                // Open response window when 2+ players so the react phase always runs (others can respond or pass)
+                // React phase: openResponseWindow itself skips (and resolves the cast
+                // immediately) unless an opponent could actually respond or bluff
                 const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 0;
                 if (this.responseWindow && numPlayers > 1) {
                     console.log('Opening response window (react phase)');

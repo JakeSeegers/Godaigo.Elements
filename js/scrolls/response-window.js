@@ -17,7 +17,11 @@
  * - Responder must have valid scroll (active, common, or hand+open-slot) AND valid pattern
  * - Earth I (Iron Stance) / Void I (Psychic) are counter scrolls — they cancel the original
  * - All other response scrolls execute alongside the original
- * - All non-caster players submit (respond or pass) before resolution begins
+ * - All non-caster HUMAN players submit (respond or pass) before resolution begins
+ * - The window only OPENS when at least one opponent could respond (canPlayerRespond)
+ *   or plausibly bluff a response (canPlayerBluff: matching formation + hand scroll of
+ *   that element + open active slot + enough AP). Otherwise the cast resolves instantly.
+ *   Bots are excluded — they cannot respond.
  */
 
 // Element rank for response arbitration: higher = wins over lower
@@ -254,13 +258,39 @@ class ResponseWindowSystem {
     }
 
     /**
-     * Check if any player can respond (used to skip response window)
-     * @param {number} excludePlayer - Player to exclude from check (the caster cannot respond to their own scroll)
+     * Is this player slot a bot? Bots cannot respond (no bot response logic
+     * exists yet), so they neither hold the response window open as potential
+     * responders nor count as expected submitters during arbitration.
+     */
+    isBotPlayer(playerIndex) {
+        try {
+            if (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData)) {
+                const p = allPlayersData.find(p => p.player_index === playerIndex);
+                if (p && typeof window.isBotUsername === 'function') {
+                    return window.isBotUsername(p.username);
+                }
+            }
+        } catch (e) { /* solo/tutorial mode has no allPlayersData */ }
+        return false;
+    }
+
+    /**
+     * Check if any opponent could respond — or plausibly bluff a response
+     * (used to skip the response window entirely when neither is possible).
+     *
+     * A player holds the window open when they are in the right formation for
+     * a response scroll AND can afford it AND either:
+     *   • actually have a response/counter scroll castable (active area,
+     *     common area, or hand + open active slot) → canPlayerRespond, or
+     *   • have a hand scroll of the matching element + open active slot, so
+     *     opponents can't rule out a response → canPlayerBluff.
+     *
+     * @param {number} excludePlayer - The caster (cannot respond to their own scroll)
      * @returns {boolean}
      */
-    canAnyPlayerRespond(excludePlayer = -1) {
+    canAnyPlayerRespondOrBluff(excludePlayer = -1) {
         const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 0;
-        console.log(`Response window: checking ${numPlayers} players for valid responses (excluding player ${excludePlayer})`);
+        console.log(`Response window: checking ${numPlayers} players for valid responses/bluffs (excluding player ${excludePlayer})`);
 
         for (let i = 0; i < numPlayers; i++) {
             // Skip the caster - you cannot respond to your own scroll
@@ -268,9 +298,21 @@ class ResponseWindowSystem {
                 console.log(`  Player ${i}: skipped (caster)`);
                 continue;
             }
+            if (typeof playerPositions !== 'undefined' && !playerPositions[i]) {
+                console.log(`  Player ${i}: skipped (no pawn)`);
+                continue;
+            }
+            if (this.isBotPlayer(i)) {
+                console.log(`  Player ${i}: skipped (bot — cannot respond)`);
+                continue;
+            }
             const result = this.canPlayerRespond(i);
             console.log(`  Player ${i}: canRespond=${result.canRespond}, reason=${result.reason || 'can respond'}, validScrolls=${result.validScrolls.length}`);
             if (result.canRespond) {
+                return true;
+            }
+            if (this.canPlayerBluff(i)) {
+                console.log(`  Player ${i}: can bluff (matching formation + hand element + AP)`);
                 return true;
             }
         }
@@ -300,18 +342,16 @@ class ResponseWindowSystem {
             return;
         }
 
-        // Quick check: can any non-caster player actually respond?
-        // In SINGLE-PLAYER we skip the response window when no one can respond.
-        // In MULTIPLAYER we do NOT skip here — this check runs on the caster's client
-        // using its local snapshot of opponent scroll state, which can lag behind due
-        // to in-flight `scroll-move` broadcasts. Skipping would block valid Iron Stance
-        // counters that arrived just before the winning scroll was cast.
-        // Each non-caster client already checks their own state locally inside
-        // showResponseModalForOtherPlayer() and auto-passes instantly if they can't
-        // respond, so no one is ever stuck waiting.
-        const _inMultiplayer = typeof isMultiplayer !== 'undefined' && isMultiplayer;
-        if (!_inMultiplayer && !this.canAnyPlayerRespond(casterIndex)) {
-            console.log('Response window skipped - no player can respond (no valid counter/response scrolls)');
+        // Skip the window entirely unless at least one opponent could actually
+        // respond — or plausibly bluff a response (right formation + matching
+        // hand element + open active slot + enough AP). This runs on the
+        // caster's client using its local mirror of opponent state (positions,
+        // active/hand scrolls, AP), which the broadcasts keep in sync. Bots are
+        // excluded — they cannot respond. Without this gate the caster sat
+        // through the "waiting for other players to respond" screen after
+        // every single cast.
+        if (!this.canAnyPlayerRespondOrBluff(casterIndex)) {
+            console.log('Response window skipped - no opponent can respond or bluff');
             if (onComplete) onComplete({ skipped: true, responses: [] });
             return;
         }
@@ -1477,10 +1517,15 @@ class ResponseWindowSystem {
 
         const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 1;
 
-        // All non-caster players must submit (respond or pass) before we arbitrate
+        // All non-caster HUMAN players must submit (respond or pass) before we
+        // arbitrate. Bots never submit (they cannot respond), so counting them
+        // would force every window to run out the full timeout.
         let expectedResponders = 0;
         for (let i = 0; i < numPlayers; i++) {
-            if (i !== this.currentCaster) expectedResponders++;
+            if (i === this.currentCaster) continue;
+            if (typeof playerPositions !== 'undefined' && !playerPositions[i]) continue;
+            if (this.isBotPlayer(i)) continue;
+            expectedResponders++;
         }
         const requiredResponders = expectedResponders + 1; // +1 for caster (already in set)
         console.log(`Response check: ${this.respondingPlayers.size} submitted, ${requiredResponders} expected`);
