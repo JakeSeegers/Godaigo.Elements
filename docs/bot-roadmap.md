@@ -203,12 +203,25 @@ Feature summary (see `scoreAction()` in bot.js for the authoritative list):
   hexes were *exactly* equidistant (151px) from the only remaining reachable
   unrevealed tile, so `moveExploreGradient`'s distance-closed term scored
   both directions identically — a true tie with nothing to break it. Fixed
-  with `moveRevisitPenalty` (-25): a small rolling history (`_recentPositions`,
-  last 4 hexes, persists across turn boundaries on purpose — that's where the
-  oscillation was observed) that penalizes stepping back onto a recently
-  visited hex, breaking ties toward new ground instead of alternating forever.
+  (v1) with `moveRevisitPenalty`: a small rolling history (`_recentPositions`)
+  that penalizes stepping back onto a recently visited hex.
+- **Movement oscillation, round 2 (v1's fix was incomplete).** A second
+  downloaded action log showed the SAME 2-hex ping-pong still happening —
+  now 5 round-trips inside a single turn. v1's penalty was a flat "is this
+  hex anywhere in the last N visited?" check; in a clean A↔B cycle, once
+  the window fills, BOTH A and B are simultaneously "recently visited," so
+  every candidate gets the identical penalty and the tie comes right back.
+  Fixed by weighting the penalty by recency instead of applying it flat —
+  `revisitPenalty()` divides `moveRevisitPenalty` by how many steps ago that
+  exact hex was visited, so "undo the move I just made" (1 step ago, full
+  penalty) is now punished far more than "revisit somewhere from 3+ steps
+  back" (partial penalty). A strict 2-cycle only ever has one way to
+  "continue the cycle" — reverse the immediately previous step — so this
+  directly and specifically kills it, whereas v1's flat check could not.
+  `_recentPositions` window widened 4 → 6 to also dampen slightly longer
+  (3-hex) cycles, though only the recency-decay actually fixes 2-cycles.
 
-All three found by literally running `window.BotSystem.turn()`/`.step()` in a loop in the
+All four found by literally running `window.BotSystem.turn()`/`.step()` in a loop in the
 browser console and inspecting `snapshot()`/`rank()` between turns — cheaper
 and more revealing than reasoning about the scoring code in the abstract.
 Worth repeating before investing in Stage 2/3a: structural bugs like these

@@ -53,11 +53,13 @@
         moveApPenalty:      -1,  // × step cost — cheap steps preferred
         moveExplore:        18,  // step lands on an unrevealed tile (reveals it — draws a scroll)
         moveExploreGradient: 0.15, // × px closed toward the nearest unrevealed tile
-        moveRevisitPenalty: -25,  // stepping onto a hex visited in the last few moves —
-                                  // breaks ties that would otherwise oscillate forever
-                                  // (e.g. two hexes exactly equidistant from the only
-                                  // remaining unrevealed tile have IDENTICAL scores
-                                  // with nothing else to prefer one over the other)
+        moveRevisitPenalty: -60,  // ÷ steps-since-visited (see revisitPenalty()) — breaks
+                                  // ties that would otherwise oscillate forever (e.g. two
+                                  // hexes exactly equidistant from the only remaining
+                                  // unrevealed tile have IDENTICAL scores with nothing
+                                  // else to prefer one over the other); weighted by
+                                  // recency so undoing your immediately previous move is
+                                  // penalized far more than a revisit from several steps back
 
         // ending the turn
         endTurnBase:         1,  // always a legal fallback, never attractive by itself
@@ -184,8 +186,7 @@
                         explore += WEIGHTS.moveExploreGradient * (distFrom(self) - distFrom(a));
                     }
                 }
-                const revisit = (ctx.recentPositions || []).some(p => Math.hypot(p.x - a.x, p.y - a.y) < 5)
-                    ? WEIGHTS.moveRevisitPenalty : 0;
+                const revisit = revisitPenalty(ctx.recentPositions || [], a, WEIGHTS.moveRevisitPenalty);
                 return WEIGHTS.moveBase + WEIGHTS.moveShrineValue * best
                      + WEIGHTS.moveApPenalty * a.cost + explore + revisit;
             }
@@ -233,11 +234,31 @@
     // prefer one over the other; without this the bot alternates between them
     // forever, even across turn boundaries. Persists across turns deliberately
     // (that's exactly where the oscillation was observed in practice).
-    const RECENT_POS_LIMIT = 4;
-    const _recentPositions = []; // ring buffer of {x,y}, oldest first
+    //
+    // v1 used a flat penalty for "anywhere in the last N positions," which
+    // fails for a clean 2-hex cycle: once both A and B are simultaneously
+    // inside the window, EVERY candidate move gets the same penalty, so the
+    // tie comes right back and the bot still oscillates (observed: 5 A<->B
+    // round-trips burning a whole turn's AP). Fixed by weighting the penalty
+    // by recency instead of applying it flat — "undo the move I just made"
+    // (1 step ago) is penalized far more than "revisit somewhere from 3+
+    // steps ago," so a 2-cycle can no longer look equally bad in both
+    // directions and the tie actually breaks.
+    const RECENT_POS_LIMIT = 6;
+    const _recentPositions = []; // ring buffer of {x,y}, oldest first, LAST entry = current position
     function recordVisited(x, y) {
         _recentPositions.push({ x, y });
         if (_recentPositions.length > RECENT_POS_LIMIT) _recentPositions.shift();
+    }
+    // Recency-weighted revisit penalty for a candidate move target `a`.
+    // k=1 means "this is exactly where I was one move ago" (an immediate
+    // reversal); k=2 means two moves ago, etc. — penalty decays as 1/k.
+    function revisitPenalty(recent, a, weight) {
+        for (let k = 1; k < recent.length; k++) {
+            const p = recent[recent.length - 1 - k]; // skip the last entry (current position)
+            if (Math.hypot(p.x - a.x, p.y - a.y) < 5) return weight / k;
+        }
+        return 0;
     }
 
     // Some cells never accept a stone no matter how many times we place one —
