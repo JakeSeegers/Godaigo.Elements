@@ -428,8 +428,13 @@ and not started.
    all knobs in `WEIGHTS.eval*`. Wired exactly as planned:
    `WEIGHTS.searchDepth > 0 ? searchPick() : greedyPick()` — **default is 0
    (greedy)** until the Stage-3a arena can measure the acceptance criterion.
-   Enable from the console: `BotSystem.WEIGHTS.searchDepth = 3` (≈10ms per
-   decision at depth 3 on the tutorial board).
+   Enable from the console (`BotSystem.WEIGHTS.searchDepth = 3`, ≈10ms per
+   decision on the tutorial board) or via the cheat panel (click the HUD
+   "AP" label 5×): **Bot Brain** cycles Dumb (greedy) → Smart (search every
+   action) → Hybrid (`WEIGHTS.searchHybrid`: search only when a cast or
+   stone placement is among the legal actions; plain movement stays greedy).
+   Persisted in `localStorage['godaigo_bot_brain']`, applied by bot.js at
+   load — and it deliberately overrides evolved weights.
 5. **Multi-turn MCTS (optional, not started)**: UCT over turns; unknown
    face-down tiles and opponent hands are DETERMINIZED — sample K plausible
    completions (uniform over the unseen tile-deck distribution), run the

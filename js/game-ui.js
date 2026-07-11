@@ -4026,6 +4026,45 @@ document.getElementById('undo-move').onclick = function() {
                 });
                 panel.appendChild(placeAnywhereBtn);
 
+                // Bot Brain toggle — cycles Dumb → Smart → Hybrid.
+                //   Dumb   = Stage-1 greedy scoring (default)
+                //   Smart  = Stage-2 lookahead search (3 plies) on every action
+                //   Hybrid = lookahead only when a cast/stone placement is on
+                //            the table; plain movement stays greedy (cheap)
+                // Persisted to localStorage; bot.js applies it at load, and we
+                // also apply it live so no reload is needed.
+                const BRAIN_ORDER = ['dumb', 'smart', 'hybrid'];
+                const BRAIN_UI = {
+                    dumb:   { label: '🤖 Bot Brain: Dumb (greedy)',    color: '#eee' },
+                    smart:  { label: '🧠 Bot Brain: Smart (lookahead)', color: '#6ef' },
+                    hybrid: { label: '🧠 Bot Brain: Hybrid',            color: '#fc6' },
+                };
+                function currentBrain() {
+                    try { return localStorage.getItem('godaigo_bot_brain') || 'dumb'; }
+                    catch (e) { return 'dumb'; }
+                }
+                function applyBrain(mode) {
+                    const W = window.BotSystem?.WEIGHTS;
+                    if (W) {
+                        W.searchDepth = (mode === 'dumb') ? 0 : 3;
+                        W.searchHybrid = (mode === 'hybrid') ? 1 : 0;
+                    }
+                    try { localStorage.setItem('godaigo_bot_brain', mode); } catch (e) {}
+                }
+                const brainBtn = makeBtn('', () => {
+                    const next = BRAIN_ORDER[(BRAIN_ORDER.indexOf(currentBrain()) + 1) % BRAIN_ORDER.length];
+                    applyBrain(next);
+                    brainBtn.textContent = BRAIN_UI[next].label;
+                    brainBtn.style.color = BRAIN_UI[next].color;
+                    updateStatus(
+                        next === 'dumb'  ? 'Bot brain: DUMB — one-step greedy scoring'
+                      : next === 'smart' ? 'Bot brain: SMART — 3-ply lookahead on every action'
+                      : 'Bot brain: HYBRID — lookahead for casts/stone placements, greedy movement');
+                });
+                brainBtn.textContent = BRAIN_UI[currentBrain()].label;
+                brainBtn.style.color = BRAIN_UI[currentBrain()].color;
+                panel.appendChild(brainBtn);
+
                 // ── Overlay Editor ───────────────────────────────────────────
                 const overlaySection = document.createElement('div');
                 overlaySection.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';

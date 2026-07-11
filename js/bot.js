@@ -92,6 +92,10 @@
         // leaves valued by evaluateSnapshot() below.
         searchDepth:         0,
         searchBreadth:       5,   // children expanded per node (beam width)
+        searchHybrid:        0,   // 1 = only search when a tactical choice exists
+                                  // (cast/placeStone among the legal actions);
+                                  // plain movement stays greedy. Cheat-panel
+                                  // "Bot Brain: Hybrid" sets this.
 
         // evaluateSnapshot() — STATE value, only used when searchDepth > 0.
         // Rough scale: one activated element (400) ≫ anything else per turn.
@@ -117,6 +121,19 @@
             log('Loaded evolved weights from localStorage');
         }
     } catch (e) { /* corrupt save — keep defaults */ }
+
+    // Bot Brain preference (cheat panel: click the HUD "AP" label 5×) —
+    // applied LAST so it wins over both defaults and evolved weights.
+    //   'dumb'   → greedy Stage-1 scoring (searchDepth 0)
+    //   'smart'  → 3-ply lookahead on every action
+    //   'hybrid' → lookahead only at tactical decision points
+    try {
+        const brain = localStorage.getItem('godaigo_bot_brain');
+        if (brain === 'smart')       { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 0; }
+        else if (brain === 'hybrid') { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 1; }
+        else if (brain === 'dumb')   { WEIGHTS.searchDepth = 0; WEIGHTS.searchHybrid = 0; }
+        if (brain) log(`Bot brain: ${brain}`);
+    } catch (e) { /* keep whatever the weights said */ }
 
     // ----------------------------------------------------------------
     // Derived state helpers (read ONLY from the snapshot — never from
@@ -651,11 +668,21 @@
             _plan = null;
         }
 
-        // Stage 2: lookahead search when enabled, greedy Stage-1 argmax otherwise
+        // Stage 2: lookahead search when enabled, greedy Stage-1 argmax otherwise.
+        // Hybrid mode saves the lookahead for states where it can actually pay
+        // off — a cast or stone placement is available — and stays greedy for
+        // plain movement/exploration.
         let choice = null;
         if ((WEIGHTS.searchDepth | 0) > 0 && window.BotSim) {
-            choice = searchPick();
-            if (choice) log(`Search (depth ${WEIGHTS.searchDepth | 0}) picked ${choice.action.type}`);
+            let useSearch = true;
+            if (WEIGHTS.searchHybrid) {
+                const legal = window.BotState.legalActions();
+                useSearch = legal.some(a => a.type === 'cast' || a.type === 'placeStone');
+            }
+            if (useSearch) {
+                choice = searchPick();
+                if (choice) log(`Search (depth ${WEIGHTS.searchDepth | 0}${WEIGHTS.searchHybrid ? ', hybrid' : ''}) picked ${choice.action.type}`);
+            }
         }
         if (!choice) {
             const ranked = rankActions();
