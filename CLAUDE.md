@@ -62,7 +62,9 @@ Order matters — later scripts depend on earlier ones.
 15. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 16. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
 17. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
-18. bot.js                 ← window.BotSystem — utility-scored bot; Shift+R = one step, Shift+B = full turn
+17b. bot-sim.js            ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
+18. bot.js                 ← window.BotSystem — utility-scored bot + optional lookahead (WEIGHTS.searchDepth, default 0);
+                             Shift+R = one step, Shift+B = full turn
 19. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
                              host's client impersonates the bot's index to drive its turns
                              Roadmap for smarter stages: docs/bot-roadmap.md

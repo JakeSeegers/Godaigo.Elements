@@ -6,10 +6,25 @@
 ---
 
 ## Active Branch
-`claude/win-screen-trigger-bug-3iv5dx` → remote: `JakeSeegers/Godaigo.Elements`
-(previous work base: `4.10.progresscheck`)
+`claude/bot-refinement-next-steps-yiwl0c` → remote: `JakeSeegers/Godaigo.Elements`
+(previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **BOT STAGE 2 (forward model + lookahead)** — `js/bot-sim.js` (new):
+  pure `simulate(snap, action)` over the Stage-0 snapshot (move incl.
+  tile-reveal-as-unknown, endTurn incl. shrine collection + COLOR_RANK turn
+  order, placeStone incl. fire-destruction rules, cast with whitelist-gated
+  effects), pure `legalActions(snap)`, `isTerminal/winner`, and a
+  `validate()` mirror-and-diff harness. Validated headless (Playwright +
+  tutorial board): 0% divergence for move/endTurn/placeStone/discard
+  (~750 mirrored actions) — roadmap target was <1%. Lookahead in `bot.js`:
+  `searchPick()` beam search + `evaluateSnapshot()`, enabled by
+  `WEIGHTS.searchDepth > 0` (**default 0 = greedy unchanged**; flip only on
+  Stage-3a arena evidence). Also fixed `BotState.applyAction('cast')`
+  silently no-opping when castSpell's multi-match selection popup appears.
+  Full details + new gotchas: docs/bot-roadmap.md § STAGE 2.
+
+## Previously Committed Work
 - **NEW WIN CONDITION (rules change):** winning now requires activating all 5 elements
   AND returning the pawn to the centre of your own player tile (the "player shrine").
   Single gate: `checkWinCondition(playerIndex, {announce})` in `game-core.js` (also on
@@ -97,4 +112,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-10*
+*Last updated: 2026-07-11 (bot Stage 2: forward model + search)*

@@ -30,7 +30,7 @@ different concerns and neither blocks the other:
 | R3 | Backend-authoritative turn validation | TODO | Supabase edge function + game-core.js call sites |
 | R4 | Replace host-browser impersonation with backend-driven bot turns | TODO | `js/bot-driver.js` (removed), backend service |
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
-| 2 | Forward model + lookahead search | TODO | `js/bot-sim.js` (new) |
+| 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
 | 3a | Weight evolution via self-play arena | TODO | `js/bot-arena.js` (new) |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
@@ -386,45 +386,80 @@ instead of fixing it.
 
 ---
 
-## STAGE 2 — Forward model + lookahead (TODO)
+## STAGE 2 — Forward model + lookahead (DONE except optional MCTS)
 
 Goal: `simulate(snapshot, action) → snapshot'` as PURE functions (no DOM, no
-globals), then search.
+globals), then search. Steps 1–4 below are DONE; step 5 (MCTS) is optional
+and not started.
 
-Build order (each step is independently commit-able):
+1. **`js/bot-sim.js` (DONE)** — `window.BotSim = { simulate, legalActions,
+   isTerminal, winner, checkPattern, canMoveTo, grid, diffSnapshots, validate,
+   SIMULATED_SCROLLS }`. Input/output is exclusively the Stage-0 snapshot
+   JSON; the only globals read are static `SCROLL_DEFINITIONS` (and, inside
+   `validate()` only, the live BotState/BotSystem). Includes a PURE
+   `legalActions(snap)` mirror of BotState's (search needs to enumerate from
+   SIMULATED states) and a pure movement-cost model (earth block, wind free,
+   water chaining flood fill, void nullification, other-player occupancy).
+2. **Simulated actions (DONE)**: `move` (incl. tile reveal as
+   `shrineType:'unknown'` — never invents the element; reveal draw goes to
+   HAND even past capacity, matching the real pending-cascade behaviour),
+   `endTurn` (rank-based shrine collection capped by source/pool; turn
+   advance in COLOR_RANK order; AP reset to 5 + void stones), `placeStone`
+   (pool decrement + the fire-destruction interaction rules),
+   `discardScroll`, and `cast` (AP, hand→active, win-condition activation
+   incl. the empty-source-pool rule and catacomb component elements are
+   EXACT; the effect itself is whitelist-gated: scrolls not in
+   `SIMULATED_SCROLLS` — currently all of them — are recorded in
+   `snap.sim.unsimulatedCasts` instead of pretended-simulated).
+3. **Validation harness (DONE)** — `BotSim.validate({actions, seed, policy})`
+   runs in a live game: picks seeded random (or ε-greedy 'builder') legal
+   actions, predicts each with `simulate()`, applies it for real via
+   `BotState.applyAction`, diffs predicted vs settled real snapshot.
+   Measured (tutorial board, headless Chromium): move 0/550+, endTurn 0/120+,
+   placeStone 0/60+, discard 0/9 — 0% divergence, target was <1%. Cast
+   effect side-effects divert as designed and are counted "accepted".
+   A second mode mirrors the REAL bot's own action stream (plan builds +
+   casts included) by wrapping `BotState.applyAction` — see the Playwright
+   driver pattern in the session notes below.
+4. **Search, within one turn only (DONE)** — `searchPick()` in bot.js:
+   depth-limited beam search (`WEIGHTS.searchDepth` plies,
+   `WEIGHTS.searchBreadth` children per node) over own-turn actions; an
+   endTurn edge is a leaf. Leaves valued by `evaluateSnapshot()` (bot.js),
+   all knobs in `WEIGHTS.eval*`. Wired exactly as planned:
+   `WEIGHTS.searchDepth > 0 ? searchPick() : greedyPick()` — **default is 0
+   (greedy)** until the Stage-3a arena can measure the acceptance criterion.
+   Enable from the console: `BotSystem.WEIGHTS.searchDepth = 3` (≈10ms per
+   decision at depth 3 on the tutorial board).
+5. **Multi-turn MCTS (optional, not started)**: UCT over turns; unknown
+   face-down tiles and opponent hands are DETERMINIZED — sample K plausible
+   completions (uniform over the unseen tile-deck distribution), run the
+   search per sample, majority-vote the root action. K=8 is plenty.
+   Rollout policy = Stage-1 greedy.
 
-1. **`js/bot-sim.js`** exposing `window.BotSim = { simulate, isTerminal, winner }`.
-   Input/output is exclusively the Stage-0 snapshot JSON. Never touch live game
-   state from this file.
-2. Implement, in this order (easiest → hardest):
-   a. `move` (pawn xy + AP − cost; if target tile was unrevealed, mark revealed
-      but DO NOT invent its element — model it as `shrineType:'unknown'` and
-      treat as a probability node or heuristic bump),
-   b. `endTurn` (collection when on shrine centre: refill active player's pool
-      from sourcePool up to capacity; AP reset; advance activePlayerIndex),
-   c. `placeStone` (append stone, decrement pool),
-   d. `cast` for SIMPLE scrolls only: consume pattern stones per the game's
-      disposal rule, add element to `activated` if sourcePool > 0.
-      Maintain a whitelist `SIMULATED_SCROLLS`; any scroll not on it gets a flat
-      heuristic value instead of simulation (`+CAST_VALUE`), which keeps the
-      model honest about what it doesn't know.
-3. **Validation harness before any search**: play 50 seeded random-action games
-   where every applied real action (via `BotState.applyAction`) is mirrored in
-   the simulator; diff the real `BotState.snapshot()` against the simulated one
-   after each action and log divergences. Fix until move/endTurn/placeStone
-   diverge in <1% of steps. Scroll casts may diverge (whitelist-gated) — that's
-   accepted and logged, not fixed.
-4. **Search, within one turn only** (small tree: AP ≤ 5–10):
-   depth-limited exhaustive search over own-turn actions, leaf-evaluated with
-   the Stage-1 scoring function on the simulated snapshot. Wire it in as
-   `WEIGHTS.searchDepth > 0 ? searchPick() : greedyPick()`.
-5. **Multi-turn MCTS (optional)**: UCT over turns; unknown face-down tiles and
-   opponent hands are DETERMINIZED — sample K plausible completions (uniform
-   over the unseen tile-deck distribution), run the search per sample, majority-vote
-   the root action. K=8 is plenty. Rollout policy = Stage-1 greedy.
+Acceptance (still open, needs 3a): search bot beats greedy Stage-1 bot ≥60%
+over 100 arena games with the same weights. Flip the `searchDepth` default
+only on that evidence.
 
-Acceptance: search bot beats greedy Stage-1 bot ≥60% over 100 arena games (Stage 3a
-harness) with the same weights.
+**Gotchas found while building Stage 2 (all fixed, don't re-break):**
+- `getAllHexagonPositions()` also emits **trapezoid bridge hexes** at
+  large-tile offsets `(±2,0),(0,±2),(-2,2),(2,-2)` wherever ≥2 tiles'
+  trapezoids coincide — hidden tiles contribute too, and landing on one
+  reveals them. A grid model without these misses real moves AND reveals.
+- `castSpell()` opens a "Select Scroll to Cast" popup when several scrolls
+  match at once, and previously `BotState.applyAction('cast')` returned
+  `ok:true` while the cast silently no-opped — the bot then looped on it.
+  applyAction now clicks the requested scroll's button (or reports failure).
+- A state evaluator must NOT credit AP across a simulated endTurn
+  (`snap.sim.turnsEnded`) — in single-player the activePlayerIndex doesn't
+  change, so the AP reset otherwise makes passing the turn look like free
+  value and the search ends every turn instantly.
+- The flat heuristic for unsimulated cast effects must only count casts that
+  granted a NEW activation (`unsimulatedCasts[].grantedNew`), or the search
+  farms the flat value by re-casting an already-won scroll — the same
+  infinite-recast loop Stage 1's `castAlreadyWon` fixed for greedy.
+- Reveal-drawn scrolls go to the hand even when it's full (pending cascade);
+  catacomb reveals also grant +1 AP, which is unknowable pre-reveal and is
+  an accepted, documented divergence.
 
 ---
 

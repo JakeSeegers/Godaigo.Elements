@@ -85,6 +85,27 @@
         shrineNeed:          1.0, // × (capacity − pool[element])
         shrineUnactivated:   2.5, // element not yet activated
         shrineDeadSource:  -3.0,  // source pool empty — collection yields nothing
+
+        // ── Stage 2: lookahead search (BotSim forward model) ──
+        // searchDepth 0 = greedy Stage-1 argmax (no BotSim needed);
+        // searchDepth N ≥ 1 = depth-N beam search over own-turn actions,
+        // leaves valued by evaluateSnapshot() below.
+        searchDepth:         0,
+        searchBreadth:       5,   // children expanded per node (beam width)
+
+        // evaluateSnapshot() — STATE value, only used when searchDepth > 0.
+        // Rough scale: one activated element (400) ≫ anything else per turn.
+        evalWin:        100000,   // terminal win (loss = −evalWin)
+        evalActivated:     400,   // per element in the activated set
+        evalStoneNeeded:    12,   // per pool stone of an unactivated, live-source element
+        evalStone:           3,   // per other pool stone
+        evalScrollHeld:     30,   // per scroll in hand/active
+        evalAp:              2,   // per remaining AP (own turn only)
+        evalUnsimCast:      90,   // flat value per unsimulated cast in the sim trace —
+                                  // the whitelist-gated stand-in for effects the
+                                  // forward model honestly doesn't know (≈ castBase)
+        evalHiddenDist:  -0.08,   // × px to nearest hidden tile (exploration shaping)
+        evalHomeDist:     -0.6,   // × px to own shrine once all 5 elements are activated
     };
 
     // Evolved weights (Stage 3a) override defaults without code edits
@@ -432,6 +453,107 @@
         return null;
     }
 
+    // ----------------------------------------------------------------
+    // Stage 2 — depth-limited lookahead over BotSim's forward model.
+    // Enabled via WEIGHTS.searchDepth > 0. Search stays WITHIN the bot's
+    // own turn: an endTurn edge is a leaf (roadmap: multi-turn MCTS is a
+    // separate, optional step).
+    // ----------------------------------------------------------------
+
+    // State value of a snapshot from player `forIndex`'s perspective.
+    // This is the search leaf evaluator — tune via WEIGHTS.eval*, not here.
+    function evaluateSnapshot(snap, forIndex) {
+        const p = snap.players[forIndex];
+        if (!p) return -Infinity;
+        const win = window.BotSim.winner(snap);
+        if (win === forIndex) return WEIGHTS.evalWin;
+        if (win !== null) return -WEIGHTS.evalWin;
+
+        let v = 0;
+        v += p.activated.length * WEIGHTS.evalActivated;
+        for (const el of ELEMENTS) {
+            const n = p.pool[el] || 0;
+            const useful = !p.activated.includes(el) && (snap.sourcePool[el] || 0) > 0;
+            v += n * (useful ? WEIGHTS.evalStoneNeeded : WEIGHTS.evalStone);
+        }
+        v += (p.handCount + p.activeCount) * WEIGHTS.evalScrollHeld;
+        // AP only counts while still inside the original turn — after a
+        // simulated endTurn the reset would otherwise make passing the turn
+        // look like free value (single-player keeps the same activePlayerIndex)
+        if (snap.turn.activePlayerIndex === forIndex && !(snap.sim?.turnsEnded > 0)) {
+            v += snap.turn.ap * WEIGHTS.evalAp;
+        }
+        // Flat credit for effects the simulator honestly didn't model — but
+        // only for casts that granted a new activation, or the search farms
+        // the flat value by re-casting an already-won scroll forever
+        for (const c of snap.sim?.unsimulatedCasts || []) {
+            if (c.grantedNew) v += WEIGHTS.evalUnsimCast;
+        }
+
+        const allActivated = ELEMENTS.every(el => p.activated.includes(el));
+        if (allActivated) {
+            const home = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === forIndex);
+            if (home) v += WEIGHTS.evalHomeDist * Math.hypot(home.x - p.x, home.y - p.y);
+        } else {
+            const hidden = snap.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            if (hidden.length) {
+                const d = Math.min(...hidden.map(t => Math.hypot(t.x - p.x, t.y - p.y)));
+                v += WEIGHTS.evalHiddenDist * d;
+            }
+        }
+        return v;
+    }
+
+    // Beam search: at every node, 1-ply-evaluate all children, expand only
+    // the top `searchBreadth`. Root actions come from the REAL legalActions()
+    // (game-validated); deeper plies use BotSim.legalActions (pure mirror).
+    // Returns {action, score} or null when search can't run here.
+    function searchPick() {
+        const sim = window.BotSim;
+        if (!sim) return null;
+        const snap0 = window.BotState.snapshot();
+        const meIdx = snap0.turn.activePlayerIndex;
+        const legal = window.BotState.legalActions();
+        if (!legal.length || legal[0].type === 'placeTile') return null;
+
+        const depth = Math.max(1, WEIGHTS.searchDepth | 0);
+        const breadth = Math.max(2, WEIGHTS.searchBreadth | 0);
+
+        function value(snap, d) {
+            // Leaf: depth exhausted, game over, or the turn passed (endTurn)
+            if (d <= 0 || snap.turn.activePlayerIndex !== meIdx || sim.isTerminal(snap)) {
+                return evaluateSnapshot(snap, meIdx);
+            }
+            const acts = sim.legalActions(snap);
+            if (!acts.length) return evaluateSnapshot(snap, meIdx);
+            const children = acts
+                .map(a => { const s1 = sim.simulate(snap, a); return { a, s1, v1: evaluateSnapshot(s1, meIdx) }; })
+                .sort((x, y) => y.v1 - x.v1)
+                .slice(0, breadth);
+            let best = -Infinity;
+            for (const c of children) {
+                const v = value(c.s1, d - 1);
+                if (v > best) best = v;
+            }
+            return best;
+        }
+
+        // Root: beam over the real legal actions, but move the bot's
+        // anti-oscillation penalty into the root scores so search ties
+        // break the same way greedy's do.
+        const rootChildren = legal
+            .map(a => { const s1 = sim.simulate(snap0, a); return { a, s1, v1: evaluateSnapshot(s1, meIdx) }; })
+            .sort((x, y) => y.v1 - x.v1)
+            .slice(0, Math.max(breadth, 8)); // keep the root a little wider
+        let best = null;
+        for (const c of rootChildren) {
+            let v = value(c.s1, depth - 1);
+            if (c.a.type === 'move') v += revisitPenalty(_recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
+            if (!best || v > best.score) best = { action: c.a, score: v };
+        }
+        return best;
+    }
+
     // Rank all legal actions for the current position (debug + decision core)
     function rankActions() {
         const snap = window.BotState.snapshot();
@@ -529,17 +651,26 @@
             _plan = null;
         }
 
-        const ranked = rankActions();
-        if (!ranked.length) { log('No legal actions found'); return null; }
+        // Stage 2: lookahead search when enabled, greedy Stage-1 argmax otherwise
+        let choice = null;
+        if ((WEIGHTS.searchDepth | 0) > 0 && window.BotSim) {
+            choice = searchPick();
+            if (choice) log(`Search (depth ${WEIGHTS.searchDepth | 0}) picked ${choice.action.type}`);
+        }
+        if (!choice) {
+            const ranked = rankActions();
+            if (!ranked.length) { log('No legal actions found'); return null; }
+            choice = ranked[0];
+        }
 
-        const { action, score } = ranked[0];
+        const { action, score } = choice;
         const label = action.type === 'placeTile'      ? `place player tile at (${action.x.toFixed(0)},${action.y.toFixed(0)})`
                     : action.type === 'cast'           ? `cast ${action.scroll}`
                     : action.type === 'placeStone'     ? `place ${action.stoneType} for ${action.scroll} (${Math.round((action.progress||0)*100)}%)`
                     : action.type === 'move'           ? `move to (${action.x.toFixed(0)},${action.y.toFixed(0)}) cost ${action.cost}`
                     : action.type === 'discardScroll'  ? `discard ${action.scroll} (from ${action.from})`
                     : 'end turn';
-        log(`Best action [${score.toFixed(1)}]: ${label}  (of ${ranked.length} candidates)`);
+        log(`Best action [${score.toFixed(1)}]: ${label}`);
 
         const res = window.BotState.applyAction(action);
         if (!res.ok) { log(`Action failed: ${res.reason}`); return null; }
@@ -641,8 +772,10 @@
     window.BotSystem = {
         step:  botAct,        // one action
         turn:  botTurn,       // play out the whole turn
-        rank:  rankActions,   // scored candidate list (top = what step() would do)
+        rank:  rankActions,   // scored candidate list (top = what greedy step() would do)
         score: scoreAction,   // (action, snapshot, ctx) → utility
+        searchPick,           // Stage 2 lookahead pick — used when WEIGHTS.searchDepth > 0
+        evaluateSnapshot,     // Stage 2 state evaluator (search leaves)
         waitForQuiescence,    // settle response windows / selection modes / cascades
         WEIGHTS,              // live tuning surface (Stage 3a evolves this)
         DEFAULT_WEIGHTS,
