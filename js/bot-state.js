@@ -185,6 +185,10 @@
                 const p = hexToPixel(h.q + dq, h.r + dr, S);
                 if (placedTiles.some(o => Math.hypot(o.x - p.x, o.y - p.y) < 40)) continue; // occupied
                 if (candidates.some(c => Math.hypot(c.x - p.x, c.y - p.y) < 40)) continue;  // dupe
+                // Same rule the drag-drop path enforces: a player tile must
+                // touch at least 2 unrevealed tiles at placement time
+                if (typeof countTouchingUnrevealedTiles === 'function' &&
+                    countTouchingUnrevealedTiles(p.x, p.y) < 2) continue;
                 candidates.push({ x: p.x, y: p.y, distToCentroid: Math.hypot(p.x - cx, p.y - cy) });
             }
         }
@@ -341,6 +345,10 @@
             case 'placeTile': {
                 if (typeof isPlacementPhase === 'undefined' || !isPlacementPhase) {
                     return { ok: false, reason: 'not placement phase' };
+                }
+                if (typeof countTouchingUnrevealedTiles === 'function' &&
+                    countTouchingUnrevealedTiles(a.x, a.y) < 2) {
+                    return { ok: false, reason: 'player tiles must touch 2+ unrevealed tiles' };
                 }
                 placeTile(a.x, a.y, 0, false, 'player');
                 if (typeof broadcastGameAction === 'function') {

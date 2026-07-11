@@ -873,10 +873,15 @@
                 continue;
             }
             // Selection modes (Sacrificial Pyre, Telekinesis, Take Flight, …)
-            // need input the bot can't give yet — cancel so the turn never wedges
+            // need input the bot can't give yet — cancel so the turn never
+            // wedges. Modal-based effects (Scholar's Insight, Create, Arson…)
+            // don't always register a selectionMode, so ALSO detect their
+            // overlay elements directly — otherwise the modal lingers on
+            // screen for the rest of the game, blocking the board view.
             const se = window.spellSystem?.scrollEffects;
-            if (se?.selectionMode || window.takeFlightState) {
-                log('Cancelling a selection mode the bot cannot drive');
+            const openModal = (se?.EFFECT_MODAL_IDS || []).find(id => document.getElementById(id));
+            if (se?.selectionMode || window.takeFlightState || openModal) {
+                log(`Cancelling a selection the bot cannot drive${openModal ? ` (${openModal})` : ''}`);
                 se?.cancelSelectionMode?.();
                 if (window.takeFlightState) window.takeFlightState = null;
                 await tick(250);

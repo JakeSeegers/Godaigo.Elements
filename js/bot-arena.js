@@ -103,6 +103,10 @@
                 const p = hexToPixel(h.q + dq, h.r + dr, S);
                 if (placedTiles.some(o => Math.hypot(o.x - p.x, o.y - p.y) < 40)) continue;
                 if (candidates.some(c => Math.hypot(c.x - p.x, c.y - p.y) < 40)) continue;
+                // Game rule (same as the drag-drop path): player tiles must
+                // touch at least 2 unrevealed tiles at placement time
+                if (typeof countTouchingUnrevealedTiles === 'function' &&
+                    countTouchingUnrevealedTiles(p.x, p.y) < 2) continue;
                 candidates.push(p);
             }
         }
