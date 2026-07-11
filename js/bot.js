@@ -103,12 +103,16 @@
         // searchDepth 0 = greedy Stage-1 argmax (no BotSim needed);
         // searchDepth N ≥ 1 = depth-N beam search over own-turn actions,
         // leaves valued by evaluateSnapshot() below.
-        searchDepth:         0,
+        // DEFAULT = HYBRID, per arena evidence (BotArena, 2×10 games, seeds
+        // 11/23): Hybrid beat greedy 12-3 with 5 draws (80% of decided),
+        // while FULL search (searchHybrid 0) LOST its series 1-3 — lookahead
+        // helps at tactical decision points but its movement choices fight
+        // the plan/path logic. Cheat-panel "Bot Brain" still overrides.
+        searchDepth:         3,
         searchBreadth:       5,   // children expanded per node (beam width)
-        searchHybrid:        0,   // 1 = only search when a tactical choice exists
+        searchHybrid:        1,   // 1 = only search when a tactical choice exists
                                   // (cast/placeStone among the legal actions);
-                                  // plain movement stays greedy. Cheat-panel
-                                  // "Bot Brain: Hybrid" sets this.
+                                  // plain movement stays greedy.
 
         // evaluateSnapshot() — STATE value, only used when searchDepth > 0.
         // Rough scale: one activated element (400) ≫ anything else per turn.

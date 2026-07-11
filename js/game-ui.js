@@ -4040,8 +4040,9 @@ document.getElementById('undo-move').onclick = function() {
                     hybrid: { label: '🧠 Bot Brain: Hybrid',            color: '#fc6' },
                 };
                 function currentBrain() {
-                    try { return localStorage.getItem('godaigo_bot_brain') || 'dumb'; }
-                    catch (e) { return 'dumb'; }
+                    // default matches DEFAULT_WEIGHTS (hybrid, per arena evidence)
+                    try { return localStorage.getItem('godaigo_bot_brain') || 'hybrid'; }
+                    catch (e) { return 'hybrid'; }
                 }
                 function applyBrain(mode) {
                     const W = window.BotSystem?.WEIGHTS;

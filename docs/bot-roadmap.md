@@ -31,7 +31,7 @@ different concerns and neither blocks the other:
 | R4 | Replace host-browser impersonation with backend-driven bot turns | TODO | `js/bot-driver.js` (removed), backend service |
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
-| 3a | Weight evolution via self-play arena | TODO — **do before 2.5; it's the yardstick** | `js/bot-arena.js` (new) |
+| 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5) | `js/bot-arena.js` |
 | 2.5 | Scroll-effect usage: selection targets + response scrolls | TODO (after 3a) | `js/bot-effects.js` (new) + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
@@ -442,9 +442,13 @@ and not started.
    search per sample, majority-vote the root action. K=8 is plenty.
    Rollout policy = Stage-1 greedy.
 
-Acceptance (still open, needs 3a): search bot beats greedy Stage-1 bot ≥60%
-over 100 arena games with the same weights. Flip the `searchDepth` default
-only on that evidence.
+Acceptance — MEASURED (BotArena, 2×10 games, seeds 11/23, alternating
+sides): **HYBRID search beat greedy 12-3 with 5 draws** (80% of decided
+games; 60% counting draws as non-wins) → default flipped to hybrid
+(`searchDepth: 3, searchHybrid: 1`). **FULL search LOST its series 1-3-4**
+— always-on lookahead's movement choices fight the plan/path logic; do NOT
+enable `searchHybrid: 0` by default without new evidence. Caveat: 20 games,
+not the spec's 100 — rerun at scale once R5 makes games cheap.
 
 **Gotchas found while building Stage 2 (all fixed, don't re-break):**
 - `getAllHexagonPositions()` also emits **trapezoid bridge hexes** at
@@ -511,7 +515,46 @@ Acceptance per increment: arena win rate vs. the pre-increment bot improves
 (same weights, same seeds); no increment may regress the Stage-1 fixed bugs
 (recast loops, oscillation, overflow stalls).
 
-## STAGE 3a — Weight evolution via self-play (TODO)
+## STAGE 3a — Self-play arena (DONE) — original plan below
+
+`js/bot-arena.js`: `BotArena.run(weightsA, weightsB, nGames, seed, opts)`
+plays local hot-seat 2-player games (no Supabase, no multiplayer), both
+players bot-driven, per-player weight tables (swapped into
+`BotSystem.WEIGHTS` each turn), seeded `Math.random` per game (deck
+shuffles reproducible), alternating sides per game, turn cap → draw.
+Winner via `BotSim.winner`. Mutes sound/music/`window.gami` (no arena XP
+farming) and the win modal during runs; restores everything after.
+`BotArena.evolve(generations, opts)` implements the evolution loop below
+(configurable `gamesPerPair` — a full spec generation is hours in-browser;
+serious evolution wants R5's server-side execution).
+
+Support added for the arena: `BotSystem.speedScale` (delay scaling; arena
+default 0.1 ≈ 35ms/action) and `BotSystem.resetMemory()` (per-game wipe of
+plan/oscillation-history/cursed-cells — positions repeat across games).
+
+**Five real bot/infra bugs found by the first arena runs** (all fixed —
+games went from 100% frozen draws to ~50-turn completions):
+1. `BotState.hexGrid()`'s TIME-based cache (1.5s) served pre-reveal grids;
+   at bot speed whole games fit in one stale window and pawns froze on a
+   board that no longer existed. Now invalidated by board change.
+2. Euclidean-only exploration froze pawns in cul-de-sacs (every legal move
+   "increased distance" even when it was the only way out). Now scored by
+   real cheapest path (`ctx.explorePath`, `WEIGHTS.moveExplorePath`), with
+   a multi-source path field for search leaf evaluation.
+3. `makePlan()` was hand-only; games dead-ended when the only source of a
+   needed element was a scroll parked in the ACTIVE area (casts leave it
+   there) or the COMMON area. Plans now consider hand+active+common, gated
+   on actual win credit — which also fixed a plan-level infinite recast
+   loop (the plan had no `castAlreadyWon` equivalent) and made catacomb
+   dual-credit count.
+4. Stage-0 vocabulary gaps: casts from the common area and voluntary
+   discards (cycle a jammed 2-slot hand to the common area) didn't exist,
+   so bots plateaued at 2/5 elements with dead scrolls in hand forever.
+5. The anti-freeze rule (clear stale revisit memory when endTurn wins with
+   AP to spare) initially overrode SHRINE COLLECTION and caused a cost-0
+   wind-stone ping-pong; now thresholded to fallback-scored endTurns only.
+
+## STAGE 3a — original plan (for reference)
 
 Goal: the "slowly evolving" learner, no ML infrastructure.
 
