@@ -328,6 +328,14 @@
 
         let result = { winner: null, turns: 0 };
         try {
+            // Neutralize tutorial mode if a tutorial was running — its hooks
+            // force tile elements (first flip is always earth) and its
+            // spotlight overlays obscure the board being watched.
+            if (window.isTutorialMode) {
+                window.isTutorialMode = false;
+                window.tutorialAllowedHexes = null;
+                document.querySelectorAll('[class^="tmode"], [class*=" tmode"]').forEach(el => el.remove());
+            }
             if (typeof resetGameResources === 'function') resetGameResources();
             window.BotSystem.resetMemory();
             startGame(nPlayers);

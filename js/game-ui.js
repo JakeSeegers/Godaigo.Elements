@@ -4101,6 +4101,37 @@ document.getElementById('undo-move').onclick = function() {
                 matchRow.appendChild(stopBtn);
                 panel.appendChild(matchRow);
 
+                // Restart the CURRENT game as an all-bot spectator match with
+                // the same table size — your seat is handed to a bot. From a
+                // multiplayer game this leaves the online room first (removes
+                // this room's bot rows too — the disconnect sweep deliberately
+                // skips them, so they'd linger otherwise).
+                panel.appendChild(makeBtn('🔁 Restart bot game without player', async () => {
+                    if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+                    if (window.BotArena.isSpectating()) { updateStatus('A bot match is already running — stop it first'); return; }
+                    const n = Math.max(2, Math.min(5, (playerPositions || []).filter(Boolean).length || 2));
+                    panel.remove();
+                    try {
+                        if (isMultiplayer) {
+                            updateStatus('Leaving the online game…');
+                            if (isHost && currentGameId) {
+                                try {
+                                    const { data: players } = await supabase.from('players')
+                                        .select('id, username').eq('game_id', currentGameId);
+                                    for (const p of (players || []).filter(p => window.isBotUsername?.(p.username))) {
+                                        await supabase.rpc('remove_player', { p_player_id: p.id });
+                                    }
+                                } catch (e) { console.warn('bot-row cleanup failed (continuing):', e); }
+                            }
+                            if (typeof _doLeaveGame === 'function') await _doLeaveGame();
+                        }
+                        await window.BotArena.spectate(n);
+                    } catch (err) {
+                        console.error('Bot restart failed:', err);
+                        updateStatus('Bot restart failed — see console');
+                    }
+                }));
+
                 // ── Overlay Editor ───────────────────────────────────────────
                 const overlaySection = document.createElement('div');
                 overlaySection.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';
