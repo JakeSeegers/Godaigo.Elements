@@ -552,13 +552,30 @@ plan/oscillation-history/cursed-cells — positions repeat across games).
 (`js/game-ui.js` cheat panel, opened via 5 clicks on the HUD AP label) runs
 `BotArena.evolve(3, {gamesPerPair:1, popSize:6})` — 15 games/generation × 3
 generations = 45 games, a few minutes, not the full "hours in-browser" spec
-run — then applies the champion table to the LIVE `WEIGHTS` object via the
-new `BotArena.applyWeights()` export (evolve() already persists it to
-localStorage; this just makes it take effect without a reload). Leaves any
-online game first via a shared `leaveOnlineGameIfAny()` helper (also used by
-the existing bot-match buttons), and `evolve()` now checks `BotArena.stop()`'s
-flag once per generation so the panel's ⏹ button can cancel a training run
-in progress (previously only `spectate()` was cancellable).
+run. Leaves any online game first via a shared `leaveOnlineGameIfAny()`
+helper (also used by the existing bot-match buttons), and `evolve()` now
+checks `BotArena.stop()`'s flag once per generation so the panel's ⏹ button
+can cancel a training run in progress (previously only `spectate()` was
+cancellable).
+
+**Confirmation gate (added after a v1 of this button silently made bots
+worse):** a single game per `evolve()` pairing is noisy — the per-generation
+winner can win by luck, not by being a better strategy — so v1 of the button
+applied and persisted whatever evolve() returned unconditionally. That's
+exactly the thing this roadmap's own Stage 3a acceptance criterion (below —
+"champion beats the hand-tuned defaults ≥55%...") exists to prevent; the
+button had just skipped the check for convenience. Fixed: after evolve()
+returns, the button runs a 10-game confirmation match (`BotArena.run()`)
+between the champion and whatever weights were live before training started,
+via the new `BotArena.applyWeights()` export, and only keeps the result
+(applies it live, leaves localStorage as evolve() wrote it) if the champion's
+`aFitness` actually beat the baseline's in that match — otherwise it reverts
+both the live `WEIGHTS` object and `localStorage['godaigo_bot_weights']` to
+their pre-training snapshot. `evolve()`'s own per-generation auto-persist to
+localStorage is unchanged (pre-existing, intentional — see below) since the
+console/manual training workflow it was built for already expects a human to
+judge the logged fitness before trusting a result; only the one-click UI path
+needed the automated check.
 
 **Fitness shaping (added after the first evolution runs):** `evolve()`
 originally used pure win-count as fitness — a bot that stalled into a
