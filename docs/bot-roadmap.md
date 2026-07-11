@@ -547,7 +547,7 @@ trap (e.g. the earth-stone boxed-in case) — it mirrors the "win ±1, small
 per-turn penalty" reward already specified below for Stage 3c, tested
 cheaply in the arena before RL makes it expensive to iterate on.
 
-**Five real bot/infra bugs found by the first arena runs** (all fixed —
+**Six real bot/infra bugs found by the first arena runs** (all fixed —
 games went from 100% frozen draws to ~50-turn completions):
 1. `BotState.hexGrid()`'s TIME-based cache (1.5s) served pre-reveal grids;
    at bot speed whole games fit in one stale window and pawns froze on a
@@ -568,6 +568,16 @@ games went from 100% frozen draws to ~50-turn completions):
 5. The anti-freeze rule (clear stale revisit memory when endTurn wins with
    AP to spare) initially overrode SHRINE COLLECTION and caused a cost-0
    wind-stone ping-pong; now thresholded to fallback-scored endTurns only.
+6. `ResponseWindowSystem.isBotPlayer()` (`js/scrolls/response-window.js`)
+   identifies bots via multiplayer's `allPlayersData`, which is never
+   populated in the arena's local hot-seat games — every seat there IS a
+   bot, but isBotPlayer() silently returned false for all of them. Any cast
+   whose response/counter happened to be formed for another bot opened a
+   REAL response window with no one able to click Pass, stalling ~15s
+   (`RESPONSE_TIMEOUT_MS`) per eligible cast. `run()`/`spectate()` now
+   monkey-patch `isBotPlayer` to `() => true` for the duration of the local
+   match (restored after), same save/restore pattern as the other muted
+   systems.
 
 ## STAGE 3a — original plan (for reference)
 

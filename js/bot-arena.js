@@ -58,6 +58,7 @@
     // even if a game throws.
     // ----------------------------------------------------------------
     function muteEnvironment() {
+        const rw = window.spellSystem?.responseWindow;
         const saved = {
             random: Math.random,
             sound: window.SoundSystem,
@@ -66,6 +67,7 @@
             endTurnPrompt: window.showEndTurnPrompt,
             levelComplete: window.spellSystem?.showLevelComplete,
             speedScale: window.BotSystem.speedScale,
+            isBotPlayer: rw?.isBotPlayer,
         };
         window.SoundSystem = null;
         window.JoytoneBridge = null;
@@ -76,6 +78,15 @@
                 log(`(win screen suppressed for player ${playerIndex})`);
             };
         }
+        // ResponseWindowSystem.isBotPlayer() identifies bots via multiplayer's
+        // `allPlayersData` (lobby.js), which doesn't exist in the arena's local
+        // hot-seat games — every seat here IS a bot, but isBotPlayer() silently
+        // returns false for all of them, so the "skip window — bots can't
+        // respond" gate never fires. Any cast whose response/counter happens to
+        // be formed for another bot then opens a REAL window that sits out the
+        // full 15s timeout with no one able to click Pass. Tell it the truth
+        // for the duration of the run.
+        if (rw) rw.isBotPlayer = () => true;
         return function restore() {
             Math.random = saved.random;
             window.SoundSystem = saved.sound;
@@ -86,6 +97,7 @@
                 window.spellSystem.showLevelComplete = saved.levelComplete;
             }
             window.BotSystem.speedScale = saved.speedScale;
+            if (rw && saved.isBotPlayer) rw.isBotPlayer = saved.isBotPlayer;
         };
     }
 
@@ -365,9 +377,16 @@
         const savedGami = window.gami;
         const savedPrompt = window.showEndTurnPrompt;
         const savedSpeed = window.BotSystem.speedScale;
+        const rw = window.spellSystem?.responseWindow;
+        const savedIsBotPlayer = rw?.isBotPlayer;
         window.gami = null;
         window.showEndTurnPrompt = () => {};
         window.BotSystem.speedScale = opts.speed ?? 1;
+        // Same fix as run()'s muteEnvironment(): isBotPlayer() only knows about
+        // multiplayer's allPlayersData, so in this local all-bot match it thinks
+        // every seat is human and lets real response windows open — 15s of dead
+        // air per eligible cast with no one to click Pass.
+        if (rw) rw.isBotPlayer = () => true;
         const turnCap = opts.turnCap ?? 300;
 
         const roster = Array.from({ length: nPlayers }, (_, i) =>
@@ -416,6 +435,7 @@
             window.gami = savedGami;
             window.showEndTurnPrompt = savedPrompt;
             window.BotSystem.speedScale = savedSpeed;
+            if (rw && savedIsBotPlayer) rw.isBotPlayer = savedIsBotPlayer;
             _spectating = false;
         }
 
