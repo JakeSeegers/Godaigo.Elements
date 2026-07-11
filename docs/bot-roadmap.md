@@ -147,17 +147,33 @@ Action forms (the ONLY vocabulary later stages may use):
 { type:'cast',       scroll:'EARTH_SCROLL_3' }
 { type:'placeStone', x, y, stoneType:'earth', scroll, progress } // progress = placed/total after this stone
 { type:'move',       x, y, cost }                                // one adjacent hex step
+{ type:'breakStone', stoneId, x, y, stoneType, cost }             // cost = STONE_BREAK_COST[stoneType] (void 1..earth 5)
 { type:'discardScroll', scroll, from:'hand'|'active' }           // only legal while hand/active is over capacity
 { type:'endTurn' }
 ```
 
 `legalActions()` gates on overflow: when hand/active is over
 `spellSystem.MAX_HAND_SIZE`/`MAX_ACTIVE_SIZE`, it returns discard-only actions
-(cast/placeStone/move/endTurn are withheld) until the bot discards back down.
-`bot.js`'s `botAct()` checks this before even consulting the pattern-plan
-(which calls `applyAction()` directly and would otherwise bypass the gate).
-This is what lets the bot resolve its own end-of-turn scroll overflow instead
-of surfacing `showEndTurnOverflowModal()` — see the fixed bug below.
+(cast/placeStone/move/breakStone/endTurn are withheld) until the bot discards
+back down. `bot.js`'s `botAct()` checks this before even consulting the
+pattern-plan (which calls `applyAction()` directly and would otherwise bypass
+the gate). This is what lets the bot resolve its own end-of-turn scroll
+overflow instead of surfacing `showEndTurnOverflowModal()` — see the fixed
+bug below.
+
+**`breakStone` (added after a real playtest got a bot stuck in a movement
+loop):** the bot didn't know `attemptBreakStone()` exists — the same
+right-click/long-press action a human uses to clear a blocking stone (AP
+cost by rank, `game-core.js`'s `STONE_RANK`). A bot boxed in by an earth
+stone (movement-blocking, see `canPlayerMoveToHex`) with nothing else legal
+had no way out and no reason to sit and wait — this is a genuine Stage-0
+vocabulary gap, same class as the common-area-cast/voluntary-discard gaps
+below, not a hand-authored "avoid earth stones" rule. `bot-state.js` now
+enumerates it (adjacent stone, affordable AP) and `bot.js` scores it with
+two new weights (`breakStoneBase`, `breakStoneApPenalty`) — evolution decides
+when it's worth an earth stone's 5 AP, same as everything else in the table.
+Not yet mirrored in `bot-sim.js`, so hybrid-brain lookahead search can't plan
+around it yet — only the greedy scoreAction() path considers it.
 
 Not yet enumerated (Stage 2+ work): catacomb teleports, scroll-effect
 sub-choices (target selection inside effects), hand→common moves.

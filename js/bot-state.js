@@ -163,11 +163,19 @@
     //   {type:'cast', scroll}
     //   {type:'placeStone', x, y, stoneType, scroll, progress}
     //   {type:'move', x, y, cost}
+    //   {type:'breakStone', stoneId, x, y, stoneType, cost}
     //   {type:'discardScroll', scroll, from:'hand'|'active'}
     //   {type:'endTurn'}
     // NOT yet enumerated (Stage 2+): catacomb teleports, scroll-effect
-    // sub-choices.
+    // sub-choices. breakStone is also not yet mirrored in bot-sim.js, so
+    // hybrid-brain lookahead search cannot plan around it — only the greedy
+    // scoreAction() path considers it today.
     // ----------------------------------------------------------------
+
+    // Same rank→AP-cost table `attemptBreakStone()` uses in game-core.js
+    // (duplicated there in several closures too — it's a fixed small game
+    // constant, not logic worth threading through as a dependency).
+    const STONE_BREAK_COST = { void: 1, wind: 2, fire: 3, water: 4, earth: 5 };
 
     // Free hexes adjacent to the existing placed-tile cluster, on the LARGE
     // player-tile hex grid (TILE_SIZE * 4) — distinct from hexGrid()'s small
@@ -310,6 +318,21 @@
             }
         }
 
+        // ── breakStone: any adjacent stone the player can afford to break ──
+        // Mirrors attemptBreakStone()'s own adjacency test (isAdjacentToPlayer,
+        // same HEX_STEP radius) rather than calling it, since that helper reads
+        // the singular `playerPosition` getter — which does resolve to
+        // playerPositions[activePlayerIndex] (see game-core.js), but the move
+        // block above already computes distance from `player` directly, so
+        // reuse that instead of a second code path to the same fact.
+        for (const s of placedStones) {
+            const d = Math.hypot(s.x - player.x, s.y - player.y);
+            if (d <= HEX_NEAR || d >= HEX_STEP) continue;
+            const cost = STONE_BREAK_COST[s.type];
+            if (cost == null || cost > ap) continue;
+            actions.push({ type: 'breakStone', stoneId: s.id, x: s.x, y: s.y, stoneType: s.type, cost });
+        }
+
         // ── voluntary discard: cycle a hand/active scroll to the common area
         // (legal any time via spellSystem.discardScroll — the same move the
         // overflow flow uses). This is how a bot frees a hand slot jammed
@@ -423,6 +446,20 @@
                 if (typeof broadcastPlayerMovement === 'function') {
                     broadcastPlayerMovement(activePlayerIndex, a.x, a.y, a.cost);
                 }
+                return { ok: true };
+            }
+            case 'breakStone': {
+                const stone = placedStones.find(s => s.id === a.stoneId);
+                if (!stone) return { ok: false, reason: 'stone not found' };
+                const player = playerPositions[activePlayerIndex];
+                if (!player) return { ok: false, reason: 'pawn not found' };
+                const d = Math.hypot(stone.x - player.x, stone.y - player.y);
+                if (d <= HEX_NEAR || d >= HEX_STEP) return { ok: false, reason: 'stone not adjacent' };
+                const cost = STONE_BREAK_COST[stone.type];
+                if (cost == null || getTotalAP() < cost) return { ok: false, reason: 'not enough AP' };
+                // attemptBreakStone() is the same function the UI's right-click/
+                // long-press handlers call — never reimplement the break itself.
+                attemptBreakStone(a.stoneId);
                 return { ok: true };
             }
             case 'discardScroll': {

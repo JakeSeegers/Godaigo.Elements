@@ -68,6 +68,15 @@
                                   // recency so undoing your immediately previous move is
                                   // penalized far more than a revisit from several steps back
 
+        // breaking a stone (attemptBreakStone) — costs AP by stone rank
+        // (void 1 .. earth 5). Mostly matters for clearing a path an earth
+        // stone would otherwise block outright (canPlayerMoveToHex treats
+        // earth as impassable without an adjacent void) — a bot with no
+        // other legal move but plenty of AP should take this over stalling
+        // on endTurn every turn.
+        breakStoneBase:      3,
+        breakStoneApPenalty: -1,  // × AP cost — cheap breaks (void, wind) preferred over earth
+
         // returning home — with all 5 elements activated the win now requires
         // standing on the centre of the bot's own player tile (player shrine),
         // so walking home dominates everything else once the set is complete
@@ -274,6 +283,10 @@
                 const revisit = revisitPenalty(ctx.recentPositions || [], a, WEIGHTS.moveRevisitPenalty);
                 return WEIGHTS.moveBase + WEIGHTS.moveShrineValue * best
                      + WEIGHTS.moveApPenalty * a.cost + explore + revisit + home;
+            }
+
+            case 'breakStone': {
+                return WEIGHTS.breakStoneBase + WEIGHTS.breakStoneApPenalty * a.cost;
             }
 
             case 'endTurn': {
