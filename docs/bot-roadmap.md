@@ -577,6 +577,23 @@ console/manual training workflow it was built for already expects a human to
 judge the logged fitness before trusting a result; only the one-click UI path
 needed the automated check.
 
+**Tutorial interference (found via a real playtest — running from inside an
+active tutorial got stuck in a loop, then the page reloaded on its own):**
+`spectate()` already neutralized `window.isTutorialMode` before running local
+games ("its hooks force tile elements... and its spotlight overlays obscure
+the board"), but `playGame()` — the function `run()`/`evolve()` (and so the
+Train Weights button) actually use — never did. Every `TutorialMode` hook
+call site (`game-core.js`, `game-ui.js`, `scroll-panels.js`) is gated on
+`window.isTutorialMode`, so leaving it `true` meant a bot racing through
+moves/casts/end-turns across dozens of games could satisfy the tutorial's
+remaining scripted steps in seconds — and `tutorial-mode.js`'s `finish()`
+calls `window.location.reload()` once the step sequence runs out, which
+would kill an in-progress training run outright. Fixed by factoring the
+neutralization into a shared `neutralizeTutorialMode()` and calling it at
+the top of `playGame()` (once per game, not just once per `run()`/`evolve()`
+call, in case something re-triggers tutorial state mid-run) as well as
+`spectate()`.
+
 **Fitness shaping (added after the first evolution runs):** `evolve()`
 originally used pure win-count as fitness — a bot that stalled into a
 200-turn turn-cap draw scored identically to one that played sharply and

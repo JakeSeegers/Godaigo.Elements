@@ -112,6 +112,22 @@
         Object.assign(W, window.BotSystem.DEFAULT_WEIGHTS, table);
     }
 
+    // Neutralize an in-progress tutorial before running ANY local bot games
+    // (run()/evolve()'s playGame() as well as spectate()). Every TutorialMode
+    // hook call site (game-core.js/game-ui.js/scroll-panels.js) is gated on
+    // `window.isTutorialMode`, so clearing it fully stops the tutorial's own
+    // step-advance machinery from reacting to bot actions — without this, a
+    // bot racing through moves/casts/end-turns across dozens of games can
+    // satisfy the tutorial's remaining scripted steps in seconds, and
+    // tutorial-mode.js's finish() calls window.location.reload() once its
+    // step sequence runs out, killing the run outright.
+    function neutralizeTutorialMode() {
+        if (!window.isTutorialMode) return;
+        window.isTutorialMode = false;
+        window.tutorialAllowedHexes = null;
+        document.querySelectorAll('[class^="tmode"], [class*=" tmode"]').forEach(el => el.remove());
+    }
+
     // ----------------------------------------------------------------
     // Player-tile placement: the two mutually-farthest free hexes adjacent
     // to the tile cluster (large-tile grid). Deterministic and symmetric —
@@ -191,6 +207,7 @@
         // Seed ALL shuffle randomness (tile deck, scroll decks) for this game
         Math.random = mulberry32(gameSeed);
 
+        neutralizeTutorialMode();
         if (typeof resetGameResources === 'function') resetGameResources();
         window.BotSystem.resetMemory();
         startGame(2);
@@ -421,14 +438,7 @@
 
         let result = { winner: null, turns: 0 };
         try {
-            // Neutralize tutorial mode if a tutorial was running — its hooks
-            // force tile elements (first flip is always earth) and its
-            // spotlight overlays obscure the board being watched.
-            if (window.isTutorialMode) {
-                window.isTutorialMode = false;
-                window.tutorialAllowedHexes = null;
-                document.querySelectorAll('[class^="tmode"], [class*=" tmode"]').forEach(el => el.remove());
-            }
+            neutralizeTutorialMode();
             if (typeof resetGameResources === 'function') resetGameResources();
             window.BotSystem.resetMemory();
             startGame(nPlayers);
