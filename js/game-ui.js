@@ -4066,6 +4066,43 @@ document.getElementById('undo-move').onclick = function() {
                 brainBtn.style.color = BRAIN_UI[currentBrain()].color;
                 panel.appendChild(brainBtn);
 
+                // Stop any currently-running local bot job (spectate match or
+                // weight-evolution run) and wait for it to actually finish —
+                // both check BotArena's shared stop flag between turns/generations,
+                // which can take a few seconds. Returns false (with a status
+                // message already shown) if it couldn't be stopped in time.
+                async function stopAnyRunningBotJob() {
+                    if (!(window.BotArena.isSpectating() || window.BotArena.isEvolving())) return true;
+                    updateStatus('Stopping the current bot job…');
+                    for (let i = 0; i < 100 && (window.BotArena.isSpectating() || window.BotArena.isEvolving()); i++) {
+                        window.BotArena.stop();
+                        await new Promise(r => setTimeout(r, 300));
+                    }
+                    if (window.BotArena.isSpectating() || window.BotArena.isEvolving()) {
+                        updateStatus('Could not stop the running bot job');
+                        return false;
+                    }
+                    return true;
+                }
+
+                // Leave the current online room if we're in one — bot jobs
+                // (spectate/evolve) run local hot-seat games and would otherwise
+                // collide with a live multiplayer session.
+                async function leaveOnlineGameIfAny() {
+                    if (!isMultiplayer) return;
+                    updateStatus('Leaving the online game…');
+                    if (isHost && currentGameId) {
+                        try {
+                            const { data: players } = await supabase.from('players')
+                                .select('id, username').eq('game_id', currentGameId);
+                            for (const p of (players || []).filter(p => window.isBotUsername?.(p.username))) {
+                                await supabase.rpc('remove_player', { p_player_id: p.id });
+                            }
+                        } catch (e) { console.warn('bot-row cleanup failed (continuing):', e); }
+                    }
+                    if (typeof _doLeaveGame === 'function') await _doLeaveGame();
+                }
+
                 // Start an all-bot spectator match with a CHOSEN player count,
                 // from ANY game context. If currently in a multiplayer game it
                 // leaves the online room first (removing the room's bot rows —
@@ -4074,30 +4111,9 @@ document.getElementById('undo-move').onclick = function() {
                 async function restartAsBots(n) {
                     if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
                     panel.remove(); // clear the panel; reopen any time via the AP label
-                    // A match already running? Stop it and wait it out — the
-                    // stop takes effect between turns, which can be seconds.
-                    if (window.BotArena.isSpectating()) {
-                        updateStatus('Stopping the current bot match…');
-                        for (let i = 0; i < 100 && window.BotArena.isSpectating(); i++) {
-                            window.BotArena.stop();
-                            await new Promise(r => setTimeout(r, 300));
-                        }
-                        if (window.BotArena.isSpectating()) { updateStatus('Could not stop the running match'); return; }
-                    }
+                    if (!await stopAnyRunningBotJob()) return;
                     try {
-                        if (isMultiplayer) {
-                            updateStatus('Leaving the online game…');
-                            if (isHost && currentGameId) {
-                                try {
-                                    const { data: players } = await supabase.from('players')
-                                        .select('id, username').eq('game_id', currentGameId);
-                                    for (const p of (players || []).filter(p => window.isBotUsername?.(p.username))) {
-                                        await supabase.rpc('remove_player', { p_player_id: p.id });
-                                    }
-                                } catch (e) { console.warn('bot-row cleanup failed (continuing):', e); }
-                            }
-                            if (typeof _doLeaveGame === 'function') await _doLeaveGame();
-                        }
+                        await leaveOnlineGameIfAny();
                         await window.BotArena.spectate(n);
                     } catch (err) {
                         console.error('Bot match failed:', err);
@@ -4134,6 +4150,56 @@ document.getElementById('undo-move').onclick = function() {
                 // size kept. Use the numbered buttons above to pick a count.
                 panel.appendChild(makeBtn('🔁 Restart bot game without player (same size)', () =>
                     restartAsBots(Math.max(2, Math.min(5, (playerPositions || []).filter(Boolean).length || 2)))));
+
+                // Weight evolution (BotArena.evolve — roadmap Stage 3a): runs a
+                // MUTED self-play arena in the background for a modest preset
+                // (popSize 6 → 15 games/generation × 3 generations = 45 games,
+                // a few minutes, not the "hours in-browser" full spec run) and
+                // applies the resulting champion table to the LIVE weights
+                // immediately — evolve() also persists it to localStorage so
+                // it survives a reload without this button. Leaves any online
+                // game first, same reasoning as the bot-match buttons above:
+                // this plays local hot-seat games under the hood.
+                const trainRow = document.createElement('div');
+                trainRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                const TRAIN_LABEL = '🧬 Train Weights (45 games, few min)';
+                const trainBtn = makeBtn(TRAIN_LABEL, async () => {
+                    if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+                    if (window.BotArena.isEvolving()) { updateStatus('Already training — use ⏹ to stop it'); return; }
+                    if (!await stopAnyRunningBotJob()) return;
+                    trainBtn.disabled = true;
+                    trainBtn.textContent = '🧬 Training… generation 0/3';
+                    try {
+                        await leaveOnlineGameIfAny();
+                        const champion = await window.BotArena.evolve(3, {
+                            gamesPerPair: 1,
+                            popSize: 6,
+                            onGeneration: (gen, total, fitness) => {
+                                trainBtn.textContent = `🧬 Training… generation ${gen}/${total}`;
+                                updateStatus(`Training weights: generation ${gen}/${total} — fitness ${fitness.map(f => f.toFixed(1)).join(', ')}`);
+                            },
+                        });
+                        window.BotArena.applyWeights(champion);
+                        updateStatus('Training complete — new weights applied live and saved for future sessions. (The board shows the last training game — start a new game to keep playing.)');
+                    } catch (err) {
+                        console.error('Weight training failed:', err);
+                        updateStatus('Weight training failed — see console');
+                    } finally {
+                        trainBtn.disabled = false;
+                        trainBtn.textContent = TRAIN_LABEL;
+                    }
+                });
+                trainRow.appendChild(trainBtn);
+                const trainStopBtn = document.createElement('button');
+                trainStopBtn.textContent = '⏹';
+                trainStopBtn.title = 'Stop training after the current generation finishes';
+                trainStopBtn.style.cssText = 'padding:4px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:13px;';
+                trainStopBtn.onclick = () => {
+                    if (window.BotArena?.isEvolving()) { window.BotArena.stop(); updateStatus('Stopping after this generation…'); }
+                    else updateStatus('No training run in progress');
+                };
+                trainRow.appendChild(trainStopBtn);
+                panel.appendChild(trainRow);
 
                 // ── Overlay Editor ───────────────────────────────────────────
                 const overlaySection = document.createElement('div');

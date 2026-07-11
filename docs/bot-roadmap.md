@@ -31,7 +31,7 @@ different concerns and neither blocks the other:
 | R4 | Replace host-browser impersonation with backend-driven bot turns | TODO | `js/bot-driver.js` (removed), backend service |
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
-| 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5) | `js/bot-arena.js` |
+| 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5; cheat-panel "🧬 Train Weights" button runs a modest preset without the console) | `js/bot-arena.js`, `js/game-ui.js` cheat panel |
 | 2.5 | Scroll-effect usage: selection targets + response scrolls | TODO (after 3a) | `js/bot-effects.js` (new) + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
@@ -547,6 +547,18 @@ serious evolution wants R5's server-side execution).
 Support added for the arena: `BotSystem.speedScale` (delay scaling; arena
 default 0.1 ≈ 35ms/action) and `BotSystem.resetMemory()` (per-game wipe of
 plan/oscillation-history/cursed-cells — positions repeat across games).
+
+**Cheat-panel UI (no console needed):** the "🧬 Train Weights" button
+(`js/game-ui.js` cheat panel, opened via 5 clicks on the HUD AP label) runs
+`BotArena.evolve(3, {gamesPerPair:1, popSize:6})` — 15 games/generation × 3
+generations = 45 games, a few minutes, not the full "hours in-browser" spec
+run — then applies the champion table to the LIVE `WEIGHTS` object via the
+new `BotArena.applyWeights()` export (evolve() already persists it to
+localStorage; this just makes it take effect without a reload). Leaves any
+online game first via a shared `leaveOnlineGameIfAny()` helper (also used by
+the existing bot-match buttons), and `evolve()` now checks `BotArena.stop()`'s
+flag once per generation so the panel's ⏹ button can cancel a training run
+in progress (previously only `spectate()` was cancellable).
 
 **Fitness shaping (added after the first evolution runs):** `evolve()`
 originally used pure win-count as fitness — a bot that stalled into a

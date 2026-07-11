@@ -17,6 +17,11 @@
 //   await BotArena.evolve(generations, opts)
 //       → champion weight table (also saved to
 //         localStorage['godaigo_bot_weights'] + logged as JSON)
+//       opts.onGeneration?(genNumber, totalGenerations, fitnessArray) — optional
+//       progress callback. BotArena.stop() cancels between generations.
+//       BotArena.applyWeights(table) applies a table to the LIVE WEIGHTS
+//       object in place (no reload needed) — the cheat panel's "Train Weights"
+//       button uses this on evolve()'s result.
 //
 // HOW A GAME RUNS (local hot-seat — no Supabase, no multiplayer):
 //   resetGameResources() + startGame(2) reset everything; Math.random is
@@ -313,40 +318,57 @@
         return out;
     }
 
+    let _evolving = false;
+    function isEvolving() { return _evolving; }
+
+    // opts.onGeneration?(genNumber, totalGenerations, fitnessArray) — optional
+    // progress hook so a caller (e.g. the cheat-panel UI) can report progress
+    // without polling; purely observational, never gates the loop.
     async function evolve(generations = 5, opts = {}) {
-        const gamesPerPair = opts.gamesPerPair ?? 2;
-        const popSize = opts.popSize ?? 8;
-        const seed = opts.seed ?? 1;
-        const rng = mulberry32(seed);
+        if (_running || _evolving) throw new Error('BotArena already running');
+        _evolving = true;
+        _stopRequested = false; // same stop() flag spectate() uses — shared "cancel a local bot job" signal
+        try {
+            const gamesPerPair = opts.gamesPerPair ?? 2;
+            const popSize = opts.popSize ?? 8;
+            const seed = opts.seed ?? 1;
+            const rng = mulberry32(seed);
 
-        let population = [{ ...window.BotSystem.WEIGHTS }];
-        while (population.length < popSize) population.push(mutate(population[0], rng));
+            let population = [{ ...window.BotSystem.WEIGHTS }];
+            while (population.length < popSize) population.push(mutate(population[0], rng));
 
-        for (let gen = 0; gen < generations; gen++) {
-            const fitness = new Array(population.length).fill(0);
-            for (let i = 0; i < population.length; i++) {
-                for (let j = i + 1; j < population.length; j++) {
-                    const r = await run(population[i], population[j], gamesPerPair, seed * 100 + gen * 10 + i + j, opts);
-                    fitness[i] += r.aFitness;
-                    fitness[j] += r.bFitness;
+            for (let gen = 0; gen < generations; gen++) {
+                if (_stopRequested) { log(`evolve stopped early after generation ${gen}/${generations}`); break; }
+                const fitness = new Array(population.length).fill(0);
+                for (let i = 0; i < population.length; i++) {
+                    for (let j = i + 1; j < population.length; j++) {
+                        const r = await run(population[i], population[j], gamesPerPair, seed * 100 + gen * 10 + i + j, opts);
+                        fitness[i] += r.aFitness;
+                        fitness[j] += r.bFitness;
+                    }
+                }
+                const ranked = population
+                    .map((w, i) => ({ w, f: fitness[i] }))
+                    .sort((a, b) => b.f - a.f);
+                log(`generation ${gen + 1}/${generations} fitness:`, ranked.map(r => r.f).join(', '));
+                if (typeof opts.onGeneration === 'function') {
+                    try { opts.onGeneration(gen + 1, generations, ranked.map(r => r.f)); } catch (e) { /* UI callback errors never abort training */ }
+                }
+
+                const champion = ranked[0].w;
+                try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(champion)); } catch (e) {}
+                log('champion weights (paste into bot.js DEFAULT_WEIGHTS to make permanent):\n' + JSON.stringify(champion));
+
+                const elites = [ranked[0].w, ranked[1].w];
+                population = [...elites];
+                while (population.length < popSize) {
+                    population.push(mutate(elites[population.length % 2], rng));
                 }
             }
-            const ranked = population
-                .map((w, i) => ({ w, f: fitness[i] }))
-                .sort((a, b) => b.f - a.f);
-            log(`generation ${gen + 1}/${generations} fitness:`, ranked.map(r => r.f).join(', '));
-
-            const champion = ranked[0].w;
-            try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(champion)); } catch (e) {}
-            log('champion weights (paste into bot.js DEFAULT_WEIGHTS to make permanent):\n' + JSON.stringify(champion));
-
-            const elites = [ranked[0].w, ranked[1].w];
-            population = [...elites];
-            while (population.length < popSize) {
-                population.push(mutate(elites[population.length % 2], rng));
-            }
+            return population[0];
+        } finally {
+            _evolving = false;
         }
-        return population[0];
     }
 
     // ----------------------------------------------------------------
@@ -356,7 +378,10 @@
     // Start from the cheat panel (AP label 5×) or the console:
     //   BotArena.spectate(3)            — 3 bots, normal pacing
     //   BotArena.spectate(4, {speed:2}) — 4 bots, double-time delays
-    //   BotArena.stop()                 — end the match early
+    //   BotArena.stop()                 — end the match early (also cancels
+    //                                      an in-progress evolve(), which
+    //                                      checks the same flag once per
+    //                                      generation)
     // ----------------------------------------------------------------
     let _spectating = false;
     let _stopRequested = false;
@@ -448,6 +473,9 @@
         return result;
     }
 
-    window.BotArena = { run, evolve, playGame, spectate, stop, isSpectating };
+    window.BotArena = {
+        run, evolve, playGame, spectate, stop, isSpectating, isEvolving,
+        applyWeights: setWeights, // apply an {…} weight table to the LIVE WEIGHTS object in place
+    };
     log('Loaded — window.BotArena ready (run / evolve / spectate)');
 })();
