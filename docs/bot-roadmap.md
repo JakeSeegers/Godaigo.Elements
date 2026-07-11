@@ -532,6 +532,21 @@ Support added for the arena: `BotSystem.speedScale` (delay scaling; arena
 default 0.1 ≈ 35ms/action) and `BotSystem.resetMemory()` (per-game wipe of
 plan/oscillation-history/cursed-cells — positions repeat across games).
 
+**Fitness shaping (added after the first evolution runs):** `evolve()`
+originally used pure win-count as fitness — a bot that stalled into a
+200-turn turn-cap draw scored identically to one that played sharply and
+still drew, so evolution had zero selection pressure against stalling.
+`run()`/`playGame()` now also track each side's win-condition progress
+(elements activated at game end) and stuck-turn count (turns force-ended
+because `botTurn()` never chose to end them itself), and `sideFitness()`
+combines win/loss ±1 with a small progress reward and stuck-turn penalty
+(`opts.progressWeight`/`opts.stuckPenalty`, defaults 0.3/0.15) into
+`aFitness`/`bFitness`, which `evolve()` now selects on instead of raw wins.
+This is reward SHAPING, not a hand-authored rule about any specific
+trap (e.g. the earth-stone boxed-in case) — it mirrors the "win ±1, small
+per-turn penalty" reward already specified below for Stage 3c, tested
+cheaply in the arena before RL makes it expensive to iterate on.
+
 **Five real bot/infra bugs found by the first arena runs** (all fixed —
 games went from 100% frozen draws to ~50-turn completions):
 1. `BotState.hexGrid()`'s TIME-based cache (1.5s) served pre-reveal grids;

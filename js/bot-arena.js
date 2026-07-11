@@ -7,7 +7,13 @@
 // weights.
 //
 //   await BotArena.run(weightsA, weightsB, nGames, seed, opts)
-//       → { aWins, bWins, draws, avgTurns, games:[{winner, turns, side}] }
+//       → { aWins, bWins, draws, avgTurns, aFitness, bFitness,
+//           games:[{winner, turns, side}] }
+//       aFitness/bFitness are the SELECTION SIGNAL evolve() uses (see
+//       sideFitness() below) — win/loss ±1 plus a small reward for
+//       win-condition progress and a small penalty per stuck turn, NOT a
+//       plain win tally. opts.progressWeight (default 0.3) and
+//       opts.stuckPenalty (default 0.15) tune those terms.
 //   await BotArena.evolve(generations, opts)
 //       → champion weight table (also saved to
 //         localStorage['godaigo_bot_weights'] + logged as JSON)
@@ -153,10 +159,17 @@
 
     // ----------------------------------------------------------------
     // One full game. weights0/weights1 are keyed by PLAYER INDEX.
-    // Returns { winner: 0 | 1 | null, turns }.
+    // Returns { winner: 0 | 1 | null, turns, activated: [n0, n1], stuckTurns: {0, 1} }.
+    // `activated` = each player's elements-activated count at game end (win
+    // progress, 0-5) and `stuckTurns` = how many times each player's turn had
+    // to be force-ended because botTurn() never chose to end it itself
+    // (stuck/no productive action). Both feed evolve()'s fitness so a bot
+    // that stalls scores worse than one that plays actively, even when
+    // neither wins outright — see docs/bot-roadmap.md Stage 3a fitness note.
     // ----------------------------------------------------------------
     async function playGame(weights0, weights1, gameSeed, opts) {
         const turnCap = opts.turnCap ?? 200;
+        const stuckTurns = { 0: 0, 1: 0 };
 
         // Seed ALL shuffle randomness (tile deck, scroll decks) for this game
         Math.random = mulberry32(gameSeed);
@@ -175,20 +188,45 @@
             refillAP();
             await window.BotSystem.turn();
 
-            const w = window.BotSim.winner(window.BotState.snapshot());
-            if (w !== null) return { winner: w, turns: turn + 1 };
+            const snap = window.BotState.snapshot();
+            const activated = snap.players.map(p => p.activated.length);
+            const w = window.BotSim.winner(snap);
+            if (w !== null) return { winner: w, turns: turn + 1, activated, stuckTurns };
 
             if (activePlayerIndex === idx) {
                 // Bot didn't end its own turn (stuck/no actions) — force it
+                stuckTurns[idx]++;
                 const r = window.BotState.applyAction({ type: 'endTurn' });
                 if (!r.ok) {
                     log(`game seed ${gameSeed}: stuck on turn ${turn} (${r.reason}) — draw`);
-                    return { winner: null, turns: turn + 1 };
+                    return { winner: null, turns: turn + 1, activated, stuckTurns };
                 }
                 await sleep(20);
             }
         }
-        return { winner: null, turns: turnCap };
+        const finalActivated = window.BotState.snapshot().players.map(p => p.activated.length);
+        return { winner: null, turns: turnCap, activated: finalActivated, stuckTurns };
+    }
+
+    // ----------------------------------------------------------------
+    // Per-side fitness for one game: +1 win / -1 loss / 0 draw, plus a small
+    // reward for win-condition progress (elements activated, 0-5) and a
+    // small penalty per turn the side got stuck with nothing productive to
+    // do. This is reward SHAPING, not a hand-authored rule about any
+    // specific trap — it makes evolution's selection pressure notice
+    // stalling/passivity at all, which pure win/loss fitness could not
+    // (a 200-turn stalled draw scored identically to a sharp, decisive
+    // draw). Mirrors the "win ±1, small per-turn penalty" reward the
+    // roadmap specifies for the eventual Stage 3c RL reward.
+    // ----------------------------------------------------------------
+    function sideFitness(result, sideIsPlayer0, opts = {}) {
+        const progressWeight = opts.progressWeight ?? 0.3;
+        const stuckPenalty = opts.stuckPenalty ?? 0.15;
+        const idx = sideIsPlayer0 ? 0 : 1;
+        const win = result.winner === null ? 0 : (result.winner === idx ? 1 : -1);
+        const progress = (result.activated?.[idx] ?? 0) / 5;
+        const stuck = result.stuckTurns?.[idx] ?? 0;
+        return win + progressWeight * progress - stuckPenalty * stuck;
     }
 
     // ----------------------------------------------------------------
@@ -205,7 +243,7 @@
         const restore = muteEnvironment();
         window.BotSystem.speedScale = opts.speed ?? 0.1;
 
-        const result = { aWins: 0, bWins: 0, draws: 0, avgTurns: 0, games: [] };
+        const result = { aWins: 0, bWins: 0, draws: 0, avgTurns: 0, aFitness: 0, bFitness: 0, games: [] };
         try {
             for (let i = 0; i < nGames; i++) {
                 const aIsPlayer0 = i % 2 === 0;
@@ -219,6 +257,8 @@
                 if (g.winner === null) result.draws++;
                 else if (aWon) result.aWins++;
                 else result.bWins++;
+                result.aFitness += sideFitness(g, aIsPlayer0, opts);
+                result.bFitness += sideFitness(g, !aIsPlayer0, opts);
                 result.games.push({ winner: g.winner, turns: g.turns, aIsPlayer0 });
                 result.avgTurns += g.turns / nGames;
                 log(`game ${i + 1}/${nGames}: ${g.winner === null ? 'draw' : (aWon ? 'A' : 'B') + ' wins'} in ${g.turns} turns  (A=${result.aWins} B=${result.bWins} D=${result.draws})`);
@@ -228,14 +268,19 @@
             restore();
             _running = false;
         }
-        log('run complete:', JSON.stringify({ aWins: result.aWins, bWins: result.bWins, draws: result.draws, avgTurns: +result.avgTurns.toFixed(1) }));
+        log('run complete:', JSON.stringify({
+            aWins: result.aWins, bWins: result.bWins, draws: result.draws,
+            avgTurns: +result.avgTurns.toFixed(1),
+            aFitness: +result.aFitness.toFixed(2), bFitness: +result.bFitness.toFixed(2),
+        }));
         return result;
     }
 
     // ----------------------------------------------------------------
     // Evolution loop (roadmap Stage 3a step 2).
     // population 8 = current WEIGHTS + 7 Gaussian mutations (σ = 20% of
-    // each weight's magnitude); fitness = round-robin wins; next gen =
+    // each weight's magnitude); fitness = round-robin sideFitness() (win/loss
+    // plus progress/stuck-turn shaping, not a plain win tally); next gen =
     // top-2 elites + 6 fresh mutations of them. Champion persisted to
     // localStorage['godaigo_bot_weights'] after every generation.
     // NOTE: a full roadmap-spec generation (28 pairs × 10 games) takes
@@ -270,8 +315,8 @@
             for (let i = 0; i < population.length; i++) {
                 for (let j = i + 1; j < population.length; j++) {
                     const r = await run(population[i], population[j], gamesPerPair, seed * 100 + gen * 10 + i + j, opts);
-                    fitness[i] += r.aWins;
-                    fitness[j] += r.bWins;
+                    fitness[i] += r.aFitness;
+                    fitness[j] += r.bFitness;
                 }
             }
             const ranked = population
