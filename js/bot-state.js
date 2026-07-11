@@ -271,10 +271,16 @@
                     if (blocked) continue;
                     for (const c of missing) {
                         if ((pool[c.type] || 0) <= 0) continue;
-                        // Same placement-range rule the drag-drop UI enforces —
-                        // out-of-range placements would desync other clients
+                        // Mirror the FULL validity the drag-drop path enforces
+                        // (findValidStonePosition): in range, not on any
+                        // face-down tile, no pawn standing there. applyAction
+                        // re-checks these; enumerating illegal cells would
+                        // desync other clients.
                         if (typeof isInPlacementRange === 'function' &&
                             !isInPlacementRange(c.x, c.y, c.type)) continue;
+                        if (typeof isPositionOnFlippedTile === 'function' &&
+                            isPositionOnFlippedTile(c.x, c.y, grid)) continue;
+                        if (playerPositions.some(p => p && Math.hypot(p.x - c.x, p.y - c.y) < HEX_NEAR)) continue;
                         const key = `${c.x.toFixed(1)},${c.y.toFixed(1)},${c.type}`;
                         if (seen.has(key)) continue;
                         seen.add(key);
@@ -374,6 +380,23 @@
             case 'placeStone': {
                 const pool = playerPools[activePlayerIndex] || {};
                 if ((pool[a.stoneType] || 0) <= 0) return { ok: false, reason: `no ${a.stoneType} stones` };
+                // Enforce the same validity the drag-drop path does — callers
+                // (plans, effects, harnesses) may request cells legalActions
+                // never offered. Placing on a face-down tile is illegal.
+                if (placedStones.some(s => Math.hypot(s.x - a.x, s.y - a.y) < HEX_NEAR)) {
+                    return { ok: false, reason: 'cell already holds a stone' };
+                }
+                if (playerPositions.some(p => p && Math.hypot(p.x - a.x, p.y - a.y) < HEX_NEAR)) {
+                    return { ok: false, reason: 'a pawn occupies that hex' };
+                }
+                if (typeof isPositionOnFlippedTile === 'function' &&
+                    isPositionOnFlippedTile(a.x, a.y, hexGrid())) {
+                    return { ok: false, reason: 'cannot place a stone on a face-down tile' };
+                }
+                if (typeof isInPlacementRange === 'function' &&
+                    !isInPlacementRange(a.x, a.y, a.stoneType)) {
+                    return { ok: false, reason: 'out of placement range' };
+                }
                 placeStone(a.x, a.y, a.stoneType);
                 pool[a.stoneType]--;
                 if (typeof updateStoneCount === 'function') updateStoneCount(a.stoneType);

@@ -248,6 +248,16 @@
         }
     }
 
+    // Would a stone placed here survive the fire-interaction rules?
+    // (fire and void are never destroyed on placement; anything else dies
+    // next to a fire that has no adjacent void). Lets planners AVOID doomed
+    // cells instead of discovering them by wasting stones.
+    function stoneWouldSurvive(snap, x, y, type) {
+        if (type === 'fire' || type === 'void') return true;
+        return !neighborStones(snap, x, y).some(nb =>
+            nb.type === 'fire' && !hasAdjacentVoid(snap, nb.x, nb.y));
+    }
+
     function applyFireInteractions(snap, placed) {
         if (placed.type === 'fire') {
             if (!hasAdjacentVoid(snap, placed.x, placed.y)) {
@@ -500,6 +510,14 @@
                     if ((p.pool[c.type] || 0) <= 0) continue;
                     const d = dist(p.x, p.y, c.x, c.y);
                     if (d <= HEX_NEAR || d >= HEX_STEP) continue; // base placement range: adjacent to pawn
+                    // Not on any face-down tile, no pawn standing there
+                    // (mirrors findValidStonePosition)
+                    const hex = g.find(h => dist(h.x, h.y, c.x, c.y) < HEX_NEAR);
+                    if (hex && hex.tileIds.some(id => {
+                        const t = snap.tiles.find(tt => tt.id === id);
+                        return t && !t.revealed && !t.isPlayerTile;
+                    })) continue;
+                    if (snap.players.some(pl => pl && dist(pl.x, pl.y, c.x, c.y) < HEX_NEAR)) continue;
                     const key = `${c.x.toFixed(1)},${c.y.toFixed(1)},${c.type}`;
                     if (seen.has(key)) continue;
                     seen.add(key);
@@ -716,6 +734,7 @@
     window.BotSim = {
         simulate, legalActions, isTerminal, winner,
         checkPattern, canMoveTo, grid, diffSnapshots, validate,
+        stoneWouldSurvive,
         SIMULATED_SCROLLS, UNKNOWN_SCROLL,
     };
     log('Loaded — window.BotSim ready (simulate / legalActions / isTerminal / validate)');

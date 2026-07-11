@@ -46,6 +46,8 @@
         placeProgress:      45,  // × fraction of the variant complete AFTER this stone
         placeUnactivated:   25,  // building toward an unactivated element
         placeDeadElement:  -30,  // building toward an element with an empty source pool
+        placeDoomed:      -500,  // the stone would be destroyed on placement (non-fire/
+                                 // non-void next to an unvoided fire) — pure stone waste
 
         // movement
         moveBase:            2,
@@ -218,6 +220,10 @@
                 if (el && ELEMENTS.includes(el)) {
                     if ((snap.sourcePool[el] || 0) <= 0) s += WEIGHTS.placeDeadElement;
                     else if (!self.activated.includes(el)) s += WEIGHTS.placeUnactivated;
+                }
+                // The bot KNOWS the fire rule — don't pay stones to relearn it
+                if (window.BotSim && !window.BotSim.stoneWouldSurvive(snap, a.x, a.y, a.stoneType)) {
+                    s += WEIGHTS.placeDoomed;
                 }
                 return s;
             }
@@ -395,6 +401,13 @@
                 });
                 if (!cells.every(c => grid.some(h => Math.hypot(h.x - c.x, h.y - c.y) < 5))) continue;
                 if (cells.some(c => cursedCells.has(cellKey(c)))) continue; // known-doomed cell — skip this variant
+                // Cells on face-down tiles are illegal to place on, and a
+                // non-fire/non-void stone next to an unvoided fire dies on
+                // placement — don't plan shapes that can't exist.
+                if (typeof isPositionOnFlippedTile === 'function' &&
+                    cells.some(c => isPositionOnFlippedTile(c.x, c.y, grid))) continue;
+                if (window.BotSim &&
+                    cells.some(c => !window.BotSim.stoneWouldSurvive(snap, c.x, c.y, c.type))) continue;
                 let placed = 0, blocked = false;
                 const need = {};
                 for (const c of cells) {
@@ -425,6 +438,10 @@
             const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
             if (s && s.type !== c.type) return false;                       // cell corrupted
             if (!s && (self.pool[c.type] || 0) <= 0) return false;          // can't supply anymore
+            // A fire stone may have appeared next to a still-missing cell
+            // since the plan was made — the stone would die on placement
+            if (!s && window.BotSim &&
+                !window.BotSim.stoneWouldSurvive(snap, c.x, c.y, c.type)) return false;
         }
         return true;
     }
