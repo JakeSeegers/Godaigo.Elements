@@ -52,7 +52,12 @@
         moveShrineValue:    30,  // × (target shrine value ÷ (1 + remaining path cost))
         moveApPenalty:      -1,  // × step cost — cheap steps preferred
         moveExplore:        18,  // step lands on an unrevealed tile (reveals it — draws a scroll)
-        moveExploreGradient: 0.15, // × px closed toward the nearest unrevealed tile
+        moveExploreGradient: 0.15, // × px closed toward the nearest unrevealed tile (euclidean fallback)
+        moveExplorePath:    60,  // ÷ (1 + remaining path cost) when the step is the first hop of the
+                                 // actual cheapest PATH to a hidden tile. The euclidean gradient alone
+                                 // freezes the bot in cul-de-sacs: every legal move increases
+                                 // straight-line distance even when it's the only way out (observed:
+                                 // 100% draws in 2-player arena games — both bots parked forever)
         moveRevisitPenalty: -60,  // ÷ steps-since-visited (see revisitPenalty()) — breaks
                                   // ties that would otherwise oscillate forever (e.g. two
                                   // hexes exactly equidistant from the only remaining
@@ -71,11 +76,19 @@
         endTurnOnShrine:    55,  // standing on a collectible shrine centre: end = collect
         endTurnLowAp:        6,  // + when AP ≤ 1 — nothing useful left to do
 
-        // discarding to resolve hand/active overflow (only offered when over capacity)
+        // discarding — offered forced (hand/active overflow) or voluntarily
+        // (cycle a jammed slot to the common area)
         discardBase:        10,
         discardActivated:   40,  // element already won — this copy has less value
         discardDeadElement: 30,  // source pool empty — no win credit ever again
         discardLevel:       -5,  // × scroll level — prefer to KEEP higher-level scrolls
+        discardVoluntary:  -20,  // extra penalty when NOT forced by overflow — only a
+                                 // clearly dead scroll (already-won/dead-source) is worth
+                                 // giving up a slot for; note the discard lands in the
+                                 // COMMON area where opponents can cast it too
+        discardResponseOnly: 25, // level-1 scrolls are response-only and the bot can't
+                                 // play responses yet (Stage 2.5) — dead weight in a
+                                 // 2-slot hand, cycle it out
 
         // placement phase: where to put the bot's starting player tile
         placeTileBase:            10,
@@ -218,13 +231,22 @@
                     const v = shrineValue(snap, t.shrineType) / (1 + remaining);
                     if (v > best) best = v;
                 }
-                // Exploration: landing on an unrevealed tile flips it (scroll draw!);
-                // otherwise reward closing distance to the nearest hidden tile.
+                // Exploration: landing on an unrevealed tile flips it (scroll draw!).
+                // Primary signal is the real cheapest PATH to a hidden tile
+                // (ctx.explorePath) — the euclidean gradient is only a fallback,
+                // because it freezes the bot whenever escaping a cul-de-sac
+                // requires temporarily increasing straight-line distance.
                 let explore = 0;
                 if (ctx.hiddenTiles.length) {
                     const onHidden = ctx.hiddenTiles.some(t => Math.hypot(t.x - a.x, t.y - a.y) < 70);
                     if (onHidden) explore += WEIGHTS.moveExplore;
-                    else {
+                    if (ctx.explorePath && ctx.explorePath.length) {
+                        const first = ctx.explorePath[0];
+                        if (Math.hypot(first.x - a.x, first.y - a.y) < 5) {
+                            const remaining = ctx.explorePath.reduce((c, p) => c + p.cost, 0);
+                            explore += WEIGHTS.moveExplorePath / (1 + remaining);
+                        }
+                    } else if (!onHidden) {
                         const distFrom = p => Math.min(...ctx.hiddenTiles.map(t => Math.hypot(t.x - p.x, t.y - p.y)));
                         explore += WEIGHTS.moveExploreGradient * (distFrom(self) - distFrom(a));
                     }
@@ -258,6 +280,8 @@
                 const el = scrollElement(a.scroll);
                 const def = window.SCROLL_DEFINITIONS?.[a.scroll];
                 let s = WEIGHTS.discardBase + WEIGHTS.discardLevel * (def?.level || 0);
+                if (a.voluntary) s += WEIGHTS.discardVoluntary;
+                if (def?.level === 1) s += WEIGHTS.discardResponseOnly;
                 if (el && ELEMENTS.includes(el)) {
                     if (self.activated.includes(el)) s += WEIGHTS.discardActivated;
                     if ((snap.sourcePool[el] || 0) <= 0) s += WEIGHTS.discardDeadElement;
@@ -336,10 +360,30 @@
         const pHex = pixelToHex(self.x, self.y, TILE_SIZE);
         const grid = window.BotState.hexGrid();
         let best = null;
-        for (const name of self.hand) {
+        // Plan targets: hand + ACTIVE AREA + COMMON AREA. Hand-only planning
+        // dead-ends games: a catacomb scroll parked in the active area (casts
+        // leave scrolls there) or an opponent's discard in the common area is
+        // often the ONLY remaining source of an unactivated element.
+        const sources = new Set([...self.hand, ...self.active, ...(snap.commonArea || [])]);
+        for (const name of sources) {
             const def = window.SCROLL_DEFINITIONS?.[name];
             if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
             const el = def.element;
+            // Win credit this cast would actually grant. Zero credit ⇒ never
+            // plan it — an already-won scroll with its pattern still on the
+            // board otherwise becomes an infinite recast loop (the plan-level
+            // twin of the castAlreadyWon bug). Catacomb scrolls credit each
+            // unactivated COMPONENT element (no source-pool guard, matching
+            // applyScrollEffects).
+            let credit = 0;
+            if (el === 'catacomb') {
+                for (const c of new Set((def.patterns[0] || []).map(cell => cell.type))) {
+                    if (!self.activated.includes(c)) credit++;
+                }
+            } else if (!self.activated.includes(el) && (snap.sourcePool[el] || 0) > 0) {
+                credit = 1;
+            }
+            if (credit === 0) continue;
             for (const variant of def.patterns) {
                 const cells = variant.map(req => {
                     const px = hexToPixel(pHex.q + req.q, pHex.r + req.r, TILE_SIZE);
@@ -359,9 +403,7 @@
                 // The pool must cover every missing stone NOW — half-built
                 // shapes the bot can't finish are worse than nothing
                 if (Object.entries(need).some(([t, n]) => (self.pool[t] || 0) < n)) continue;
-                let score = placed * 10;
-                if (!self.activated.includes(el) && (snap.sourcePool[el] || 0) > 0) score += 20;
-                if ((snap.sourcePool[el] || 0) <= 0) score -= 50; // no win credit
+                const score = placed * 10 + credit * 20; // catacombs can be worth 2 elements
                 if (!best || score > best.score) best = { score, scroll: name, anchor: pHex, cells };
             }
         }
@@ -372,7 +414,8 @@
         if (!_plan) return false;
         const self = me(snap);
         if (!self) return false;
-        const holding = (self.hand || []).includes(_plan.scroll) || self.active.includes(_plan.scroll);
+        const holding = (self.hand || []).includes(_plan.scroll) || self.active.includes(_plan.scroll) ||
+                        (snap.commonArea || []).includes(_plan.scroll); // common-area scrolls are castable too
         if (!holding) return false;
         for (const c of _plan.cells) {
             const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
@@ -477,6 +520,37 @@
     // separate, optional step).
     // ----------------------------------------------------------------
 
+    // Explore field: cost-to-nearest-hidden-tile for every hex, computed once
+    // per search decision (multi-source Dijkstra over the SIM grid). Leaf
+    // evaluation uses it instead of euclidean distance — euclidean freezes
+    // the search in cul-de-sacs exactly like it froze the greedy scorer.
+    let _exploreField = null; // { dist: Map<hexKey, cost> } | null
+    function buildExploreField(snap) {
+        const grid = window.BotSim.grid(snap);
+        const hiddenIds = new Set(snap.tiles.filter(t => !t.revealed && !t.isPlayerTile).map(t => t.id));
+        if (!hiddenIds.size) return null;
+        const dist = new Map();
+        const frontier = [];
+        for (const h of grid) {
+            if (h.tileIds.some(id => hiddenIds.has(id))) { dist.set(h.key, 0); frontier.push(h); }
+        }
+        while (frontier.length) {
+            let bi = 0;
+            for (let i = 1; i < frontier.length; i++)
+                if (dist.get(frontier[i].key) < dist.get(frontier[bi].key)) bi = i;
+            const cur = frontier.splice(bi, 1)[0];
+            for (const nb of grid) {
+                const d = Math.hypot(nb.x - cur.x, nb.y - cur.y);
+                if (d <= 5 || d >= 40) continue;
+                const mv = window.BotSim.canMoveTo(snap, nb.x, nb.y);
+                if (!mv.canMove) continue;
+                const nd = dist.get(cur.key) + Math.max(0.5, mv.cost); // 0-cost wind still advances the field
+                if (nd < (dist.get(nb.key) ?? Infinity)) { dist.set(nb.key, nd); frontier.push(nb); }
+            }
+        }
+        return { dist };
+    }
+
     // State value of a snapshot from player `forIndex`'s perspective.
     // This is the search leaf evaluator — tune via WEIGHTS.eval*, not here.
     function evaluateSnapshot(snap, forIndex) {
@@ -514,7 +588,12 @@
         } else {
             const hidden = snap.tiles.filter(t => !t.revealed && !t.isPlayerTile);
             if (hidden.length) {
-                const d = Math.min(...hidden.map(t => Math.hypot(t.x - p.x, t.y - p.y)));
+                // Prefer real path cost (explore field) over euclidean; ~35px/step
+                // keeps the same weight scale as the euclidean fallback
+                let d = null;
+                const fieldCost = _exploreField?.dist.get(`${Math.round(p.x)},${Math.round(p.y)}`);
+                if (fieldCost !== undefined) d = fieldCost * 35;
+                if (d === null) d = Math.min(...hidden.map(t => Math.hypot(t.x - p.x, t.y - p.y)));
                 v += WEIGHTS.evalHiddenDist * d;
             }
         }
@@ -535,6 +614,7 @@
 
         const depth = Math.max(1, WEIGHTS.searchDepth | 0);
         const breadth = Math.max(2, WEIGHTS.searchBreadth | 0);
+        _exploreField = buildExploreField(snap0); // path-aware leaf evaluation
 
         function value(snap, d) {
             // Leaf: depth exhausted, game over, or the turn passed (endTurn)
@@ -568,6 +648,7 @@
             if (c.a.type === 'move') v += revisitPenalty(_recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
             if (!best || v > best.score) best = { action: c.a, score: v };
         }
+        _exploreField = null; // valid only for this decision's root snapshot
         return best;
     }
 
@@ -597,6 +678,24 @@
         };
         for (const t of ctx.shrines) {
             ctx.paths.set(t.id, window.BotState.findPath(self.x, self.y, t.x, t.y));
+        }
+        // Cheapest real path to any walkable hex of a hidden tile (their outer
+        // rings ARE walkable). Hidden tile CENTRES are not on the hex grid, so
+        // findPath to the centre returns null — target the ring hexes instead.
+        ctx.explorePath = null;
+        if (ctx.hiddenTiles.length) {
+            const targets = window.BotState.hexGrid()
+                .filter(h => h.tiles?.some(t => t.flipped && !t.isPlayerTile))
+                .sort((a, b) => Math.hypot(a.x - self.x, a.y - self.y) - Math.hypot(b.x - self.x, b.y - self.y));
+            let best = null;
+            for (const h of targets.slice(0, 10)) {
+                if (Math.hypot(h.x - self.x, h.y - self.y) < 5) { best = null; break; } // already there
+                const path = window.BotState.findPath(self.x, self.y, h.x, h.y);
+                if (!path || !path.length) continue;
+                const cost = path.reduce((c, p) => c + p.cost, 0);
+                if (!best || cost < best.cost) best = { path, cost };
+            }
+            if (best) ctx.explorePath = best.path;
         }
         // All 5 elements activated → path back to the bot's own player shrine
         if (ELEMENTS.every(el => self.activated.includes(el))) {
@@ -690,6 +789,24 @@
             choice = ranked[0];
         }
 
+        // Anti-freeze: choosing endTurn with most of the turn's AP unspent
+        // while moves exist almost always means stale revisit-penalty memory
+        // has "walled in" the pawn (every escape route was recently visited).
+        // Forget the movement grudges once and re-decide — if endTurn is
+        // still the best with a clean slate, it's a genuine choice.
+        // ONLY when endTurn scored as a do-nothing fallback (< 20): a high
+        // endTurn score means shrine collection (or a win) — clearing the
+        // memory there re-enables the exact oscillation it suppresses and
+        // the bot steps OFF the shrine instead of collecting.
+        if (choice.action.type === 'endTurn' && choice.score < 20 &&
+            snap.turn.ap >= 3 && _recentPositions.length) {
+            _recentPositions.length = 0;
+            log('Anti-freeze: endTurn chosen with AP to spare — clearing move memory and re-deciding');
+            const redo = ((WEIGHTS.searchDepth | 0) > 0 && window.BotSim) ? searchPick() : null;
+            const rankedRedo = redo ? null : rankActions();
+            choice = redo || (rankedRedo && rankedRedo.length ? rankedRedo[0] : choice);
+        }
+
         const { action, score } = choice;
         const label = action.type === 'placeTile'      ? `place player tile at (${action.x.toFixed(0)},${action.y.toFixed(0)})`
                     : action.type === 'cast'           ? `cast ${action.scroll}`
@@ -715,6 +832,10 @@
     // (selection modes), and waits out the rest.
     // ----------------------------------------------------------------
     const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // Arena fast mode: BotSystem.speedScale scales every between-action delay
+    // (1 = normal live play; 0.1 = arena). Scaled sleeps still yield the event
+    // loop so async effect machinery (fire destroys, cascades) can settle.
+    const tick = ms => sleep(Math.max(0, ms * (window.BotSystem?.speedScale ?? 1)));
 
     async function waitForQuiescence() {
         const deadline = Date.now() + 25000;
@@ -727,7 +848,7 @@
                 const pick = buttons.find(b => b.textContent === 'To Active') ||
                              buttons.find(b => b.textContent === 'To Common');
                 if (pick) { log(`Cascade prompt: choosing "${pick.textContent}"`); pick.click(); }
-                await sleep(250);
+                await tick(250);
                 continue;
             }
             // Selection modes (Sacrificial Pyre, Telekinesis, Take Flight, …)
@@ -737,12 +858,12 @@
                 log('Cancelling a selection mode the bot cannot drive');
                 se?.cancelSelectionMode?.();
                 if (window.takeFlightState) window.takeFlightState = null;
-                await sleep(250);
+                await tick(250);
                 continue;
             }
             // Response window after a cast (multiplayer): wait the stack out
             if (window.spellSystem?.responseWindow?.isResponseWindowOpen) {
-                await sleep(400);
+                await tick(400);
                 continue;
             }
             return; // quiet — safe to act again
@@ -767,7 +888,7 @@
                 const applied = botAct();
                 if (!applied) break;
                 if (applied.type === 'endTurn') break;
-                await sleep(350);
+                await tick(350);
             }
         } finally {
             _turnRunning = false;
@@ -796,6 +917,17 @@
     // ----------------------------------------------------------------
     // Public API (console debugging + Stage 2/3 hooks)
     // ----------------------------------------------------------------
+    // Wipe per-game bot memory (plan, anti-oscillation history, cursed-cell
+    // blacklist). The arena MUST call this between games — board positions
+    // repeat across games, so a cell blacklisted in game 1 would silently
+    // handicap every later game.
+    function resetMemory() {
+        _plan = null;
+        _recentPositions.length = 0;
+        cellFailCount.clear();
+        cursedCells.clear();
+    }
+
     window.BotSystem = {
         step:  botAct,        // one action
         turn:  botTurn,       // play out the whole turn
@@ -803,6 +935,8 @@
         score: scoreAction,   // (action, snapshot, ctx) → utility
         searchPick,           // Stage 2 lookahead pick — used when WEIGHTS.searchDepth > 0
         evaluateSnapshot,     // Stage 2 state evaluator (search leaves)
+        resetMemory,          // wipe plan/history/blacklists (arena: call per game)
+        speedScale: 1,        // scales all between-action delays (arena sets ~0.1)
         waitForQuiescence,    // settle response windows / selection modes / cascades
         WEIGHTS,              // live tuning surface (Stage 3a evolves this)
         DEFAULT_WEIGHTS,

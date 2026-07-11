@@ -408,7 +408,11 @@
             const i = p.active.indexOf(a.scroll);
             if (i !== -1) { p.active.splice(i, 1); p.activeCount--; }
         }
-        // Real discards land in the common area, which the snapshot doesn't track.
+        // Discards land in the shared common area (castable by anyone)
+        if (!snap.commonArea) snap.commonArea = [];
+        if (a.scroll !== UNKNOWN_SCROLL && !snap.commonArea.includes(a.scroll)) {
+            snap.commonArea.push(a.scroll);
+        }
     }
 
     function simulate(snap, action) {
@@ -461,9 +465,10 @@
             return actions;
         }
 
-        // Casts (2 AP, pattern satisfied, never level-1 response scrolls)
+        // Casts (2 AP, pattern satisfied, never level-1 response scrolls) —
+        // hand, active, and the shared common area (castable by anyone)
         if (ap >= CAST_COST) {
-            for (const name of [...p.active, ...hand]) {
+            for (const name of new Set([...p.active, ...hand, ...(snap.commonArea || [])])) {
                 const def = window.SCROLL_DEFINITIONS?.[name];
                 if (!def || def.level === 1) continue; // also skips UNKNOWN_SCROLL
                 if (checkPattern(snap, name)) actions.push({ type: 'cast', scroll: name });
@@ -516,6 +521,16 @@
                     actions.push({ type: 'move', x: h.x, y: h.y, cost: mv.cost });
                 }
             }
+        }
+
+        // Voluntary discards (cycle a slot to the common area)
+        for (const name of hand) {
+            if (name === UNKNOWN_SCROLL) continue;
+            actions.push({ type: 'discardScroll', scroll: name, from: 'hand', voluntary: true });
+        }
+        for (const name of p.active) {
+            if (name === UNKNOWN_SCROLL) continue;
+            actions.push({ type: 'discardScroll', scroll: name, from: 'active', voluntary: true });
         }
 
         actions.push({ type: 'endTurn' });

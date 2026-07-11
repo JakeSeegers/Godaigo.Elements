@@ -60,6 +60,7 @@
                 ap: getTotalAP(),
             },
             sourcePool: { ...window.stonePools },
+            commonArea: window.spellSystem?.getCommonAreaScrolls?.() || [], // shared, public, castable by anyone
             tiles: placedTiles.map(t => ({
                 id: t.id,
                 x: +t.x.toFixed(1), y: +t.y.toFixed(1),
@@ -77,11 +78,23 @@
     // ----------------------------------------------------------------
     // Hex grid + Dijkstra cheapest path (stone terrain changes step costs).
     // ----------------------------------------------------------------
-    let _grid = null, _gridAt = 0;
+    let _grid = null, _gridKey = '';
     function hexGrid() {
-        // getAllHexagonPositions() is moderately expensive; cache briefly
-        const now = Date.now();
-        if (!_grid || now - _gridAt > 1500) { _grid = getAllHexagonPositions(); _gridAt = now; }
+        // getAllHexagonPositions() is moderately expensive — cache it, but
+        // invalidate on BOARD CHANGE, never on time. A time-based cache
+        // (formerly 1.5s) served pre-reveal grids to every caller right
+        // after a tile flip; at bot/arena speed whole games fit inside one
+        // stale window and the bot "froze" on hexes that no longer matched
+        // the board. Key covers: tile count, reveal count, and positions
+        // (tiles can move via Telekinesis / Shifting Sands).
+        let key = placedTiles.length + ':';
+        let revealed = 0, posHash = 0;
+        for (const t of placedTiles) {
+            if (!t.flipped) revealed++;
+            posHash = (posHash + Math.round(t.x * 10) * 31 + Math.round(t.y * 10)) | 0;
+        }
+        key += revealed + ':' + posHash;
+        if (!_grid || key !== _gridKey) { _grid = getAllHexagonPositions(); _gridKey = key; }
         return _grid;
     }
 
@@ -213,11 +226,15 @@
             }
         }
 
-        // ── cast: any hand/active scroll whose pattern is satisfied now ──
+        // ── cast: any hand/active/COMMON-AREA scroll whose pattern is
+        // satisfied now. Common-area scrolls are shared and castable by
+        // anyone (castSpell scans them natively); without them a bot whose
+        // hand jams up with already-won scrolls can never progress again.
         // Casting costs 2 AP (activateScroll validates it — don't offer casts
         // the game will reject).
         if (scrolls && ap >= 2) {
-            for (const name of [...scrolls.active, ...scrolls.hand]) {
+            const common = window.spellSystem.getCommonAreaScrolls?.() || [];
+            for (const name of new Set([...scrolls.active, ...scrolls.hand, ...common])) {
                 const def = window.SCROLL_DEFINITIONS?.[name];
                 if (!def || def.level === 1) continue; // level 1 = response-only
                 if (window.spellSystem.checkPattern(name)) {
@@ -280,6 +297,20 @@
                 if (!mv.canMove) continue;
                 const cost = mv.cost ?? 1;
                 if (cost <= ap) actions.push({ type: 'move', x: h.x, y: h.y, cost });
+            }
+        }
+
+        // ── voluntary discard: cycle a hand/active scroll to the common area
+        // (legal any time via spellSystem.discardScroll — the same move the
+        // overflow flow uses). This is how a bot frees a hand slot jammed
+        // with an already-won or dead-source scroll; scoring's
+        // discardVoluntary penalty keeps it rare.
+        if (scrolls) {
+            for (const name of scrolls.hand) {
+                actions.push({ type: 'discardScroll', scroll: name, from: 'hand', voluntary: true });
+            }
+            for (const name of scrolls.active) {
+                actions.push({ type: 'discardScroll', scroll: name, from: 'active', voluntary: true });
             }
         }
 
