@@ -485,10 +485,13 @@
             }
         }
 
-        // Stone placements toward viable pattern variants (adjacent-only range)
+        // Stone placements toward viable pattern variants (adjacent-only range).
+        // Rule (isInPlacementRange): the pawn must stand on an UNOCCUPIED hex
+        // to place at all — a stone under the pawn blocks every placement.
         const g = grid(snap);
         const seen = new Set();
-        for (const name of hand) {
+        const pawnOnStone = !!stoneAt(snap, p.x, p.y);
+        for (const name of pawnOnStone ? [] : hand) {
             const def = window.SCROLL_DEFINITIONS?.[name];
             if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
             for (const variant of def.patterns) {

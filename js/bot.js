@@ -455,6 +455,9 @@
             const d = Math.hypot(h.x - cell.x, h.y - cell.y);
             if (d <= 5 || d >= 40) continue;                                 // must be adjacent to the cell
             if (missing.some(m => Math.hypot(m.x - h.x, m.y - h.y) < 5)) continue; // don't stand on an unfilled cell
+            // Rule: placement requires the pawn on an UNOCCUPIED hex — don't
+            // walk onto a stone to place from there, it would be blocked
+            if (placedStones.some(s => Math.hypot(s.x - h.x, s.y - h.y) < 5)) continue;
             const path = window.BotState.findPath(self.x, self.y, h.x, h.y);
             if (!path || !path.length) continue;
             const cost = path.reduce((c, p) => c + p.cost, 0);

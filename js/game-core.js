@@ -3707,6 +3707,15 @@
         function isInPlacementRange(x, y, stoneType) {
             if (!playerPosition) return false;
 
+            // Rule: stones may only be placed while the pawn stands on an
+            // UNOCCUPIED hex. Standing on a stone (e.g. mid wind-chain)
+            // blocks all placement until the pawn steps off. Checked before
+            // the placement-range buffs so it applies even under Avalanche /
+            // Seed the Skies / Mason's Savvy.
+            const stoneUnderPawn = placedStones.some(s =>
+                Math.hypot(s.x - playerPosition.x, s.y - playerPosition.y) < 5);
+            if (stoneUnderPawn) return false;
+
             // Get current player index (use activePlayerIndex in single player, myPlayerIndex in multiplayer)
             const currentPlayerIdx = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null) ? myPlayerIndex : activePlayerIndex;
 
