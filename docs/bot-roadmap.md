@@ -31,7 +31,8 @@ different concerns and neither blocks the other:
 | R4 | Replace host-browser impersonation with backend-driven bot turns | TODO | `js/bot-driver.js` (removed), backend service |
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
-| 3a | Weight evolution via self-play arena | TODO | `js/bot-arena.js` (new) |
+| 3a | Weight evolution via self-play arena | TODO — **do before 2.5; it's the yardstick** | `js/bot-arena.js` (new) |
+| 2.5 | Scroll-effect usage: selection targets + response scrolls | TODO (after 3a) | `js/bot-effects.js` (new) + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
 
@@ -467,6 +468,48 @@ only on that evidence.
   an accepted, documented divergence.
 
 ---
+
+## STAGE 2.5 — Scroll-effect usage (TODO — sequenced AFTER 3a)
+
+The bot casts scrolls but wastes their power: selection-mode effects are
+cancelled (`waitForQuiescence` cancels any `selectionMode` /
+`takeFlightState` it can't drive), response scrolls (level 1) are never
+played, and the Stage-2 simulator treats all effects as unknown. Weight
+evolution (3a) CANNOT fix any of this — a weight can't pick a Telekinesis
+target. This stage adds the missing capability. Build 3a FIRST: every
+increment below must be A/B-measured in the arena (with vs. without),
+otherwise there is no way to tell whether effect-driving actually wins games.
+
+Build order (each step independently commit-able and arena-measurable):
+
+1. **Inventory the choice space.** From `js/scrolls/effects/scroll-effects.js`,
+   list every scroll whose `execute()` returns `requiresSelection:true` (or
+   sets `tileMoveMode`/`takeFlightState`), and for each: what is being chosen
+   (tile, stone, pawn, hand scroll), what makes a choice valid, and what the
+   game-visible outcome is. Write the table into this file before coding.
+2. **`js/bot-effects.js`** — `window.BotEffects.driveSelection(scrollName)`:
+   when a selection mode opens during a BOT cast, enumerate the valid
+   choices via the game's own selection APIs (never reimplement validity),
+   score them with simple `WEIGHTS.effect*` heuristics, and apply the best
+   one. Wire into `waitForQuiescence`: try `BotEffects.driveSelection()`
+   first, fall back to today's cancel for scrolls it doesn't know.
+   Start with the 3–4 most-drawn scrolls; expand opportunistically.
+3. **Response scrolls.** Hook the response window for bot players: when
+   `ResponseWindowSystem` opens against a bot holding a castable response
+   scroll, decide respond/pass by score (v1 heuristic: respond when the
+   cast would grant the caster their 4th or 5th element, or when the
+   response is free-ish and the bot is ahead). This also removes the "bots
+   never count as responders" carve-out in response-window.js — coordinate
+   both sides.
+4. **Whitelist effects in the simulator.** For each scroll whose effect the
+   bot can now drive, implement it in `BotSim` and add it to
+   `SIMULATED_SCROLLS` — ONLY together with harness evidence
+   (`BotSim.validate`) that the simulation matches reality. This is what
+   lets `searchPick()` plan around effects instead of scoring them blind.
+
+Acceptance per increment: arena win rate vs. the pre-increment bot improves
+(same weights, same seeds); no increment may regress the Stage-1 fixed bugs
+(recast loops, oscillation, overflow stalls).
 
 ## STAGE 3a — Weight evolution via self-play (TODO)
 

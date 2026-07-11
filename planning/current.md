@@ -51,6 +51,15 @@ exist in code but are untested end-to-end. Docs system fully in place.
 
 ## NEXT SESSION TASK LIST (priority order)
 
+### 0. Bot track (agreed order — see docs/bot-roadmap.md)
+1. **Stage 3a — self-play arena** (`js/bot-arena.js`): BotArena.run() +
+   evolution loop. This is the yardstick; build first. Measures
+   Smart (search) vs Dumb (greedy) vs Hybrid and evolves WEIGHTS.
+2. **Stage 2.5 — scroll-effect usage** (`js/bot-effects.js`): drive
+   selection-mode effects instead of cancelling them, play response
+   scrolls, whitelist driven effects in BotSim. Each increment
+   A/B-measured in the arena. Full plan: bot-roadmap § STAGE 2.5.
+
 ### 1. Tutorial — Earth Shrine Step (MEDIUM, tutorial-mode.js)
 After step 4 (scroll found), the tutorial should:
 - Guide player to walk to the **center hex of the earth tile** (the shrine center)
