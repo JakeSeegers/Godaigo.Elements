@@ -14,6 +14,9 @@
 //       win-condition progress and a small penalty per stuck turn, NOT a
 //       plain win tally. opts.progressWeight (default 0.3) and
 //       opts.stuckPenalty (default 0.15) tune those terms.
+//       opts.onGame?(gameNumber, totalGames, gameResult) — optional per-game
+//       progress callback (also fires once per game inside evolve(), since
+//       evolve() forwards opts straight through to every run() call it makes).
 //   await BotArena.evolve(generations, opts)
 //       → champion weight table (also saved to
 //         localStorage['godaigo_bot_weights'] + logged as JSON)
@@ -296,6 +299,9 @@
                 result.games.push({ winner: g.winner, turns: g.turns, aIsPlayer0 });
                 result.avgTurns += g.turns / nGames;
                 log(`game ${i + 1}/${nGames}: ${g.winner === null ? 'draw' : (aWon ? 'A' : 'B') + ' wins'} in ${g.turns} turns  (A=${result.aWins} B=${result.bWins} D=${result.draws})`);
+                if (typeof opts.onGame === 'function') {
+                    try { opts.onGame(i + 1, nGames, g); } catch (e) { /* UI callback errors never abort a run */ }
+                }
                 await sleep(0); // yield between games — keep the tab responsive
             }
         } finally {

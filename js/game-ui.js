@@ -4152,84 +4152,152 @@ document.getElementById('undo-move').onclick = function() {
                     restartAsBots(Math.max(2, Math.min(5, (playerPositions || []).filter(Boolean).length || 2)))));
 
                 // Weight evolution (BotArena.evolve — roadmap Stage 3a): runs a
-                // MUTED self-play arena in the background for a modest preset
-                // (popSize 6 → 15 games/generation × 3 generations = 45 games)
-                // then a CONFIRMATION match against the weights we started
-                // with, only applying/keeping the result if it actually won
-                // that match. This mirrors the roadmap's own Stage 3a
-                // acceptance bar ("champion beats the hand-tuned defaults...",
-                // just scaled down from a 100-game spec run to something a
-                // button click can afford) — a single game per evolve()
-                // pairing is noisy enough that its per-generation pick can win
-                // by luck, not by being better, so nothing here should be
-                // trusted without being checked against a real baseline
-                // first. evolve() itself still auto-persists to localStorage
-                // every generation (pre-existing, intentional design so a
-                // console-run evolve() takes effect on reload) — this button
-                // does not change that behavior, it only decides whether to
-                // KEEP what got written by reverting it if the result didn't
-                // hold up. Leaves any online game first, same reasoning as
-                // the bot-match buttons above: this plays local hot-seat
-                // games under the hood.
-                const trainRow = document.createElement('div');
-                trainRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
-                const TRAIN_LABEL = '🧬 Train Weights (~55 games, few min)';
-                const trainBtn = makeBtn(TRAIN_LABEL, async () => {
-                    if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
-                    if (window.BotArena.isEvolving()) { updateStatus('Already training — use ⏹ to stop it'); return; }
-                    if (!await stopAnyRunningBotJob()) return;
-                    trainBtn.disabled = true;
-                    trainBtn.textContent = '🧬 Training… generation 0/3';
-                    // Snapshot what's live AND what's persisted before touching
-                    // anything, so a rejected result can be fully reverted —
-                    // including whatever evolve() wrote to localStorage along
-                    // the way during its own per-generation auto-persist.
+                // MUTED self-play arena in the background, then a CONFIRMATION
+                // match against the weights in place before training started,
+                // only applying/keeping the result if it actually won that
+                // match. This mirrors the roadmap's own Stage 3a acceptance bar
+                // ("champion beats the hand-tuned defaults...") — a single
+                // game per evolve() pairing (the "quick" preset) is noisy
+                // enough that its per-generation pick can win by luck, not by
+                // being better, so nothing here should be trusted without
+                // being checked against a real baseline first (see
+                // docs/bot-roadmap.md's "Confirmation gate" note — v1 of this
+                // button applied evolve()'s result unconditionally and could
+                // silently make bots worse). evolve() itself still
+                // auto-persists to localStorage every generation
+                // (pre-existing, intentional design so a console-run evolve()
+                // takes effect on reload) — this only decides whether to KEEP
+                // what got written, reverting it if the result didn't hold up.
+                // Leaves any online game first, same reasoning as the
+                // bot-match buttons above: this plays local hot-seat games
+                // under the hood.
+                async function runWeightTraining(preset, onProgress) {
+                    const { generations, gamesPerPair, popSize, confirmGames } = preset;
                     const baselineWeights = { ...window.BotSystem.WEIGHTS };
                     let baselineStored = null;
                     try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
-                    try {
-                        await leaveOnlineGameIfAny();
-                        const champion = await window.BotArena.evolve(3, {
-                            gamesPerPair: 1,
-                            popSize: 6,
-                            onGeneration: (gen, total, fitness) => {
-                                trainBtn.textContent = `🧬 Training… generation ${gen}/${total}`;
-                                updateStatus(`Training weights: generation ${gen}/${total} — fitness ${fitness.map(f => f.toFixed(1)).join(', ')}`);
-                            },
-                        });
+                    await leaveOnlineGameIfAny();
 
-                        trainBtn.textContent = '🧬 Confirming result…';
-                        updateStatus('Training done — confirming the result actually improved things…');
-                        const confirmGames = 10;
-                        const confirm = await window.BotArena.run(
-                            champion, baselineWeights, confirmGames, Date.now() % 100000);
-                        const improved = confirm.aFitness > confirm.bFitness;
-                        const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
+                    const pairs = popSize * (popSize - 1) / 2;
+                    const totalGames = pairs * gamesPerPair * generations + confirmGames;
+                    const startedAt = Date.now();
+                    let gamesDone = 0, lastGen = 0, lastFitness = null;
+                    const report = (phase) => onProgress({
+                        phase, gamesDone, totalGames, startedAt,
+                        gen: lastGen, generations, fitness: lastFitness,
+                    });
 
-                        if (improved) {
-                            window.BotArena.applyWeights(champion);
-                            updateStatus(`Training complete — champion beat the starting weights ${record} in the ` +
-                                `confirmation match. New weights applied live and saved. (Board shows the last game — ` +
-                                `start a new game to keep playing.)`);
-                        } else {
-                            window.BotArena.applyWeights(baselineWeights);
-                            try {
-                                if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
-                                else localStorage.setItem('godaigo_bot_weights', baselineStored);
-                            } catch (e) {}
-                            updateStatus(`Training finished but did not beat the starting weights (${record}) in the ` +
-                                `confirmation match — kept the previous weights. (Board shows the last game — start ` +
-                                `a new game to keep playing.)`);
-                        }
-                    } catch (err) {
-                        console.error('Weight training failed:', err);
-                        updateStatus('Weight training failed — see console');
-                    } finally {
-                        trainBtn.disabled = false;
-                        trainBtn.textContent = TRAIN_LABEL;
+                    const champion = await window.BotArena.evolve(generations, {
+                        gamesPerPair, popSize,
+                        onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report('training'); },
+                        onGame: () => { gamesDone++; report('training'); },
+                    });
+
+                    report('confirming');
+                    const confirm = await window.BotArena.run(
+                        champion, baselineWeights, confirmGames, Date.now() % 100000,
+                        { onGame: () => { gamesDone++; report('confirming'); } });
+                    const improved = confirm.aFitness > confirm.bFitness;
+                    const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
+
+                    if (improved) {
+                        window.BotArena.applyWeights(champion);
+                    } else {
+                        window.BotArena.applyWeights(baselineWeights);
+                        try {
+                            if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                            else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                        } catch (e) {}
                     }
-                });
-                trainRow.appendChild(trainBtn);
+                    return { improved, record };
+                }
+
+                // Shared progress meter for whichever training preset is running.
+                const progressWrap = document.createElement('div');
+                progressWrap.style.cssText = 'display:none;flex-direction:column;gap:4px;';
+                const progressBarOuter = document.createElement('div');
+                progressBarOuter.style.cssText = 'background:#111;border:1px solid #444;border-radius:4px;height:8px;overflow:hidden;';
+                const progressBarInner = document.createElement('div');
+                progressBarInner.style.cssText = 'background:#6ef;height:100%;width:0%;';
+                progressBarOuter.appendChild(progressBarInner);
+                const progressText = document.createElement('div');
+                progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;';
+                progressWrap.appendChild(progressBarOuter);
+                progressWrap.appendChild(progressText);
+
+                function fmtTime(s) { return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`; }
+                function renderProgress(p) {
+                    progressWrap.style.display = 'flex';
+                    const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
+                    progressBarInner.style.width = pct.toFixed(1) + '%';
+                    const elapsedS = (Date.now() - p.startedAt) / 1000;
+                    const rate = p.gamesDone > 0 ? elapsedS / p.gamesDone : null;
+                    const etaS = rate ? Math.max(0, (p.totalGames - p.gamesDone) * rate) : null;
+                    const genLine = p.fitness
+                        ? `gen ${p.gen}/${p.generations} · fitness ${p.fitness.map(f => f.toFixed(1)).join(', ')}`
+                        : `gen ${p.gen}/${p.generations}`;
+                    progressText.textContent =
+                        `${p.phase === 'confirming' ? 'Confirming result' : 'Training'} — ${genLine}\n` +
+                        `games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · elapsed ${fmtTime(elapsedS)}` +
+                        (etaS != null ? ` · ETA ~${fmtTime(etaS)}` : '');
+                }
+                function hideProgress() { progressWrap.style.display = 'none'; }
+
+                // Two presets: "quick" is the fast sample (few minutes, noisy —
+                // may often correctly report no improvement); "thorough" is a
+                // real training run (~700 games, likely 1-2+ hours) closer to
+                // the roadmap's own spec. Both share the confirmation gate
+                // above, so neither can silently apply a worse result.
+                const TRAIN_PRESETS = {
+                    quick:    { label: '🧬 Train Weights (quick, ~55 games)',
+                                generations: 3, gamesPerPair: 1, popSize: 6, confirmGames: 10 },
+                    thorough: { label: '🧬 Train Weights (thorough, ~700 games, 1-2+ hrs)',
+                                generations: 8, gamesPerPair: 3, popSize: 8, confirmGames: 20 },
+                };
+                let quickBtn, thoroughBtn;
+                function makeTrainButton(key) {
+                    const preset = TRAIN_PRESETS[key];
+                    const btn = makeBtn(preset.label, async () => {
+                        if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+                        if (window.BotArena.isEvolving()) { updateStatus('Already training — use ⏹ to stop it'); return; }
+                        if (!await stopAnyRunningBotJob()) return;
+                        quickBtn.disabled = true;
+                        thoroughBtn.disabled = true;
+                        btn.textContent = `${preset.label} — starting…`;
+                        try {
+                            const { improved, record } = await runWeightTraining(preset, (p) => {
+                                renderProgress(p);
+                                btn.textContent = p.phase === 'confirming'
+                                    ? `${preset.label} — confirming…`
+                                    : `${preset.label} — gen ${p.gen}/${preset.generations}`;
+                            });
+                            hideProgress();
+                            updateStatus(improved
+                                ? `Training complete — champion beat the starting weights ${record} in the confirmation ` +
+                                  `match. New weights applied live and saved. (Board shows the last game — start a new ` +
+                                  `game to keep playing.)`
+                                : `Training finished but did not beat the starting weights (${record}) in the ` +
+                                  `confirmation match — kept the previous weights. (Board shows the last game — start ` +
+                                  `a new game to keep playing.)`);
+                        } catch (err) {
+                            console.error('Weight training failed:', err);
+                            hideProgress();
+                            updateStatus('Weight training failed — see console');
+                        } finally {
+                            quickBtn.disabled = false;
+                            thoroughBtn.disabled = false;
+                            btn.textContent = preset.label;
+                        }
+                    });
+                    return btn;
+                }
+                quickBtn = makeTrainButton('quick');
+                thoroughBtn = makeTrainButton('thorough');
+
+                panel.appendChild(quickBtn);
+                const thoroughRow = document.createElement('div');
+                thoroughRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                thoroughRow.appendChild(thoroughBtn);
                 const trainStopBtn = document.createElement('button');
                 trainStopBtn.textContent = '⏹';
                 trainStopBtn.title = 'Stop training after the current generation finishes';
@@ -4238,8 +4306,9 @@ document.getElementById('undo-move').onclick = function() {
                     if (window.BotArena?.isEvolving()) { window.BotArena.stop(); updateStatus('Stopping after this generation…'); }
                     else updateStatus('No training run in progress');
                 };
-                trainRow.appendChild(trainStopBtn);
-                panel.appendChild(trainRow);
+                thoroughRow.appendChild(trainStopBtn);
+                panel.appendChild(thoroughRow);
+                panel.appendChild(progressWrap);
 
                 // ── Overlay Editor ───────────────────────────────────────────
                 const overlaySection = document.createElement('div');

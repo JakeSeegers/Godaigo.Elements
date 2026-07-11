@@ -548,15 +548,38 @@ Support added for the arena: `BotSystem.speedScale` (delay scaling; arena
 default 0.1 ≈ 35ms/action) and `BotSystem.resetMemory()` (per-game wipe of
 plan/oscillation-history/cursed-cells — positions repeat across games).
 
-**Cheat-panel UI (no console needed):** the "🧬 Train Weights" button
-(`js/game-ui.js` cheat panel, opened via 5 clicks on the HUD AP label) runs
-`BotArena.evolve(3, {gamesPerPair:1, popSize:6})` — 15 games/generation × 3
-generations = 45 games, a few minutes, not the full "hours in-browser" spec
-run. Leaves any online game first via a shared `leaveOnlineGameIfAny()`
-helper (also used by the existing bot-match buttons), and `evolve()` now
-checks `BotArena.stop()`'s flag once per generation so the panel's ⏹ button
-can cancel a training run in progress (previously only `spectate()` was
-cancellable).
+**Cheat-panel UI (no console needed):** two "🧬 Train Weights" buttons
+(`js/game-ui.js` cheat panel, opened via 5 clicks on the HUD AP label), both
+built on a shared `runWeightTraining(preset, onProgress)` helper:
+- **quick**: `{generations:3, gamesPerPair:1, popSize:6}` — 45 games, a few
+  minutes. Noisy (1 game/pairing) — may correctly report no improvement often.
+- **thorough**: `{generations:8, gamesPerPair:3, popSize:8}` — ~672 training
+  games + 20 confirmation games, likely 1-2+ hours; closer to the roadmap's
+  own spec scale (28 pairs × N games/generation).
+
+Both share a live progress meter (bar + generation/fitness/games-done/ETA
+text), driven by new `opts.onGame`/`opts.onGeneration` callbacks on
+`run()`/`evolve()`. Leaves any online game first via a shared
+`leaveOnlineGameIfAny()` helper (also used by the existing bot-match
+buttons), and `evolve()` checks `BotArena.stop()`'s flag once per generation
+so the panel's ⏹ button can cancel a training run in progress (previously
+only `spectate()` was cancellable) — note this only interrupts the `evolve()`
+phase; the confirmation match after it always runs to completion, since it's
+short relative to either preset.
+
+**On running training concurrently:** deliberately NOT built. `BotArena`
+plays local (no-Supabase) games in one browser tab's single JS thread against
+shared mutable global state (`placedTiles`, `activePlayerIndex`,
+`window.spellSystem`, ...) — two `playGame()` calls can't run concurrently in
+one tab, and real multiplayer rooms wouldn't help (network overhead, and a
+bot still needs a browser tab to drive it via impersonation until R4/R5 land
+— see Runtime Track above). The only available "parallelism" today is
+manually opening multiple tabs, each running an independent `evolve()` call —
+each tab has an isolated `window`, so that's genuinely concurrent, but
+`localStorage['godaigo_bot_weights']` is shared across tabs of the same
+origin (last write wins) and there's no cross-tab result comparison, so this
+is a DIY console workaround, not something worth building UI around. Real
+concurrent self-play at scale is Stage R5's job.
 
 **Confirmation gate (added after a v1 of this button silently made bots
 worse):** a single game per `evolve()` pairing is noisy — the per-generation
