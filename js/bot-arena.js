@@ -109,19 +109,33 @@
         return candidates;
     }
 
-    function placeBothPlayerTiles() {
+    // Spread n player tiles as far apart as possible (greedy max–min):
+    // start from the farthest pair, then repeatedly add the candidate whose
+    // minimum distance to the already-chosen spots is largest.
+    function placePlayerTilesSpread(n) {
         const cands = placementCandidates();
-        if (cands.length < 2) throw new Error('arena: not enough placement candidates');
-        let best = null;
+        if (cands.length < n) throw new Error(`arena: only ${cands.length} placement candidates for ${n} players`);
+        let pair = null;
         for (let i = 0; i < cands.length; i++) {
             for (let j = i + 1; j < cands.length; j++) {
                 const d = Math.hypot(cands[i].x - cands[j].x, cands[i].y - cands[j].y);
-                if (!best || d > best.d) best = { d, a: cands[i], b: cands[j] };
+                if (!pair || d > pair.d) pair = { d, a: cands[i], b: cands[j] };
             }
         }
-        placeTile(best.a.x, best.a.y, 0, false, 'player'); // → player 0
-        placeTile(best.b.x, best.b.y, 0, false, 'player'); // → player 1
+        const chosen = [pair.a, pair.b];
+        while (chosen.length < n) {
+            let best = null;
+            for (const c of cands) {
+                if (chosen.includes(c)) continue;
+                const minD = Math.min(...chosen.map(p => Math.hypot(p.x - c.x, p.y - c.y)));
+                if (!best || minD > best.minD) best = { minD, c };
+            }
+            chosen.push(best.c);
+        }
+        for (const p of chosen.slice(0, n)) placeTile(p.x, p.y, 0, false, 'player');
     }
+
+    function placeBothPlayerTiles() { placePlayerTilesSpread(2); }
 
     // The local hot-seat path never auto-resets AP when playerPositions
     // has >1 entries (that branch is gated on multiplayer's myPlayerIndex),
@@ -274,6 +288,89 @@
         return population[0];
     }
 
-    window.BotArena = { run, evolve, playGame };
-    log('Loaded — window.BotArena ready (run / evolve)');
+    // ----------------------------------------------------------------
+    // Spectator mode: watch 2–5 bots play a full LOCAL game with all the
+    // normal visuals (win screen included), then auto-download the action
+    // log. Unlike run(), nothing visual is muted and pacing is watchable.
+    // Start from the cheat panel (AP label 5×) or the console:
+    //   BotArena.spectate(3)            — 3 bots, normal pacing
+    //   BotArena.spectate(4, {speed:2}) — 4 bots, double-time delays
+    //   BotArena.stop()                 — end the match early
+    // ----------------------------------------------------------------
+    let _spectating = false;
+    let _stopRequested = false;
+    function stop() { _stopRequested = true; }
+    function isSpectating() { return _spectating; }
+
+    async function spectate(nPlayers = 2, opts = {}) {
+        if (_running || _spectating) throw new Error('BotArena already running');
+        nPlayers = Math.max(2, Math.min(5, nPlayers | 0)); // 5 player colors exist
+        if (!window.BotSim || !window.BotState || !window.BotSystem) {
+            throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
+        }
+        _spectating = true;
+        _stopRequested = false;
+
+        // Keep sounds, music, animations, and the WIN SCREEN — only mute
+        // gamification so bot games can't farm XP onto a logged-in profile.
+        const savedGami = window.gami;
+        const savedPrompt = window.showEndTurnPrompt;
+        const savedSpeed = window.BotSystem.speedScale;
+        window.gami = null;
+        window.showEndTurnPrompt = () => {};
+        window.BotSystem.speedScale = opts.speed ?? 1;
+        const turnCap = opts.turnCap ?? 300;
+
+        const roster = Array.from({ length: nPlayers }, (_, i) =>
+            ({ index: i, username: `🤖 Bot ${i + 1}`, isBot: true }));
+        window.ActionLog?.clear?.();
+        window.ActionLog?.setRoster?.(roster);
+
+        let result = { winner: null, turns: 0 };
+        try {
+            if (typeof resetGameResources === 'function') resetGameResources();
+            window.BotSystem.resetMemory();
+            startGame(nPlayers);
+            await sleep(300);
+            placePlayerTilesSpread(nPlayers);
+            await sleep(300);
+            activePlayerIndex = 0;
+            if (typeof updateStatus === 'function') {
+                updateStatus(`🤖 Bot match: ${nPlayers} bots playing. Open the cheat panel to stop or download the log.`);
+            }
+
+            for (let turn = 0; turn < turnCap && !_stopRequested; turn++) {
+                try { currentTurnNumber = turn + 1; } catch (e) {} // local games never advance it — the log needs it
+                const idx = activePlayerIndex;
+                refillAP();
+                await window.BotSystem.turn();
+                result.turns = turn + 1;
+
+                const w = window.BotSim.winner(window.BotState.snapshot());
+                if (w !== null) { result.winner = w; break; }
+
+                if (activePlayerIndex === idx) {
+                    const r = window.BotState.applyAction({ type: 'endTurn' });
+                    if (!r.ok) { log(`spectate: stuck on turn ${turn} (${r.reason})`); break; }
+                    await sleep(50);
+                }
+            }
+        } finally {
+            window.gami = savedGami;
+            window.showEndTurnPrompt = savedPrompt;
+            window.BotSystem.speedScale = savedSpeed;
+            _spectating = false;
+        }
+
+        const label = result.winner !== null ? `🏆 Bot ${result.winner + 1} wins in ${result.turns} turns!`
+                    : _stopRequested ? `⏹ Bot match stopped after ${result.turns} turns`
+                    : `🤝 Draw — turn cap (${result.turns}) reached`;
+        log(label);
+        if (typeof updateStatus === 'function') updateStatus(`${label} Downloading action log…`);
+        try { window.ActionLog?.download?.(); } catch (e) { log('log download failed:', e); }
+        return result;
+    }
+
+    window.BotArena = { run, evolve, playGame, spectate, stop, isSpectating };
+    log('Loaded — window.BotArena ready (run / evolve / spectate)');
 })();

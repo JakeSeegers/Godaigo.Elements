@@ -4066,6 +4066,41 @@ document.getElementById('undo-move').onclick = function() {
                 brainBtn.style.color = BRAIN_UI[currentBrain()].color;
                 panel.appendChild(brainBtn);
 
+                // Bot match spectator: start a fresh LOCAL game where 2–5 bots
+                // play each other with normal visuals; the action log
+                // auto-downloads when it ends. Click ⏹ to stop early.
+                const matchRow = document.createElement('div');
+                matchRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                const matchLabel = document.createElement('span');
+                matchLabel.textContent = '🤖 Bot match:';
+                matchLabel.style.cssText = 'font-size:12px;color:#aaa;';
+                matchRow.appendChild(matchLabel);
+                [2, 3, 4, 5].forEach(n => {
+                    const b = document.createElement('button');
+                    b.textContent = String(n);
+                    b.style.cssText = 'padding:4px 9px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:13px;';
+                    b.onclick = () => {
+                        if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+                        if (window.BotArena.isSpectating()) { updateStatus('A bot match is already running — use ⏹ to stop it'); return; }
+                        panel.remove(); // clear the panel; reopen any time via the AP label
+                        window.BotArena.spectate(n).catch(err => {
+                            console.error('Bot match failed:', err);
+                            updateStatus('Bot match failed — see console');
+                        });
+                    };
+                    matchRow.appendChild(b);
+                });
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = '⏹';
+                stopBtn.title = 'Stop the running bot match (log still downloads)';
+                stopBtn.style.cssText = 'padding:4px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:13px;';
+                stopBtn.onclick = () => {
+                    if (window.BotArena?.isSpectating()) { window.BotArena.stop(); updateStatus('Stopping bot match…'); }
+                    else updateStatus('No bot match running');
+                };
+                matchRow.appendChild(stopBtn);
+                panel.appendChild(matchRow);
+
                 // ── Overlay Editor ───────────────────────────────────────────
                 const overlaySection = document.createElement('div');
                 overlaySection.style.cssText = 'border-top:1px solid #444;padding-top:8px;display:flex;flex-direction:column;gap:6px;';
