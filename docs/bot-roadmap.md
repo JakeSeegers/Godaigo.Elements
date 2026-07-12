@@ -242,13 +242,43 @@ Feature summary (see `scoreAction()` in bot.js for the authoritative list):
   directly and specifically kills it, whereas v1's flat check could not.
   `_recentPositions` window widened 4 → 6 to also dampen slightly longer
   (3-hex) cycles, though only the recency-decay actually fixes 2-cycles.
+- **Doomed piecemeal placeStone loop (found post-Stage-2, via BotArena batch
+  runs — not a single-bot test).** `castAlreadyWon` (above) only guards the
+  `cast` action; `scoreAction()`'s `placeStone` case never got the same
+  treatment, and the anchored `_plan`/`makePlan()` system's own credit gate
+  (skip planning a scroll whose element is already activated or whose source
+  pool is empty) only protects placements made THROUGH a plan. Both the
+  greedy fallback and the default hybrid-search path pull candidates
+  straight from `BotState.legalActions()`, which enumerates a `placeStone`
+  for every missing cell of every pattern variant with no win-credit
+  awareness at all — so once `_plan` is null (the common case: only ~5 plan
+  cycles happened in a 200-turn game), the bot can feed stones one at a time
+  into a pattern that can never be cast for credit, forever, since no single
+  isolated placement is penalized enough to lose to `move`/`endTurn`.
+  Reproduced via `BotArena.run()`: a 200-turn game deadlocked as a draw with
+  one side stuck at 0/5 elements the entire game, having taken 228
+  `placeStone` actions and zero `cast` actions — 178 of them piling stones
+  into an already-won `WIND_SCROLL_5` pattern that could never grant credit
+  again. Fixed with `hasWinCredit(snap, scrollName)` (mirrors `makePlan()`'s
+  credit calc: catacomb credits per unactivated component with no
+  source-pool guard; single-element scrolls need the element unactivated AND
+  a non-empty source pool) and a hard veto (`placeNoCredit: -500`, same
+  magnitude/philosophy as `placeDoomed`) applied in BOTH `scoreAction()`'s
+  `placeStone` case and `searchPick()`'s root + every recursive ply (via
+  `creditFilter()`) — greedy and search shared the vocabulary
+  (`BotState.legalActions()`/`BotSim.legalActions()`) but not, until now, the
+  credit awareness. Confirmed on the exact reproducing seed: 200-turn draw →
+  42-turn decisive win, 0 further placements toward the dead pattern.
 
-All four found by literally running `window.BotSystem.turn()`/`.step()` in a loop in the
-browser console and inspecting `snapshot()`/`rank()` between turns — cheaper
-and more revealing than reasoning about the scoring code in the abstract.
-Worth repeating before investing in Stage 2/3a: structural bugs like these
-make weight-tuning or lookahead search pointless (a smarter search over a
-broken scorer just finds the same bugs faster).
+All five found by literally running the bot (single-bot loops via
+`window.BotSystem.turn()`/`.step()`, or bot-vs-bot batches via
+`BotArena.run()`) and inspecting `snapshot()`/`rank()`/action logs between
+turns — cheaper and more revealing than reasoning about the scoring code in
+the abstract. Worth repeating before investing further in Stage 2.5/3a:
+structural bugs like these make weight-tuning or lookahead search pointless
+(a smarter search over a broken scorer just finds the same bugs faster), and
+some (like this one) only surface in multi-turn/multi-game batches, not
+single-turn inspection.
 
 ---
 

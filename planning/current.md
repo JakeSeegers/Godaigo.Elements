@@ -10,6 +10,22 @@
 (previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **BOT FIX: doomed piecemeal placeStone loop** — `js/bot.js`. Reported
+  symptom: bots in testing "easily get stuck doing nothing or going around
+  in circles." Reproduced via `BotArena.run()` bot-vs-bot batches (not
+  reachable from single-turn console testing): a 200-turn game deadlocked
+  as a draw with one side stuck at 0/5 elements for the ENTIRE game — 228
+  `placeStone` actions, 0 `cast` actions, 178 of them feeding stones into an
+  already-won `WIND_SCROLL_5` pattern that could never grant win credit
+  again. Root cause: `castAlreadyWon` only guards the `cast` action; the
+  anchored `_plan` system's credit gate only protects plan-driven
+  placements; the greedy fallback and default hybrid-search path both pull
+  raw candidates from `BotState.legalActions()`, which has no win-credit
+  awareness. Fixed with a shared `hasWinCredit()` check + hard veto
+  (`placeNoCredit: -500`) applied in both `scoreAction()` and
+  `searchPick()` (root + every recursive ply). Confirmed on the exact
+  reproducing seed: 200-turn draw → 42-turn decisive win. Full writeup:
+  docs/bot-roadmap.md § Stage 1 fixed-bugs list (5th entry).
 - **BOT STAGE 2 (forward model + lookahead)** — `js/bot-sim.js` (new):
   pure `simulate(snap, action)` over the Stage-0 snapshot (move incl.
   tile-reveal-as-unknown, endTurn incl. shrine collection + COLOR_RANK turn

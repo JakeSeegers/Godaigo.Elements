@@ -45,7 +45,11 @@
         placeBase:          20,
         placeProgress:      45,  // × fraction of the variant complete AFTER this stone
         placeUnactivated:   25,  // building toward an unactivated element
-        placeDeadElement:  -30,  // building toward an element with an empty source pool
+        placeNoCredit:    -500,  // this scroll can never grant win credit again (element
+                                 // already activated, or its source pool is empty) — hard
+                                 // veto, same magnitude/philosophy as placeDoomed below,
+                                 // so it reliably beats out move/endTurn regardless of
+                                 // weight evolution drift (see hasWinCredit())
         placeDoomed:      -500,  // the stone would be destroyed on placement (non-fire/
                                  // non-void next to an unvoided fire) — pure stone waste
 
@@ -199,6 +203,30 @@
         return collectibleShrines(snap).find(t => Math.hypot(t.x - self.x, t.y - self.y) < 5) || null;
     }
 
+    // Would casting this scroll grant NEW win credit right now? Mirrors the
+    // credit calc in makePlan() (catacomb credits each unactivated COMPONENT
+    // element, no source-pool guard; a single-element scroll needs its
+    // element unactivated AND its source pool non-empty). Used to VETO
+    // placeStone actions that can never pay off — without this, piecemeal
+    // placement (outside the anchored _plan system, which already skips
+    // these via its own credit check) has no way to notice a pattern is
+    // pointless and loops forever feeding it stones. Observed in a BotArena
+    // game: 178 placeStone actions toward an already-won WIND_SCROLL_5 in a
+    // single game, the exact same class of bug castAlreadyWon fixes for the
+    // cast action — that fix just never covered placeStone.
+    function hasWinCredit(snap, scrollName) {
+        const self = me(snap);
+        if (!self) return true;
+        const el = scrollElement(scrollName);
+        if (el === 'catacomb') {
+            const def = window.SCROLL_DEFINITIONS?.[scrollName];
+            const components = [...new Set((def?.patterns?.[0] || []).map(c => c.type))];
+            return components.some(c => !self.activated.includes(c));
+        }
+        if (!el || !ELEMENTS.includes(el)) return true; // unknown/non-elemental — don't veto
+        return !self.activated.includes(el) && (snap.sourcePool[el] || 0) > 0;
+    }
+
     // ----------------------------------------------------------------
     // scoreAction — the Stage-1 utility function. Tune WEIGHTS, not this.
     // ----------------------------------------------------------------
@@ -224,12 +252,8 @@
             }
 
             case 'placeStone': {
-                const el = scrollElement(a.scroll);
                 let s = WEIGHTS.placeBase + WEIGHTS.placeProgress * (a.progress || 0);
-                if (el && ELEMENTS.includes(el)) {
-                    if ((snap.sourcePool[el] || 0) <= 0) s += WEIGHTS.placeDeadElement;
-                    else if (!self.activated.includes(el)) s += WEIGHTS.placeUnactivated;
-                }
+                s += hasWinCredit(snap, a.scroll) ? WEIGHTS.placeUnactivated : WEIGHTS.placeNoCredit;
                 // The bot KNOWS the fire rule — don't pay stones to relearn it
                 if (window.BotSim && !window.BotSim.stoneWouldSurvive(snap, a.x, a.y, a.stoneType)) {
                     s += WEIGHTS.placeDoomed;
@@ -637,6 +661,15 @@
         return v;
     }
 
+    // Drop placeStone actions that can never grant win credit (see
+    // hasWinCredit()) — search has no other way to notice a pattern is
+    // pointless, since evaluateSnapshot() only sees pool/activated counts,
+    // not "is this scroll's pattern even completable." Applied at every
+    // ply, not just the root, so the search tree never expands through one.
+    function creditFilter(snap, acts) {
+        return acts.filter(a => a.type !== 'placeStone' || hasWinCredit(snap, a.scroll));
+    }
+
     // Beam search: at every node, 1-ply-evaluate all children, expand only
     // the top `searchBreadth`. Root actions come from the REAL legalActions()
     // (game-validated); deeper plies use BotSim.legalActions (pure mirror).
@@ -658,7 +691,7 @@
             if (d <= 0 || snap.turn.activePlayerIndex !== meIdx || sim.isTerminal(snap)) {
                 return evaluateSnapshot(snap, meIdx);
             }
-            const acts = sim.legalActions(snap);
+            const acts = creditFilter(snap, sim.legalActions(snap));
             if (!acts.length) return evaluateSnapshot(snap, meIdx);
             const children = acts
                 .map(a => { const s1 = sim.simulate(snap, a); return { a, s1, v1: evaluateSnapshot(s1, meIdx) }; })
@@ -675,7 +708,7 @@
         // Root: beam over the real legal actions, but move the bot's
         // anti-oscillation penalty into the root scores so search ties
         // break the same way greedy's do.
-        const rootChildren = legal
+        const rootChildren = creditFilter(snap0, legal)
             .map(a => { const s1 = sim.simulate(snap0, a); return { a, s1, v1: evaluateSnapshot(s1, meIdx) }; })
             .sort((x, y) => y.v1 - x.v1)
             .slice(0, Math.max(breadth, 8)); // keep the root a little wider
