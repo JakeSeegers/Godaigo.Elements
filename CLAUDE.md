@@ -116,6 +116,6 @@ Full list: see `js/INDEX.md § Window Globals`.
 ---
 
 ## KNOWN ACTIVE BUGS
-See `TODO.md` for full list. Top open items as of last update:
-- `TRANS-WIN-CON`: Transmute (Fire IV) doesn't always stamp fire symbol on player tile
-- `TRANS-DOUBLE-DISP`: Transmute inventory display stale after discard
+See `TODO.md` for full list. `TRANS-WIN-CON` and `TRANS-DOUBLE-DISP` (Transmute
+fire-symbol stamp / stale inventory display) are confirmed cleared. No other
+top-level items as of last update.

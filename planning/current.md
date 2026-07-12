@@ -6,10 +6,23 @@
 ---
 
 ## Active Branch
-`claude/bot-refinement-next-steps-yiwl0c` → remote: `JakeSeegers/Godaigo.Elements`
-(previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
+`claude/masons-savvy-range-bug-ep7hjm` → remote: `JakeSeegers/Godaigo.Elements`
+(previous: `claude/bot-refinement-next-steps-yiwl0c`; base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **MASON'S SAVVY PLACEMENT RANGE FIX** — `js/game-core.js`, `js/game-ui.js`:
+  `findValidStonePosition()` read the stone type off the module-global
+  `draggedStoneType`, but both the mouse and touch drop handlers nulled
+  that global *before* calling it, so `isInPlacementRange()` always saw
+  `stoneType = null` and silently skipped the earth-only extended-range
+  check (Mason's Savvy) and the water/wind one (Seed the Skies), falling
+  back to plain adjacency. The keyboard placement-preview path passed the
+  type explicitly and worked fine — hence the "inconsistent" symptom.
+  Fix: `findValidStonePosition(x, y, stoneTypeOverride)` now takes an
+  explicit override; both drop handlers pass the captured type before
+  nulling the global. Verified headless via Playwright (stubbed Supabase
+  client, tutorial board): same distance-3 earth-stone drop with the buff
+  active went from `valid: false` → `valid: true`.
 - **BOT STAGE 2 (forward model + lookahead)** — `js/bot-sim.js` (new):
   pure `simulate(snap, action)` over the Stage-0 snapshot (move incl.
   tile-reveal-as-unknown, endTurn incl. shrine collection + COLOR_RANK turn
@@ -112,10 +125,10 @@ The tutorial text is vague. Make these explicit at the appropriate steps:
 ---
 
 ## Known Open Issues
-- `TRANS-WIN-CON`: Transmute (Fire IV) doesn't always stamp fire symbol on player tile
-- `TRANS-DOUBLE-DISP`: Transmute inventory display stale after discard
 - `onPlayerMoved` hook in game-ui.js exists but tutorial-mode.js treats it as no-op
 - Steps 5–14 of tutorial untested in full sequence
+
+(`TRANS-WIN-CON` and `TRANS-DOUBLE-DISP` confirmed cleared — removed from this list.)
 
 ## Files Currently In Flight
 None — all changes committed and pushed.
@@ -128,4 +141,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-11 (bot Stage 2: forward model + search)*
+*Last updated: 2026-07-12 (Mason's Savvy placement-range fix; cleared TRANS-WIN-CON / TRANS-DOUBLE-DISP)*
