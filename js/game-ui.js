@@ -1254,7 +1254,7 @@
                 draggedStoneType = null;
                 draggedStoneOriginalPos = null;
 
-                const stonePos = findValidStonePosition(world.x, world.y);
+                const stonePos = findValidStonePosition(world.x, world.y, capturedStoneType);
                 if (stonePos.valid) {
                     if (capturedStoneId === null) {
                         window._pendingFireDestroys = [];
@@ -1931,7 +1931,7 @@
                     draggedStoneId = null;
                     draggedStoneType = null;
 
-                    const stonePos = findValidStonePosition(world.x, world.y);
+                    const stonePos = findValidStonePosition(world.x, world.y, capturedStoneType);
                     if (stonePos.valid) {
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
                         window.SoundSystem?.play(capturedStoneType === 'earth' ? 'placeearthstone' : 'placestone');

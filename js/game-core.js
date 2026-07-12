@@ -3230,7 +3230,8 @@
             return matchingPos.tiles.some(tile => tile.flipped && !tile.isPlayerTile);
         }
 
-        function findValidStonePosition(x, y) {
+        function findValidStonePosition(x, y, stoneTypeOverride) {
+            const stoneType = stoneTypeOverride !== undefined ? stoneTypeOverride : draggedStoneType;
             const hexPositions = getAllHexagonPositions();
             let nearest = null;
             let minDist = Infinity;
@@ -3267,7 +3268,7 @@
                 const onFlippedTile = isPositionOnFlippedTile(nearest.x, nearest.y, hexPositions);
 
                 // Check if position is valid for placement based on active buffs
-                const inPlacementRange = playerPosition && isInPlacementRange(nearest.x, nearest.y, draggedStoneType);
+                const inPlacementRange = playerPosition && isInPlacementRange(nearest.x, nearest.y, stoneType);
 
                 if (!occupied && !anyPlayerHere && !onFlippedTile && inPlacementRange) {
                     return { x: nearest.x, y: nearest.y, valid: true };
