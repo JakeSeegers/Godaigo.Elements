@@ -205,8 +205,23 @@
 
     function legalActions() {
         // ── placement phase: this player hasn't placed their tile yet ──
-        if (typeof isPlacementPhase !== 'undefined' && isPlacementPhase &&
-            typeof playerTilesPlaced !== 'undefined' && !playerTilesPlaced.has(activePlayerIndex)) {
+        // isPlacementPhase is only ever set true by the real multiplayer
+        // lobby flow (startMultiplayerGame() in lobby.js) — the local
+        // single-page startGame() never touches it, and BotArena's own
+        // placePlayerTilesSpread() bypasses it entirely, so it happens to
+        // work there anyway. Tutorial Mode has NEITHER: its own scripted
+        // "place tile" step never sets the flag either. Without the
+        // fallback below, a bot driven from the console right after
+        // clicking "Play Tutorial" gets isPlacementPhase===undefined,
+        // playerPositions[activePlayerIndex]===undefined, and returns []
+        // forever — legalActions() never enumerates a placeTile action, so
+        // the bot does nothing from turn zero (observed: "No legal actions
+        // found" logged on every step). The fallback triggers off the
+        // actual observable state (no pawn placed yet) instead of the flag.
+        const needsPlacement = (typeof isPlacementPhase !== 'undefined' && isPlacementPhase)
+            ? (typeof playerTilesPlaced !== 'undefined' && !playerTilesPlaced.has(activePlayerIndex))
+            : !playerPositions[activePlayerIndex];
+        if (needsPlacement) {
             return placementCandidates().map(c => ({ type: 'placeTile', x: c.x, y: c.y, distToCentroid: c.distToCentroid }));
         }
 
@@ -366,7 +381,15 @@
 
         switch (a?.type) {
             case 'placeTile': {
-                if (typeof isPlacementPhase === 'undefined' || !isPlacementPhase) {
+                // Same robust check as legalActions() above — isPlacementPhase
+                // is only meaningful in real multiplayer; fall back to "this
+                // player has no pawn yet" everywhere else (local hot-seat,
+                // Tutorial Mode) so the action this function itself offered
+                // isn't immediately rejected as illegal.
+                const inPlacement = (typeof isPlacementPhase !== 'undefined' && isPlacementPhase)
+                    ? (typeof playerTilesPlaced !== 'undefined' && !playerTilesPlaced.has(activePlayerIndex))
+                    : !playerPositions[activePlayerIndex];
+                if (!inPlacement) {
                     return { ok: false, reason: 'not placement phase' };
                 }
                 if (typeof countTouchingUnrevealedTiles === 'function' &&

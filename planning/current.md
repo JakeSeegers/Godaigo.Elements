@@ -10,6 +10,19 @@
 (previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **BOT FIX: placement phase was dead code outside real multiplayer** —
+  `js/bot-state.js`. Root cause of a fresh "bots get stuck immediately"
+  report: `legalActions()`/`applyAction()`'s `placeTile` handling both
+  gated on `isPlacementPhase`, a flag ONLY set by the real multiplayer
+  lobby flow — the local `startGame()` never touches it, and BotArena
+  never caught this because its own placement helper bypasses BotState
+  entirely for placement. Tutorial Mode has no such bypass, so a bot
+  driven from the console right after "Play Tutorial" got zero legal
+  actions forever ("No legal actions found" on every step — indistinguishable
+  from a stuck loop to a human tester). Fixed by falling back to "this
+  player has no pawn placed yet" (observable state) when the flag isn't
+  meaningfully set. Verified: the same repro now plays 15 real turns,
+  3/5 elements activated, no errors. Full writeup: bot-roadmap.md § STAGE 0.
 - **BOT STAGE 2.5 (first increment): scroll-effect selection driving** —
   `js/bot-effects.js` (new), wired into `js/bot.js`'s `waitForQuiescence()`.
   Drives 5 of 12 selection-mode effects instead of cancelling them:

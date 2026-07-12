@@ -107,6 +107,9 @@ different concerns and neither blocks the other:
 9. **Testing without an account**: open the game → "Play Tutorial" (no login) →
    the board auto-sets-up. `window.BotSystem.step()` / `.turn()` from the console
    drive the bot. `Shift+R` = one action, `Shift+B` = play out the whole turn.
+   **This genuinely works now** (see the placement-phase bug below) — before
+   that fix, driving the bot immediately after "Play Tutorial" did nothing
+   at all, forever.
 
 ---
 
@@ -177,6 +180,33 @@ around it yet — only the greedy scoreAction() path considers it.
 
 Not yet enumerated (Stage 2+ work): catacomb teleports, scroll-effect
 sub-choices (target selection inside effects), hand→common moves.
+
+**FIXED bug — placement phase was dead code outside real multiplayer (found
+via a fresh user report of the bot "immediately stuck" — traced with a
+Playwright repro that drove the bot straight from "Play Tutorial", not the
+arena):** both `legalActions()`'s placement branch and `applyAction()`'s
+`placeTile` case gated on the `isPlacementPhase` global, which is **only
+ever set `true` by the real multiplayer lobby flow**
+(`startMultiplayerGame()` in lobby.js). The local single-page `startGame()`
+never touches it. `BotArena` never noticed because its own
+`placePlayerTilesSpread()` calls `placeTile()` directly, completely
+bypassing `BotState` for placement — so this path was untested by every
+prior Stage 3a arena run. Tutorial Mode has no equivalent bypass: its own
+scripted "place tile" step doesn't set `isPlacementPhase` either, so a bot
+driven from the console right after clicking "Play Tutorial" got
+`isPlacementPhase === undefined`, `playerPositions[activePlayerIndex] ===
+undefined`, and `legalActions()` returned `[]` — forever. From a human's
+perspective this looks exactly like "the bot is stuck in a loop": every
+`Shift+R`/`Shift+B` press (or `BotSystem.step()`/`.turn()` call) logs "No
+legal actions found" and nothing ever happens. Fixed by deriving placement
+need from observable state instead of the flag: `isPlacementPhase` when
+it's meaningfully set (real multiplayer), else fall back to "this player
+has no pawn placed yet" — safe everywhere else since a legitimately active
+player's `playerPositions[i]` never goes back to null once placed.
+Verified end-to-end (Playwright): the exact repro that previously logged
+"No legal actions found" on all 40 steps now places its tile, walks to a
+shrine, places stones, casts a scroll, and reaches 3/5 elements activated
+over 15 real turns, no errors.
 
 ---
 
