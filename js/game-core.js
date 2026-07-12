@@ -1283,6 +1283,13 @@
             }
 
             castSpell() {
+                // A pawn mid-transit across a stone hasn't come to rest yet —
+                // must move off before casting (see isPlayerRestingOnStone).
+                if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
+                    window.SoundSystem?.play('error');
+                    updateStatus('Cannot cast while standing on a stone — move to an empty hex first.');
+                    return false;
+                }
                 // Scrolls in Active Area OR Common Area can be activated
                 const activeScrollsList = Array.from(this.getPlayerScrolls(false).active);
                 const commonAreaScrolls = this.getCommonAreaScrolls();
@@ -2589,6 +2596,13 @@
         }
 
         function attemptBreakStone(stoneId) {
+            // Mid-transit across a stone — must move off before acting (see
+            // isPlayerRestingOnStone).
+            if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
+                updateStatus('Cannot break a stone while standing on a stone — move to an empty hex first.');
+                window.SoundSystem?.play('error');
+                return;
+            }
             // In multiplayer, only the active player can break stones
             if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
                 typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null &&
@@ -3284,6 +3298,8 @@
                 const onFlippedTile = isPositionOnFlippedTile(nearest.x, nearest.y, hexPositions);
 
                 // Check if position is valid for placement based on active buffs
+                // (isInPlacementRange already refuses to place while the pawn
+                // itself is standing on a stone — see its stoneUnderPawn check)
                 const inPlacementRange = playerPosition && isInPlacementRange(nearest.x, nearest.y, draggedStoneType);
 
                 if (!occupied && !anyPlayerHere && !onFlippedTile && inPlacementRange) {
@@ -5732,6 +5748,47 @@ function clearPlayerPath() {
             return placedTiles.some(t =>
                 t.isPlayerTile && t.playerIndex !== null && t.playerIndex !== forPlayerIndex &&
                 Math.hypot(t.x - x, t.y - y) < 5);
+        }
+
+        // Rule: a hex with a stone on it is transit-only, never a resting
+        // place. canPlayerMoveToHex() still lets a pawn move ONTO a
+        // stone-occupied hex (with the stone's usual AP cost/blocking rules)
+        // so it can be crossed — but once there, only another 'move' is
+        // legal. Every position-dependent action (cast, place a stone, break
+        // a stone, end turn) checks this and refuses until the pawn moves
+        // off onto an empty hex — see castSpell(), attemptBreakStone(),
+        // isInPlacementRange() (game-core.js), the end-turn click handler
+        // (game-ui.js), and legalActions()/applyAction() (bot-state.js).
+        function isPlayerRestingOnStone(playerIndex) {
+            const pos = playerPositions[playerIndex];
+            if (!pos) return false;
+            return placedStones.some(s => Math.hypot(s.x - pos.x, s.y - pos.y) < 5);
+        }
+
+        // Stranded = resting on a stone with no legal move to escape it (0 AP
+        // with nothing free/affordable adjacent). isPlayerRestingOnStone's ban
+        // on ending the turn there would otherwise hard-deadlock the game —
+        // no move, no cast/place/break (also banned while resting), no end
+        // turn. endTurn alone gets this escape hatch; every other
+        // position-dependent action stays banned regardless of AP, since
+        // being stranded doesn't make casting/placing/breaking legitimate.
+        function isPlayerStrandedOnStone(playerIndex) {
+            if (!isPlayerRestingOnStone(playerIndex)) return false;
+            const pos = playerPositions[playerIndex];
+            const ap = (playerIndex === activePlayerIndex && typeof getTotalAP === 'function') ? getTotalAP() : 0;
+            // Mirrors legalActions()'s own move enumeration (bot-state.js),
+            // which gates the WHOLE move block on ap > 0 — even a free (0
+            // cost) wind-stone move isn't offered at exactly 0 AP. Matching
+            // that here means this never reports "has an escape" when the
+            // actual action list would offer none.
+            const hexes = ap > 0 ? getAllHexagonPositions() : [];
+            const hasEscape = hexes.some(h => {
+                const d = Math.hypot(h.x - pos.x, h.y - pos.y);
+                if (d <= 5 || d >= 40) return false;
+                const mv = canPlayerMoveToHex(h.x, h.y, false);
+                return mv.canMove && mv.cost <= ap;
+            });
+            return !hasEscape;
         }
 
         // Single win-condition gate. Returns true when the win fired.

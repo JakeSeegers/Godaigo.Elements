@@ -3057,6 +3057,17 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 return;
             }
 
+            // Mid-transit across a stone — must move off before resting the
+            // turn there (see isPlayerRestingOnStone). Exempt when stranded
+            // (no legal move to escape it) — that's the one case where
+            // ending the turn HAS to stay legal, or the game hard-deadlocks.
+            if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(turnPlayerIdx) &&
+                !(typeof isPlayerStrandedOnStone === 'function' && isPlayerStrandedOnStone(turnPlayerIdx))) {
+                updateStatus('Cannot end your turn while standing on a stone — move to an empty hex first.');
+                window.SoundSystem?.play('error');
+                return;
+            }
+
             // R2 (docs/bot-roadmap.md, Runtime Track): shadow-mode backend validator.
             // Asks the server (which only knows the LAST persisted turn owner — see
             // persistCurrentTurnIndex below) whether it agrees this player currently
@@ -3532,18 +3543,20 @@ document.getElementById('undo-move').onclick = function() {
 
         let activeTeleportIndicators = [];
 
-        function updateCatacombIndicators() {
-            // Remove existing indicators
-            activeTeleportIndicators.forEach(ind => ind.remove());
-            activeTeleportIndicators = [];
-
-            // Only allow teleport indicators on the active player's turn
-            if (typeof canTakeAction === 'function' && !canTakeAction()) return;
-
-            // Check if player is on a catacomb shrine
-            if (!playerPosition) return;
-
-            const currentShrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
+        // Freedom ("only applies to you") is scoped by playerIndex in
+        // activeBuffs.freedom, but the teleport indicators built from it are
+        // DOM elements that persist until the next recompute — with no
+        // recompute wired to the turn boundary, an indicator drawn during
+        // the caster's turn (correctly, per hasFreedomActive at that moment)
+        // stays on the board and clickable into whoever's turn comes next.
+        // Its click handler only re-checked canTakeAction()/occupancy, never
+        // eligibility, so any later player could click through it and
+        // teleport for free even though Freedom was never active for them.
+        // Both call sites below recompute fresh off CURRENT myPlayerIndex so
+        // a stale indicator can't be exploited after control passes on.
+        function catacombEligibility() {
+            if (!playerPosition) return { shrine: null, isCatacombLike: () => false };
+            const shrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
             const freedomActive = spellSystem && spellSystem.scrollEffects
                 && typeof spellSystem.scrollEffects.hasFreedomActive === 'function'
                 && spellSystem.scrollEffects.hasFreedomActive(myPlayerIndex);
@@ -3554,7 +3567,18 @@ document.getElementById('undo-move').onclick = function() {
                 if (freedomActive && elementalTypes.includes(tile.shrineType)) return true;
                 return false;
             };
+            return { shrine, isCatacombLike };
+        }
 
+        function updateCatacombIndicators() {
+            // Remove existing indicators
+            activeTeleportIndicators.forEach(ind => ind.remove());
+            activeTeleportIndicators = [];
+
+            // Only allow teleport indicators on the active player's turn
+            if (typeof canTakeAction === 'function' && !canTakeAction()) return;
+
+            const { shrine: currentShrine, isCatacombLike } = catacombEligibility();
             if (!currentShrine || !isCatacombLike(currentShrine)) return;
 
             // Find all other REVEALED catacomb shrines (not flipped) WITHOUT stones on them
@@ -3607,6 +3631,20 @@ document.getElementById('undo-move').onclick = function() {
                     e.preventDefault();
                     if (typeof canTakeAction === 'function' && !canTakeAction()) {
                         updateStatus('Not your turn.');
+                        return;
+                    }
+
+                    // Re-validate departure eligibility fresh — see
+                    // catacombEligibility()'s comment. This indicator's own
+                    // closure captured currentShrine/isCatacombLike from
+                    // whenever it was drawn (e.g. during another player's
+                    // Freedom-active turn), so trusting that snapshot here
+                    // would let a leftover indicator be exploited after
+                    // control passes to whoever's turn it is now.
+                    const fresh = catacombEligibility();
+                    if (!fresh.shrine || !fresh.isCatacombLike(fresh.shrine)) {
+                        updateStatus('Cannot teleport — no catacomb/Freedom access from here anymore.');
+                        updateCatacombIndicators();
                         return;
                     }
 

@@ -253,13 +253,20 @@
             }
         }
 
+        // ── resting-on-stone gate: a hex with a stone on it is transit-only
+        // (see isPlayerRestingOnStone in game-core.js) — cast/placeStone/
+        // breakStone/endTurn all require being at rest, so none of them get
+        // enumerated until the pawn moves to an empty hex. 'move' and
+        // 'discardScroll' (position-independent) are unaffected.
+        const onStone = typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex);
+
         // ── cast: any hand/active/COMMON-AREA scroll whose pattern is
         // satisfied now. Common-area scrolls are shared and castable by
         // anyone (castSpell scans them natively); without them a bot whose
         // hand jams up with already-won scrolls can never progress again.
         // Casting costs 2 AP (activateScroll validates it — don't offer casts
         // the game will reject).
-        if (scrolls && ap >= 2) {
+        if (!onStone && scrolls && ap >= 2) {
             const common = window.spellSystem.getCommonAreaScrolls?.() || [];
             for (const name of new Set([...scrolls.active, ...scrolls.hand, ...common])) {
                 const def = window.SCROLL_DEFINITIONS?.[name];
@@ -273,7 +280,7 @@
         // ── placeStone: every missing stone of every VIABLE pattern variant ──
         // A variant is viable when each of its cells is on the board and either
         // empty or already holding the right-type stone.
-        if (scrolls) {
+        if (!onStone && scrolls) {
             const pHex = pixelToHex(player.x, player.y, TILE_SIZE);
             const grid = hexGrid();
             const seen = new Set(); // dedupe identical placements across scrolls
@@ -340,7 +347,7 @@
         // playerPositions[activePlayerIndex] (see game-core.js), but the move
         // block above already computes distance from `player` directly, so
         // reuse that instead of a second code path to the same fact.
-        for (const s of placedStones) {
+        if (!onStone) for (const s of placedStones) {
             const d = Math.hypot(s.x - player.x, s.y - player.y);
             if (d <= HEX_NEAR || d >= HEX_STEP) continue;
             const cost = STONE_BREAK_COST[s.type];
@@ -363,8 +370,15 @@
         }
 
         // ── endTurn: always available while the button is live ──
+        // Exempt from the resting-on-stone ban when stranded (no legal move
+        // to escape it) — see isPlayerStrandedOnStone in game-core.js. Without
+        // this a bot that lands on a stone with 0 AP and nothing affordable
+        // adjacent has zero legal actions at all: onStone excludes
+        // cast/placeStone/breakStone/endTurn, and no move exists either.
+        const strandedOnStone = onStone &&
+            typeof isPlayerStrandedOnStone === 'function' && isPlayerStrandedOnStone(activePlayerIndex);
         const btn = document.getElementById('end-turn');
-        if (btn && !btn.disabled) actions.push({ type: 'endTurn' });
+        if ((!onStone || strandedOnStone) && btn && !btn.disabled) actions.push({ type: 'endTurn' });
 
         return actions;
     }
@@ -377,6 +391,19 @@
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
             typeof myPlayerIndex !== 'undefined' && activePlayerIndex !== myPlayerIndex) {
             return { ok: false, reason: 'not this client\'s turn (multiplayer guard)' };
+        }
+
+        // Re-check the resting-on-stone gate (see legalActions() above) —
+        // callers may hold a stale action from a snapshot taken before the
+        // pawn's last move landed it on a stone. endTurn is exempt when
+        // stranded (no legal move to escape it) — the one case where it has
+        // to stay legal, or the game hard-deadlocks (see
+        // isPlayerStrandedOnStone in game-core.js).
+        const positionalTypes = ['cast', 'placeStone', 'breakStone', 'endTurn'];
+        if (positionalTypes.includes(a?.type) &&
+            typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex) &&
+            !(a.type === 'endTurn' && typeof isPlayerStrandedOnStone === 'function' && isPlayerStrandedOnStone(activePlayerIndex))) {
+            return { ok: false, reason: 'standing on a stone — must move to an empty hex first' };
         }
 
         switch (a?.type) {

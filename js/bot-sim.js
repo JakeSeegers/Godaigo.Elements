@@ -483,9 +483,15 @@
             return actions;
         }
 
+        // Rule (mirrors isPlayerRestingOnStone in game-core.js): a hex with a
+        // stone on it is transit-only — cast/placeStone/endTurn all require
+        // being at rest, so none of them are legal until the pawn moves to
+        // an empty hex. 'move' and 'discardScroll' are unaffected.
+        const pawnOnStone = !!stoneAt(snap, p.x, p.y);
+
         // Casts (2 AP, pattern satisfied, never level-1 response scrolls) —
         // hand, active, and the shared common area (castable by anyone)
-        if (ap >= CAST_COST) {
+        if (!pawnOnStone && ap >= CAST_COST) {
             for (const name of new Set([...p.active, ...hand, ...(snap.commonArea || [])])) {
                 const def = window.SCROLL_DEFINITIONS?.[name];
                 if (!def || def.level === 1) continue; // also skips UNKNOWN_SCROLL
@@ -494,11 +500,8 @@
         }
 
         // Stone placements toward viable pattern variants (adjacent-only range).
-        // Rule (isInPlacementRange): the pawn must stand on an UNOCCUPIED hex
-        // to place at all — a stone under the pawn blocks every placement.
         const g = grid(snap);
         const seen = new Set();
-        const pawnOnStone = !!stoneAt(snap, p.x, p.y);
         for (const name of pawnOnStone ? [] : hand) {
             const def = window.SCROLL_DEFINITIONS?.[name];
             if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
@@ -562,7 +565,12 @@
             actions.push({ type: 'discardScroll', scroll: name, from: 'active', voluntary: true });
         }
 
-        actions.push({ type: 'endTurn' });
+        // Stranded exception (mirrors isPlayerStrandedOnStone in
+        // game-core.js): resting on a stone with zero moves enumerated above
+        // must still allow ending the turn, or the search sees a dead end
+        // with no legal action at all.
+        const strandedOnStone = pawnOnStone && !actions.some(act => act.type === 'move');
+        if (!pawnOnStone || strandedOnStone) actions.push({ type: 'endTurn' });
         return actions;
     }
 
