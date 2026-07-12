@@ -194,6 +194,14 @@
             p && i !== ai && dist(p.x, p.y, x, y) < HEX_NEAR);
         if (occupied) return { canMove: false, cost: Infinity };
 
+        // Mirror of canPlayerMoveToHex()'s isOpponentTileCenter() block —
+        // another player's tile centre is off-limits (your own stays
+        // reachable, needed for the win condition).
+        const onOpponentTileCenter = snap.tiles.some(t =>
+            t.isPlayerTile && t.playerIndex !== null && t.playerIndex !== ai &&
+            dist(t.x, t.y, x, y) < HEX_NEAR);
+        if (onOpponentTileCenter) return { canMove: false, cost: Infinity };
+
         const stone = stoneAt(snap, x, y);
         if (!stone) return { canMove: true, cost: 1 };
 

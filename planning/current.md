@@ -10,6 +10,29 @@
 (previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **RULES CHANGE: player tiles are off-limits for stones/opponent movement** —
+  `js/game-core.js`, `js/game-ui.js`, `js/bot.js`, `js/bot-sim.js`. Two new
+  rules: (1) stones can never be placed on a player tile or its bridge hexes
+  (own or opponent's) — gated once in `isInPlacementRange()` via the new
+  `isPositionOnPlayerTile()`, so all 6 call sites (drag-drop, keyboard
+  cycling, bot legalActions/applyAction, plan-building) inherit it
+  automatically; (2) a player may not move onto the CENTRE hex of another
+  player's tile (their own centre stays reachable, required to win) — gated
+  in `canPlayerMoveToHex()` via the new `isOpponentTileCenter()`, inherited
+  by every caller (bot pathfinding/Dijkstra, drag movement, keyboard
+  movement). `bot-sim.js`'s pure movement-cost mirror updated to match, so
+  search/lookahead stays accurate. Considered and rejected an end-turn-based
+  version of rule 2 first (blocked ending turn while standing on an
+  opponent's tile) — abandoned after finding it could soft-lock a bot with
+  0 AP on an opponent's tile in the local arena (no turn-timer safety net
+  there, unlike real multiplayer); the user simplified to a movement
+  restriction instead, which has no such risk since the tile is simply
+  never enterable. Verified: direct function tests (own-centre movable,
+  opponent-centre blocked, own/opponent placement blocked, bridge hex
+  blocked, normal hexes unaffected) all pass; 15-game arena regression
+  batch shows 14 decisive wins, 0 errors, 0 stuck turns, win rates
+  comparable to pre-change baselines. Documented in
+  docs/game-design-document.md and docs/INDEX.md.
 - **BOT FIX: per-bot memory was shared across bot players (the actual
   "trapped in loops" bug)** — `js/bot.js`. Found from a real user's
   downloaded 2-bot-vs-2-bot action log showing an identical 6-hex

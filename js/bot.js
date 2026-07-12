@@ -473,11 +473,14 @@
                 });
                 if (!cells.every(c => grid.some(h => Math.hypot(h.x - c.x, h.y - c.y) < 5))) continue;
                 if (cells.some(c => cursedCells.has(cellKey(c)))) continue; // known-doomed cell — skip this variant
-                // Cells on face-down tiles are illegal to place on, and a
-                // non-fire/non-void stone next to an unvoided fire dies on
-                // placement — don't plan shapes that can't exist.
+                // Cells on face-down tiles or any player tile (incl. bridge
+                // hexes) are illegal to place on, and a non-fire/non-void
+                // stone next to an unvoided fire dies on placement — don't
+                // plan shapes that can't exist.
                 if (typeof isPositionOnFlippedTile === 'function' &&
                     cells.some(c => isPositionOnFlippedTile(c.x, c.y, grid))) continue;
+                if (typeof isPositionOnPlayerTile === 'function' &&
+                    cells.some(c => isPositionOnPlayerTile(c.x, c.y, grid))) continue;
                 if (window.BotSim &&
                     cells.some(c => !window.BotSim.stoneWouldSurvive(snap, c.x, c.y, c.type))) continue;
                 let placed = 0, blocked = false;

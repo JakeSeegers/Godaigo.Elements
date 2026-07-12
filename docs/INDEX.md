@@ -55,3 +55,9 @@ Max 25 of each type across all players (shared pool).
 - Can only be played during another player's action
 - Requires 2 AP + player in center of pattern
 - If two players respond: higher rank element resolves first
+
+### Player tiles
+- Stones can never be placed on a player tile, including its bridge hexes (own or opponent's).
+- Movement onto the **centre** hex of another player's tile is blocked; your own centre stays
+  reachable (required to win). Gates: `isPositionOnPlayerTile()` (placement) and
+  `isOpponentTileCenter()` (movement, called from `canPlayerMoveToHex()`) in game-core.js.

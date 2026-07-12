@@ -80,6 +80,16 @@ Scrolls can exist in three locations:
 
 ---
 
+## Player Tiles
+- Stones can never be placed on a player tile, including its bridge hexes (the shared
+  boundary positions formed where a player tile's edge touches a neighbouring tile) —
+  this applies to every player's tile, including your own.
+- A player may not move their pawn onto the **centre** hex of another player's tile.
+  Your own tile's centre stays reachable (required to win). The rest of an opponent's
+  tile (its other hexes, its bridge hexes) is not restricted for movement — only its centre.
+
+---
+
 ## Game Phases
 *(To be expanded)*
 

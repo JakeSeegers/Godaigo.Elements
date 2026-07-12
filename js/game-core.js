@@ -3230,6 +3230,23 @@
             return matchingPos.tiles.some(tile => tile.flipped && !tile.isPlayerTile);
         }
 
+        // Rule: stones may never be placed on a player tile, including its
+        // bridge hexes (the shared boundary positions getAllHexagonPositions()
+        // synthesizes when ≥2 tiles' trapezoid corners coincide — a bridge hex's
+        // `tiles` list carries every tile that contributes to it, so a bridge
+        // hex touching a player tile is excluded the same way a normal hex on
+        // that tile is). Applies to every player's tile, including your own.
+        function isPositionOnPlayerTile(x, y, hexPositions) {
+            const matchingPos = hexPositions.find(pos => {
+                const dist = Math.sqrt(Math.pow(pos.x - x, 2) + Math.pow(pos.y - y, 2));
+                return dist < 5;
+            });
+
+            if (!matchingPos || !matchingPos.tiles) return false;
+
+            return matchingPos.tiles.some(tile => tile.isPlayerTile);
+        }
+
         function findValidStonePosition(x, y) {
             const hexPositions = getAllHexagonPositions();
             let nearest = null;
@@ -3715,6 +3732,12 @@
             const stoneUnderPawn = placedStones.some(s =>
                 Math.hypot(s.x - playerPosition.x, s.y - playerPosition.y) < 5);
             if (stoneUnderPawn) return false;
+
+            // Rule: stones may never land on a player tile or its bridge hexes
+            // (any player's, including your own) — checked before the
+            // placement-range buffs so it applies even under Avalanche / Seed
+            // the Skies / Mason's Savvy, same as the stone-under-pawn rule above.
+            if (isPositionOnPlayerTile(x, y, getAllHexagonPositions())) return false;
 
             // Get current player index (use activePlayerIndex in single player, myPlayerIndex in multiplayer)
             const currentPlayerIdx = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null) ? myPlayerIndex : activePlayerIndex;
@@ -5699,6 +5722,18 @@ function clearPlayerPath() {
             return Math.hypot(pos.x - tile.x, pos.y - tile.y) < 5;
         }
 
+        // Rule: a player may not MOVE ONTO the centre hex of another player's
+        // tile (their OWN tile's centre is required for the win condition —
+        // see isPlayerAtOwnShrine above — so that one stays reachable).
+        // Deliberately narrower than "the whole player tile": a player tile's
+        // other hexes and bridge hexes are unaffected, only its single centre
+        // point (same point isPlayerAtOwnShrine/getPlayerShrineTile checks).
+        function isOpponentTileCenter(x, y, forPlayerIndex) {
+            return placedTiles.some(t =>
+                t.isPlayerTile && t.playerIndex !== null && t.playerIndex !== forPlayerIndex &&
+                Math.hypot(t.x - x, t.y - y) < 5);
+        }
+
         // Single win-condition gate. Returns true when the win fired.
         // Safe to call repeatedly from any path: showLevelComplete and
         // handleGameOver both guard against double-fire.
@@ -7180,6 +7215,13 @@ function clearPlayerPath() {
             // Block movement onto hexes occupied by other players (prevents moving "through" players as pathing is step-wise)
             if (isHexOccupiedByOtherPlayer(x, y)) {
                 if (logBlocked) console.log(`❌ Cannot move to (${x.toFixed(1)}, ${y.toFixed(1)}): occupied by another player`);
+                return { canMove: false, cost: Infinity };
+            }
+
+            // Block entering the centre hex of ANOTHER player's tile (your
+            // own stays reachable — required for the win condition).
+            if (isOpponentTileCenter(x, y, activePlayerIndex)) {
+                if (logBlocked) console.log(`❌ Cannot move to (${x.toFixed(1)}, ${y.toFixed(1)}): another player's tile centre`);
                 return { canMove: false, cost: Infinity };
             }
 
