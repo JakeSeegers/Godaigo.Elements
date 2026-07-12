@@ -487,20 +487,65 @@ otherwise there is no way to tell whether effect-driving actually wins games.
 Build order (each step independently commit-able and arena-measurable):
 
 1. **Inventory the choice space (DONE — see § CHOICE-SPACE INVENTORY below).**
-2. **`js/bot-effects.js`** — `window.BotEffects.driveSelection(scrollName)`:
-   when a selection mode opens during a BOT cast, enumerate the valid
-   choices via the game's own selection APIs (never reimplement validity),
-   score them with simple `WEIGHTS.effect*` heuristics, and apply the best
-   one. Wire into `waitForQuiescence`: try `BotEffects.driveSelection()`
-   first, fall back to today's cancel for scrolls it doesn't know.
-   Start with the 3–4 most-drawn scrolls; expand opportunistically.
-3. **Response scrolls.** Hook the response window for bot players: when
-   `ResponseWindowSystem` opens against a bot holding a castable response
-   scroll, decide respond/pass by score (v1 heuristic: respond when the
-   cast would grant the caster their 4th or 5th element, or when the
-   response is free-ish and the bot is ahead). This also removes the "bots
-   never count as responders" carve-out in response-window.js — coordinate
-   both sides.
+2. **`js/bot-effects.js`** — `window.BotEffects.driveTransmute()` (DONE,
+   Transmute only so far — see § CHOICE-SPACE INVENTORY for what's still
+   outstanding). Other selection-mode scrolls (Shifting Sands, Telekinesis,
+   Sacrificial Pyre, …) still fall through to today's cancel-and-continue in
+   `waitForQuiescence`; expand opportunistically, one driver at a time,
+   each A/B-measured in the arena.
+3. **Response scrolls (DONE — real multiplayer, not just the arena).**
+   `window.BotEffects.decideResponse(responderIndex, casterIndex)`: v1
+   heuristic — counter (Iron Stance/Psychic) when the triggering cast would
+   grant the caster an unactivated element, otherwise play the cheapest
+   pure-response scroll (Reflect/Unbidden Lamplight/Sigh of Recollection)
+   for free value, else pass. Two call sites:
+   - **Arena** (`js/bot.js` `waitForQuiescence`): gated on
+     `BotArena.isRunning()`.
+   - **Real multiplayer** (`js/bot-driver.js` `respondForBots()`, ticks
+     alongside the existing 700ms turn watcher): removes the "bots never
+     count as responders" carve-out in `response-window.js`
+     (`canAnyPlayerRespondOrBluff` / `checkAllPlayersResponded`) and adds a
+     `responderIndexOverride` param to `playerResponds()` so the host can
+     submit on an explicit bot index instead of relying on
+     `localResponderIndex()` (which only resolves to whichever identity is
+     locally impersonated for a full TURN, not a one-off response).
+   - **AP-accounting fix (both paths):** `getPlayerAP`/`spendPlayerAP` used
+     to have no correct source of truth for a NON-active responder outside
+     multiplayer (`playerAPs[]` was multiplayer-broadcast-only,
+     `game-core.js`'s `syncPlayerState()` early-returned before recording it
+     locally) — a responding bot's AP checks silently fell back to
+     `currentAP`, i.e. **whichever player is currently active/displayed**,
+     not the responder's own AP. Fixed by always recording
+     `playerAPs[activePlayerIndex]` in `syncPlayerState()` (not gated on
+     `isMultiplayer`), and by giving `spendPlayerAP()` a direct-to-`playerAPs[]`
+     path for "a responder with no live client of their own on this browser"
+     (any non-active player locally, or a bot specifically in real
+     multiplayer — genuine remote human opponents keep the original
+     `spendAP()` path, since on their own separate client `currentAP` is
+     unambiguously theirs). Verified: a simulated bot-responder scenario
+     (active/caster AP=9, bot AP=5) confirms `spendPlayerAP(botIndex, 2)`
+     leaves the caster's AP untouched and correctly drains the bot's own
+     tracked pool (void first, then base) to 3.
+   - **Nested selections (e.g. Reflecting/Psychic-ing an interactive
+     scroll):** SAFE as-is for the response case specifically — none of the
+     five response-eligible scrolls (Iron Stance, Psychic, Reflect,
+     Unbidden Lamplight, Sigh of Recollection) open a selection UI when
+     cast AS A RESPONSE (Reflect's immediate-nested-execution path only
+     fires in its main-phase use, which `decideResponse` never triggers).
+     The QUEUED replay (`processReflectPending`/`processPsychicPending`,
+     fired at the start of the Reflect/Psychic caster's own next turn) DOES
+     already chain through the normal `requiresSelection` UI via
+     `onComplete` callbacks for whatever scroll was queued — if that's an
+     undriven selection scroll, it degrades gracefully to today's
+     cancel-and-continue (same as any other selection the bot can't drive
+     yet), it does not hang or corrupt state.
+   - **Testability caveat:** real networked multiplayer (Supabase) is
+     unreachable from this sandbox, so the cross-client broadcast round
+     trip (`broadcastResponse`/`broadcastPass` → another client's
+     `handleRemoteResponse`/`handleRemotePass`) is unverified beyond code
+     review — everything above it (AP accounting, carve-out removal, the
+     respond/pass decision itself) is verified. Worth a real multiplayer
+     smoke test (host + bot vs. a human) before relying on this.
 4. **Whitelist effects in the simulator.** For each scroll whose effect the
    bot can now drive, implement it in `BotSim` and add it to
    `SIMULATED_SCROLLS` — ONLY together with harness evidence
