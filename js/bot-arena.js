@@ -61,6 +61,24 @@
         };
     }
 
+    // Force local-mode identity before any local bot match. isMultiplayer/
+    // myPlayerIndex are only ever reset by a CLEAN online-game leave
+    // (lobby.js's _doLeaveGame()) — if that leave never fully completes (e.g.
+    // its remove_player RPC throws), a bot match started right after inherits
+    // a STALE isMultiplayer=true with a stale myPlayerIndex. startGame() does
+    // not touch either. With isMultiplayer stuck true,
+    // updateEndTurnButtonVisibility() (multiplayer-state.js) then gates the
+    // end-turn button on real-multiplayer turn ownership (myPlayerIndex ===
+    // activePlayerIndex) instead of "always enabled locally" — silently
+    // disabling it for whichever bot doesn't match the stale identity, which
+    // kills the match the instant a bot falls back to force-ending its turn.
+    // Observed: a real 3-bot spectator match ending after turn 1, logged as
+    // "stuck on turn 0 (end-turn button unavailable)".
+    function ensureLocalMode() {
+        if (typeof isMultiplayer !== 'undefined') isMultiplayer = false;
+        if (typeof myPlayerIndex !== 'undefined') myPlayerIndex = null;
+    }
+
     // ----------------------------------------------------------------
     // Environment guard: everything the arena mutes, saved and restored
     // even if a game throws.
@@ -211,6 +229,7 @@
         Math.random = mulberry32(gameSeed);
 
         neutralizeTutorialMode();
+        ensureLocalMode();
         if (typeof resetGameResources === 'function') resetGameResources();
         window.BotSystem.resetMemory();
         startGame(2);
@@ -445,6 +464,7 @@
         let result = { winner: null, turns: 0 };
         try {
             neutralizeTutorialMode();
+            ensureLocalMode();
             if (typeof resetGameResources === 'function') resetGameResources();
             window.BotSystem.resetMemory();
             startGame(nPlayers);
