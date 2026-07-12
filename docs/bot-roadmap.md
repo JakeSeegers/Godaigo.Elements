@@ -651,6 +651,34 @@ games went from 100% frozen draws to ~50-turn completions):
    AP to spare) initially overrode SHRINE COLLECTION and caused a cost-0
    wind-stone ping-pong; now thresholded to fallback-scored endTurns only.
 
+**Unified core + visualized/N-player evolve (later addition):** `run()`,
+`evolve()`, and `spectate()` were originally two separate code paths — a
+muted/fast 2-player loop (`playGame`, used by `run`/`evolve`) and a
+visualized 2–5-player loop (`spectate`'s own inline loop, no per-player
+weight swapping). Unified into one shared `playMatch(weightsPerPlayer, opts)`
+that all three now call: `weightsPerPlayer.length` sets the player count
+(2–5), an `undefined` entry leaves `WEIGHTS` untouched (how `spectate()`
+plays with whatever's currently loaded instead of a fixed table), and
+`opts.visual` controls only pacing (muting/status/log-download stays the
+caller's job). This unlocked two things without new game logic:
+- `run()`/`evolve()` accept `opts.visual: true` to watch training games with
+  normal pacing instead of muted-fast (same core as `spectate()`).
+- `evolve()` accepts `opts.nPlayers` (2–5): 2 keeps the original exhaustive
+  pairwise round-robin; >2 samples `opts.gamesPerGen` random N-player
+  groupings per generation (seeded, reproducible) since exhaustive
+  `C(popSize, nPlayers)` explodes — the winner's population slot gets +1
+  fitness, draws get nothing.
+- `stop()` (previously spectate-only) now interrupts `run()`/`evolve()`
+  too — checked in every loop via a shared `_stopRequested` flag, reset
+  only by the true top-level entry point so a mid-evolve stop isn't undone
+  between an evolve run's internal pairwise/grouped games.
+
+Cheat panel gained a "🧬 Evolve" row next to "🤖 Bot match" (same 2/3/4/5
+player-count buttons, shared Stop), running a small visualized 3-generation
+pop-6 evolve by default — tune further from the console with
+`BotArena.evolve(generations, {nPlayers, visual, popSize, gamesPerPair,
+gamesPerGen})`.
+
 ## STAGE 3a — original plan (for reference)
 
 Goal: the "slowly evolving" learner, no ML infrastructure.

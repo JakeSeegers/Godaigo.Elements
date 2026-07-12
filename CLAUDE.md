@@ -70,7 +70,9 @@ Order matters — later scripts depend on earlier ones.
                              Shift+R = one step, Shift+B = full turn
 19. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
                              host's client impersonates the bot's index to drive its turns
-19b. bot-arena.js          ← window.BotArena — self-play arena (bot-vs-bot local games, weight evolution)
+19b. bot-arena.js          ← window.BotArena — self-play arena (bot-vs-bot local games, weight evolution).
+                             Shared playMatch() core for 2-5 players; run/evolve/spectate all support
+                             opts.visual (watch instead of muted-fast) and evolve supports opts.nPlayers (2-5)
                              Roadmap for smarter stages: docs/bot-roadmap.md
 ```
 

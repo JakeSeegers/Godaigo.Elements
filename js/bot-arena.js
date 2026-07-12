@@ -1,32 +1,49 @@
 // ============================================================
 // bot-arena.js — Stage 3a of docs/bot-roadmap.md: self-play arena
 // ============================================================
-// Runs full LOCAL 2-player games where both players are bot-driven, with a
-// separate WEIGHTS table per player. Used to A/B bot brains (search vs
-// greedy vs hybrid), measure Stage-2.5 effect-usage increments, and evolve
-// weights.
+// Runs full LOCAL games (2–5 players) where every player is bot-driven,
+// with a separate WEIGHTS table per player. Used to A/B bot brains (search
+// vs greedy vs hybrid), measure Stage-2.5 effect-usage increments, watch
+// bots play, and evolve weights.
 //
 //   await BotArena.run(weightsA, weightsB, nGames, seed, opts)
 //       → { aWins, bWins, draws, avgTurns, games:[{winner, turns, side}] }
 //   await BotArena.evolve(generations, opts)
 //       → champion weight table (also saved to
 //         localStorage['godaigo_bot_weights'] + logged as JSON)
+//       opts.nPlayers (2–5, default 2): 2 stays the original exhaustive
+//       pairwise round-robin; >2 samples opts.gamesPerGen random N-player
+//       groupings per generation instead (exhaustive C(popSize,N) explodes).
+//       opts.visual (default false): play every training game with normal
+//       pacing/visuals via the SAME playMatch() core spectate() uses,
+//       instead of muted/fast — watch the population improve live.
+//   await BotArena.spectate(nPlayers, opts)
+//       → { winner, turns } — watch nPlayers bots play one full game with
+//         normal visuals (win screen included), auto-downloads the action
+//         log when it ends.
+//   BotArena.stop() — interrupts run()/evolve()/spectate(), whichever is
+//   active (shared _stopRequested flag, checked in every loop below).
+//
+// SHARED CORE: playMatch(weightsPerPlayer, opts) plays exactly one game for
+// weightsPerPlayer.length players (2–5), swapping in each player's weight
+// table on their turn (an `undefined` entry leaves WEIGHTS untouched — how
+// spectate() gets "whatever's currently loaded" instead of a fixed table).
+// opts.visual controls pacing (sleep durations, turnCap default) only —
+// muting environment (sound/gami/win-modal) and any status/ActionLog UI
+// bookkeeping is the CALLER's job (run/evolve mute+stay silent, spectate
+// keeps everything on and drives the status bar + log download).
 //
 // HOW A GAME RUNS (local hot-seat — no Supabase, no multiplayer):
-//   resetGameResources() + startGame(2) reset everything; Math.random is
+//   resetGameResources() + startGame(n) reset everything; Math.random is
 //   temporarily seeded (mulberry32) so tile/scroll deck shuffles are
-//   reproducible per game. Both player tiles are placed at the two
-//   mutually-farthest placement candidates (fair, deterministic). Then
-//   turns alternate: swap WEIGHTS to the active player's table, refill AP
-//   (the local hot-seat path never auto-resets AP for >1 players — that
-//   code is multiplayer-only), run BotSystem.turn(), check BotSim.winner.
-//   Sides alternate between games to cancel first-mover advantage.
-//
-// SUPPRESSED DURING A RUN (saved/restored): win-screen modal
-// (spellSystem.showLevelComplete), end-turn AP prompt, SoundSystem,
-// JoytoneBridge, gamification (window.gami — otherwise arena games would
-// farm real XP onto the logged-in profile). BotSystem.speedScale is set
-// from opts.speed (default 0.1 ≈ 35ms between actions).
+//   reproducible per game. Player tiles are placed at the N mutually-
+//   farthest placement candidates (fair, deterministic — placePlayerTilesSpread).
+//   Turns cycle through all N players; each player's weights are swapped in
+//   right before their turn; AP is refilled every turn (the local hot-seat
+//   path never auto-resets AP for >1 players — that code is multiplayer-
+//   only). A stuck player (no legal action ends their turn) gets a forced
+//   endTurn click, verified to actually advance activePlayerIndex before
+//   trusting it — see the comment in playMatch().
 //
 // LOAD ORDER: after bot.js.
 // ============================================================
@@ -47,9 +64,21 @@
         };
     }
 
+    // Pick k distinct indices from [0, poolSize) via a seeded partial
+    // Fisher-Yates shuffle (deterministic given the same rng stream).
+    function sampleDistinct(poolSize, k, rng) {
+        const idx = Array.from({ length: poolSize }, (_, i) => i);
+        const n = Math.min(k, poolSize);
+        for (let i = 0; i < n; i++) {
+            const j = i + Math.floor(rng() * (idx.length - i));
+            [idx[i], idx[j]] = [idx[j], idx[i]];
+        }
+        return idx.slice(0, n);
+    }
+
     // ----------------------------------------------------------------
-    // Environment guard: everything the arena mutes, saved and restored
-    // even if a game throws.
+    // Environment guard: everything a MUTED (non-visual) run mutes, saved
+    // and restored even if a game throws.
     // ----------------------------------------------------------------
     function muteEnvironment() {
         const saved = {
@@ -83,6 +112,15 @@
         };
     }
 
+    // Neutralize a running tutorial (its hooks force tile elements and its
+    // spotlight overlays obscure the board) — only matters for visual runs.
+    function neutralizeTutorial() {
+        if (!window.isTutorialMode) return;
+        window.isTutorialMode = false;
+        window.tutorialAllowedHexes = null;
+        document.querySelectorAll('[class^="tmode"], [class*=" tmode"]').forEach(el => el.remove());
+    }
+
     function setWeights(table) {
         const W = window.BotSystem.WEIGHTS;
         for (const k of Object.keys(W)) delete W[k];
@@ -90,9 +128,9 @@
     }
 
     // ----------------------------------------------------------------
-    // Player-tile placement: the two mutually-farthest free hexes adjacent
-    // to the tile cluster (large-tile grid). Deterministic and symmetric —
-    // neither bot gets a positional edge from placement luck.
+    // Player-tile placement: N mutually-farthest free hexes adjacent to the
+    // tile cluster (large-tile grid), greedy max–min. Deterministic and
+    // symmetric — no bot gets a positional edge from placement luck.
     // ----------------------------------------------------------------
     function placementCandidates() {
         const S = TILE_SIZE * 4;
@@ -139,8 +177,6 @@
         for (const p of chosen.slice(0, n)) placeTile(p.x, p.y, 0, false, 'player');
     }
 
-    function placeBothPlayerTiles() { placePlayerTilesSpread(2); }
-
     // The local hot-seat path never auto-resets AP when playerPositions
     // has >1 entries (that branch is gated on multiplayer's myPlayerIndex),
     // so the arena refills at the start of every turn. addAP caps regular
@@ -151,32 +187,50 @@
         if (typeof addAP === 'function') addAP(missing);
     }
 
+    // Shared "should we stop early" flag — set by stop(), checked by every
+    // loop in run()/evolve()/spectate() so one Stop button covers all three.
+    let _stopRequested = false;
+    function stop() { _stopRequested = true; }
+
     // ----------------------------------------------------------------
-    // One full game. weights0/weights1 are keyed by PLAYER INDEX.
-    // Returns { winner: 0 | 1 | null, turns }.
+    // SHARED CORE: one full game for weightsPerPlayer.length players (2–5).
+    // weightsPerPlayer[i] is that player's weight table; an `undefined`
+    // entry means "don't touch WEIGHTS for this player's turn" (how
+    // spectate() plays with whatever's currently loaded/toggled instead of
+    // a fixed table). opts.visual only affects PACING (sleep durations,
+    // turnCap default) — muting the environment and any status/log UI is
+    // the caller's job. Returns { winner: 0..n-1 | null, turns }.
     // ----------------------------------------------------------------
-    async function playGame(weights0, weights1, gameSeed, opts) {
-        const turnCap = opts.turnCap ?? 200;
+    async function playMatch(weightsPerPlayer, opts = {}) {
+        const nPlayers = weightsPerPlayer.length;
+        const visual = !!opts.visual;
+        const turnCap = opts.turnCap ?? (visual ? 300 : 200);
+        const seed = opts.seed ?? Math.floor(Math.random() * 1e9);
 
         // Seed ALL shuffle randomness (tile deck, scroll decks) for this game
-        Math.random = mulberry32(gameSeed);
+        Math.random = mulberry32(seed);
 
+        if (visual) neutralizeTutorial();
         if (typeof resetGameResources === 'function') resetGameResources();
         window.BotSystem.resetMemory();
-        startGame(2);
-        await sleep(30);
-        placeBothPlayerTiles();
-        await sleep(30);
+        startGame(nPlayers);
+        await sleep(visual ? 300 : 30);
+        placePlayerTilesSpread(nPlayers);
+        await sleep(visual ? 300 : 30);
         activePlayerIndex = 0;
+        if (visual) { try { currentTurnNumber = 1; } catch (e) {} } // local games never advance it — the log needs it
 
-        for (let turn = 0; turn < turnCap; turn++) {
+        const result = { winner: null, turns: 0 };
+        for (let turn = 0; turn < turnCap && !_stopRequested; turn++) {
+            if (visual) { try { currentTurnNumber = turn + 1; } catch (e) {} }
             const idx = activePlayerIndex;
-            setWeights(idx === 0 ? weights0 : weights1);
+            if (weightsPerPlayer[idx] !== undefined) setWeights(weightsPerPlayer[idx]);
             refillAP();
             await window.BotSystem.turn();
+            result.turns = turn + 1;
 
             const w = window.BotSim.winner(window.BotState.snapshot());
-            if (w !== null) return { winner: w, turns: turn + 1 };
+            if (w !== null) { result.winner = w; break; }
 
             if (activePlayerIndex === idx) {
                 // Bot didn't end its own turn (stuck/no actions) — force it.
@@ -185,69 +239,100 @@
                 // advancing — a click that gets swallowed (e.g. an unresolved
                 // scroll-overflow banner, or some other gate) would otherwise
                 // look like success and this loop would silently re-run the
-                // SAME stuck player every remaining iteration up to turnCap.
+                // SAME stuck player for the rest of turnCap.
                 const r = window.BotState.applyAction({ type: 'endTurn' });
                 await sleep(200);
                 if (!r.ok || activePlayerIndex === idx) {
-                    log(`game seed ${gameSeed}: stuck on turn ${turn} (${r.reason || 'endTurn did not advance activePlayerIndex'}) — draw`);
-                    return { winner: null, turns: turn + 1 };
+                    log(`match seed ${seed}: stuck on turn ${turn} (${r.reason || 'endTurn did not advance activePlayerIndex'})`);
+                    break;
                 }
-                await sleep(20);
+                await sleep(visual ? 50 : 20);
             }
         }
-        return { winner: null, turns: turnCap };
+        return result;
+    }
+
+    // Backward-compat 2-player wrapper (console/roadmap scripts reference
+    // this signature directly).
+    async function playGame(weights0, weights1, gameSeed, opts = {}) {
+        return playMatch([weights0, weights1], { ...opts, seed: gameSeed });
+    }
+
+    // ----------------------------------------------------------------
+    // Internal: play an A-vs-B series, checking _stopRequested each game.
+    // No _running guard or flag resets — that's the caller's job (run() as
+    // a top-level entry point; evolve()'s 2-player path calls this directly
+    // so a mid-evolve stop() isn't undone between pairwise matchups).
+    // ----------------------------------------------------------------
+    async function _playSeries(weightsA, weightsB, nGames, seed, opts) {
+        const result = { aWins: 0, bWins: 0, draws: 0, avgTurns: 0, games: [] };
+        for (let i = 0; i < nGames && !_stopRequested; i++) {
+            const aIsPlayer0 = i % 2 === 0;
+            const g = await playGame(
+                aIsPlayer0 ? weightsA : weightsB,
+                aIsPlayer0 ? weightsB : weightsA,
+                seed * 1000 + i,
+                opts
+            );
+            const aWon = g.winner !== null && ((g.winner === 0) === aIsPlayer0);
+            if (g.winner === null) result.draws++;
+            else if (aWon) result.aWins++;
+            else result.bWins++;
+            result.games.push({ winner: g.winner, turns: g.turns, aIsPlayer0 });
+            result.avgTurns += g.turns / nGames;
+            log(`game ${i + 1}/${nGames}: ${g.winner === null ? 'draw' : (aWon ? 'A' : 'B') + ' wins'} in ${g.turns} turns  (A=${result.aWins} B=${result.bWins} D=${result.draws})`);
+            await sleep(0); // yield between games — keep the tab responsive
+        }
+        return result;
     }
 
     // ----------------------------------------------------------------
     // Public: run an A-vs-B series. Sides alternate each game (game i even:
     // A = player 0; odd: A = player 1) to cancel first-mover advantage.
+    // opts.visual: play every game with normal pacing/visuals (muted by
+    // default, like before).
     // ----------------------------------------------------------------
     let _running = false;
     async function run(weightsA, weightsB, nGames = 10, seed = 0, opts = {}) {
-        if (_running) throw new Error('BotArena already running');
+        if (_running || _spectating || _evolving) throw new Error('BotArena already running');
         if (!window.BotSim || !window.BotState || !window.BotSystem) {
             throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
         }
         _running = true;
-        const restore = muteEnvironment();
-        window.BotSystem.speedScale = opts.speed ?? 0.1;
-
-        const result = { aWins: 0, bWins: 0, draws: 0, avgTurns: 0, games: [] };
+        _stopRequested = false;
+        const visual = !!opts.visual;
+        const restore = visual ? null : muteEnvironment();
+        window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
         try {
-            for (let i = 0; i < nGames; i++) {
-                const aIsPlayer0 = i % 2 === 0;
-                const g = await playGame(
-                    aIsPlayer0 ? weightsA : weightsB,
-                    aIsPlayer0 ? weightsB : weightsA,
-                    seed * 1000 + i,
-                    opts
-                );
-                const aWon = g.winner !== null && ((g.winner === 0) === aIsPlayer0);
-                if (g.winner === null) result.draws++;
-                else if (aWon) result.aWins++;
-                else result.bWins++;
-                result.games.push({ winner: g.winner, turns: g.turns, aIsPlayer0 });
-                result.avgTurns += g.turns / nGames;
-                log(`game ${i + 1}/${nGames}: ${g.winner === null ? 'draw' : (aWon ? 'A' : 'B') + ' wins'} in ${g.turns} turns  (A=${result.aWins} B=${result.bWins} D=${result.draws})`);
-                await sleep(0); // yield between games — keep the tab responsive
-            }
+            const result = await _playSeries(weightsA, weightsB, nGames, seed, { ...opts, visual });
+            log('run complete:', JSON.stringify({ aWins: result.aWins, bWins: result.bWins, draws: result.draws, avgTurns: +result.avgTurns.toFixed(1) }));
+            return result;
         } finally {
-            restore();
+            if (restore) restore();
             _running = false;
         }
-        log('run complete:', JSON.stringify({ aWins: result.aWins, bWins: result.bWins, draws: result.draws, avgTurns: +result.avgTurns.toFixed(1) }));
-        return result;
     }
 
     // ----------------------------------------------------------------
     // Evolution loop (roadmap Stage 3a step 2).
-    // population 8 = current WEIGHTS + 7 Gaussian mutations (σ = 20% of
-    // each weight's magnitude); fitness = round-robin wins; next gen =
-    // top-2 elites + 6 fresh mutations of them. Champion persisted to
+    // population = current WEIGHTS + (popSize-1) Gaussian mutations
+    // (σ = 20% of each weight's magnitude); next gen = top-2 elites + fresh
+    // mutations of them. Champion persisted to
     // localStorage['godaigo_bot_weights'] after every generation.
+    //
+    // opts.nPlayers (2–5, default 2):
+    //   2 → the ORIGINAL exhaustive pairwise round-robin (every population
+    //   pair plays opts.gamesPerPair games; unchanged from before).
+    //   >2 → exhaustive C(popSize, nPlayers) explodes fast, so each
+    //   generation instead samples opts.gamesPerGen (default popSize*3)
+    //   random N-player groupings (seeded, reproducible) and credits the
+    //   winner's population slot with +1 fitness.
+    // opts.visual: play every training game with normal pacing/visuals via
+    // playMatch() — same core spectate() uses — instead of muted/fast.
+    //
     // NOTE: a full roadmap-spec generation (28 pairs × 10 games) takes
-    // hours in-browser — gamesPerPair is configurable; server-side
-    // execution is Stage R5's job.
+    // hours in-browser even muted, and MUCH longer visualized — gamesPerPair
+    // /gamesPerGen are configurable; server-side execution is Stage R5's job.
     // ----------------------------------------------------------------
     function mutate(table, rng, sigma = 0.2) {
         const out = { ...table };
@@ -263,59 +348,101 @@
         return out;
     }
 
+    let _evolving = false;
     async function evolve(generations = 5, opts = {}) {
+        if (_running || _spectating || _evolving) throw new Error('BotArena already running');
+        if (!window.BotSim || !window.BotState || !window.BotSystem) {
+            throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
+        }
         const gamesPerPair = opts.gamesPerPair ?? 2;
         const popSize = opts.popSize ?? 8;
         const seed = opts.seed ?? 1;
+        const nPlayers = Math.max(2, Math.min(5, opts.nPlayers ?? 2));
+        const visual = !!opts.visual;
         const rng = mulberry32(seed);
+
+        _evolving = true;
+        _stopRequested = false;
+        const restore = visual ? null : muteEnvironment();
+        window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
+        if (visual) neutralizeTutorial();
 
         let population = [{ ...window.BotSystem.WEIGHTS }];
         while (population.length < popSize) population.push(mutate(population[0], rng));
+        let champion = population[0];
 
-        for (let gen = 0; gen < generations; gen++) {
-            const fitness = new Array(population.length).fill(0);
-            for (let i = 0; i < population.length; i++) {
-                for (let j = i + 1; j < population.length; j++) {
-                    const r = await run(population[i], population[j], gamesPerPair, seed * 100 + gen * 10 + i + j, opts);
-                    fitness[i] += r.aWins;
-                    fitness[j] += r.bWins;
+        try {
+            for (let gen = 0; gen < generations && !_stopRequested; gen++) {
+                const fitness = new Array(population.length).fill(0);
+
+                if (nPlayers === 2) {
+                    for (let i = 0; i < population.length && !_stopRequested; i++) {
+                        for (let j = i + 1; j < population.length && !_stopRequested; j++) {
+                            if (visual && typeof updateStatus === 'function') {
+                                updateStatus(`🧬 Evolve gen ${gen + 1}/${generations}: pop#${i} vs pop#${j}`);
+                            }
+                            const r = await _playSeries(population[i], population[j], gamesPerPair, seed * 100 + gen * 10 + i + j, { ...opts, visual });
+                            fitness[i] += r.aWins;
+                            fitness[j] += r.bWins;
+                        }
+                    }
+                } else {
+                    const gamesPerGen = opts.gamesPerGen ?? popSize * 3;
+                    for (let g = 0; g < gamesPerGen && !_stopRequested; g++) {
+                        const idxs = sampleDistinct(population.length, nPlayers, rng);
+                        const weightsPerPlayer = idxs.map(i => population[i]);
+                        const gameSeed = seed * 100000 + gen * 1000 + g;
+                        if (visual && typeof updateStatus === 'function') {
+                            updateStatus(`🧬 Evolve gen ${gen + 1}/${generations}, game ${g + 1}/${gamesPerGen}: pop ${idxs.join(',')}`);
+                        }
+                        const result = await playMatch(weightsPerPlayer, { ...opts, seed: gameSeed, visual });
+                        if (result.winner !== null) fitness[idxs[result.winner]]++;
+                        log(`gen ${gen + 1} game ${g + 1}/${gamesPerGen} (pop ${idxs.join(',')}): ${result.winner === null ? 'draw' : 'pop#' + idxs[result.winner] + ' wins'} in ${result.turns} turns`);
+                        await sleep(0);
+                    }
+                }
+
+                const ranked = population
+                    .map((w, i) => ({ w, f: fitness[i] }))
+                    .sort((a, b) => b.f - a.f);
+                log(`generation ${gen + 1}/${generations} fitness:`, ranked.map(r => r.f).join(', '));
+
+                champion = ranked[0].w;
+                try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(champion)); } catch (e) {}
+                log('champion weights (paste into bot.js DEFAULT_WEIGHTS to make permanent):\n' + JSON.stringify(champion));
+
+                const elites = [ranked[0].w, ranked[1].w];
+                population = [...elites];
+                while (population.length < popSize) {
+                    population.push(mutate(elites[population.length % 2], rng));
                 }
             }
-            const ranked = population
-                .map((w, i) => ({ w, f: fitness[i] }))
-                .sort((a, b) => b.f - a.f);
-            log(`generation ${gen + 1}/${generations} fitness:`, ranked.map(r => r.f).join(', '));
-
-            const champion = ranked[0].w;
-            try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(champion)); } catch (e) {}
-            log('champion weights (paste into bot.js DEFAULT_WEIGHTS to make permanent):\n' + JSON.stringify(champion));
-
-            const elites = [ranked[0].w, ranked[1].w];
-            population = [...elites];
-            while (population.length < popSize) {
-                population.push(mutate(elites[population.length % 2], rng));
-            }
+        } finally {
+            if (restore) restore();
+            _evolving = false;
         }
-        return population[0];
+        return champion;
     }
 
     // ----------------------------------------------------------------
-    // Spectator mode: watch 2–5 bots play a full LOCAL game with all the
-    // normal visuals (win screen included), then auto-download the action
-    // log. Unlike run(), nothing visual is muted and pacing is watchable.
+    // Spectator mode: watch nPlayers (2–5) bots play a full LOCAL game with
+    // all the normal visuals (win screen included), then auto-download the
+    // action log. Unlike run(), nothing visual is muted and pacing is
+    // watchable. All players share whatever weights are currently loaded
+    // (an evolved localStorage table, or the Bot Brain toggle) — playMatch()
+    // is given an array of `undefined` entries so it never overwrites that.
     // Start from the cheat panel (AP label 5×) or the console:
     //   BotArena.spectate(3)            — 3 bots, normal pacing
     //   BotArena.spectate(4, {speed:2}) — 4 bots, double-time delays
     //   BotArena.stop()                 — end the match early
     // ----------------------------------------------------------------
     let _spectating = false;
-    let _stopRequested = false;
-    function stop() { _stopRequested = true; }
     function isSpectating() { return _spectating; }
-    function isRunning() { return _running || _spectating; }
+    function isEvolving() { return _evolving; }
+    function isRunning() { return _running || _spectating || _evolving; }
 
     async function spectate(nPlayers = 2, opts = {}) {
-        if (_running || _spectating) throw new Error('BotArena already running');
+        if (_running || _spectating || _evolving) throw new Error('BotArena already running');
         nPlayers = Math.max(2, Math.min(5, nPlayers | 0)); // 5 player colors exist
         if (!window.BotSim || !window.BotState || !window.BotSystem) {
             throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
@@ -331,56 +458,19 @@
         window.gami = null;
         window.showEndTurnPrompt = () => {};
         window.BotSystem.speedScale = opts.speed ?? 1;
-        const turnCap = opts.turnCap ?? 300;
 
         const roster = Array.from({ length: nPlayers }, (_, i) =>
             ({ index: i, username: `🤖 Bot ${i + 1}`, isBot: true }));
         window.ActionLog?.clear?.();
         window.ActionLog?.setRoster?.(roster);
 
-        let result = { winner: null, turns: 0 };
+        let result;
         try {
-            // Neutralize tutorial mode if a tutorial was running — its hooks
-            // force tile elements (first flip is always earth) and its
-            // spotlight overlays obscure the board being watched.
-            if (window.isTutorialMode) {
-                window.isTutorialMode = false;
-                window.tutorialAllowedHexes = null;
-                document.querySelectorAll('[class^="tmode"], [class*=" tmode"]').forEach(el => el.remove());
-            }
-            if (typeof resetGameResources === 'function') resetGameResources();
-            window.BotSystem.resetMemory();
-            startGame(nPlayers);
-            await sleep(300);
-            placePlayerTilesSpread(nPlayers);
-            await sleep(300);
-            activePlayerIndex = 0;
+            neutralizeTutorial();
             if (typeof updateStatus === 'function') {
                 updateStatus(`🤖 Bot match: ${nPlayers} bots playing. Open the cheat panel to stop or download the log.`);
             }
-
-            for (let turn = 0; turn < turnCap && !_stopRequested; turn++) {
-                try { currentTurnNumber = turn + 1; } catch (e) {} // local games never advance it — the log needs it
-                const idx = activePlayerIndex;
-                refillAP();
-                await window.BotSystem.turn();
-                result.turns = turn + 1;
-
-                const w = window.BotSim.winner(window.BotState.snapshot());
-                if (w !== null) { result.winner = w; break; }
-
-                if (activePlayerIndex === idx) {
-                    // See the matching comment in playGame() — verify the
-                    // click actually advanced the turn, not just that it landed.
-                    const r = window.BotState.applyAction({ type: 'endTurn' });
-                    await sleep(200);
-                    if (!r.ok || activePlayerIndex === idx) {
-                        log(`spectate: stuck on turn ${turn} (${r.reason || 'endTurn did not advance activePlayerIndex'})`);
-                        break;
-                    }
-                    await sleep(50);
-                }
-            }
+            result = await playMatch(Array(nPlayers).fill(undefined), { ...opts, visual: true, turnCap: opts.turnCap ?? 300 });
         } finally {
             window.gami = savedGami;
             window.showEndTurnPrompt = savedPrompt;
@@ -397,6 +487,6 @@
         return result;
     }
 
-    window.BotArena = { run, evolve, playGame, spectate, stop, isSpectating, isRunning };
+    window.BotArena = { run, evolve, playGame, playMatch, spectate, stop, isSpectating, isEvolving, isRunning };
     log('Loaded — window.BotArena ready (run / evolve / spectate)');
 })();
