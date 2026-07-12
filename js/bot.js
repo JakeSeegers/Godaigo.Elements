@@ -147,6 +147,20 @@
                                   // forward model honestly doesn't know (≈ castBase)
         evalHiddenDist:  -0.08,   // × px to nearest hidden tile (exploration shaping)
         evalHomeDist:     -0.6,   // × px to own shrine once all 5 elements are activated
+
+        // Opponent-threat terms — this game has exactly one winner, so an
+        // opponent's progress toward THEIR win is symmetric danger to us.
+        // Deliberately scaled well below our OWN equivalent terms (0.3× and
+        // 0.2× evalActivated respectively) — threat-AWARE, not
+        // threat-obsessed; our own progress should still dominate. See
+        // opponentProgress()/commonAreaThreat() below.
+        evalOpponentThreat: 0.3,  // × the MOST-advanced opponent's own progress
+                                  // score (mirrors evalActivated + evalHomeDist)
+        evalCommonThreat:   80,   // flat, per live common-area scroll ANY opponent's
+                                  // current board could cast right now — a "loaded
+                                  // gun" distinct from their activated count, since
+                                  // a scroll they haven't gotten to yet doesn't show
+                                  // up there
     };
 
     // Evolved weights (Stage 3a) override defaults without code edits
@@ -691,6 +705,44 @@
         return { dist };
     }
 
+    // How close is `oppIndex` to winning, in the SAME currency evaluateSnapshot()
+    // uses for our own progress — deliberately mirrors its activated+home-distance
+    // terms so "how close are they" is directly comparable to "how close am I."
+    function opponentProgress(snap, oppIndex) {
+        const opp = snap.players[oppIndex];
+        if (!opp) return 0;
+        let v = opp.activated.length * WEIGHTS.evalActivated;
+        if (ELEMENTS.every(el => opp.activated.includes(el))) {
+            const home = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === oppIndex);
+            if (home) v += WEIGHTS.evalHomeDist * Math.hypot(home.x - opp.x, home.y - opp.y);
+        }
+        return v;
+    }
+
+    // Common-area scrolls are castable by ANYONE — if an opponent's CURRENT
+    // board already satisfies one, that's a "loaded gun" distinct from their
+    // activated count (a scroll they haven't gotten around to yet doesn't
+    // show up there). Uses BotSim.checkPattern(snap, scroll, playerIndex) —
+    // a pure function of the snapshot, safe to call on hypothetical/simulated
+    // states, not the live board (unlike spellSystem.checkPatternForPlayer).
+    // Discarding OUR OWN scroll of the threatened element replaces it
+    // (discardToCommonArea sends the old one to the bottom of its deck — a
+    // real denial, not just a swap) — search discovers this on its own: the
+    // resulting snapshot's commonArea differs, so this term scores lower for
+    // whichever opponent was threatening it. No special-casing needed.
+    function commonAreaThreat(snap, forIndex) {
+        let threat = 0;
+        for (const name of snap.commonArea || []) {
+            const def = window.SCROLL_DEFINITIONS?.[name];
+            if (!def || def.level === 1) continue; // response-only scrolls aren't a main-phase threat
+            for (let i = 0; i < snap.players.length; i++) {
+                if (i === forIndex || !snap.players[i]) continue;
+                if (window.BotSim.checkPattern(snap, name, i)) { threat += WEIGHTS.evalCommonThreat; break; }
+            }
+        }
+        return threat;
+    }
+
     // State value of a snapshot from player `forIndex`'s perspective.
     // This is the search leaf evaluator — tune via WEIGHTS.eval*, not here.
     function evaluateSnapshot(snap, forIndex) {
@@ -737,6 +789,18 @@
                 v += WEIGHTS.evalHiddenDist * d;
             }
         }
+
+        // Opponent threat — zero-sum: their progress toward winning is danger
+        // to us. MAX across opponents (not sum) so this reacts to whoever is
+        // most advanced without being diluted by player count in 3-5p games.
+        let maxOppProgress = 0;
+        for (let i = 0; i < snap.players.length; i++) {
+            if (i === forIndex || !snap.players[i]) continue;
+            maxOppProgress = Math.max(maxOppProgress, opponentProgress(snap, i));
+        }
+        v -= maxOppProgress * WEIGHTS.evalOpponentThreat;
+        v -= commonAreaThreat(snap, forIndex);
+
         return v;
     }
 

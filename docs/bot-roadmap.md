@@ -359,6 +359,39 @@ over a broken scorer just finds the same bugs faster), and some (like the
 per-player memory bug) only surface with MULTIPLE bots sharing one browser
 tab, not single-bot or single-turn inspection.
 
+**Opponent-threat evaluator (added later, same "run it and look" method).**
+`evaluateSnapshot()` was purely self-referential — zero awareness of
+opponent state. Added `opponentProgress()` (mirrors the bot's own
+activated+home-distance terms for every OTHER player, MAX across opponents)
+and `commonAreaThreat()` (flags a live common-area scroll any opponent's
+CURRENT board could cast, via `BotSim.checkPattern(snap, scroll,
+playerIndex)` — parameterized for any player already, just never used for
+this). Surfaced a real bug while building it: `bot-sim.js`'s `simDiscard()`
+never modeled common-area REPLACEMENT (one scroll per element, old one
+bumped to deck bottom — see `discardToCommonArea()` in game-core.js) — it
+just pushed onto an unbounded array, so a simulated denial discard could
+never actually register as removing the threat. Fixed alongside. Verified
+behaviorally, not just numerically: a constructed scenario (opponent's board
+satisfies a common scroll; bot holds a dead-to-it scroll of the same
+element) makes `searchPick()` choose the denial discard when the terms are
+live, and a plain move when they're zeroed — confirming the term changes
+real decisions. 30-game A/B arena batch (same seed, weights live vs.
+zeroed): draws/avg-turns statistically identical (12-13-5 / 69.3 vs.
+13-12-5 / 70.2) — no regression.
+
+**Related finding, NOT fixed (separate from the above): response-only
+(level-1) scrolls can permanently clog a common-area slot.** Neither bot can
+ever cast (blocked by rule — level-1 is response-only) or respond (blocked
+by `response-window.js`'s `isBotPlayer()` hard-exclusion) with one — the
+existing `discardResponseOnly` nudge gets it out of hand, but the common
+area it lands in then has nothing to ever displace it again. Confirmed via
+log inspection of a real drawn arena game: two elements' common-area slots
+each got stuck holding a level-1 scroll for the last ~30% of a 200-turn
+game while every other element's slot kept churning normally — a real,
+verified contributor to draws, independent of and pre-dating the
+opponent-threat work above. Real fix is full response-scroll support (below,
+step 3, not started).
+
 ---
 
 ## STAGE 1.5 — Multiplayer bot player (DONE — contract reference)
@@ -712,7 +745,17 @@ Build order (each step independently commit-able and arena-measurable):
    cast would grant the caster their 4th or 5th element, or when the
    response is free-ish and the bot is ahead). This also removes the "bots
    never count as responders" carve-out in response-window.js — coordinate
-   both sides.
+   both sides, including `bot-arena.js`'s `rw.isBotPlayer = () => true`
+   override (added specifically to force-skip response windows during
+   self-play so games don't sit out the 15s timeout — this becomes real
+   decision logic instead of a skip once bots can actually respond).
+   **Explicit scope decision: no bluffing.** `canPlayerBluff()`/the bluff
+   path in `canAnyPlayerRespondOrBluff()` is a human meta-game mechanic
+   (feign holding a response you don't have); bots should only ever
+   pass-or-respond with what they actually hold — do not build bluff logic.
+   Known related bug this would help: response-only (level-1) scrolls can
+   permanently clog a common-area element slot since neither bot can ever
+   cast OR respond with one today — see the "Related finding" note above.
 4. **Whitelist effects in the simulator.** For each scroll whose effect the
    bot can now drive, implement it in `BotSim` and add it to
    `SIMULATED_SCROLLS` — ONLY together with harness evidence

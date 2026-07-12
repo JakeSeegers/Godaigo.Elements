@@ -426,10 +426,23 @@
             const i = p.active.indexOf(a.scroll);
             if (i !== -1) { p.active.splice(i, 1); p.activeCount--; }
         }
-        // Discards land in the shared common area (castable by anyone)
+        // Discards land in the shared common area (castable by anyone) — one
+        // slot PER ELEMENT, same as discardToCommonArea() in game-core.js: a
+        // new scroll REPLACES any existing scroll of the same element (which
+        // leaves the common area entirely, sent to the bottom of its deck),
+        // it doesn't just accumulate. Without this, commonArea grows
+        // unbounded in simulation and a discard can never actually be seen
+        // to deny an opponent's threat (see commonAreaThreat() in bot.js) —
+        // the old scroll would still show up as "present" right alongside
+        // the new one.
         if (!snap.commonArea) snap.commonArea = [];
-        if (a.scroll !== UNKNOWN_SCROLL && !snap.commonArea.includes(a.scroll)) {
-            snap.commonArea.push(a.scroll);
+        if (a.scroll !== UNKNOWN_SCROLL) {
+            const element = window.SCROLL_DEFINITIONS?.[a.scroll]?.element;
+            if (element) {
+                snap.commonArea = snap.commonArea.filter(name =>
+                    window.SCROLL_DEFINITIONS?.[name]?.element !== element);
+            }
+            if (!snap.commonArea.includes(a.scroll)) snap.commonArea.push(a.scroll);
         }
     }
 

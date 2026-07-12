@@ -185,36 +185,53 @@ exist in code but are untested end-to-end. Docs system fully in place.
    bot-roadmap § STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
-4. **NOT STARTED: opponent-awareness (scoped, not built).** Two confirmed
-   gaps found by direct code inspection: (a) the bot has zero awareness that
-   catacomb/Freedom-buffed shrine centers let it teleport for free —
-   `bot-state.js` explicitly lists "catacomb teleports" as not yet
-   enumerated, no `{type:'teleport',...}` action exists; (b) the bot never
-   voluntarily repositions scrolls for strategic reasons (e.g. discarding to
-   common area specifically to bump/deny a scroll an opponent's board could
-   currently cast — `discardToCommonArea()` sends the replaced scroll to the
-   bottom of its deck, a genuine denial). Agreed direction for (b): rather
-   than a one-off scoring bonus, generalize `evaluateSnapshot()` into an
-   opponent-threat-aware evaluator (loop `snap.players` for every OTHER
-   player, not just `forIndex`) — this generalizes to future opponent-aware
-   tactics for free and reuses `bot-sim.js`'s existing
-   `checkPattern(snap, scrollName, playerIndex)` primitive (already
-   parameterized for any player, just unused for this). Data readiness: pool/
-   active/activated are already public per-player in `snapshot()`; hand
-   scroll ELEMENT types are now also public (`handElements`, added this
-   session — see "Last Committed Work") while names/patterns correctly stay
-   hidden. Real gap before this can be validated past 2 players:
-   `playGame()`/`run()`/`evolve()` are hardcoded to 2 players (`startGame(2)`,
-   `placeBothPlayerTiles()`) — only `spectate()` supports 2-5p, and it isn't
-   wired for weight training (shared WEIGHTS, no per-seat comparison).
-   Proposed order: (1) write the threat term generically over all opponents
-   now — free, data's already there; (2) tune/validate at 2p via existing
-   `run()`; (3) separately generalize the training loop to N players once
-   the term needs real 3-5p validation. Full true adversarial
-   (minimax-style, simulate the opponent's actual next turn) is a larger
-   escalation flagged for LATER, only if the static evaluator proves
-   insufficient — full always-on lookahead already lost a head-to-head
-   series once (STAGE 3a), so scope creep here is a known risk.
+4. **Opponent-awareness — Track A DONE (evaluator term), Tracks B/C not
+   started.** Track A: `evaluateSnapshot()` now scores opponent threat —
+   `opponentProgress(snap, oppIndex)` mirrors the bot's own
+   activated+home-distance terms for every opponent (MAX across opponents,
+   not sum, so it doesn't dilute in 3-5p); `commonAreaThreat(snap, forIndex)`
+   flags any live common-area scroll an opponent's CURRENT board could cast
+   right now, via `BotSim.checkPattern(snap, scroll, playerIndex)` (already
+   parameterized for any player, just unused before). New weights
+   `evalOpponentThreat: 0.3`, `evalCommonThreat: 80`. Found and fixed a real
+   bug along the way: `bot-sim.js`'s `simDiscard()` didn't model common-area
+   REPLACEMENT (one scroll per element, old one bumped to deck bottom) — it
+   just pushed onto an unbounded array, so the denial mechanic could never
+   register in simulation. Verified: `evaluateSnapshot()` delta exactly
+   matches each new weight in isolation; a constructed scenario (opponent's
+   board satisfies a common scroll, bot holds a dead-to-it same-element
+   scroll) makes `searchPick()` correctly choose the denial discard
+   (score 436) vs. ignoring it entirely with the terms zeroed (picks a plain
+   move instead, 464) — a real behavior change, not just a score delta. A/B
+   arena batch (30 games, same seed, weights on vs. zeroed): 12-13-5 vs.
+   13-12-5, avg turns 69.3 vs. 70.2 — statistically identical, **no
+   regression**. Not yet reachable from hybrid search's non-search branch
+   (greedy `scoreAction()` has no opponent awareness) — flagged, not closed.
+   Tracks B (generalize `playGame()`/`run()`/`evolve()` past 2 players) and C
+   (catacomb/Freedom teleport action) remain unscoped/unbuilt as originally
+   planned.
+5. **KNOWN ISSUE, not yet fixed: response-only (level-1) scrolls can
+   permanently clog a common-area element slot ("elemental lockout").**
+   Neither bot can ever cast OR respond with a level-1 scroll (main-phase
+   casting is blocked by rule — "Level 1 scrolls can only be used as
+   responses" — and `response-window.js`'s `isBotPlayer()` hard-excludes
+   bots from ever being considered as responders). The bot already has a
+   mitigation for holding them (`discardResponseOnly: +25` nudges voluntary
+   discard) — but discarding just moves the dead scroll into the shared
+   common-area slot for its element, and nothing ever displaces it again
+   unless someone discards ANOTHER scroll of that same element there.
+   Confirmed on real data: in a 200-turn drawn arena game (seed 40000, game
+   6 of a 30-game batch), `EARTH_SCROLL_1` and `FIRE_SCROLL_1` each landed in
+   their element's common-area slot around the 65-70% mark and were never
+   replaced for the rest of the game — while every other element's slot kept
+   churning normally. This reduces both players' win paths for that element
+   for the remainder of the game and is a real, verified contributor to
+   draws (independent of the opponent-threat work above — same draw rate
+   with or without it on this seed). Real fix is full response-scroll
+   support (see bot-roadmap § STAGE 2.5 step 3, not started — needs
+   `response-window.js`'s bot-exclusion removed, priority/no-bluff response
+   logic per user's explicit call: bots should only pass-or-respond, no
+   bluffing). Cheaper interim mitigation not yet scoped.
 
 ### 1. Tutorial — Earth Shrine Step (MEDIUM, tutorial-mode.js)
 After step 4 (scroll found), the tutorial should:
