@@ -76,10 +76,18 @@ exist in code but are untested end-to-end. Docs system fully in place.
    cache, cul-de-sac freezes, hand-only planning, missing common-area
    casts/voluntary discards, anti-freeze vs shrine collection) — details
    in bot-roadmap § STAGE 3a.
-2. **NEXT: Stage 2.5 — scroll-effect usage** (`js/bot-effects.js`): drive
-   selection-mode effects instead of cancelling them, play response
-   scrolls, whitelist driven effects in BotSim. Each increment
-   A/B-measured in the arena. Full plan: bot-roadmap § STAGE 2.5.
+2. **IN PROGRESS: Stage 2.5 — scroll-effect usage** (`js/bot-effects.js`,
+   not yet created). Step 1 (inventory the choice space) is **DONE** — full
+   table of all 17 selection-mode/response scrolls in bot-roadmap.md §
+   STAGE 2.5, including two real gaps found while inventorying: (a)
+   `EFFECT_MODAL_IDS` is missing `'transmute-modal'`, so a bot-cast
+   Transmute modal is never detected or cleaned up; (b) Telekinesis and
+   Take Flight's destination step are drag-based, not click-based, and need
+   a decision on how the bot drives them before those two are attempted.
+   NEXT: step 2, `js/bot-effects.js`'s `driveSelection()`, starting with
+   the click-based/modal-only scrolls (11 of 17) before the two drag-based
+   ones. Each increment A/B-measured in the arena. Full plan: bot-roadmap §
+   STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
 

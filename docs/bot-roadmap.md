@@ -532,11 +532,58 @@ otherwise there is no way to tell whether effect-driving actually wins games.
 
 Build order (each step independently commit-able and arena-measurable):
 
-1. **Inventory the choice space.** From `js/scrolls/effects/scroll-effects.js`,
-   list every scroll whose `execute()` returns `requiresSelection:true` (or
-   sets `tileMoveMode`/`takeFlightState`), and for each: what is being chosen
-   (tile, stone, pawn, hand scroll), what makes a choice valid, and what the
-   game-visible outcome is. Write the table into this file before coding.
+1. **Inventory the choice space (DONE — table below).** From
+   `js/scrolls/effects/scroll-effects.js`, every scroll whose `execute()`
+   returns `requiresSelection:true` (or sets `tileMoveMode`/`takeFlightState`),
+   what is being chosen, what makes a choice valid, and the interaction
+   mechanic (matters for how hard each is to drive programmatically).
+
+   | Scroll | Effect name | Chooses | Mechanic | Valid when | `selectionMode.type` |
+   |---|---|---|---|---|---|
+   | EARTH_SCROLL_2 | Shifting Sands | 2 tiles to swap | click 2 tiles (`handleTileClick`) | tile has no stones/players, in eligible set | `tile-swap` |
+   | EARTH_SCROLL_4 | Heavy Stomp | 1 tile to flip | click 1 tile (`handleTileClick`) | any tile | `tile-flip` |
+   | WATER_SCROLL_3 | Inspiring Draught | a deck, then (if 2 drawn) which to return | 2-step DOM modal (`showDeckSelectionModal` → `showScrollSelectionModal`) | deck non-empty | none (pure modal, IDs `deck-select-modal`/`scroll-select-modal`) |
+   | WATER_SCROLL_4 | Wandering River | 1 tile, then a new element | click tile (`handleTileClick`), then click element in a follow-up modal (`showElementSelectionModal`) | tile not a player tile | `tile-element-change` |
+   | WATER_SCROLL_5 | Control the Current | any number of adjacent water stones, one at a time | click stones (`handleStoneClick`), no fixed count — a "Done"-style exit | stone is water, adjacent to caster | `water-transform` |
+   | FIRE_SCROLL_3 | Sacrificial Pyre | 1 hand scroll to sacrifice | click-based modal (`showScrollSelectionModal`) | hand non-empty | none (modal `scroll-select-modal`) — **cascades**: if the sacrificed scroll itself has a selection effect (e.g. sacrificing EARTH_SCROLL_2), `execute()` is called on it too, opening a SECOND selection mode |
+   | FIRE_SCROLL_4 | Transmute | any number of stones/scrolls to discard for AP | DOM modal, click items repeatedly | AP not already at max | none — modal id `'transmute-modal'`, **NOT in `EFFECT_MODAL_IDS`** (bug, see below) |
+   | FIRE_SCROLL_5 | Arson | an opponent, then one of their stone types | 2-step modal (`showOpponentSelectionModal` → `showArsonElementModal`) | opponent not Excavate-immune, has ≥1 stone of some type | none (modals `opponent-select-modal`/`arson-element-modal`) |
+   | WIND_SCROLL_4 | Take Flight | a player, then a destination hex | modal for player, then **drag** the pawn to a hex (no click handler — `window.takeFlightState`) | destination unoccupied | `take-flight-drag` |
+   | VOID_SCROLL_2 | Scholar's Insight | a deck, then a scroll from it | 2-step DOM modal | deck non-empty | `scholars-insight` (cleanup only; picking is modal-driven) |
+   | VOID_SCROLL_4 | Telekinesis | 1 tile to move | **drag** a highlighted tile (`window.tileMoveMode`), not click — no `handleTileClick` | tile touches ≥2 others after moving; max moves is **1** (execute()'s status text says "(0/3)" — stale/wrong, code says `MAX_MOVES = 1`) | `telekinesis` |
+   | VOID_SCROLL_5 | Create | 1 element type | click a modal button | pool for that element has room | none (modal `create-stone-modal`) |
+   | CATACOMB_SCROLL_3 | Call to Adventure | 1 tile to flip | reuses Heavy Stomp's `enterTileFlipMode` | unoccupied tile | `tile-flip` |
+   | CATACOMB_SCROLL_4 | Excavate | 1 hex to teleport to | click a hex (`handleHexClick`) | **deferred**: opens at the start of the caster's NEXT turn, not at cast time; hex on a revealed non-player tile, no stone/player on it | `excavate-teleport` |
+   | CATACOMB_SCROLL_8 | Plunder | a target player, then one of their active scrolls | 2-step modal (`showPlunderPlayerModal` → `showScrollSelectionModal`) | target has ≥1 active scroll (self-targeting allowed, excludes the scroll being cast) | none (modals `plunder-player-modal`/`scroll-select-modal`) |
+   | CATACOMB_SCROLL_9 | Quick Reflexes | a level-1 scroll from a deck | modal, deck search restricted to level 1 | a level-1 scroll exists in some deck | `quick-reflexes` |
+   | CATACOMB_SCROLL_10 | Combust | 1 tile to destroy all stones on | click 1 tile (`handleTileClick`) | not a player tile | `scorched-earth` |
+
+   Not selection-mode at all but still worth Stage-2.5 attention: **response
+   scrolls** (level 1, step 3 below) — EARTH_SCROLL_1 (Iron Stance, counter),
+   WATER_SCROLL_1 (Reflect, duplicates the last-cast effect — so driving it
+   well requires driving whatever it reflects), FIRE_SCROLL_1 (Unbidden
+   Lamplight), WIND_SCROLL_1 (Sigh of Recollection), VOID_SCROLL_1 (Psychic,
+   counter).
+
+   **Two real gaps found while inventorying (fix opportunistically, not
+   blocking step 2):**
+   - `EFFECT_MODAL_IDS` (scroll-effects.js line ~87) is missing
+     `'transmute-modal'`. `waitForQuiescence()`'s modal-detection and
+     `cancelSelectionMode()`'s cleanup sweep both key off this list, so a
+     Transmute modal opened by a bot cast is neither detected nor ever
+     cleaned up — the same class of "modal lingers for the rest of the game"
+     bug the `EFFECT_MODAL_IDS` mechanism was built to prevent for every
+     *other* modal-only effect.
+   - Two effects are **drag-based**, not click-based (Telekinesis,
+     Take Flight's destination step): no `handleTileClick`/`handleHexClick`
+     to call directly like the other nine. Driving these needs either a
+     synthesized drag/drop sequence or a new programmatic entry point
+     exposed by scroll-effects.js (mirroring how `BotState.applyAction()`
+     already calls into game functions directly rather than faking DOM
+     events) — decide which before starting these two; the other eleven can
+     be driven by calling their `handleXClick`/modal-button `onclick`
+     directly.
+
 2. **`js/bot-effects.js`** — `window.BotEffects.driveSelection(scrollName)`:
    when a selection mode opens during a BOT cast, enumerate the valid
    choices via the game's own selection APIs (never reimplement validity),
