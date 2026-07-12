@@ -63,6 +63,8 @@ Order matters — later scripts depend on earlier ones.
 16. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
 17. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
 17b. bot-sim.js            ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
+17c. bot-effects.js        ← window.BotEffects — Stage 2.5 scroll-effect usage: driveTransmute() (open-ended
+                             discard-for-AP modal), decideResponse() (arena-only response-scroll respond/pass)
 18. bot.js                 ← window.BotSystem — utility-scored bot + optional lookahead (WEIGHTS.searchDepth, default 0);
                              Shift+R = one step, Shift+B = full turn
 19. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);

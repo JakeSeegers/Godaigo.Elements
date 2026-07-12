@@ -89,6 +89,7 @@ const ScrollEffects = {
         'water-transform-modal', 'take-flight-player-modal', 'arson-element-modal',
         'scroll-select-modal', 'deck-select-modal', 'element-select-modal',
         'opponent-select-modal', 'plunder-player-modal', 'excavate-teleport-modal',
+        'transmute-modal',
     ],
 
     cancelSelectionMode() {

@@ -305,6 +305,7 @@
     let _stopRequested = false;
     function stop() { _stopRequested = true; }
     function isSpectating() { return _spectating; }
+    function isRunning() { return _running || _spectating; }
 
     async function spectate(nPlayers = 2, opts = {}) {
         if (_running || _spectating) throw new Error('BotArena already running');
@@ -383,6 +384,6 @@
         return result;
     }
 
-    window.BotArena = { run, evolve, playGame, spectate, stop, isSpectating };
+    window.BotArena = { run, evolve, playGame, spectate, stop, isSpectating, isRunning };
     log('Loaded — window.BotArena ready (run / evolve / spectate)');
 })();

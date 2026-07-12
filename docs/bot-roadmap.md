@@ -486,11 +486,7 @@ otherwise there is no way to tell whether effect-driving actually wins games.
 
 Build order (each step independently commit-able and arena-measurable):
 
-1. **Inventory the choice space.** From `js/scrolls/effects/scroll-effects.js`,
-   list every scroll whose `execute()` returns `requiresSelection:true` (or
-   sets `tileMoveMode`/`takeFlightState`), and for each: what is being chosen
-   (tile, stone, pawn, hand scroll), what makes a choice valid, and what the
-   game-visible outcome is. Write the table into this file before coding.
+1. **Inventory the choice space (DONE — see § CHOICE-SPACE INVENTORY below).**
 2. **`js/bot-effects.js`** — `window.BotEffects.driveSelection(scrollName)`:
    when a selection mode opens during a BOT cast, enumerate the valid
    choices via the game's own selection APIs (never reimplement validity),
@@ -514,6 +510,62 @@ Build order (each step independently commit-able and arena-measurable):
 Acceptance per increment: arena win rate vs. the pre-increment bot improves
 (same weights, same seeds); no increment may regress the Stage-1 fixed bugs
 (recast loops, oscillation, overflow stalls).
+
+### § CHOICE-SPACE INVENTORY (Stage 2.5 step 1 — DONE)
+
+15 scrolls open an interactive selection when cast (`requiresSelection:true`
+plus a `system.enter*Mode()`/`show*Modal()` call); 1 more (Excavate) defers
+its choice to the start of the caster's NEXT turn instead of cast time.
+Everything else either fires automatically or just sets a buff that changes
+the legality of a later ordinary action (placement range, stone-move, AP
+cost) — those don't need `BotEffects` at all, they need `bot-state.js`'s
+legality checks to already account for the buff (Mason's Savvy did, once
+the drag-and-drop bug above was fixed; Seed the Skies/Avalanche do too via
+the same `isInPlacementRange` path). Grouped by interaction shape, since
+that's the natural unit for shared `BotEffects` handlers:
+
+**A — single/double tile click (board)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Shifting Sands (EARTH_SCROLL_2) | 2 tiles, any distance | `getEligibleTilesForSwap()`: not a player tile, no stones, no players (re-checked at 2nd click) | Tiles swap x/y positions |
+| Heavy Stomp (EARTH_SCROLL_4) | 1 tile | same eligible set as above | Hidden→revealed (draws a scroll, via `revealTile`); revealed→hidden (irreversible, clears undo, no scroll) |
+| Call to Adventure (CATACOMB_SCROLL_3) | 1 tile | identical mechanic — reuses `enterTileFlipMode` | Same as Heavy Stomp, plus: reveals for the rest of this turn also grant shrine stones immediately (`activeBuffs.callToAdventure`) |
+| Combust (CATACOMB_SCROLL_10) | 1 tile | `tileHasStones(tile)` true, not a player tile | Destroys every stone on that tile |
+| Wandering River (WATER_SCROLL_4) | 1 tile, then 1 element (2 steps) | tile: `getEligibleTilesForWanderingRiver()` — any non-player tile, revealed OR hidden, **no stone/player exclusion**; element: unfiltered pick of all 5 | Tile counts as chosen element (reveal/collection effects + visual) until caster's next turn |
+
+**B — modal only, no board interaction**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Create (VOID_SCROLL_5) | 1 element | button disabled if caster's own pool has no room for that element | Draws stones = that element's rank (earth 5, water 4, fire 3, wind 2, void 1) |
+| Scholar's Insight (VOID_SCROLL_2) | 1 deck, then 1 scroll from it (2 steps) | deck disabled if empty; scroll is any card in that deck | Scroll added to hand, deck reshuffled |
+| Quick Reflexes (CATACOMB_SCROLL_9) | 1 scroll | flat pooled list of every level-1 scroll across all 5 elemental decks (not deck-then-scroll) | Scroll added to hand + draws 2 stones of its element, deck reshuffled |
+| Inspiring Draught (WATER_SCROLL_3) | 1 deck, then (if 2 drawn) 1 of the 2 to put back | deck disabled if empty; auto-draws top 2 (`deck.pop()` x2), only 1 drawn if deck had 1 left (auto-kept, no 2nd step) | Kept scroll(s) go to hand; returned one reshuffled back in |
+| Sacrificial Pyre (FIRE_SCROLL_3) | 1 scroll from caster's OWN hand | any hand scroll, pattern ignored | Sent to common area; grants its stone reward; **if it has its own effect, that effect executes too** — can open a NESTED selection UI (e.g. sacrificing Shifting Sands opens tile-swap) |
+| Transmute (FIRE_SCROLL_4) | any number of: personal-pool stones (by type) / hand scrolls / active scrolls, repeatable, then Done | stone buttons disabled at 0 count; discarding stops being useful once `currentAP >= 5 + voidPool` | Each discard = +2 AP (capped); **not a single choice — an open multi-select session ended by the bot clicking Done** |
+
+**C — two-step targeting (player, then a thing of theirs)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Arson (FIRE_SCROLL_5) | 1 opponent, then 1 element (2 steps) | opponent: excludes self + Excavate-immune players; element: only types that opponent's pool has >0 of | Destroys 1 stone of that type from their pool |
+| Plunder (CATACOMB_SCROLL_8) | 1 target (self allowed), then 1 of their active scrolls (2 steps) | target: excludes Excavate-immune opponents, self always eligible; targets with 0 plunderable active scrolls shown disabled (self-target excludes the scroll currently being cast) | Chosen active scroll discarded to common area |
+| Take Flight (WIND_SCROLL_4) | 1 target player (self allowed), then a board DRAG (not click) to a hex (2 steps) | target: excludes Excavate-immune opponents; hex: unoccupied | Pawn teleports; scroll goes to target's hand if targeting an opponent, stays in caster's active area if self |
+
+**D — board drag, single actor**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Telekinesis (VOID_SCROLL_4) | DRAG 1 tile to a new spot | same eligible set as Shifting Sands, plus the drop handler enforces "must still touch ≥2 tiles, can't strand a neighbor" | Tile moves. **`MAX_MOVES` is hard-coded to 1** even though the status text says "(0/3)" — stale copy, only 1 move is ever allowed; don't build for 3 |
+
+**E — repeatable board-click session (persists all turn)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Control the Current (WATER_SCROLL_5) | click a water stone, then pick its new element, repeat freely | stone: water-typed AND currently adjacent to caster (re-evaluated live after every caster move — the click targets change as the pawn moves); element: earth/fire/wind/void filtered to only types with >0 in the SOURCE pool (stricter than Wandering River's unfiltered pick) | Stone converts type; caster may repeat for the rest of the turn |
+
+**F — deferred to the start of caster's NEXT turn (not part of `execute()` at all)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Excavate (CATACOMB_SCROLL_4) | Teleport-or-Stay prompt, then (if Teleport) 1 hex | hex: unoccupied, on a revealed non-player tile | Pawn teleports there. Casting itself has zero choices (just grants immunity/no-response buffs) — the prompt fires from `processExcavateTeleport()` at the caster's next turn start, so `BotEffects` can't drive it from `waitForQuiescence`; needs its own turn-start hook |
+
+**Buff-only scrolls (no `BotEffects` needed — just correct legality checks elsewhere):** Mason's Savvy / Seed the Skies / Avalanche (placement range — `isInPlacementRange`, Mason's Savvy's drag-and-drop bug is now fixed), Burning Motivation / Simplify / Steam Vents / Mudslide / Freedom / Mine / Reflecting Pool (automatic on cast or on a later `endTurn`/move, no player choice), Breath of Power (grants a "move an adjacent stone to an adjacent empty space" action that **doesn't exist in the Stage-0 action vocabulary yet** — would need a new `BotState` action type before a bot could use it, separate from this stage's `driveSelection()` work).
 
 ## STAGE 3a — Self-play arena (DONE) — original plan below
 

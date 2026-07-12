@@ -788,8 +788,8 @@ class ResponseWindowSystem {
      * If the scroll is fromHand, it is moved to the active area first.
      * Resolution is deferred until ALL eligible players have responded or passed.
      */
-    playerResponds(scrollInfo) {
-        const myIndex = this.localResponderIndex();
+    playerResponds(scrollInfo, responderIndexOverride) {
+        const myIndex = responderIndexOverride ?? this.localResponderIndex();
         console.log(`playerResponds called: myIndex=${myIndex}, scroll=${scrollInfo.name}, fromHand=${scrollInfo.fromHand}`);
 
         // Double check they can still afford it
