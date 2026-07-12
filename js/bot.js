@@ -334,7 +334,8 @@
                     if ((snap.sourcePool[el] || 0) <= 0) s += WEIGHTS.discardDeadElement;
                 }
                 // Never discard the scroll the current build plan needs
-                if (_plan && a.scroll === _plan.scroll) s -= 1000;
+                const activePlan = mem(snap.turn.activePlayerIndex).plan;
+                if (activePlan && a.scroll === activePlan.scroll) s -= 1000;
                 return s;
             }
 
@@ -343,14 +344,40 @@
     }
 
     // ----------------------------------------------------------------
-    // Pattern plan (Stage 1.75): scroll patterns anchor to the hex the
-    // caster STANDS ON when casting, and stones may only be placed
-    // adjacent to the pawn — so multi-hex patterns need a plan: fix an
-    // anchor (the casting spot), walk around placing each cell, return
-    // to the anchor, cast. Without this the anchor drifts as the pawn
-    // moves and the bot scatters stones that never complete anything.
+    // Per-bot memory, keyed by player index.
+    //
+    // Why keyed at all: bot-arena.js's local hot-seat and spectate matches
+    // drive MULTIPLE bot players through this SAME module instance, one
+    // turn at a time, alternating. Every piece of state below used to be a
+    // single shared module-level variable — so Player A's plan, recent
+    // positions, and cursed-cell blacklist silently bled into Player B's
+    // decisions the moment turns alternated, and vice versa. Found via a
+    // real bot-vs-bot game log: an identical 6-hex movement cycle repeated
+    // turn after turn forever, immune to the anti-oscillation fix below —
+    // traced to _recentPositions being one ring buffer BOTH bots wrote
+    // into, so a player's own "don't reverse your last move" signal was
+    // getting overwritten by the OTHER player's positions every time turns
+    // switched, corrupting the tie-breaker into noise. bot-driver.js (real
+    // multiplayer) only ever drives one bot identity per browser tab, so
+    // this bug never surfaced there — only in same-page multi-bot modes.
     // ----------------------------------------------------------------
-    let _plan = null; // { scroll, anchor:{q,r}, cells:[{q,r,x,y,type}] }
+    const _mem = {};
+    function mem(idx) {
+        if (!_mem[idx]) {
+            _mem[idx] = {
+                plan: null,             // { scroll, anchor:{q,r}, cells:[{q,r,x,y,type}] }
+                recentPositions: [],    // ring buffer of {x,y}, oldest first
+                cellFailCount: new Map(),
+                cursedCells: new Set(),
+                lastTurnMoveKey: null,
+                turnRepeatStreak: 0,
+            };
+        }
+        return _mem[idx];
+    }
+    function resetAllMemory() {
+        for (const k of Object.keys(_mem)) delete _mem[k];
+    }
 
     // Recent-move history — anti-oscillation tie-breaker. Two hexes can be
     // EXACTLY equidistant from the only reachable unrevealed tile (or shrine),
@@ -369,11 +396,20 @@
     // steps ago," so a 2-cycle can no longer look equally bad in both
     // directions and the tie actually breaks.
     const RECENT_POS_LIMIT = 6;
-    const _recentPositions = []; // ring buffer of {x,y}, oldest first, LAST entry = current position
-    function recordVisited(x, y) {
-        _recentPositions.push({ x, y });
-        if (_recentPositions.length > RECENT_POS_LIMIT) _recentPositions.shift();
+    function recordVisited(idx, x, y) {
+        const rp = mem(idx).recentPositions;
+        rp.push({ x, y });
+        if (rp.length > RECENT_POS_LIMIT) rp.shift();
     }
+
+    // Whole-turn repeat detector — a second, coarser safety net above.
+    // recentPositions/revisitPenalty only ever break a clean 2-hex tie; a
+    // larger stable N-hex cycle (N <= RECENT_POS_LIMIT) can rotate in
+    // lockstep with the recency-decay penalty and never actually create the
+    // asymmetry needed to escape. botTurn() records each turn's move
+    // sequence and compares it to that SAME PLAYER's previous turn; botAct()
+    // consults turnRepeatStreak to short-circuit movement for one turn once
+    // a repeat is detected — see both sites.
     // Recency-weighted revisit penalty for a candidate move target `a`.
     // k=1 means "this is exactly where I was one move ago" (an immediate
     // reversal); k=2 means two moves ago, etc. — penalty decays as 1/k.
@@ -394,13 +430,12 @@
     // Without this the bot loops forever: place → destroyed → still missing →
     // place again, burning its whole pool and every turn's AP for zero progress.
     const cellKey = c => `${c.x.toFixed(1)},${c.y.toFixed(1)},${c.type}`;
-    const cellFailCount = new Map();
-    const cursedCells = new Set();
     const CELL_FAIL_LIMIT = 2;
 
     function makePlan(snap) {
         const self = me(snap);
         if (!self || !self.hand) return null;
+        const { cursedCells } = mem(snap.turn.activePlayerIndex);
         // All 5 elements activated — no cast adds win credit anymore; don't
         // start new builds, let move-scoring's homePath term walk the bot home
         if (ELEMENTS.every(el => self.activated.includes(el))) return null;
@@ -465,13 +500,14 @@
     }
 
     function planValid(snap) {
-        if (!_plan) return false;
+        const plan = mem(snap.turn.activePlayerIndex).plan;
+        if (!plan) return false;
         const self = me(snap);
         if (!self) return false;
-        const holding = (self.hand || []).includes(_plan.scroll) || self.active.includes(_plan.scroll) ||
-                        (snap.commonArea || []).includes(_plan.scroll); // common-area scrolls are castable too
+        const holding = (self.hand || []).includes(plan.scroll) || self.active.includes(plan.scroll) ||
+                        (snap.commonArea || []).includes(plan.scroll); // common-area scrolls are castable too
         if (!holding) return false;
-        for (const c of _plan.cells) {
+        for (const c of plan.cells) {
             const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
             if (s && s.type !== c.type) return false;                       // cell corrupted
             if (!s && (self.pool[c.type] || 0) <= 0) return false;          // can't supply anymore
@@ -508,45 +544,47 @@
 
     // The next concrete action the plan dictates, or null (fall back to scoring)
     function planNextAction(snap) {
-        if (!_plan || !planValid(snap)) { _plan = null; return null; }
+        const m = mem(snap.turn.activePlayerIndex);
+        if (!m.plan || !planValid(snap)) { m.plan = null; return null; }
+        const plan = m.plan;
         const self = me(snap);
-        const missing = _plan.cells.filter(c =>
+        const missing = plan.cells.filter(c =>
             !placedStones.some(st => st.type === c.type && Math.hypot(st.x - c.x, st.y - c.y) < 5));
 
         // Did our last attempt actually stick? If the cell we just tried to
         // fill is still missing, something (e.g. an adjacent fire stone)
         // destroyed it on placement. Count the failure; past the limit,
         // blacklist the cell and abandon this plan rather than loop forever.
-        if (_plan._lastTargetKey) {
-            const stillMissing = missing.some(c => cellKey(c) === _plan._lastTargetKey);
+        if (plan._lastTargetKey) {
+            const stillMissing = missing.some(c => cellKey(c) === plan._lastTargetKey);
             if (stillMissing) {
-                const fails = (cellFailCount.get(_plan._lastTargetKey) || 0) + 1;
-                cellFailCount.set(_plan._lastTargetKey, fails);
+                const fails = (m.cellFailCount.get(plan._lastTargetKey) || 0) + 1;
+                m.cellFailCount.set(plan._lastTargetKey, fails);
                 if (fails >= CELL_FAIL_LIMIT) {
-                    log(`Cell ${_plan._lastTargetKey} failed to hold a stone ${fails}x — blacklisting and abandoning plan`);
-                    cursedCells.add(_plan._lastTargetKey);
-                    _plan = null;
+                    log(`Cell ${plan._lastTargetKey} failed to hold a stone ${fails}x — blacklisting and abandoning plan`);
+                    m.cursedCells.add(plan._lastTargetKey);
+                    m.plan = null;
                     return null;
                 }
             } else {
-                cellFailCount.delete(_plan._lastTargetKey);
+                m.cellFailCount.delete(plan._lastTargetKey);
             }
-            _plan._lastTargetKey = null;
+            plan._lastTargetKey = null;
         }
 
         if (missing.length) {
             for (const c of missing) {
-                if (cursedCells.has(cellKey(c))) continue;
+                if (m.cursedCells.has(cellKey(c))) continue;
                 if (typeof isInPlacementRange === 'function' && isInPlacementRange(c.x, c.y, c.type)) {
-                    _plan._lastTargetKey = cellKey(c);
-                    return { type: 'placeStone', x: c.x, y: c.y, stoneType: c.type, scroll: _plan.scroll,
-                             progress: (_plan.cells.length - missing.length + 1) / _plan.cells.length };
+                    plan._lastTargetKey = cellKey(c);
+                    return { type: 'placeStone', x: c.x, y: c.y, stoneType: c.type, scroll: plan.scroll,
+                             progress: (plan.cells.length - missing.length + 1) / plan.cells.length };
                 }
             }
             if (snap.turn.ap > 0) {
                 // fill the farthest-from-anchor cells first so placed stones
                 // (earth blocks movement!) don't wall off the rest of the shape
-                const aPx = hexToPixel(_plan.anchor.q, _plan.anchor.r, TILE_SIZE);
+                const aPx = hexToPixel(plan.anchor.q, plan.anchor.r, TILE_SIZE);
                 const ordered = [...missing].sort((a, b) =>
                     Math.hypot(b.x - aPx.x, b.y - aPx.y) - Math.hypot(a.x - aPx.x, a.y - aPx.y));
                 for (const c of ordered) {
@@ -558,7 +596,7 @@
         }
 
         // Shape complete → return to the anchor and cast
-        const aPx = hexToPixel(_plan.anchor.q, _plan.anchor.r, TILE_SIZE);
+        const aPx = hexToPixel(plan.anchor.q, plan.anchor.r, TILE_SIZE);
         if (Math.hypot(self.x - aPx.x, self.y - aPx.y) >= 5) {
             if (snap.turn.ap > 0) {
                 const path = window.BotState.findPath(self.x, self.y, aPx.x, aPx.y);
@@ -568,8 +606,8 @@
             }
             return null;
         }
-        if (snap.turn.ap >= 2 && window.spellSystem.checkPattern(_plan.scroll)) {
-            return { type: 'cast', scroll: _plan.scroll };
+        if (snap.turn.ap >= 2 && window.spellSystem.checkPattern(plan.scroll)) {
+            return { type: 'cast', scroll: plan.scroll };
         }
         return null;
     }
@@ -715,7 +753,7 @@
         let best = null;
         for (const c of rootChildren) {
             let v = value(c.s1, depth - 1);
-            if (c.a.type === 'move') v += revisitPenalty(_recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
+            if (c.a.type === 'move') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
             if (!best || v > best.score) best = { action: c.a, score: v };
         }
         _exploreField = null; // valid only for this decision's root snapshot
@@ -743,7 +781,7 @@
             onShrine: shrineUnderfoot(snap),
             hiddenTiles: snap.tiles.filter(t => !t.revealed && !t.isPlayerTile),
             paths: new Map(),
-            recentPositions: _recentPositions,
+            recentPositions: mem(snap.turn.activePlayerIndex).recentPositions,
             homePath: null,
         };
         for (const t of ctx.shrines) {
@@ -815,13 +853,18 @@
             }
         }
 
+        // All per-bot memory (plan, recent positions, turn-repeat tracking)
+        // is keyed by player index — see mem() above.
+        const idx = snap.turn.activePlayerIndex;
+        const m = mem(idx);
+
         // The pattern plan takes priority: it's the only way multi-hex
         // patterns ever complete under the adjacent-only placement rule
-        if (!_plan || !planValid(snap)) {
-            _plan = makePlan(snap);
-            if (_plan) log(`New plan: build ${_plan.scroll} anchored at hex (${_plan.anchor.q},${_plan.anchor.r})`);
+        if (!m.plan || !planValid(snap)) {
+            m.plan = makePlan(snap);
+            if (m.plan) log(`New plan: build ${m.plan.scroll} anchored at hex (${m.plan.anchor.q},${m.plan.anchor.r})`);
         }
-        const planAction = _plan ? planNextAction(snap) : null;
+        const planAction = m.plan ? planNextAction(snap) : null;
         if (planAction) {
             const label = planAction.type === 'cast' ? `cast ${planAction.scroll}`
                         : planAction.type === 'placeStone' ? `place ${planAction.stoneType} for ${planAction.scroll}`
@@ -829,20 +872,50 @@
             log(`Plan action: ${label}`);
             const r = window.BotState.applyAction(planAction);
             if (r.ok) {
-                if (planAction.type === 'cast') _plan = null; // plan fulfilled
-                if (planAction.type === 'move') recordVisited(planAction.x, planAction.y);
+                if (planAction.type === 'cast') m.plan = null; // plan fulfilled
+                if (planAction.type === 'move') recordVisited(idx, planAction.x, planAction.y);
                 return planAction;
             }
             log(`Plan action failed (${r.reason}) — falling back to scoring`);
-            _plan = null;
+            m.plan = null;
+        }
+
+        // Turn-repeat circuit breaker: if the last COMPLETED turn traced the
+        // exact same move sequence as the one before it (bookkeeping in
+        // botTurn() below), the scoring-driven fallback (search or greedy)
+        // is stuck re-deriving an unproductive cycle — the anti-oscillation
+        // recency-decay penalty is tuned for 2-hex ties and can get rotated
+        // in lockstep by a larger stable N-hex cycle instead of breaking it.
+        // Observed in a real bot-vs-bot game log: an identical 6-hex
+        // hub-and-spoke path (always returning to one fully-explored tile)
+        // repeated turn after turn, forever — nothing about the board
+        // changes between two such turns, so the deterministic scorer just
+        // reproduces the same decisions. For exactly one turn, skip
+        // movement entirely and take whatever non-move action scores best
+        // instead (or end the turn if only movement is legal) — wandering
+        // that accomplished nothing twice in a row won't accomplish
+        // anything a third time either. Self-clearing: botTurn() resets the
+        // streak once this fires, so it only intervenes once per cycle.
+        let choice = null;
+        if (m.turnRepeatStreak >= 1) {
+            const ranked = rankActions().filter(r => r.action.type !== 'move');
+            if (ranked.length) {
+                choice = ranked[0];
+                log(`Turn-repeat circuit breaker (streak ${m.turnRepeatStreak}): skipping movement, picked ${choice.action.type}`);
+            } else {
+                const r = window.BotState.applyAction({ type: 'endTurn' });
+                if (r.ok) {
+                    log('Turn-repeat circuit breaker: only movement was legal — ending turn');
+                    return { type: 'endTurn' };
+                }
+            }
         }
 
         // Stage 2: lookahead search when enabled, greedy Stage-1 argmax otherwise.
         // Hybrid mode saves the lookahead for states where it can actually pay
         // off — a cast or stone placement is available — and stays greedy for
         // plain movement/exploration.
-        let choice = null;
-        if ((WEIGHTS.searchDepth | 0) > 0 && window.BotSim) {
+        if (!choice && (WEIGHTS.searchDepth | 0) > 0 && window.BotSim) {
             let useSearch = true;
             if (WEIGHTS.searchHybrid) {
                 const legal = window.BotState.legalActions();
@@ -869,8 +942,8 @@
         // memory there re-enables the exact oscillation it suppresses and
         // the bot steps OFF the shrine instead of collecting.
         if (choice.action.type === 'endTurn' && choice.score < 20 &&
-            snap.turn.ap >= 3 && _recentPositions.length) {
-            _recentPositions.length = 0;
+            snap.turn.ap >= 3 && m.recentPositions.length) {
+            m.recentPositions.length = 0;
             log('Anti-freeze: endTurn chosen with AP to spare — clearing move memory and re-deciding');
             const redo = ((WEIGHTS.searchDepth | 0) > 0 && window.BotSim) ? searchPick() : null;
             const rankedRedo = redo ? null : rankActions();
@@ -888,7 +961,7 @@
 
         const res = window.BotState.applyAction(action);
         if (!res.ok) { log(`Action failed: ${res.reason}`); return null; }
-        if (action.type === 'move') recordVisited(action.x, action.y);
+        if (action.type === 'move') recordVisited(idx, action.x, action.y);
         return action;
     }
 
@@ -960,6 +1033,9 @@
         if (_turnRunning) { log('Turn already running'); return; }
         _turnRunning = true;
         const startingPlayer = activePlayerIndex;
+        const m = mem(startingPlayer);
+        const wasForced = m.turnRepeatStreak >= 1; // circuit breaker armed for this turn
+        const turnMoves = [];
         try {
             for (let i = 0; i < 30; i++) {                    // safety cap
                 if (activePlayerIndex !== startingPlayer) break; // turn passed
@@ -967,11 +1043,31 @@
                 if (activePlayerIndex !== startingPlayer) break;
                 const applied = botAct();
                 if (!applied) break;
+                if (applied.type === 'move') turnMoves.push(`${applied.x.toFixed(1)},${applied.y.toFixed(1)}`);
                 if (applied.type === 'endTurn') break;
                 await tick(350);
             }
         } finally {
             _turnRunning = false;
+        }
+        // Compare this turn's move sequence to THIS SAME PLAYER's last one
+        // to detect a stable N-hex cycle (see mem()/turnRepeatStreak above).
+        // A circuit-breaker turn (wasForced) is a one-shot intervention, not
+        // a new baseline to compare against — fully reset regardless of
+        // what it produced (likely empty, which must NOT count as "equal
+        // to the last empty turn" or the breaker would just latch forever).
+        if (wasForced) {
+            m.turnRepeatStreak = 0;
+            m.lastTurnMoveKey = null;
+        } else {
+            const key = turnMoves.join('|');
+            if (key && key === m.lastTurnMoveKey) {
+                m.turnRepeatStreak++;
+                log(`Turn repeated the exact same ${turnMoves.length}-move sequence as last turn (streak ${m.turnRepeatStreak}) — next turn skips movement`);
+            } else {
+                m.turnRepeatStreak = 0;
+            }
+            m.lastTurnMoveKey = key || null;
         }
         log('Turn autopilot finished');
     }
@@ -997,15 +1093,12 @@
     // ----------------------------------------------------------------
     // Public API (console debugging + Stage 2/3 hooks)
     // ----------------------------------------------------------------
-    // Wipe per-game bot memory (plan, anti-oscillation history, cursed-cell
-    // blacklist). The arena MUST call this between games — board positions
-    // repeat across games, so a cell blacklisted in game 1 would silently
-    // handicap every later game.
+    // Wipe per-bot memory for ALL players (plan, anti-oscillation history,
+    // cursed-cell blacklist, turn-repeat tracking). The arena MUST call this
+    // between games — board positions repeat across games, so a cell
+    // blacklisted in game 1 would silently handicap every later game.
     function resetMemory() {
-        _plan = null;
-        _recentPositions.length = 0;
-        cellFailCount.clear();
-        cursedCells.clear();
+        resetAllMemory();
     }
 
     window.BotSystem = {

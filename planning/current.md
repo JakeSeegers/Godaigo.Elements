@@ -10,6 +10,24 @@
 (previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **BOT FIX: per-bot memory was shared across bot players (the actual
+  "trapped in loops" bug)** — `js/bot.js`. Found from a real user's
+  downloaded 2-bot-vs-2-bot action log showing an identical 6-hex
+  hub-and-spoke movement path repeated turn after turn forever. Root cause:
+  `_plan`/`_recentPositions`/`cellFailCount`/`cursedCells` were single
+  shared module variables — fine for real multiplayer (one bot identity
+  per tab) but broken for the cheat panel's local hot-seat/spectate modes,
+  where ONE bot.js instance drives multiple bot players alternately, so
+  each player's anti-oscillation memory got overwritten by the OTHER
+  player's moves every turn switch. Fixed by keying all per-bot state
+  behind `mem(playerIndex)`. Also added a coarser safety net: `botTurn()`
+  detects when a player repeats last turn's exact move sequence and
+  `botAct()` skips movement for one turn when that happens. Verified: 0
+  exact-repeat occurrences across two fresh 15-game arena batches (previously
+  reproducible every batch); circuit breaker fired 7x in one batch,
+  correctly picking productive alternatives. **Follow-up flagged, not yet
+  fixed:** a related within-turn oscillation from hybrid search staying
+  engaged too broadly during exploration — see bot-roadmap.md § STAGE 1.
 - **BOT FIX: placement phase was dead code outside real multiplayer** —
   `js/bot-state.js`. Root cause of a fresh "bots get stuck immediately"
   report: `legalActions()`/`applyAction()`'s `placeTile` handling both

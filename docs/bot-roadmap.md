@@ -299,16 +299,62 @@ Feature summary (see `scoreAction()` in bot.js for the authoritative list):
   (`BotState.legalActions()`/`BotSim.legalActions()`) but not, until now, the
   credit awareness. Confirmed on the exact reproducing seed: 200-turn draw →
   42-turn decisive win, 0 further placements toward the dead pattern.
+- **Per-bot memory was shared across ALL bot players, not scoped per
+  player — the actual "trapped in loops" bug (found from a real user's
+  downloaded 2-bot-vs-2-bot action log, not a synthetic repro).** `_plan`,
+  `_recentPositions`, `cellFailCount`, and `cursedCells` were single
+  module-level variables in `bot.js`. That's fine for `bot-driver.js` (real
+  multiplayer — one browser tab only ever drives ONE bot identity), but
+  `bot-arena.js`'s local hot-seat and spectate modes drive MULTIPLE bot
+  players through this SAME module instance, one turn at a time,
+  alternating — exactly the setup behind the cheat panel's "watch bots
+  play" feature that produced the user's log (two players, both
+  `isBot:true`, single page). Every time turns switched, Player A's
+  `_recentPositions` (etc.) got silently overwritten by Player B's moves
+  and vice versa, so a player's own "don't reverse your last move"
+  anti-oscillation signal was really "don't go where the OTHER player just
+  was" — corrupting the recency-decay tie-breaker into effective noise.
+  The user's log showed the visible symptom: an identical 6-hex
+  hub-and-spoke movement path (always returning to one fully-explored
+  central tile) repeated turn after turn, forever, for both bots
+  independently — a stable N-hex cycle exactly at the anti-oscillation
+  memory's own window size (`RECENT_POS_LIMIT = 6`), which a
+  recency-decay penalty tuned for clean 2-hex ties cannot break (it rotates
+  in lockstep with the cycle instead of creating the asymmetry needed to
+  escape). Fixed by keying all four pieces of state behind a `mem(playerIndex)`
+  accessor, threaded through every read/write site (`scoreAction`,
+  `makePlan`/`planValid`/`planNextAction`, `searchPick`, `rankActions`,
+  `botAct`, `botTurn`, `resetMemory`). Also added a second, coarser safety
+  net: `botTurn()` now records each turn's exact move sequence and compares
+  it to that SAME player's previous turn; if identical twice in a row,
+  `botAct()` skips movement entirely for one turn (takes the best non-move
+  action, or just ends the turn) — a circuit breaker for any future
+  N-hex-cycle class of bug the recency-decay penalty still can't catch,
+  self-clearing after firing once. Verified: the exact 6-hex repeat pattern
+  is gone across two fresh 15-game arena batches (0 occurrences), and the
+  circuit breaker itself fired 7 times in one batch, correctly picking
+  `placeStone`/`breakStone`/`cast`/`endTurn` over continuing to wander.
+  **Not yet fixed, flagged for follow-up:** a related but distinct
+  *within-turn* oscillation surfaced in the same batches — hybrid search
+  stays engaged for an entire turn whenever ANY `placeStone` candidate is
+  technically legal (even a hopeless one, per `legal.some(a => a.type ===
+  'cast' || a.type === 'placeStone')`), and `searchPick()`'s movement
+  choices don't share the plan/path discipline that keeps greedy
+  exploration coherent — matches the roadmap's own prior finding ("FULL
+  search LOST its series 1-3-4 — always-on lookahead's movement choices
+  fight the plan/path logic") resurfacing via hybrid mode being triggered
+  more broadly than intended.
 
-All five found by literally running the bot (single-bot loops via
-`window.BotSystem.turn()`/`.step()`, or bot-vs-bot batches via
-`BotArena.run()`) and inspecting `snapshot()`/`rank()`/action logs between
-turns — cheaper and more revealing than reasoning about the scoring code in
-the abstract. Worth repeating before investing further in Stage 2.5/3a:
-structural bugs like these make weight-tuning or lookahead search pointless
-(a smarter search over a broken scorer just finds the same bugs faster), and
-some (like this one) only surface in multi-turn/multi-game batches, not
-single-turn inspection.
+All six found by literally running the bot (single-bot loops via
+`window.BotSystem.turn()`/`.step()`, bot-vs-bot batches via
+`BotArena.run()`, or a real user's downloaded action log) and inspecting
+`snapshot()`/`rank()`/action logs between turns — cheaper and more
+revealing than reasoning about the scoring code in the abstract. Worth
+repeating before investing further in Stage 2.5/3a: structural bugs like
+these make weight-tuning or lookahead search pointless (a smarter search
+over a broken scorer just finds the same bugs faster), and some (like the
+per-player memory bug) only surface with MULTIPLE bots sharing one browser
+tab, not single-bot or single-turn inspection.
 
 ---
 
