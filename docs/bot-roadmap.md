@@ -32,7 +32,7 @@ different concerns and neither blocks the other:
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
 | 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5; cheat-panel "🧬 Train Weights" button runs a modest preset without the console) | `js/bot-arena.js`, `js/game-ui.js` cheat panel |
-| 2.5 | Scroll-effect usage: selection targets + response scrolls | TODO (after 3a) | `js/bot-effects.js` (new) + bot-sim whitelist |
+| 2.5 | Scroll-effect usage: selection targets + response scrolls | IN PROGRESS (5/12 selection effects driven; response scrolls not started) | `js/bot-effects.js` + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
 
@@ -584,13 +584,49 @@ Build order (each step independently commit-able and arena-measurable):
      be driven by calling their `handleXClick`/modal-button `onclick`
      directly.
 
-2. **`js/bot-effects.js`** — `window.BotEffects.driveSelection(scrollName)`:
-   when a selection mode opens during a BOT cast, enumerate the valid
-   choices via the game's own selection APIs (never reimplement validity),
-   score them with simple `WEIGHTS.effect*` heuristics, and apply the best
-   one. Wire into `waitForQuiescence`: try `BotEffects.driveSelection()`
-   first, fall back to today's cancel for scrolls it doesn't know.
-   Start with the 3–4 most-drawn scrolls; expand opportunistically.
+2. **`js/bot-effects.js` — `window.BotEffects.driveSelection()` (IN PROGRESS,
+   first increment DONE):** when a selection mode opens during a BOT cast,
+   enumerate the valid choices via the game's own selection APIs (never
+   reimplement validity — calls `selectionMode.handleTileClick(tile)` etc.
+   directly, or clicks the real modal button/card a human would), score with
+   a small independent `elementNeed()` heuristic (same shape as `bot.js`'s
+   `shrineValue()`, kept separate since this file doesn't share bot.js's
+   closure), and apply the best one. Wired into `waitForQuiescence`: tries
+   `BotEffects.driveSelection()` first, falls back to today's cancel for
+   scrolls it doesn't know.
+
+   **Driven so far:** tile-flip (Heavy Stomp EARTH_SCROLL_4, Call to
+   Adventure CATACOMB_SCROLL_3 — prefers flipping a hidden tile over hiding
+   a revealed one), scorched-earth (Combust CATACOMB_SCROLL_10 — targets the
+   tile with the most stones), tile-swap (Shifting Sands EARTH_SCROLL_2 —
+   picks the two closest eligible tiles), Create (VOID_SCROLL_5 — most-needed
+   element), Scholar's Insight (VOID_SCROLL_2 — most-needed element's deck,
+   then highest-level scroll in it).
+
+   **Not yet driven** (falls through to cancel, same as before this file
+   existed): Sacrificial Pyre, Inspiring Draught, Wandering River, Control
+   the Current, Arson, Plunder, Quick Reflexes, Excavate's deferred
+   teleport — all click/modal-based per the inventory table above, next in
+   line. Telekinesis and Take Flight's destination step are drag-based (no
+   click handler to call) and need a decision on approach before starting.
+
+   **Bug found via arena testing (fixed):** the dispatcher originally
+   chained the DOM-modal checks (Create, Scholar's Insight) as `else if`
+   off the `selectionMode` switch. Scholar's Insight sets BOTH a
+   selectionMode (`type:'scholars-insight'`, cleanup-only — the actual
+   picking is modal-driven) AND the DOM modal at the same time, so the
+   switch's `default: break` silently consumed the turn before the modal
+   check ever ran — Scholar's Insight was always falling through to cancel
+   despite `driveScholarsInsight()` existing. Fixed by making the modal
+   checks independent `if`s, not `else if`s.
+
+   **Measured (BotArena, 8 games, seed 500, turnCap 150, identical seeds
+   both runs):** with `BotEffects` enabled, 0 draws became fewer (3→2,
+   pre-existing turn-cap draws unrelated to this change — same two games
+   drew in both runs) and `bFitness` rose 2.80→8.16 with `aFitness`
+   similar (-8.32→-6.93) — driving effects is a net win, not a
+   regression, on this small sample. Rerun at scale once more increments
+   land.
 3. **Response scrolls.** Hook the response window for bot players: when
    `ResponseWindowSystem` opens against a bot holding a castable response
    scroll, decide respond/pass by score (v1 heuristic: respond when the

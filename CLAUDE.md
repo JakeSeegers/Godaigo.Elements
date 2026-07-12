@@ -65,6 +65,8 @@ Order matters — later scripts depend on earlier ones.
 17b. bot-sim.js            ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
 18. bot.js                 ← window.BotSystem — utility-scored bot + optional lookahead (WEIGHTS.searchDepth, default 0);
                              Shift+R = one step, Shift+B = full turn
+18b. bot-effects.js        ← window.BotEffects — drives scroll-effect selection choices (Stage 2.5, in progress);
+                             waitForQuiescence() tries this before cancelling a selection it can't drive
 19. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
                              host's client impersonates the bot's index to drive its turns
 19b. bot-arena.js          ← window.BotArena — self-play arena (bot-vs-bot local games, weight evolution)

@@ -10,6 +10,19 @@
 (previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **BOT STAGE 2.5 (first increment): scroll-effect selection driving** —
+  `js/bot-effects.js` (new), wired into `js/bot.js`'s `waitForQuiescence()`.
+  Drives 5 of 12 selection-mode effects instead of cancelling them:
+  tile-flip (Heavy Stomp / Call to Adventure), scorched-earth (Combust),
+  tile-swap (Shifting Sands), Create, Scholar's Insight — all by calling
+  the game's own `selectionMode.handleXClick()`/modal buttons directly,
+  same philosophy as `BotState.applyAction()`. Found + fixed a real
+  dispatch bug via arena testing (Scholar's Insight's cleanup-only
+  selectionMode was silently swallowing the modal check before it ran).
+  Measured on 8 arena games (same seeds, with/without `BotEffects`): fewer
+  draws, higher fitness for the side benefiting from driven effects — no
+  regressions. Remaining 7 selection scrolls + response-scroll playing are
+  scoped in bot-roadmap.md § STAGE 2.5 but not yet built.
 - **BOT FIX: doomed piecemeal placeStone loop** — `js/bot.js`. Reported
   symptom: bots in testing "easily get stuck doing nothing or going around
   in circles." Reproduced via `BotArena.run()` bot-vs-bot batches (not
@@ -76,18 +89,19 @@ exist in code but are untested end-to-end. Docs system fully in place.
    cache, cul-de-sac freezes, hand-only planning, missing common-area
    casts/voluntary discards, anti-freeze vs shrine collection) — details
    in bot-roadmap § STAGE 3a.
-2. **IN PROGRESS: Stage 2.5 — scroll-effect usage** (`js/bot-effects.js`,
-   not yet created). Step 1 (inventory the choice space) is **DONE** — full
-   table of all 17 selection-mode/response scrolls in bot-roadmap.md §
-   STAGE 2.5, including two real gaps found while inventorying: (a)
-   `EFFECT_MODAL_IDS` is missing `'transmute-modal'`, so a bot-cast
-   Transmute modal is never detected or cleaned up; (b) Telekinesis and
-   Take Flight's destination step are drag-based, not click-based, and need
-   a decision on how the bot drives them before those two are attempted.
-   NEXT: step 2, `js/bot-effects.js`'s `driveSelection()`, starting with
-   the click-based/modal-only scrolls (11 of 17) before the two drag-based
-   ones. Each increment A/B-measured in the arena. Full plan: bot-roadmap §
-   STAGE 2.5.
+2. **IN PROGRESS: Stage 2.5 — scroll-effect usage.** Step 1 (inventory) is
+   **DONE** — full table of all 17 selection-mode/response scrolls in
+   bot-roadmap.md § STAGE 2.5. Step 2 (`js/bot-effects.js`) is **STARTED**:
+   5 of 12 selection effects driven (tile-flip, scorched-earth, tile-swap,
+   Create, Scholar's Insight), A/B-measured in the arena (fewer draws, no
+   regressions vs. baseline on identical seeds). NEXT: the remaining 7
+   click/modal-based scrolls (Sacrificial Pyre, Inspiring Draught,
+   Wandering River, Control the Current, Arson, Plunder, Quick Reflexes,
+   Excavate's deferred teleport), then decide an approach for the 2
+   drag-based ones (Telekinesis, Take Flight), then step 3 (response
+   scrolls). Also still open: the `EFFECT_MODAL_IDS` missing
+   `'transmute-modal'` bug found during inventorying. Full plan:
+   bot-roadmap § STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
 
