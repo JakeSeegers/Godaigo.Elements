@@ -39,6 +39,11 @@
         castAlreadyWon:    -120, // element already activated — no win-condition value left;
                                  // without this the bot loops forever re-casting a satisfied
                                  // pattern instead of exploring for the elements it still needs
+        castNoCredit:     -500,  // this exact scroll was cast before and its special effect
+                                 // cancelled without granting win credit (e.g. Sacrificial
+                                 // Pyre with an empty hand) — hard veto, same magnitude as
+                                 // placeNoCredit, so a still-"unactivated" element can't lure
+                                 // the bot into recasting a known no-op (see trackCastCredit())
         castLevel:           2,  // per scroll level — mild preference for big scrolls
 
         // stone placement toward a pattern
@@ -224,7 +229,36 @@
             return components.some(c => !self.activated.includes(c));
         }
         if (!el || !ELEMENTS.includes(el)) return true; // unknown/non-elemental — don't veto
+        if (mem(snap.turn.activePlayerIndex).noCreditScrolls.has(scrollName)) return false;
         return !self.activated.includes(el) && (snap.sourcePool[el] || 0) > 0;
+    }
+
+    // Verify a cast actually earned win credit — some scrolls' special
+    // effects can self-cancel on an unmet precondition (e.g. Sacrificial
+    // Pyre needs scrolls in hand) without erroring, so applyAction() reports
+    // success while self.activated never gains the element. The plan/scoring
+    // credit model only checks activated+sourcePool (see hasWinCredit,
+    // makePlan) so undetected this looks identical to "still worth casting"
+    // and the bot recasts the same no-op forever. Observed in a BotArena
+    // game: a player stuck at 0/5 elements for 200 turns, endlessly
+    // recasting FIRE_SCROLL_3 (Sacrificial Pyre) with an empty hand.
+    // preSnap must be taken BEFORE the cast so "expected" reflects what the
+    // scroll could still credit; called right after a successful cast apply.
+    function trackCastCredit(idx, preSnap, scrollName) {
+        const preSelf = me(preSnap);
+        if (!preSelf) return;
+        const def = window.SCROLL_DEFINITIONS?.[scrollName];
+        const el = def?.element;
+        const expected = el === 'catacomb'
+            ? [...new Set((def.patterns?.[0] || []).map(c => c.type))].filter(c => !preSelf.activated.includes(c))
+            : (el && ELEMENTS.includes(el) && !preSelf.activated.includes(el)) ? [el] : [];
+        if (!expected.length) return; // no credit was possible anyway — nothing to learn
+        const postSelf = me(window.BotState.snapshot());
+        if (!postSelf) return;
+        if (!expected.some(e => postSelf.activated.includes(e))) {
+            mem(idx).noCreditScrolls.add(scrollName);
+            log(`Cast ${scrollName} granted no win credit (effect cancelled?) — blacklisting for this game`);
+        }
     }
 
     // ----------------------------------------------------------------
@@ -242,7 +276,9 @@
                 const el = scrollElement(a.scroll);
                 const def = window.SCROLL_DEFINITIONS?.[a.scroll];
                 let s = WEIGHTS.castBase + WEIGHTS.castLevel * (def?.level || 0);
-                if (el && ELEMENTS.includes(el)) {
+                if (mem(snap.turn.activePlayerIndex).noCreditScrolls.has(a.scroll)) {
+                    s += WEIGHTS.castNoCredit; // effect cancelled before — hard veto, don't recast
+                } else if (el && ELEMENTS.includes(el)) {
                     const dead = (snap.sourcePool[el] || 0) <= 0;
                     if (self.activated.includes(el)) s += WEIGHTS.castAlreadyWon; // no more win credit here
                     else if (dead) s += WEIGHTS.castDeadElement;                  // no win credit
@@ -371,6 +407,7 @@
                 cursedCells: new Set(),
                 lastTurnMoveKey: null,
                 turnRepeatStreak: 0,
+                noCreditScrolls: new Set(), // scrolls whose special effect cancelled without granting win credit — see trackCastCredit()
             };
         }
         return _mem[idx];
@@ -435,7 +472,7 @@
     function makePlan(snap) {
         const self = me(snap);
         if (!self || !self.hand) return null;
-        const { cursedCells } = mem(snap.turn.activePlayerIndex);
+        const { cursedCells, noCreditScrolls } = mem(snap.turn.activePlayerIndex);
         // All 5 elements activated — no cast adds win credit anymore; don't
         // start new builds, let move-scoring's homePath term walk the bot home
         if (ELEMENTS.every(el => self.activated.includes(el))) return null;
@@ -448,6 +485,7 @@
         // often the ONLY remaining source of an unactivated element.
         const sources = new Set([...self.hand, ...self.active, ...(snap.commonArea || [])]);
         for (const name of sources) {
+            if (noCreditScrolls.has(name)) continue; // cast before, effect cancelled — don't replan it
             const def = window.SCROLL_DEFINITIONS?.[name];
             if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
             const el = def.element;
@@ -702,13 +740,23 @@
         return v;
     }
 
-    // Drop placeStone actions that can never grant win credit (see
+    // Drop placeStone/cast actions that can never grant win credit (see
     // hasWinCredit()) — search has no other way to notice a pattern is
     // pointless, since evaluateSnapshot() only sees pool/activated counts,
     // not "is this scroll's pattern even completable." Applied at every
     // ply, not just the root, so the search tree never expands through one.
+    // cast needs its own check (not hasWinCredit's element/pool logic):
+    // BotSim's simCast() unconditionally activates the element on cast (it
+    // doesn't model per-scroll special-effect preconditions like Sacrificial
+    // Pyre cancelling on an empty hand — see trackCastCredit()), so a
+    // blacklisted scroll would otherwise look like a guaranteed win-credit
+    // step to the search and get picked every time despite really being a
+    // no-op in the real game.
     function creditFilter(snap, acts) {
-        return acts.filter(a => a.type !== 'placeStone' || hasWinCredit(snap, a.scroll));
+        const noCredit = mem(snap.turn.activePlayerIndex).noCreditScrolls;
+        return acts.filter(a =>
+            (a.type !== 'placeStone' || hasWinCredit(snap, a.scroll)) &&
+            (a.type !== 'cast' || !noCredit.has(a.scroll)));
     }
 
     // Beam search: at every node, 1-ply-evaluate all children, expand only
@@ -875,7 +923,10 @@
             log(`Plan action: ${label}`);
             const r = window.BotState.applyAction(planAction);
             if (r.ok) {
-                if (planAction.type === 'cast') m.plan = null; // plan fulfilled
+                if (planAction.type === 'cast') {
+                    trackCastCredit(idx, snap, planAction.scroll);
+                    m.plan = null; // plan fulfilled
+                }
                 if (planAction.type === 'move') recordVisited(idx, planAction.x, planAction.y);
                 return planAction;
             }
@@ -965,6 +1016,7 @@
         const res = window.BotState.applyAction(action);
         if (!res.ok) { log(`Action failed: ${res.reason}`); return null; }
         if (action.type === 'move') recordVisited(idx, action.x, action.y);
+        if (action.type === 'cast') trackCastCredit(idx, snap, action.scroll);
         return action;
     }
 
