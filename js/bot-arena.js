@@ -179,10 +179,17 @@
             if (w !== null) return { winner: w, turns: turn + 1 };
 
             if (activePlayerIndex === idx) {
-                // Bot didn't end its own turn (stuck/no actions) — force it
+                // Bot didn't end its own turn (stuck/no actions) — force it.
+                // applyAction({type:'endTurn'}) reports ok:true just from
+                // clicking the button, NOT from activePlayerIndex actually
+                // advancing — a click that gets swallowed (e.g. an unresolved
+                // scroll-overflow banner, or some other gate) would otherwise
+                // look like success and this loop would silently re-run the
+                // SAME stuck player every remaining iteration up to turnCap.
                 const r = window.BotState.applyAction({ type: 'endTurn' });
-                if (!r.ok) {
-                    log(`game seed ${gameSeed}: stuck on turn ${turn} (${r.reason}) — draw`);
+                await sleep(200);
+                if (!r.ok || activePlayerIndex === idx) {
+                    log(`game seed ${gameSeed}: stuck on turn ${turn} (${r.reason || 'endTurn did not advance activePlayerIndex'}) — draw`);
                     return { winner: null, turns: turn + 1 };
                 }
                 await sleep(20);
@@ -363,8 +370,14 @@
                 if (w !== null) { result.winner = w; break; }
 
                 if (activePlayerIndex === idx) {
+                    // See the matching comment in playGame() — verify the
+                    // click actually advanced the turn, not just that it landed.
                     const r = window.BotState.applyAction({ type: 'endTurn' });
-                    if (!r.ok) { log(`spectate: stuck on turn ${turn} (${r.reason})`); break; }
+                    await sleep(200);
+                    if (!r.ok || activePlayerIndex === idx) {
+                        log(`spectate: stuck on turn ${turn} (${r.reason || 'endTurn did not advance activePlayerIndex'})`);
+                        break;
+                    }
                     await sleep(50);
                 }
             }
