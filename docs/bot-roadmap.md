@@ -137,7 +137,10 @@ Snapshot shape (version 1):
   stones: [{ x, y, type }],
   players:[{ index, x, y, color,
              pool: {earth,water,fire,wind,void},           // cap 5 each
-             hand: [names] | null,                         // null for opponents (hidden)
+             hand: [names] | null,                         // null for opponents (name/pattern hidden)
+             handElements: [elements],                     // public even for opponents — each hand
+                                                             // scroll's ELEMENT only (matches the opponent
+                                                             // panel UI: icon per card, no name/pattern)
              handCount, activeCount,
              active: [names],                              // public
              activated: [elements] }]                      // public, win progress

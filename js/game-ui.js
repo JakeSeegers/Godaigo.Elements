@@ -834,14 +834,33 @@
                 card.appendChild(stonesDiv);
 
 
-                // Scrolls summary (hand count only - hand contents are private)
+                // Scrolls summary: hand count + each scroll's ELEMENT only (name/
+                // pattern stay private — element type is visible, same as a
+                // face-down card showing its suit but not its rank).
                 const handSize = scrollData.hand ? scrollData.hand.size : 0;
                 const activeSize = scrollData.active ? scrollData.active.size : 0;
 
                 const scrollsSummary = document.createElement('div');
                 scrollsSummary.className = 'opponent-scrolls-summary';
-                scrollsSummary.textContent = `Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''} (hidden)`;
+                scrollsSummary.textContent = `Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''}`;
                 card.appendChild(scrollsSummary);
+
+                if (handSize > 0 && scrollData.hand) {
+                    const handElementsDiv = document.createElement('div');
+                    handElementsDiv.className = 'opponent-hand-elements';
+                    scrollData.hand.forEach(scrollName => {
+                        const element = spellSystem.getScrollElement(scrollName);
+                        const elementIcon = document.createElement('img');
+                        elementIcon.src = element === 'catacomb'
+                            ? 'images/Catacomb.png' + IMG_V
+                            : (STONE_TYPES[element]?.img || '');
+                        elementIcon.className = 'element-icon-sm';
+                        elementIcon.alt = element || 'unknown';
+                        elementIcon.title = element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown';
+                        handElementsDiv.appendChild(elementIcon);
+                    });
+                    card.appendChild(handElementsDiv);
+                }
 
                 // Active scrolls (visible to opponents)
                 if (activeSize > 0) {

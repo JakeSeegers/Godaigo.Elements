@@ -43,7 +43,10 @@
                 x: +p.x.toFixed(1), y: +p.y.toFixed(1),
                 color: p.color,
                 pool: { ...(playerPools[i] || { earth:0, water:0, fire:0, wind:0, void:0 }) },
-                hand:       isSelf && scrolls ? [...scrolls.hand]   : null, // opponents' hands hidden
+                hand:       isSelf && scrolls ? [...scrolls.hand]   : null, // opponents' hand SCROLLS hidden...
+                handElements: scrolls          // ...but each hand scroll's ELEMENT is public (matches the
+                    ? [...scrolls.hand].map(name => window.spellSystem.getScrollElement(name))
+                    : [],                       // opponent panel — see game-ui.js updateOpponentPanel())
                 handCount:  scrolls ? scrolls.hand.size   : 0,
                 active:     scrolls ? [...scrolls.active] : [],             // active area is public
                 activeCount: scrolls ? scrolls.active.size : 0,

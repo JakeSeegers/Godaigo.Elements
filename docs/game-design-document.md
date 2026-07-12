@@ -37,8 +37,8 @@ Scrolls can exist in three locations:
 ### Scroll Visibility
 
 #### In Hand
-- Only visible to the owning player
-- Full scroll information shown (name, element, description, pattern requirements)
+- **Owner sees:** Full scroll information (name, element, description, pattern requirements)
+- **Opponents see:** Each scroll's element only (shown as an icon) — name and pattern stay hidden
 
 #### In Active Area
 - **Owner sees:** Full scroll information including shape layout requirements

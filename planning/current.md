@@ -10,6 +10,33 @@
 (previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
 
 ## Last Committed Work
+- **BOT FIX: spectator match dying after turn 1 (stale isMultiplayer identity)** —
+  `js/bot-arena.js`. `BotArena.spectate()`/`playGame()` never reset
+  `isMultiplayer`/`myPlayerIndex` before starting a LOCAL match — they relied
+  entirely on a prior online game having been left cleanly. If that leave
+  didn't fully complete (its `remove_player` RPC can throw), a local bot
+  match inherited a stale `isMultiplayer=true` with a mismatched
+  `myPlayerIndex`, which made `updateEndTurnButtonVisibility()` gate the
+  end-turn button on real-multiplayer turn ownership instead of "always
+  enabled locally" — silently disabling it and killing the match the instant
+  a bot force-ended its turn. Reported symptom: a real 3-bot spectator match
+  ending after turn 1 ("stuck on turn 0 (end-turn button unavailable)").
+  Fixed with `ensureLocalMode()`, called at the start of `playGame()` and
+  `spectate()` (covers `run()`/`evolve()` too). Verified by staging the
+  exact stale state and confirming the match dies at turn 1 without the fix,
+  runs the full turn cap with it.
+- **RULES CHANGE: opponent hand scrolls show element type, not just count** —
+  `js/game-ui.js` (`updateOpponentPanel()`), `js/bot-state.js` (`snapshot()`),
+  `css/styles.css`. Previously the opponent panel showed "Hand: N scrolls
+  (hidden)" with zero breakdown; now each hand scroll renders as an element
+  icon (name/pattern still hidden) — same idea as a card game showing suit
+  but not rank. `BotState.snapshot()` now exposes `players[i].handElements`
+  (public for all players) alongside the existing `hand` (still `null` for
+  opponents) and `handCount`. Not yet consumed by any scoring logic — this
+  is the observability half of the "bot should react to opponent threats"
+  discussion (see bot-roadmap.md), the evaluator half is unscoped/unbuilt.
+  Verified: snapshot correctly reports `handElements` without leaking scroll
+  names, UI renders one icon per opponent hand scroll.
 - **RULES CHANGE: player tiles are off-limits for stones/opponent movement** —
   `js/game-core.js`, `js/game-ui.js`, `js/bot.js`, `js/bot-sim.js`. Two new
   rules: (1) stones can never be placed on a player tile or its bridge hexes
@@ -158,6 +185,36 @@ exist in code but are untested end-to-end. Docs system fully in place.
    bot-roadmap § STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
+4. **NOT STARTED: opponent-awareness (scoped, not built).** Two confirmed
+   gaps found by direct code inspection: (a) the bot has zero awareness that
+   catacomb/Freedom-buffed shrine centers let it teleport for free —
+   `bot-state.js` explicitly lists "catacomb teleports" as not yet
+   enumerated, no `{type:'teleport',...}` action exists; (b) the bot never
+   voluntarily repositions scrolls for strategic reasons (e.g. discarding to
+   common area specifically to bump/deny a scroll an opponent's board could
+   currently cast — `discardToCommonArea()` sends the replaced scroll to the
+   bottom of its deck, a genuine denial). Agreed direction for (b): rather
+   than a one-off scoring bonus, generalize `evaluateSnapshot()` into an
+   opponent-threat-aware evaluator (loop `snap.players` for every OTHER
+   player, not just `forIndex`) — this generalizes to future opponent-aware
+   tactics for free and reuses `bot-sim.js`'s existing
+   `checkPattern(snap, scrollName, playerIndex)` primitive (already
+   parameterized for any player, just unused for this). Data readiness: pool/
+   active/activated are already public per-player in `snapshot()`; hand
+   scroll ELEMENT types are now also public (`handElements`, added this
+   session — see "Last Committed Work") while names/patterns correctly stay
+   hidden. Real gap before this can be validated past 2 players:
+   `playGame()`/`run()`/`evolve()` are hardcoded to 2 players (`startGame(2)`,
+   `placeBothPlayerTiles()`) — only `spectate()` supports 2-5p, and it isn't
+   wired for weight training (shared WEIGHTS, no per-seat comparison).
+   Proposed order: (1) write the threat term generically over all opponents
+   now — free, data's already there; (2) tune/validate at 2p via existing
+   `run()`; (3) separately generalize the training loop to N players once
+   the term needs real 3-5p validation. Full true adversarial
+   (minimax-style, simulate the opponent's actual next turn) is a larger
+   escalation flagged for LATER, only if the static evaluator proves
+   insufficient — full always-on lookahead already lost a head-to-head
+   series once (STAGE 3a), so scope creep here is a known risk.
 
 ### 1. Tutorial — Earth Shrine Step (MEDIUM, tutorial-mode.js)
 After step 4 (scroll found), the tutorial should:
@@ -220,4 +277,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-11 (bot Stage 2: forward model + search)*
+*Last updated: 2026-07-12 (stone-rest rule, Freedom exploit fix, spectator-match stale-identity fix, opponent hand element visibility)*
