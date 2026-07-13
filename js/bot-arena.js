@@ -114,9 +114,28 @@
     // "stuck on turn 0 (end-turn button unavailable)". Called from
     // playMatch() itself (not just spectate()) so run()/evolve() are covered
     // too, regardless of which top-level entry point started the match.
+    //
+    // Resetting the JS variables alone isn't enough, though: the end-turn
+    // BUTTON's actual DOM `disabled` attribute is only ever refreshed by
+    // updateEndTurnButtonVisibility() itself — nothing calls that as a side
+    // effect of an assignment to isMultiplayer. If the button was left
+    // disabled by whatever real state the tab was in right before this
+    // match started (e.g. a real multiplayer game where it wasn't this
+    // client's turn), it stays disabled — applyAction('endTurn')
+    // (bot-state.js) checks the raw DOM property, not isMultiplayer —
+    // and the very first forced end-turn fails, which playMatch() treats
+    // as "stuck" and ends the WHOLE match after just one turn. This is
+    // specifically why "🔁 Restart bot game without player" (the only
+    // caller that ever starts a match from an EXISTING session rather than
+    // a fresh page load) could still die after turn 1 even with
+    // isMultiplayer/myPlayerIndex correctly reset — headless testing never
+    // catches it because a freshly loaded page never has a stale-disabled
+    // button to begin with. Force a DOM refresh right here instead of
+    // relying on some other code path to do it eventually.
     function ensureLocalMode() {
         if (typeof isMultiplayer !== 'undefined') isMultiplayer = false;
         if (typeof myPlayerIndex !== 'undefined') myPlayerIndex = null;
+        if (typeof updateEndTurnButtonVisibility === 'function') updateEndTurnButtonVisibility();
     }
 
     // ----------------------------------------------------------------
