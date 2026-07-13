@@ -560,6 +560,18 @@
         const unsuppressJoytone = suppressJoytone();
         window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
 
+        // Every population member is tracked as {id, w, parentIds} so a UI
+        // can show a stable roster across generations, not just a bare
+        // fitness-number array: id is assigned once when a table is first
+        // created (seed, mutation, or crossover child) and an ELITE keeps
+        // its id when carried over unchanged into the next generation — a
+        // fresh mutation/crossover child always gets a NEW id and records
+        // parentIds (empty for a seed/pure mutation-of-one, [idA, idB] for
+        // a crossover child) so lineage can be shown. Purely a display
+        // concern — ids never affect selection/breeding logic itself.
+        let _nextPopId = 1;
+        function newMember(w, parentIds) { return { id: _nextPopId++, w, parentIds: parentIds || [] }; }
+
         // opts.seedWeights (0-2 uploaded/carried-over weight tables) seeds
         // the initial population instead of the live WEIGHTS. With exactly
         // 2 seeds, the rest of the population is bred via crossover between
@@ -568,17 +580,17 @@
         // generation's own winners. With 0 or 1, behaves exactly as before
         // (mutations of the single available table).
         const seeds = (opts.seedWeights && opts.seedWeights.length) ? opts.seedWeights : [{ ...window.BotSystem.WEIGHTS }];
-        let population = [...seeds];
+        let population = seeds.map(w => newMember(w));
         while (population.length < popSize) {
             if (seeds.length >= 2) {
                 const pa = seeds[Math.floor(rng() * seeds.length)];
                 const pb = seeds[Math.floor(rng() * seeds.length)];
-                population.push(mutate(pa === pb ? pa : crossover(pa, pb, rng), rng));
+                population.push(newMember(mutate(pa === pb ? pa : crossover(pa, pb, rng), rng)));
             } else {
-                population.push(mutate(seeds[0], rng));
+                population.push(newMember(mutate(seeds[0], rng)));
             }
         }
-        let champion = population[0];
+        let champion = population[0].w;
 
         try {
             for (let gen = 0; gen < generations && !_stopRequested; gen++) {
@@ -590,7 +602,7 @@
                             if (visual && typeof updateStatus === 'function') {
                                 updateStatus(`🧬 Evolve gen ${gen + 1}/${generations}: pop#${i} vs pop#${j}`);
                             }
-                            const r = await _playSeries(population[i], population[j], gamesPerPair, seed * 100 + gen * 10 + i + j, { ...opts, visual });
+                            const r = await _playSeries(population[i].w, population[j].w, gamesPerPair, seed * 100 + gen * 10 + i + j, { ...opts, visual });
                             fitness[i] += r.aFitness;
                             fitness[j] += r.bFitness;
                         }
@@ -599,7 +611,7 @@
                     const gamesPerGen = opts.gamesPerGen ?? popSize * 3;
                     for (let g = 0; g < gamesPerGen && !_stopRequested; g++) {
                         const idxs = sampleDistinct(population.length, nPlayers, rng);
-                        const weightsPerPlayer = idxs.map(i => population[i]);
+                        const weightsPerPlayer = idxs.map(i => population[i].w);
                         const gameSeed = seed * 100000 + gen * 1000 + g;
                         if (visual && typeof updateStatus === 'function') {
                             updateStatus(`🧬 Evolve gen ${gen + 1}/${generations}, game ${g + 1}/${gamesPerGen}: pop ${idxs.join(',')}`);
@@ -615,31 +627,39 @@
                 }
 
                 const ranked = population
-                    .map((w, i) => ({ w, f: fitness[i] }))
+                    .map((p, i) => ({ id: p.id, w: p.w, parentIds: p.parentIds, f: fitness[i] }))
                     .sort((a, b) => b.f - a.f);
                 log(`generation ${gen + 1}/${generations} fitness:`, ranked.map(r => r.f).join(', '));
                 if (typeof opts.onGeneration === 'function') {
-                    try { opts.onGeneration(gen + 1, generations, ranked.map(r => r.f)); } catch (e) { /* UI callback errors never abort training */ }
+                    // 3rd arg (bare fitness numbers) kept exactly as before for
+                    // existing callers; 4th arg is the richer per-member roster
+                    // (id/fitness/lineage/weights, already best-first) for a UI
+                    // that wants to show more than just numbers.
+                    try {
+                        opts.onGeneration(gen + 1, generations, ranked.map(r => r.f),
+                            ranked.map(r => ({ id: r.id, fitness: r.f, parentIds: r.parentIds, w: r.w })));
+                    } catch (e) { /* UI callback errors never abort training */ }
                 }
 
                 champion = ranked[0].w;
                 try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(champion)); } catch (e) {}
                 log('champion weights (paste into bot.js DEFAULT_WEIGHTS to make permanent):\n' + JSON.stringify(champion));
 
-                // Pure elitism: the top 2 survive completely unchanged, so a
-                // generation can never lose the best table found so far.
-                // The rest of the population is bred from a slightly wider
-                // pool (top 3) via crossover + mutation, so two different
-                // good strategies can combine instead of only mutating apart
-                // from a single elite each.
-                const elites = [ranked[0].w, ranked[1].w];
-                const breedingPool = ranked.slice(0, Math.min(3, ranked.length)).map(r => r.w);
-                population = [...elites];
+                // Pure elitism: the top 2 survive completely unchanged (same
+                // id — they ARE the same table), so a generation can never
+                // lose the best table found so far. The rest of the
+                // population is bred from a slightly wider pool (top 3) via
+                // crossover + mutation — a fresh id each, with parentIds set
+                // — so two different good strategies can combine instead of
+                // only mutating apart from a single elite each.
+                const elites = [ranked[0], ranked[1]];
+                const breedingPool = ranked.slice(0, Math.min(3, ranked.length));
+                population = elites.map(r => ({ id: r.id, w: r.w, parentIds: r.parentIds }));
                 while (population.length < popSize) {
                     const pa = breedingPool[Math.floor(rng() * breedingPool.length)];
                     const pb = breedingPool[Math.floor(rng() * breedingPool.length)];
-                    const child = pa === pb ? pa : crossover(pa, pb, rng);
-                    population.push(mutate(child, rng));
+                    const child = pa.id === pb.id ? pa.w : crossover(pa.w, pb.w, rng);
+                    population.push(newMember(mutate(child, rng), pa.id === pb.id ? [pa.id] : [pa.id, pb.id]));
                 }
             }
         } finally {

@@ -4892,9 +4892,13 @@ document.getElementById('undo-move').onclick = function() {
             });
         })();
 
-        // ─── Bot Training panel ────────────────────────────────────────────
+        // ─── Bot Training window ────────────────────────────────────────────
         // A lighter, player-facing sibling of the dev cheat panel's Train
-        // Weights buttons: pick a player count and a speed, press Start.
+        // Weights buttons: pick a player count and a speed, press Start —
+        // plus a live roster of the current population, a generation-by-
+        // generation log, and a click-through weight diagram per bot, so
+        // the "what is actually happening" question has a real answer
+        // on-screen instead of just a progress bar.
         // Activate: click the Profile modal's header ("Profile" —
         // <h2 class="gami-title">, always that exact text regardless of
         // which tab is active, see gamification-ui.js) 5 times within 3
@@ -4904,40 +4908,93 @@ document.getElementById('undo-move').onclick = function() {
             let clickTimer = null;
             const state = { n: 2, watchable: true, generations: 5 };
 
+            // Weight groupings mirror the section comments in bot.js's
+            // DEFAULT_WEIGHTS — used purely for the drill-down diagram, so
+            // a 50-number table reads as "these are about movement" instead
+            // of one long undifferentiated list.
+            const WEIGHT_CATEGORIES = [
+                { name: 'Casting', keys: ['castBase', 'castUnactivated', 'castDeadElement', 'castAlreadyWon', 'castNoCredit', 'castLevel'] },
+                { name: 'Stone placement', keys: ['placeBase', 'placeProgress', 'placeUnactivated', 'placeNoCredit', 'placeDoomed', 'planDeficitPenalty'] },
+                { name: 'Movement', keys: ['moveBase', 'moveShrineValue', 'moveApPenalty', 'moveExplore', 'moveExploreGradient', 'moveExplorePath', 'moveRevisitPenalty', 'moveFixation'] },
+                { name: 'Breaking a stone', keys: ['breakStoneBase', 'breakStoneApPenalty'] },
+                { name: 'Returning home', keys: ['moveReturnHome'] },
+                { name: 'Ending the turn', keys: ['endTurnBase', 'endTurnOnShrine', 'endTurnLowAp'] },
+                { name: 'Discarding', keys: ['discardBase', 'discardActivated', 'discardDeadElement', 'discardLevel', 'discardVoluntary', 'discardResponseOnly'] },
+                { name: 'Transmute', keys: ['transmuteTargetAP'] },
+                { name: 'Placement phase', keys: ['placeTileBase', 'placeTileCentroidPenalty'] },
+                { name: 'Shrine valuation', keys: ['shrineNeed', 'shrineUnactivated', 'shrineDeadSource'] },
+                { name: 'Lookahead search (set by Bot Brain, not trained)', keys: ['searchDepth', 'searchBreadth', 'searchHybrid'] },
+                { name: 'State evaluation (used only when search is active)', keys: ['evalWin', 'evalActivated', 'evalStoneNeeded', 'evalStone', 'evalScrollHeld', 'evalAp', 'evalUnsimCast', 'evalHiddenDist', 'evalHomeDist'] },
+                { name: 'Opponent awareness', keys: ['evalOpponentThreat', 'evalCommonThreat'] },
+            ];
+
+            // Small inline "(?)" tooltip — native title attribute, no extra
+            // wiring. Used next to jargon (Population, Generation, Fitness, ...).
+            function infoIcon(text) {
+                const s = document.createElement('span');
+                s.textContent = ' ⓘ';
+                s.title = text;
+                s.style.cssText = 'color:#6ef;cursor:help;font-size:11px;';
+                return s;
+            }
+
             function openBotTrainingPanel() {
-                const existing = document.getElementById('bot-training-panel');
+                const existing = document.getElementById('bot-training-overlay');
                 if (existing) { existing.remove(); return; }
                 if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
 
-                const panel = document.createElement('div');
-                panel.id = 'bot-training-panel';
-                Object.assign(panel.style, {
-                    position: 'fixed', bottom: '60px', right: '16px',
-                    background: '#1a1a2e', border: '1px solid #444', borderRadius: '8px',
-                    padding: '10px 14px', zIndex: '9999', display: 'flex',
-                    flexDirection: 'column', gap: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-                    minWidth: '240px', maxWidth: '280px',
+                // ── Shell: full-screen overlay + centered modal box ──────────
+                const overlay = document.createElement('div');
+                overlay.id = 'bot-training-overlay';
+                Object.assign(overlay.style, {
+                    position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.6)',
+                    zIndex: '9999', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 });
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+                const modal = document.createElement('div');
+                Object.assign(modal.style, {
+                    background: '#1a1a2e', border: '1px solid #444', borderRadius: '10px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.7)', width: 'min(920px, 94vw)',
+                    maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                });
+                overlay.appendChild(modal);
+
+                const header = document.createElement('div');
+                header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #333;flex-shrink:0;';
                 const title = document.createElement('div');
                 title.textContent = '🧬 Bot Training';
-                title.style.cssText = 'font-size:13px;font-weight:bold;color:#eee;';
-                panel.appendChild(title);
+                title.style.cssText = 'font-size:15px;font-weight:bold;color:#eee;';
+                header.appendChild(title);
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = '✕';
+                closeBtn.style.cssText = 'background:none;border:1px solid #555;border-radius:5px;color:#ccc;cursor:pointer;padding:3px 10px;font-size:13px;';
+                closeBtn.onclick = () => overlay.remove();
+                header.appendChild(closeBtn);
+                modal.appendChild(header);
+
+                const body = document.createElement('div');
+                body.style.cssText = 'padding:14px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;';
+                modal.appendChild(body);
 
                 const desc = document.createElement('div');
-                desc.textContent = 'Trains the bots you play against. "Repeat" below sets how many generations to run — more generations means a longer run. New weights are only kept if they beat the current ones in a confirmation match at the end.';
+                desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match at the end.';
                 desc.style.cssText = 'font-size:11px;color:#999;';
-                panel.appendChild(desc);
+                body.appendChild(desc);
 
-                // A row of mutually-exclusive pick buttons for one setting —
-                // shared render logic for the player-count and speed rows below.
-                function makeChoiceRow(label, options, getValue, setValue) {
+                // ── Controls: Players / Speed / Repeat ───────────────────────
+                const controls = document.createElement('div');
+                controls.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+                body.appendChild(controls);
+
+                function makeChoiceRow(label, options, getValue, setValue, help) {
                     const row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                    row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
                     const lbl = document.createElement('span');
                     lbl.textContent = label;
-                    lbl.style.cssText = 'font-size:12px;color:#aaa;min-width:44px;';
+                    lbl.style.cssText = 'font-size:12px;color:#aaa;min-width:52px;';
                     row.appendChild(lbl);
+                    if (help) row.appendChild(infoIcon(help));
                     const buttons = options.map(opt => {
                         const b = document.createElement('button');
                         b.textContent = opt.text;
@@ -4960,7 +5017,7 @@ document.getElementById('undo-move').onclick = function() {
                         };
                     }
                     repaint();
-                    panel.appendChild(row);
+                    controls.appendChild(row);
                 }
 
                 // startBtnRef is read inside makeChoiceRow's onclick above, so it
@@ -4973,7 +5030,8 @@ document.getElementById('undo-move').onclick = function() {
 
                 makeChoiceRow('Players:',
                     [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })),
-                    () => state.n, (v) => { state.n = v; });
+                    () => state.n, (v) => { state.n = v; },
+                    'How many bots play each training game. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game.');
 
                 makeChoiceRow('Speed:', [
                     { value: true, text: 'Watchable', title: 'Normal pacing — watch the board play out' },
@@ -4987,11 +5045,12 @@ document.getElementById('undo-move').onclick = function() {
                 // button shows live games-done/total once running).
                 makeChoiceRow('Repeat:',
                     [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
-                    () => state.generations, (v) => { state.generations = v; });
+                    () => state.generations, (v) => { state.generations = v; },
+                    'Number of GENERATIONS to run, not total games — each generation plays many games on its own (a population of 6 plays ~18 games per generation by default), so Repeat=20 is roughly 20x that many games, not 20 games.');
 
                 const progressText = document.createElement('div');
                 progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
-                panel.appendChild(progressText);
+                body.appendChild(progressText);
 
                 function fmtTime(s) { return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`; }
                 function renderProgress(p) {
@@ -5002,9 +5061,220 @@ document.getElementById('undo-move').onclick = function() {
                     progressText.textContent = `${genLine} — games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtTime(elapsedS)}`;
                 }
 
+                const actionRow = document.createElement('div');
+                actionRow.style.cssText = 'display:flex;gap:8px;';
+                body.appendChild(actionRow);
+
                 const startBtn = document.createElement('button');
                 startBtn.textContent = 'Start Training';
                 startBtn.style.cssText = 'padding:6px 10px;background:#2d4a2d;color:#eee;border:1px solid #5a5;border-radius:5px;cursor:pointer;font-size:12px;';
+                actionRow.appendChild(startBtn);
+
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = 'Stop';
+                stopBtn.style.cssText = 'padding:5px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:12px;';
+                stopBtn.onclick = () => {
+                    if (window.BotArena?.isRunning()) { window.BotArena.stop(); updateStatus('Stopping after the current generation…'); }
+                    else updateStatus('No training run in progress');
+                };
+                actionRow.appendChild(stopBtn);
+
+                // ── Live roster + generation log + weight-diagram drill-down ──
+                // Shared by BOTH Start Training and Start Breeding below —
+                // whichever one is running (or most recently ran) populates
+                // this. Population membership persists id/lineage across
+                // generations (see bot-arena.js's newMember()/elites), so the
+                // roster can show "same bot survived" vs "freshly bred" from
+                // one generation to the next instead of just bare numbers.
+                const insightRow = document.createElement('div');
+                insightRow.style.cssText = 'display:flex;gap:14px;flex-wrap:wrap;';
+                body.appendChild(insightRow);
+
+                const rosterCol = document.createElement('div');
+                rosterCol.style.cssText = 'flex:1 1 260px;min-width:240px;display:flex;flex-direction:column;gap:6px;';
+                insightRow.appendChild(rosterCol);
+
+                const rosterHeader = document.createElement('div');
+                rosterHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                rosterHeader.textContent = 'Population';
+                rosterHeader.appendChild(infoIcon('The pool of weight-tables currently competing. The top 2 by fitness survive unchanged into the next generation ("elite"); the rest are bred (crossover of the top 3, then mutated) and get a new #id. Click a row to see its weights.'));
+                rosterCol.appendChild(rosterHeader);
+
+                const rosterList = document.createElement('div');
+                rosterList.style.cssText = 'display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto;';
+                rosterCol.appendChild(rosterList);
+
+                const genCol = document.createElement('div');
+                genCol.style.cssText = 'flex:1 1 220px;min-width:200px;display:flex;flex-direction:column;gap:6px;';
+                insightRow.appendChild(genCol);
+
+                const genHeader = document.createElement('div');
+                genHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                genHeader.textContent = 'Generations';
+                genHeader.appendChild(infoIcon('One line per generation completed so far in the current run: which #id came out on top and its fitness. Fitness is win(±1) plus small bonuses for win-progress and avoiding stalls — not a plain score, so small differences are normal.'));
+                genCol.appendChild(genHeader);
+
+                const genLogEl = document.createElement('div');
+                genLogEl.style.cssText = 'display:flex;flex-direction:column-reverse;gap:2px;max-height:220px;overflow-y:auto;font-size:11px;color:#aaa;font-family:monospace;';
+                genCol.appendChild(genLogEl);
+
+                const detailCol = document.createElement('div');
+                detailCol.style.cssText = 'flex:1 1 320px;min-width:280px;display:none;flex-direction:column;gap:6px;';
+                insightRow.appendChild(detailCol);
+
+                const detailHeader = document.createElement('div');
+                detailHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;display:flex;align-items:center;justify-content:space-between;';
+                detailCol.appendChild(detailHeader);
+
+                const detailBody = document.createElement('div');
+                detailBody.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;font-size:11px;';
+                detailCol.appendChild(detailBody);
+
+                // ── Roster/generation state for the CURRENT run ──────────────
+                let currentRoster = [];   // latest members array (id, fitness, parentIds, w), best-first
+                let genLog = [];          // [{gen, total, bestId, bestFitness}]
+                let seenIds = new Set();  // ids ever shown this run — lets the roster mark "new this gen"
+                let selectedMemberId = null;
+
+                function resetInsights() {
+                    currentRoster = [];
+                    genLog = [];
+                    seenIds = new Set();
+                    selectedMemberId = null;
+                    rosterList.innerHTML = '';
+                    genLogEl.innerHTML = '';
+                    detailCol.style.display = 'none';
+                }
+
+                function renderRoster() {
+                    rosterList.innerHTML = '';
+                    if (!currentRoster.length) {
+                        const empty = document.createElement('div');
+                        empty.textContent = 'No run in progress — start training or breeding to see the population here.';
+                        empty.style.cssText = 'font-size:11px;color:#777;font-style:italic;';
+                        rosterList.appendChild(empty);
+                        return;
+                    }
+                    const maxFitness = Math.max(...currentRoster.map(m => m.fitness), 1);
+                    for (const m of currentRoster) {
+                        const row = document.createElement('div');
+                        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;cursor:pointer;` +
+                            `background:${m.id === selectedMemberId ? '#2d4a4a' : '#22223a'};border:1px solid ${m.id === selectedMemberId ? '#6ef' : '#333'};`;
+                        row.onclick = () => { selectedMemberId = m.id; renderRoster(); renderDetail(); };
+
+                        const idEl = document.createElement('div');
+                        idEl.textContent = `#${m.id}`;
+                        idEl.style.cssText = 'font-size:11px;color:#eee;font-weight:bold;min-width:28px;';
+                        row.appendChild(idEl);
+
+                        const barWrap = document.createElement('div');
+                        barWrap.style.cssText = 'flex:1;background:#111;border-radius:3px;height:10px;overflow:hidden;position:relative;';
+                        const bar = document.createElement('div');
+                        const barPct = maxFitness !== 0 ? Math.max(0, Math.min(100, (m.fitness / maxFitness) * 100)) : 0;
+                        bar.style.cssText = `height:100%;width:${barPct}%;background:${m.fitness >= 0 ? '#4a8' : '#a44'};`;
+                        barWrap.appendChild(bar);
+                        row.appendChild(barWrap);
+
+                        const fitEl = document.createElement('div');
+                        fitEl.textContent = m.fitness.toFixed(1);
+                        fitEl.style.cssText = 'font-size:11px;color:#ccc;min-width:34px;text-align:right;';
+                        row.appendChild(fitEl);
+
+                        // Check "already seen" FIRST — an elite that was
+                        // originally bred several generations ago must show
+                        // as "surviving," not re-show its birth lineage every
+                        // generation as if it had just been bred again.
+                        const lineageEl = document.createElement('div');
+                        lineageEl.style.cssText = 'font-size:10px;color:#888;min-width:64px;text-align:right;';
+                        lineageEl.textContent = seenIds.has(m.id) ? 'elite (surviving)'
+                            : (m.parentIds && m.parentIds.length === 2) ? `bred #${m.parentIds[0]}×#${m.parentIds[1]}`
+                            : (m.parentIds && m.parentIds.length === 1) ? `mutated #${m.parentIds[0]}`
+                            : 'seed';
+                        row.appendChild(lineageEl);
+
+                        rosterList.appendChild(row);
+                        seenIds.add(m.id);
+                    }
+                }
+
+                function renderGenLog() {
+                    genLogEl.innerHTML = '';
+                    for (const g of genLog) {
+                        const line = document.createElement('div');
+                        line.textContent = `gen ${g.gen}/${g.total} — best: #${g.bestId} (${g.bestFitness.toFixed(1)})`;
+                        genLogEl.appendChild(line);
+                    }
+                }
+
+                function weightBar(key, value, baseline) {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                    const keyEl = document.createElement('div');
+                    keyEl.textContent = key;
+                    keyEl.style.cssText = 'width:150px;flex-shrink:0;color:#aaa;font-family:monospace;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+                    row.appendChild(keyEl);
+
+                    const diffPct = baseline !== 0 ? ((value - baseline) / Math.abs(baseline)) * 100 : (value === 0 ? 0 : 100);
+                    const barWrap = document.createElement('div');
+                    barWrap.style.cssText = 'flex:1;background:#111;border-radius:3px;height:9px;overflow:hidden;';
+                    const bar = document.createElement('div');
+                    const width = Math.min(100, Math.abs(diffPct));
+                    const color = diffPct > 0.5 ? '#4a8' : diffPct < -0.5 ? '#a44' : '#555';
+                    bar.style.cssText = `height:100%;width:${width}%;background:${color};`;
+                    barWrap.appendChild(bar);
+                    row.appendChild(barWrap);
+
+                    const valEl = document.createElement('div');
+                    valEl.textContent = `${value} (base ${baseline}, ${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(0)}%)`;
+                    valEl.style.cssText = 'width:130px;flex-shrink:0;color:#ccc;font-family:monospace;font-size:10px;text-align:right;';
+                    row.appendChild(valEl);
+                    return row;
+                }
+
+                function renderDetail() {
+                    const member = currentRoster.find(m => m.id === selectedMemberId);
+                    if (!member) { detailCol.style.display = 'none'; return; }
+                    detailCol.style.display = 'flex';
+                    detailHeader.innerHTML = '';
+                    const label = document.createElement('span');
+                    label.textContent = `#${member.id} weights (vs. hand-tuned default)`;
+                    detailHeader.appendChild(label);
+                    const closeDetail = document.createElement('button');
+                    closeDetail.textContent = '✕';
+                    closeDetail.style.cssText = 'background:none;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;padding:1px 7px;font-size:11px;';
+                    closeDetail.onclick = () => { selectedMemberId = null; renderRoster(); renderDetail(); };
+                    detailHeader.appendChild(closeDetail);
+
+                    detailBody.innerHTML = '';
+                    const defaults = window.BotSystem.DEFAULT_WEIGHTS;
+                    for (const cat of WEIGHT_CATEGORIES) {
+                        const keysPresent = cat.keys.filter(k => member.w[k] !== undefined);
+                        if (!keysPresent.length) continue;
+                        const catHeader = document.createElement('div');
+                        catHeader.textContent = cat.name;
+                        catHeader.style.cssText = 'font-size:10px;color:#789;text-transform:uppercase;letter-spacing:0.03em;margin-top:4px;';
+                        detailBody.appendChild(catHeader);
+                        for (const k of keysPresent) {
+                            detailBody.appendChild(weightBar(k, member.w[k], defaults[k]));
+                        }
+                    }
+                }
+
+                // Wired into evolve()'s onGeneration (4th arg — richer roster
+                // data, see bot-arena.js) by both Start Training and Start
+                // Breeding below, so either flow feeds the same live views.
+                function handleGeneration(gen, total, fitnessArr, members) {
+                    currentRoster = members;
+                    genLog.push({ gen, total, bestId: members[0].id, bestFitness: members[0].fitness });
+                    renderRoster();
+                    renderGenLog();
+                    if (selectedMemberId != null) renderDetail(); // keep the open diagram live
+                }
+
+                const breedSep = document.createElement('div');
+                breedSep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
+                body.appendChild(breedSep);
+
                 startBtn.onclick = async () => {
                     if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
                     if (!await stopAnyRunningBotJob()) return;
@@ -5012,10 +5282,13 @@ document.getElementById('undo-move').onclick = function() {
                     startBtn.disabled = true;
                     if (breedBtn) breedBtn.disabled = true;
                     startBtn.textContent = 'Training…';
+                    resetInsights();
+                    renderRoster();
                     try {
                         const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10 };
                         const { improved, record } = await runWeightTraining(preset, renderProgress, {
                             nPlayers: state.n, visual: state.watchable,
+                            onGeneration: handleGeneration,
                         });
                         progressText.style.display = 'none';
                         updateStatus(improved
@@ -5032,16 +5305,6 @@ document.getElementById('undo-move').onclick = function() {
                         startBtn.textContent = 'Start Training';
                     }
                 };
-                panel.appendChild(startBtn);
-
-                const stopBtn = document.createElement('button');
-                stopBtn.textContent = 'Stop';
-                stopBtn.style.cssText = 'padding:5px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:12px;';
-                stopBtn.onclick = () => {
-                    if (window.BotArena?.isRunning()) { window.BotArena.stop(); updateStatus('Stopping after the current generation…'); }
-                    else updateStatus('No training run in progress');
-                };
-                panel.appendChild(stopBtn);
 
                 // ── Breed from champion files ────────────────────────────────
                 // Separate flow from Start Training above: no confirm-vs-
@@ -5055,19 +5318,15 @@ document.getElementById('undo-move').onclick = function() {
                 // files seed it directly, any remaining slots are crossover-
                 // bred from those seeds (or mutated from current WEIGHTS if
                 // nothing was uploaded).
-                const breedSep = document.createElement('div');
-                breedSep.style.cssText = 'border-top:1px solid #444;margin-top:2px;padding-top:8px;';
-                panel.appendChild(breedSep);
-
                 const breedTitle = document.createElement('div');
                 breedTitle.textContent = 'Breed from champion files';
                 breedTitle.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
-                panel.appendChild(breedTitle);
+                body.appendChild(breedTitle);
 
                 const breedDesc = document.createElement('div');
                 breedDesc.textContent = 'Upload up to 2 champion .json files as parents (population = Players above). Produces a downloaded champion file at the end — does NOT change your current live bot weights.';
                 breedDesc.style.cssText = 'font-size:11px;color:#999;';
-                panel.appendChild(breedDesc);
+                body.appendChild(breedDesc);
 
                 const seedFiles = []; // {name, weights}
                 const fileListText = document.createElement('div');
@@ -5101,14 +5360,14 @@ document.getElementById('undo-move').onclick = function() {
                     fileInput.value = '';
                     renderFileList();
                 };
-                panel.appendChild(fileInput);
-                panel.appendChild(fileListText);
+                body.appendChild(fileInput);
+                body.appendChild(fileListText);
 
                 const clearSeedsBtn = document.createElement('button');
                 clearSeedsBtn.textContent = 'Clear uploaded';
                 clearSeedsBtn.style.cssText = 'padding:3px 8px;background:#2d2d44;color:#ccc;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:11px;align-self:flex-start;';
                 clearSeedsBtn.onclick = () => { seedFiles.length = 0; renderFileList(); };
-                panel.appendChild(clearSeedsBtn);
+                body.appendChild(clearSeedsBtn);
                 // Repeat count is the shared row built above (with Players/Speed) —
                 // both Start Training and Start Breeding read state.generations.
 
@@ -5122,6 +5381,8 @@ document.getElementById('undo-move').onclick = function() {
                     startBtn.disabled = true;
                     breedBtn.disabled = true;
                     breedBtn.textContent = 'Breeding…';
+                    resetInsights();
+                    renderRoster();
                     try {
                         await leaveOnlineGameIfAny();
                         const baselineWeights = { ...window.BotSystem.WEIGHTS };
@@ -5143,7 +5404,10 @@ document.getElementById('undo-move').onclick = function() {
                         const champion = await window.BotArena.evolve(state.generations, {
                             nPlayers: state.n, popSize, visual: state.watchable,
                             seedWeights: seedFiles.map(f => f.weights),
-                            onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report(); },
+                            onGeneration: (gen, total, fitness, members) => {
+                                lastGen = gen; lastFitness = fitness; report();
+                                handleGeneration(gen, total, fitness, members);
+                            },
                             onGame: () => { gamesDone++; report(); },
                         });
 
@@ -5183,15 +5447,10 @@ document.getElementById('undo-move').onclick = function() {
                         breedBtn.textContent = 'Start Breeding';
                     }
                 };
-                panel.appendChild(breedBtn);
+                body.appendChild(breedBtn);
 
-                const closeBtn = document.createElement('button');
-                closeBtn.textContent = '✕ Close';
-                closeBtn.style.cssText = 'padding:4px 9px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:12px;';
-                closeBtn.onclick = () => panel.remove();
-                panel.appendChild(closeBtn);
-
-                document.body.appendChild(panel);
+                renderRoster();
+                document.body.appendChild(overlay);
             }
 
             document.addEventListener('click', function(e) {
