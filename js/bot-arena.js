@@ -319,37 +319,53 @@
         activePlayerIndex = 0;
         if (visual) { try { currentTurnNumber = 1; } catch (e) {} } // local games never advance it — the log needs it
 
+        // Every seat in a bot-arena game is a bot, so the "you're out of AP,
+        // end turn?" modal (a human-click nudge — see showEndTurnPrompt's own
+        // comment) can never be answered here. muteEnvironment() already
+        // stubs it, but only for MUTED runs — a visual run (Watchable
+        // training, spectate) left the real one live, popping up and sitting
+        // there unclicked every time a bot emptied its AP. Suppress it
+        // unconditionally for the lifetime of this one game, regardless of
+        // visual/muted (spectate() also stubs it for its own longer-lived
+        // reasons — this nests safely underneath that).
+        const savedShowEndTurnPrompt = window.showEndTurnPrompt;
+        window.showEndTurnPrompt = () => {};
+
         const result = { winner: null, turns: 0, activated: new Array(nPlayers).fill(0), stuckTurns };
-        for (let turn = 0; turn < turnCap && !_stopRequested; turn++) {
-            if (visual) { try { currentTurnNumber = turn + 1; } catch (e) {} }
-            const idx = activePlayerIndex;
-            if (weightsPerPlayer[idx] !== undefined) setWeights(weightsPerPlayer[idx]);
-            refillAP();
-            await window.BotSystem.turn();
-            result.turns = turn + 1;
+        try {
+            for (let turn = 0; turn < turnCap && !_stopRequested; turn++) {
+                if (visual) { try { currentTurnNumber = turn + 1; } catch (e) {} }
+                const idx = activePlayerIndex;
+                if (weightsPerPlayer[idx] !== undefined) setWeights(weightsPerPlayer[idx]);
+                refillAP();
+                await window.BotSystem.turn();
+                result.turns = turn + 1;
 
-            const snap = window.BotState.snapshot();
-            result.activated = snap.players.map(p => p.activated.length);
-            const w = window.BotSim.winner(snap);
-            if (w !== null) { result.winner = w; break; }
+                const snap = window.BotState.snapshot();
+                result.activated = snap.players.map(p => p.activated.length);
+                const w = window.BotSim.winner(snap);
+                if (w !== null) { result.winner = w; break; }
 
-            if (activePlayerIndex === idx) {
-                // Bot didn't end its own turn (stuck/no actions) — force it.
-                // applyAction({type:'endTurn'}) reports ok:true just from
-                // clicking the button, NOT from activePlayerIndex actually
-                // advancing — a click that gets swallowed (e.g. an unresolved
-                // scroll-overflow banner, or some other gate) would otherwise
-                // look like success and this loop would silently re-run the
-                // SAME stuck player for the rest of turnCap.
-                stuckTurns[idx]++;
-                const r = window.BotState.applyAction({ type: 'endTurn' });
-                await sleep(200);
-                if (!r.ok || activePlayerIndex === idx) {
-                    log(`match seed ${seed}: stuck on turn ${turn} (${r.reason || 'endTurn did not advance activePlayerIndex'})`);
-                    break;
+                if (activePlayerIndex === idx) {
+                    // Bot didn't end its own turn (stuck/no actions) — force it.
+                    // applyAction({type:'endTurn'}) reports ok:true just from
+                    // clicking the button, NOT from activePlayerIndex actually
+                    // advancing — a click that gets swallowed (e.g. an unresolved
+                    // scroll-overflow banner, or some other gate) would otherwise
+                    // look like success and this loop would silently re-run the
+                    // SAME stuck player for the rest of turnCap.
+                    stuckTurns[idx]++;
+                    const r = window.BotState.applyAction({ type: 'endTurn' });
+                    await sleep(200);
+                    if (!r.ok || activePlayerIndex === idx) {
+                        log(`match seed ${seed}: stuck on turn ${turn} (${r.reason || 'endTurn did not advance activePlayerIndex'})`);
+                        break;
+                    }
+                    await sleep(visual ? 50 : 20);
                 }
-                await sleep(visual ? 50 : 20);
             }
+        } finally {
+            window.showEndTurnPrompt = savedShowEndTurnPrompt;
         }
         return result;
     }
