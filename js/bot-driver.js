@@ -3,7 +3,10 @@
 // ============================================================
 // A "bot player" is an ordinary `players` table row whose username starts
 // with BOT_USERNAME_PREFIX (added from the lobby via the host-only
-// "🤖 Add Bot" button — see toggleBotPlayer() in lobby.js). It counts as a
+// "🤖 Add Bot" button — see addBotPlayer()/removeBotPlayer() in lobby.js).
+// Any number of bots up to the room cap works unmodified: the watcher below
+// drives whichever bot is active off a live-queried set of bot indices,
+// not a single hardcoded one. Each counts as a
 // player everywhere: player count, color/index assignment, turn order.
 //
 // Since the bot has no client, the host's browser acts as its client:

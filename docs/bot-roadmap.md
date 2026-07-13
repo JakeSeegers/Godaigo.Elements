@@ -24,7 +24,7 @@ different concerns and neither blocks the other:
 |-------|------|--------|-------|
 | 0 | Game-state API (snapshot / legal actions / apply) | **DONE** | `js/bot-state.js` |
 | 1 | Utility-scored bot (replaces rule ladder) | **DONE** | `js/bot.js` |
-| 1.5 | Multiplayer bot player (host-driven) | **DONE** | `js/bot-driver.js` + lobby.js `toggleBotPlayer()` |
+| 1.5 | Multiplayer bot player (host-driven, any count up to 5-player cap) | **DONE** | `js/bot-driver.js` + lobby.js `addBotPlayer()`/`removeBotPlayer()` |
 | R1 | Narrow driver to pure adapter | **DONE** | `js/bot-driver.js` |
 | R2 | One backend path for move validation (shadow-mode, `endTurn` only) | **DONE** | `validate-end-turn` edge fn + `persistCurrentTurnIndex()` |
 | R3 | Backend-authoritative turn validation | TODO | Supabase edge function + game-core.js call sites |
@@ -397,10 +397,15 @@ step 3, not started).
 ## STAGE 1.5 — Multiplayer bot player (DONE — contract reference)
 
 A bot is an ordinary `players` table row whose username starts with
-`window.BOT_USERNAME_PREFIX` ('🤖'). Host-only lobby button "🤖 Add Bot"
-(`toggleBotPlayer()` in lobby.js) inserts/removes it (`is_ready: true`).
-Because it's a real row it counts everywhere: player count, Start-button
-condition, index/color assignment, `totalPlayers`, turn order.
+`window.BOT_USERNAME_PREFIX` ('🤖'). Host-only lobby buttons "🤖 Add Bot" /
+"➖ Remove Bot" (`addBotPlayer()`/`removeBotPlayer()` in lobby.js) insert/
+remove rows (`is_ready: true`) — any number up to the room's 5-player cap,
+each named `🤖 Bot N`. Because each is a real row it counts everywhere:
+player count, Start-button condition, index/color assignment,
+`totalPlayers`, turn order. `bot-driver.js`'s watcher drives whichever bot
+is active off a live-queried index set, so multiple bots needed no driver
+changes — all bots share whatever champion weights `WEIGHTS` currently
+holds (see the Supabase persistence work in `js/bot.js`).
 
 The HOST's browser is the bot's client (`js/bot-driver.js`): a 700ms watcher
 notices bot turns and IMPERSONATES the bot — temporarily reassigning the
