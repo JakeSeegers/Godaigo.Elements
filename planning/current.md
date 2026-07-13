@@ -15,6 +15,32 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **JOYTONE: silence during bot training runs + connect power button to
+  Settings toggle** — `joytone/index.html`, `js/joytone-bridge.js`,
+  `js/bot-arena.js`, `js/gamification-ui.js`. Train Weights/Evolve/Breed
+  play many short simulated games back to back, each hiding/showing
+  `#lobby-wrapper` same as a real game — previously this rebooted the
+  Joytone engine and restarted playback from scratch on every single
+  simulated game regardless of watch speed; the old "mute" approach
+  (nulling `window.JoytoneBridge` inside `muteEnvironment()`, muted runs
+  only) never actually worked since it only stopped OTHER code calling
+  in, not the internal watcher or already-playing audio. Added real
+  `setSuppressed()`/`isSuppressed()`: `startForGame()`/`onTileRevealed()`
+  no-op while suppressed (immediately powering off anything already
+  playing); `run()`/`evolve()` suppress unconditionally for their whole
+  duration regardless of `opts.visual`. `spectate()` (one continuous game,
+  the "watch bots for fun" flow) deliberately untouched. Separately: the
+  Joytone popup's own ⏻ power button and Settings' "Adaptive Music" ON/OFF
+  toggle were previously independent and could disagree — unified so
+  muting via Settings also powers the real engine off/on (actual audio-cut
+  + CPU savings, not just gain), and the popup's button notifies the
+  parent (`_onChildPowerChanged`) so Settings reflects it if open;
+  programmatic suppression-driven power changes are explicitly excluded
+  from that sync so a training run never corrupts the player's real saved
+  preference. Verified headless: mute↔power drive each other both
+  directions, suppression powers off an active session immediately and
+  guards against the mute-toggle corrupting state while suppressed, and a
+  real `evolve()` run stays suppressed for its whole duration.
 - **MULTIPLAYER: allow more than one bot player in a real lobby** —
   `index.html`, `js/lobby.js`, `js/bot-driver.js` (comments only),
   `js/INDEX.md`, `docs/bot-roadmap.md`. The lobby's "🤖 Add Bot" button was
@@ -469,4 +495,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-13 (Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
