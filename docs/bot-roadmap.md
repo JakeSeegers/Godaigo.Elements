@@ -1067,6 +1067,100 @@ PPO or DQN via tensorflow.js, reward = win ±1 with small per-turn penalty.
 If Stage 2 MCTS exists, prefer AlphaZero-style (policy prior + value net) over
 model-free RL. Do not attempt without the arena (3a) as the evaluation gate.
 
+## STAGE 4 — Elemental stone tactics (terrain control)
+
+Prompted by a user question: do stone-placement/breaking weights need to
+differ per element, given each has a distinct ability (earth blocks
+movement, water chains/mimics its neighbor, fire destroys adjacent
+non-fire/non-void stones on placement, wind is free movement, void held in
+pool grants standing bonus AP — `voidAP = pool.void` each turn,
+`game-core.js`)? Investigated case by case:
+
+- **Wind** — already correctly priced for free: its movement-cost effect
+  feeds directly into `a.cost` in the `move` case of `scoreAction()`, so a
+  single generic `moveApPenalty` already produces wind-preferring behavior
+  with no new weight needed.
+- **Water** — its value is entirely borrowed from whatever it's chained to
+  (mimics earth or wind depending on the adjacent stone via
+  `getChainedAbility()`), so a static per-element weight can't represent it
+  well. Deliberately left alone.
+- **Void (DONE)** — holding void stones in pool grants ongoing AP, a
+  persistent benefit no other element's pool has, that the evaluator
+  previously priced identically to every other element (generic
+  `evalStoneNeeded`/`evalStone`, need-based only). Added three new weights
+  in `js/bot.js`:
+  - `evalVoidHeld` (evaluator, `evaluateSnapshot()`): flat value per void
+    pool stone, ADDITIVE on top of the existing generic per-element terms
+    (they represent different value sources — generic material vs.
+    standing AP — not a replacement). Since `BotSim.simulate()` already
+    decrements pool on `placeStone`, this alone makes Hybrid-brain search
+    naturally discount any simulated action that spends void stones — no
+    extra scoring code needed for the search path.
+  - `shrineVoidBonus` (`shrineValue()`, × need, void only): void shrines
+    get extra pull during real movement/endTurn scoring (this path stays
+    greedy even under Hybrid — "plain movement stays greedy" — so this is
+    the one that actually matters for movement targeting).
+  - `placeVoidSpendPenalty` (`scoreAction()`'s `placeStone` case): mirrors
+    the opportunity cost directly, for the non-search "Dumb" brain
+    fallback where `evaluateSnapshot()` never runs. Redundant with
+    `evalVoidHeld` under Hybrid/search (which bypasses `scoreAction()` for
+    tactical actions entirely — see below) but harmless and keeps the two
+    brains consistent.
+  Verified via `evaluateSnapshot()`/`score()` called directly with
+  synthetic snapshots (exposed on `window.BotSystem`): isolated the exact
+  weighted delta for higher void pool, a void vs. non-void placement, and
+  a void vs. water shrine at equal need — all matched expected math
+  exactly. 10-game self-play regression (`BotArena.run`, same weights both
+  sides) confirms no errors/crashes with the new terms live.
+- **Earth (blocking) / Fire (interference) — TODO, scoped but not built.**
+  Both are real opponent-facing tactics (earth walls off a path, fire
+  destroys a stone an opponent needs) that the bot doesn't currently
+  reason about at all — `placeStone` scoring is 100% about the bot's OWN
+  pattern progress. Two things make this harder than the void addition:
+  1. **Placement position is dictated by the bot's own pattern, not free
+     choice.** `bot-state.js`'s `legalActions()` generates `placeStone`
+     candidates at `pHex.q+req.q, pHex.r+req.r` — offsets relative to the
+     bot's OWN position, fixed by whichever scroll/variant/cell the
+     candidate is for. There's no "place earth anywhere I want" action; the
+     bonus can only ever tie-break BETWEEN pattern-dictated options that
+     are already on the table (prefer a variant/cell that happens to also
+     block/threaten, all else equal). Real, but narrower than it first
+     sounds — it fires only when the bot's own building happens to
+     coincide with an opponent's contested space.
+  2. **The natural home for this (`evaluateSnapshot()`) can't afford real
+     pathfinding per leaf.** Search evaluates many leaves per decision
+     (root scores every legal action once, then expands `searchBreadth`
+     children per node down to `searchDepth`) — running a fresh Dijkstra
+     per opponent at every leaf (needed to know "is this hex on their
+     cheapest path to their objective") would be far too expensive at that
+     call volume. Fire interference against COMMON-AREA scrolls already
+     works for free today, incidentally: `BotSim.simulate()` already
+     models fire destroying adjacent non-fire/non-void stones on
+     placement, and `evaluateSnapshot()`'s existing `commonAreaThreat()`
+     re-checks every opponent's pattern satisfaction on the POST-simulated
+     snapshot — so if a fire placement the bot was already making for its
+     own plan happens to break an opponent's common-area "loaded gun," the
+     search leaf already scores it correctly. What's NOT covered: fire
+     breaking a stone that only helps an opponent's HAND/ACTIVE scrolls
+     (not common-area) — infeasible to detect anyway, since opponent hand
+     scroll NAMES are hidden by design (`BotState.snapshot()` only exposes
+     `handElements`, never `hand`, for non-self players — see the
+     "RULES CHANGE: opponent hand scrolls show element type" entry in
+     planning/current.md).
+  Proposed design for earth-blocking, when picked up: compute each
+  opponent's cheapest path to their next objective (nearest needed shrine,
+  or home if fully activated — mirrors `ctx.shrines`/`ctx.homePath`
+  already built once per bot decision in `rankActions()`) a SINGLE time
+  per real decision, not per search leaf, into a small cached hex set;
+  `scoreAction()`'s `placeStone` case (which — unlike search's leaf
+  evaluator — DOES still run once per candidate at the root, before
+  `searchPick()`'s own root-scoring takes over) checks cheap set
+  membership against it. Needs a real decision on whether the bonus should
+  also feed into `evaluateSnapshot()` for search's deeper plies (harder;
+  would need the cached set threaded through `simulate()`'s call chain) or
+  stay a root-only heuristic (simpler, tie-breaks the immediate choice
+  without pretending to model how the opponent reroutes around it).
+
 ---
 
 ## DO-NOT LIST (for every future stage)

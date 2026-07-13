@@ -57,6 +57,14 @@
                                  // weight evolution drift (see hasWinCredit())
         placeDoomed:      -500,  // the stone would be destroyed on placement (non-fire/
                                  // non-void next to an unvoided fire) — pure stone waste
+        placeVoidSpendPenalty: -8, // placing a void stone spends it out of the pool,
+                                 // forfeiting its standing AP bonus (voidAP = pool.void
+                                 // at turn start, game-core.js) — only bites in greedy/
+                                 // Dumb-brain mode; under Hybrid/search this same
+                                 // opportunity cost falls naturally out of evalVoidHeld
+                                 // scoring the resulting simulated snapshot lower (see
+                                 // evaluateSnapshot() below), so this is a redundant but
+                                 // harmless mirror for the non-search fallback path.
         planDeficitPenalty:  -3, // × total stones still missing from pool when makePlan()/
                                  // findFixationTarget() pick a COLLECT-THEN-BUILD plan (one
                                  // whose pattern isn't fully in-pool yet, but every missing
@@ -140,6 +148,11 @@
         shrineNeed:          1.0, // × (capacity − pool[element])
         shrineUnactivated:   2.5, // element not yet activated
         shrineDeadSource:  -3.0,  // source pool empty — collection yields nothing
+        shrineVoidBonus:     1.5, // × need, void shrines only — void pool stones also
+                                  // grant standing AP (voidAP = pool.void each turn,
+                                  // game-core.js), a benefit no other element's pool
+                                  // gives, on top of the generic material value every
+                                  // element already gets from shrineNeed/shrineUnactivated
 
         // ── Stage 2: lookahead search (BotSim forward model) ──
         // searchDepth 0 = greedy Stage-1 argmax (no BotSim needed);
@@ -169,6 +182,15 @@
                                   // forward model honestly doesn't know (≈ castBase)
         evalHiddenDist:  -0.08,   // × px to nearest hidden tile (exploration shaping)
         evalHomeDist:     -0.6,   // × px to own shrine once all 5 elements are activated
+        evalVoidHeld:        8,   // per void stone in pool, ON TOP of evalStoneNeeded/
+                                  // evalStone above — void pool stones grant standing
+                                  // AP (voidAP = pool.void each turn, game-core.js),
+                                  // a persistent multi-turn benefit no other element's
+                                  // pool has, regardless of whether void is activated
+                                  // yet. Makes search naturally discount any simulated
+                                  // action that spends void stones (BotSim.simulate()
+                                  // decrements pool on placeStone) without needing a
+                                  // dedicated per-action penalty.
 
         // Opponent-threat terms — this game has exactly one winner, so an
         // opponent's progress toward THEIR win is symmetric danger to us.
@@ -268,6 +290,7 @@
         let v = WEIGHTS.shrineNeed * need;
         if (!self.activated.includes(element)) v += WEIGHTS.shrineUnactivated * need;
         if ((snap.sourcePool[element] || 0) <= 0) v += WEIGHTS.shrineDeadSource * need;
+        if (element === 'void') v += WEIGHTS.shrineVoidBonus * need;
         return Math.max(0, v);
     }
 
@@ -371,6 +394,7 @@
                 if (window.BotSim && !window.BotSim.stoneWouldSurvive(snap, a.x, a.y, a.stoneType)) {
                     s += WEIGHTS.placeDoomed;
                 }
+                if (a.stoneType === 'void') s += WEIGHTS.placeVoidSpendPenalty;
                 return s;
             }
 
@@ -989,6 +1013,7 @@
             const useful = !p.activated.includes(el) && (snap.sourcePool[el] || 0) > 0;
             v += n * (useful ? WEIGHTS.evalStoneNeeded : WEIGHTS.evalStone);
         }
+        v += (p.pool.void || 0) * WEIGHTS.evalVoidHeld;
         v += (p.handCount + p.activeCount) * WEIGHTS.evalScrollHeld;
         // AP only counts while still inside the original turn — after a
         // simulated endTurn the reset would otherwise make passing the turn
