@@ -64,9 +64,10 @@ Order matters — later scripts depend on earlier ones.
 17. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
 17b. bot-sim.js            ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
 17c. bot-effects.js        ← window.BotEffects — Stage 2.5 scroll-effect usage: driveSelection() (tile-flip,
-                             scorched-earth, tile-swap, Create, Scholar's Insight), driveTransmute() (open-ended
-                             discard-for-AP modal), decideResponse() (response-scroll respond/pass — both
-                             arena and real multiplayer, wired from bot.js and bot-driver.js respectively)
+                             scorched-earth, tile-swap, Create, Scholar's Insight, Quick Reflexes, Sacrificial
+                             Pyre, Inspiring Draught), driveTransmute() (open-ended discard-for-AP modal),
+                             decideResponse() (response-scroll respond/pass — both arena and real multiplayer,
+                             wired from bot.js and bot-driver.js respectively)
 18. bot.js                 ← window.BotSystem — utility-scored bot + optional lookahead (WEIGHTS.searchDepth, default 0);
                              Shift+R = one step, Shift+B = full turn; waitForQuiescence() tries BotEffects
                              before cancelling a selection it can't drive

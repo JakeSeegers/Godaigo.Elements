@@ -690,14 +690,23 @@ Build order (each step independently commit-able and arena-measurable):
    picks the two closest eligible tiles), Create (VOID_SCROLL_5 — most-needed
    element), Scholar's Insight (VOID_SCROLL_2 — most-needed element's deck,
    then highest-level scroll in it), Transmute (FIRE_SCROLL_4 — discards its
-   most-plentiful stone type for AP up to a target, then clicks Done).
+   most-plentiful stone type for AP up to a target, then clicks Done),
+   Quick Reflexes (CATACOMB_SCROLL_9 — most-needed element's level-1 scroll
+   from the pooled list), Sacrificial Pyre (FIRE_SCROLL_3 — sacrifices a
+   response-only hand scroll first, else the lowest-level one), Inspiring
+   Draught (WATER_SCROLL_3 — draws from the most-needed element's deck,
+   puts back the weaker of the 2 drawn scrolls using the same
+   response-only/lowest-level rule as Sacrificial Pyre). The latter two
+   share `scroll-select-modal` with Plunder (not yet driven) — routed by
+   the exact heading text each effect's `showScrollSelectionModal()` call
+   sets, verified not to cross-contaminate.
 
    **Not yet driven** (falls through to cancel, same as before this file
-   existed): Sacrificial Pyre, Inspiring Draught, Wandering River, Control
-   the Current, Arson, Plunder, Quick Reflexes, Excavate's deferred
-   teleport — all click/modal-based per the inventory table above, next in
-   line. Telekinesis and Take Flight's destination step are drag-based (no
-   click handler to call) and need a decision on approach before starting.
+   existed): Wandering River, Control the Current, Arson, Plunder,
+   Excavate's deferred teleport — all click/modal-based per the inventory
+   table above, next in line. Telekinesis and Take Flight's destination
+   step are drag-based (no click handler to call) and need a decision on
+   approach before starting.
 
    **Bug found via arena testing (fixed):** the dispatcher originally
    chained the DOM-modal checks (Create, Scholar's Insight) as `else if`

@@ -15,6 +15,30 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT STAGE 2.5: drive 3 more scroll effects (Sacrificial Pyre,
+  Inspiring Draught, Quick Reflexes)** — `js/bot-effects.js`. All three
+  modal ids were already in scroll-effects.js's `EFFECT_MODAL_IDS`, so
+  `waitForQuiescence()` already detected them as open — only needed the
+  driver functions + `driveSelection()` dispatch wiring, no `bot.js`
+  changes. Sacrificial Pyre and Inspiring Draught's put-back step share
+  `scroll-select-modal` with Plunder (not yet driven) — routed by the
+  exact heading text each effect's `showScrollSelectionModal()` call
+  sets. Shared "give up one of these scrolls" heuristic: prefer a
+  response-only scroll first (dead weight in the main phase regardless —
+  same reasoning as `bot.js`'s `discardResponseOnly` weight), else the
+  lowest-level one. Quick Reflexes reuses the existing `rankedElements()`
+  need heuristic. Also cleaned up a stray duplicate `bot-effects.js` row
+  in `js/INDEX.md` left over from the earlier branch merge, and fixed a
+  stale claim there/in `bot-effects.js`'s own header that response
+  scrolls were still arena-only (they were extended to real multiplayer
+  in an earlier session; the comment just never got updated).
+  Verified headless against a real local game (not mocked): Sacrificial
+  Pyre correctly sacrifices a staged response-only scroll over a
+  non-response one; Quick Reflexes correctly picks the scroll matching
+  the pool's most-drained element; Inspiring Draught completes both
+  steps end to end, keeping the higher-level of the two drawn scrolls;
+  confirmed Plunder's differently-titled `scroll-select-modal` is
+  correctly left undriven (no cross-contamination).
 - **JOYTONE: silence during bot training runs + connect power button to
   Settings toggle** — `joytone/index.html`, `js/joytone-bridge.js`,
   `js/bot-arena.js`, `js/gamification-ui.js`. Train Weights/Evolve/Breed
@@ -373,17 +397,16 @@ exist in code but are untested end-to-end. Docs system fully in place.
    in bot-roadmap § STAGE 3a.
 2. **IN PROGRESS: Stage 2.5 — scroll-effect usage.** Step 1 (inventory) is
    **DONE** — full table of all 17 selection-mode/response scrolls in
-   bot-roadmap.md § STAGE 2.5. Step 2 (`js/bot-effects.js`) is **STARTED**:
-   5 of 12 selection effects driven (tile-flip, scorched-earth, tile-swap,
-   Create, Scholar's Insight), A/B-measured in the arena (fewer draws, no
-   regressions vs. baseline on identical seeds). NEXT: the remaining 7
-   click/modal-based scrolls (Sacrificial Pyre, Inspiring Draught,
-   Wandering River, Control the Current, Arson, Plunder, Quick Reflexes,
-   Excavate's deferred teleport), then decide an approach for the 2
-   drag-based ones (Telekinesis, Take Flight), then step 3 (response
-   scrolls). Also still open: the `EFFECT_MODAL_IDS` missing
-   `'transmute-modal'` bug found during inventorying. Full plan:
-   bot-roadmap § STAGE 2.5.
+   bot-roadmap.md § STAGE 2.5. Step 2 (`js/bot-effects.js`) is
+   **STARTED**: 8 of 12 selection effects driven (tile-flip,
+   scorched-earth, tile-swap, Create, Scholar's Insight, Quick Reflexes,
+   Sacrificial Pyre, Inspiring Draught), A/B-measured in the arena (fewer
+   draws, no regressions vs. baseline on identical seeds). Step 3
+   (response scrolls) is **DONE** — arena AND real multiplayer, via
+   `bot-driver.js`'s `respondForBots()`. NEXT: the remaining 4
+   click/modal-based scrolls (Wandering River, Control the Current, Arson,
+   Plunder), then decide an approach for the 2 drag-based ones
+   (Telekinesis, Take Flight). Full plan: bot-roadmap § STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
 4. **Opponent-awareness — Track A DONE (evaluator term), Tracks B/C not
@@ -495,4 +518,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-13 (bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
