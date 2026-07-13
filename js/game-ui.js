@@ -4883,7 +4883,7 @@ document.getElementById('undo-move').onclick = function() {
         (function initBotTrainingPanel() {
             let clickCount = 0;
             let clickTimer = null;
-            const state = { n: 2, watchable: true };
+            const state = { n: 2, watchable: true, generations: 5 };
 
             function openBotTrainingPanel() {
                 const existing = document.getElementById('bot-training-panel');
@@ -4947,6 +4947,10 @@ document.getElementById('undo-move').onclick = function() {
                 // startBtnRef is read inside makeChoiceRow's onclick above, so it
                 // needs to exist (even if reassigned below) before the rows are built.
                 const startBtnRef = { disabled: false };
+                // breedBtn is declared before it's built (below) so
+                // startBtn's onclick can cross-disable it — only one of
+                // Start Training / Start Breeding can run at a time.
+                let breedBtn;
 
                 makeChoiceRow('Players:',
                     [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })),
@@ -4978,6 +4982,7 @@ document.getElementById('undo-move').onclick = function() {
                     if (!await stopAnyRunningBotJob()) return;
                     startBtnRef.disabled = true;
                     startBtn.disabled = true;
+                    if (breedBtn) breedBtn.disabled = true;
                     startBtn.textContent = 'Training…';
                     try {
                         const preset = { generations: 3, gamesPerPair: 1, popSize: 6, confirmGames: 10 };
@@ -4995,6 +5000,7 @@ document.getElementById('undo-move').onclick = function() {
                     } finally {
                         startBtnRef.disabled = false;
                         startBtn.disabled = false;
+                        if (breedBtn) breedBtn.disabled = false;
                         startBtn.textContent = 'Start Training';
                     }
                 };
@@ -5008,6 +5014,150 @@ document.getElementById('undo-move').onclick = function() {
                     else updateStatus('No training run in progress');
                 };
                 panel.appendChild(stopBtn);
+
+                // ── Breed from champion files ────────────────────────────────
+                // Separate flow from Start Training above: no confirm-vs-
+                // baseline gate, no effect on this browser's live bot
+                // weights — it exists purely to produce a downloadable
+                // champion file, e.g. to carry a lineage between browsers/
+                // devices (there's no server backend this game could persist
+                // trained weights to — see the "why not Supabase" discussion).
+                // Population size = the Players count selected above (so a
+                // 5-player run breeds a population of 5): up to 2 uploaded
+                // files seed it directly, any remaining slots are crossover-
+                // bred from those seeds (or mutated from current WEIGHTS if
+                // nothing was uploaded).
+                const breedSep = document.createElement('div');
+                breedSep.style.cssText = 'border-top:1px solid #444;margin-top:2px;padding-top:8px;';
+                panel.appendChild(breedSep);
+
+                const breedTitle = document.createElement('div');
+                breedTitle.textContent = 'Breed from champion files';
+                breedTitle.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                panel.appendChild(breedTitle);
+
+                const breedDesc = document.createElement('div');
+                breedDesc.textContent = 'Upload up to 2 champion .json files as parents (population = Players above). Produces a downloaded champion file at the end — does NOT change your current live bot weights.';
+                breedDesc.style.cssText = 'font-size:11px;color:#999;';
+                panel.appendChild(breedDesc);
+
+                const seedFiles = []; // {name, weights}
+                const fileListText = document.createElement('div');
+                fileListText.style.cssText = 'font-size:11px;color:#9c9;white-space:pre-line;';
+                function renderFileList() {
+                    fileListText.textContent = seedFiles.length ? seedFiles.map(f => `✓ ${f.name}`).join('\n') : '';
+                }
+
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = 'application/json';
+                fileInput.multiple = true;
+                fileInput.style.cssText = 'font-size:11px;color:#ccc;max-width:100%;';
+                fileInput.onchange = async () => {
+                    const files = Array.from(fileInput.files || []);
+                    for (const file of files) {
+                        if (seedFiles.length >= 2) { updateStatus('Only 2 seed champions are used — extra files ignored'); break; }
+                        try {
+                            const parsed = JSON.parse(await file.text());
+                            const numericKeys = (parsed && typeof parsed === 'object')
+                                ? Object.values(parsed).filter(v => typeof v === 'number').length : 0;
+                            if (numericKeys < 20) {
+                                updateStatus(`"${file.name}" doesn't look like a champion weights file — skipped`);
+                                continue;
+                            }
+                            seedFiles.push({ name: file.name, weights: parsed });
+                        } catch (e) {
+                            updateStatus(`Could not read "${file.name}" — skipped`);
+                        }
+                    }
+                    fileInput.value = '';
+                    renderFileList();
+                };
+                panel.appendChild(fileInput);
+                panel.appendChild(fileListText);
+
+                const clearSeedsBtn = document.createElement('button');
+                clearSeedsBtn.textContent = 'Clear uploaded';
+                clearSeedsBtn.style.cssText = 'padding:3px 8px;background:#2d2d44;color:#ccc;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:11px;align-self:flex-start;';
+                clearSeedsBtn.onclick = () => { seedFiles.length = 0; renderFileList(); };
+                panel.appendChild(clearSeedsBtn);
+
+                makeChoiceRow('Repeat:',
+                    [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
+                    () => state.generations, (v) => { state.generations = v; });
+
+                breedBtn = document.createElement('button');
+                breedBtn.textContent = 'Start Breeding';
+                breedBtn.style.cssText = 'padding:6px 10px;background:#2d3a4a;color:#eee;border:1px solid #58a;border-radius:5px;cursor:pointer;font-size:12px;';
+                breedBtn.onclick = async () => {
+                    if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
+                    if (!await stopAnyRunningBotJob()) return;
+                    startBtnRef.disabled = true;
+                    startBtn.disabled = true;
+                    breedBtn.disabled = true;
+                    breedBtn.textContent = 'Breeding…';
+                    try {
+                        await leaveOnlineGameIfAny();
+                        const baselineWeights = { ...window.BotSystem.WEIGHTS };
+                        let baselineStored = null;
+                        try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
+
+                        const popSize = state.n;
+                        const gamesPerPair = 2; // evolve()'s own default, kept explicit for the totalGames estimate below
+                        const gamesPerGen = popSize * 3; // ditto
+                        const pairs = popSize * (popSize - 1) / 2;
+                        const totalGames = (state.n > 2 ? gamesPerGen : pairs * gamesPerPair) * state.generations;
+                        const startedAt = Date.now();
+                        let gamesDone = 0, lastGen = 0, lastFitness = null;
+                        const report = () => renderProgress({
+                            phase: 'training', gamesDone, totalGames, startedAt,
+                            gen: lastGen, generations: state.generations, fitness: lastFitness,
+                        });
+
+                        const champion = await window.BotArena.evolve(state.generations, {
+                            nPlayers: state.n, popSize, visual: state.watchable,
+                            seedWeights: seedFiles.map(f => f.weights),
+                            onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report(); },
+                            onGame: () => { gamesDone++; report(); },
+                        });
+
+                        // Restore the browser's LIVE weights — breeding
+                        // produces a file artifact, it should never silently
+                        // change which weights this browser's own bots use
+                        // next time (unlike Start Training above, which has
+                        // its own confirm-vs-baseline gate for exactly that;
+                        // evolve() itself unconditionally writes to
+                        // localStorage every generation regardless of caller).
+                        window.BotArena.applyWeights(baselineWeights);
+                        try {
+                            if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                            else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                        } catch (e) {}
+
+                        const blob = new Blob([JSON.stringify(champion, null, 1)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `godaigo-champion-${Date.now()}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(url);
+
+                        progressText.style.display = 'none';
+                        updateStatus(`Breeding complete (${state.generations} generation${state.generations > 1 ? 's' : ''}) — champion downloaded. Your live bot weights were left unchanged.`);
+                    } catch (err) {
+                        console.error('Bot breeding failed:', err);
+                        progressText.style.display = 'none';
+                        updateStatus('Bot breeding failed — see console');
+                    } finally {
+                        startBtnRef.disabled = false;
+                        startBtn.disabled = false;
+                        breedBtn.disabled = false;
+                        breedBtn.textContent = 'Start Breeding';
+                    }
+                };
+                panel.appendChild(breedBtn);
 
                 const closeBtn = document.createElement('button');
                 closeBtn.textContent = '✕ Close';

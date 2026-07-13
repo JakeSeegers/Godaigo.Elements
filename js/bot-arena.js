@@ -465,11 +465,14 @@
 
     // ----------------------------------------------------------------
     // Evolution loop (roadmap Stage 3a step 2).
-    // population = current WEIGHTS + (popSize-1) Gaussian mutations
-    // (σ = 20% of each weight's magnitude); next gen = top-2 elites carried
-    // over unchanged, rest bred via uniform crossover across the top-3 pool
-    // (see crossover()) then mutated. Champion persisted to
-    // localStorage['godaigo_bot_weights'] after every generation.
+    // population = opts.seedWeights (0-2 tables; defaults to current WEIGHTS
+    // when omitted) + (popSize-1) more filled by breeding those seeds (see
+    // above); next gen = top-2 elites carried over unchanged, rest bred via
+    // uniform crossover across the top-3 pool (see crossover()) then
+    // mutated. Champion persisted to localStorage['godaigo_bot_weights']
+    // after every generation — callers that don't want this run's result to
+    // affect the browser's LIVE bot weights must save/restore around the
+    // call themselves (see the Bot Training panel's "breed" flow).
     //
     // opts.nPlayers (2–5, default 2):
     //   2 → the ORIGINAL exhaustive pairwise round-robin (every population
@@ -540,8 +543,24 @@
         const restore = visual ? null : muteEnvironment();
         window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
 
-        let population = [{ ...window.BotSystem.WEIGHTS }];
-        while (population.length < popSize) population.push(mutate(population[0], rng));
+        // opts.seedWeights (0-2 uploaded/carried-over weight tables) seeds
+        // the initial population instead of the live WEIGHTS. With exactly
+        // 2 seeds, the rest of the population is bred via crossover between
+        // them (then mutated) — same reasoning as the elite breeding pool
+        // below, just applied to externally-supplied parents instead of a
+        // generation's own winners. With 0 or 1, behaves exactly as before
+        // (mutations of the single available table).
+        const seeds = (opts.seedWeights && opts.seedWeights.length) ? opts.seedWeights : [{ ...window.BotSystem.WEIGHTS }];
+        let population = [...seeds];
+        while (population.length < popSize) {
+            if (seeds.length >= 2) {
+                const pa = seeds[Math.floor(rng() * seeds.length)];
+                const pb = seeds[Math.floor(rng() * seeds.length)];
+                population.push(mutate(pa === pb ? pa : crossover(pa, pb, rng), rng));
+            } else {
+                population.push(mutate(seeds[0], rng));
+            }
+        }
         let champion = population[0];
 
         try {
