@@ -450,8 +450,9 @@
     // ----------------------------------------------------------------
     // Evolution loop (roadmap Stage 3a step 2).
     // population = current WEIGHTS + (popSize-1) Gaussian mutations
-    // (σ = 20% of each weight's magnitude); next gen = top-2 elites + fresh
-    // mutations of them. Champion persisted to
+    // (σ = 20% of each weight's magnitude); next gen = top-2 elites carried
+    // over unchanged, rest bred via uniform crossover across the top-3 pool
+    // (see crossover()) then mutated. Champion persisted to
     // localStorage['godaigo_bot_weights'] after every generation.
     //
     // opts.nPlayers (2–5, default 2):
@@ -483,6 +484,22 @@
             const u1 = Math.max(rng(), 1e-9), u2 = rng();
             const gauss = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
             out[k] = +(out[k] + gauss * sigma * Math.max(1, Math.abs(out[k]))).toFixed(3);
+        }
+        return out;
+    }
+
+    // Uniform crossover: each weight independently inherited from parent a or
+    // b (a real-valued weight vector has no meaningful "gene order" to cut a
+    // single split point on, unlike a bitstring/chromosome GA). Lets two
+    // different good strategies combine instead of only drifting apart via
+    // mutation of a single elite — e.g. one elite good at pattern-building,
+    // another good at collecting, can now produce a child that inherits both.
+    function crossover(a, b, rng) {
+        const out = { ...a };
+        for (const k of Object.keys(out)) {
+            if (typeof out[k] !== 'number') continue;
+            if (k === 'searchDepth' || k === 'searchBreadth' || k === 'searchHybrid') continue; // brain shape, not tuning
+            out[k] = rng() < 0.5 ? a[k] : b[k];
         }
         return out;
     }
@@ -557,10 +574,20 @@
                 try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(champion)); } catch (e) {}
                 log('champion weights (paste into bot.js DEFAULT_WEIGHTS to make permanent):\n' + JSON.stringify(champion));
 
+                // Pure elitism: the top 2 survive completely unchanged, so a
+                // generation can never lose the best table found so far.
+                // The rest of the population is bred from a slightly wider
+                // pool (top 3) via crossover + mutation, so two different
+                // good strategies can combine instead of only mutating apart
+                // from a single elite each.
                 const elites = [ranked[0].w, ranked[1].w];
+                const breedingPool = ranked.slice(0, Math.min(3, ranked.length)).map(r => r.w);
                 population = [...elites];
                 while (population.length < popSize) {
-                    population.push(mutate(elites[population.length % 2], rng));
+                    const pa = breedingPool[Math.floor(rng() * breedingPool.length)];
+                    const pb = breedingPool[Math.floor(rng() * breedingPool.length)];
+                    const child = pa === pb ? pa : crossover(pa, pb, rng);
+                    population.push(mutate(child, rng));
                 }
             }
         } finally {
