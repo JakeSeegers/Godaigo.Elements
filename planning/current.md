@@ -15,6 +15,38 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT FIX: real multiplayer placement phase could freeze forever on one
+  player (surfaced by the new multi-bot lobby feature)** — `js/game-core.js`.
+  User report: a real 4-player game (2 bots + 2 humans, using the new
+  multi-bot lobby) got permanently stuck waiting for one bot's tile
+  placement. `placeTile()`'s own existing comment already documented the
+  exact race: "if another player's broadcast arrived first, [captured
+  playerPositions.length] is wrong" — and correctly corrected
+  `playerPositions[]` and the placed tile's own `ownTile.playerIndex` to
+  use `myPlayerIndex` instead. It missed that `tilePlayerIndex` itself
+  (the SAME stale snapshot) is what's actually used for
+  `playerTilesPlaced.add()` and the `player-tile-placed` broadcast
+  everyone else receives. When the race hits, a placement gets silently
+  attributed to the WRONG (usually already-placed) index, so the true
+  placer's index never reaches `playerTilesPlaced`, and every client waits
+  forever for a player who already placed — a permanent freeze, not a
+  delay. Likely made much easier to hit by this session's earlier
+  multi-bot change: host-driven bots place off a fixed 800ms timer tied
+  only to `activePlayerIndex`, with no check that this client's own
+  `playerPositions` has caught up with prior remote placements yet (unlike
+  humans, naturally paced by noticing the UI update) — more players in a
+  room means more chances for a remote placement broadcast to still be in
+  flight when a bot's turn comes up. Fixed: `tilePlayerIndex = myPlayerIndex`
+  alongside the two existing corrections. Verified: staged the exact race
+  (stale empty `playerPositions`, correct `activePlayerIndex`/
+  `myPlayerIndex`=2) and confirmed `playerTilesPlaced`/tile ownership now
+  correctly record player 2; negative control (`git stash`) reproduces the
+  bug without the fix — `playerTilesPlaced` incorrectly records the
+  already-placed player 0 instead of 2, matching the reported symptom.
+  Separately investigated and ruled out (verified empirically, not just
+  reasoned): a "board runs out of valid 2-unrevealed-neighbor placement
+  spots by the 3rd/4th player" theory — a real 4-player placement sequence
+  left 11+ valid candidates for the last player, no exhaustion.
 - **BOT STAGE 2.5: drive 3 more scroll effects (Sacrificial Pyre,
   Inspiring Draught, Quick Reflexes)** — `js/bot-effects.js`. All three
   modal ids were already in scroll-effects.js's `EFFECT_MODAL_IDS`, so
@@ -518,4 +550,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-13 (fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
