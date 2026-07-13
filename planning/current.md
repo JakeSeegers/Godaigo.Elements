@@ -15,6 +15,37 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT ARENA: file-based champion breeding (Supabase alternative) +
+  visual-run modal fix** — `js/bot-arena.js`, `js/game-ui.js`. Follow-up to
+  the Supabase discussion below: rather than a shared backend (no server
+  code path exists for this static-hosted game, and the existing Supabase
+  schema has no RLS at all), the Bot Training panel gained a "Breed from
+  champion files" section — upload up to 2 previously-downloaded champion
+  `.json` files as parents, pick a repeat count (1/5/10/20/50
+  generations), Start Breeding: population size = the panel's Players
+  selector (2-5) per explicit design (a 5-player breed = population of 5,
+  2 uploaded + 3 crossover-bred — every generation is one real game with
+  the whole population, which `evolve()`'s existing group-sampling already
+  reduces to correctly when popSize===nPlayers, no core loop change
+  needed). `evolve()` gained `opts.seedWeights` (0-2 tables) to seed the
+  population instead of always starting from live WEIGHTS; with 2 seeds,
+  remaining slots are bred via the existing `crossover()` between them.
+  Breeding explicitly does NOT touch this browser's live bot weights
+  (saves/restores around the call, since `evolve()` itself unconditionally
+  writes `localStorage` every generation) — the downloaded file is the
+  entire deliverable, no confirm-vs-baseline gate needed since nothing
+  gets kept live. Also fixed, found while testing: the earlier stray-modal
+  sweep only cleared a LEFTOVER modal from before a bot job started —
+  `muteEnvironment()` (which stubs `showEndTurnPrompt`) is only called for
+  MUTED runs, so any VISUAL/Watchable run (new panel's Watchable speed,
+  and the pre-existing "Evolve" cheat-panel button) left the real modal
+  live, popping up fresh every time any bot emptied its AP. `playMatch()`
+  now stubs it unconditionally for every game's duration regardless of
+  visual/muted. Verified: headless watch-loop confirms the modal never
+  appears during a Watchable evolve() run; full breed-flow test (upload 2
+  synthetic champions, breed 1 generation, confirm download fires and live
+  weights/localStorage revert to the pre-breed baseline, not the bred
+  result).
 - **BOT ARENA UX + EVOLUTION: stray modal sweep, crossover, player-facing
   training panel, un-stoppable confirm phase** — `js/bot-arena.js`,
   `js/game-ui.js`. Four related fixes from a user Q&A session:
@@ -382,4 +413,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (stray out-of-AP modal sweep in playMatch(); evolve() crossover between elites; new player-facing "Bot Training" panel via Profile-header x5; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-13 (file-based champion breeding via the Bot Training panel — upload 2 parents, auto-download result, no Supabase needed; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
