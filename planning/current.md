@@ -15,6 +15,43 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT ARENA: Supabase-backed champion persistence ("Start Training" now
+  actually improves the deployed game, not just one browser)** —
+  `js/bot.js`, `js/game-ui.js`, new Supabase table on the live `Godaigo`
+  project. Correction to a claim made earlier in the same work: this
+  app's Supabase RLS is NOT wide open (an earlier read of a stale repo SQL
+  file was wrong) — every table already gates writes behind
+  `auth.role()='authenticated'` or `auth.uid()=owner`. New
+  `bot_champion_weights(weights jsonb, confirm_wins/losses/draws int,
+  win_rate generated column, created_by uuid, created_at)` follows the
+  same pattern: anyone can `SELECT`, `INSERT` requires
+  `auth.uid() = created_by`, no `UPDATE`/`DELETE` policy — an append-only
+  log, "best" picked by `win_rate`, nobody can overwrite another entry.
+  **Write** (`runWeightTraining`'s `improved` branch): when Start Training
+  beats the local baseline in a real confirmation match AND the player is
+  logged in, also submits the champion + confirmation record — best-effort,
+  never blocks/fails the local result if logged out or offline. **Read**
+  (`bot.js`, async/non-blocking): fetches the highest-`win_rate` champion
+  on load and merges it over `WEIGHTS` once resolved (Bot Brain preference
+  re-applied after, so it still always wins over any submitted table's
+  `searchDepth`/`searchHybrid`). Explicit design choice per user
+  direction: **always** prefer the community champion, not just as a
+  fallback when local storage is empty — a fresh device benefits
+  immediately, and a device's own local training can be superseded by a
+  better community submission on the next load. Found + fixed during
+  testing: the fetch initially used `window.supabase`, which stays the raw
+  `createClient` factory forever (`config.js`'s
+  `const supabase = window.supabase.createClient(...)` never attaches the
+  initialized client to `window` — a top-level `const` doesn't). Every
+  other Supabase call site in this codebase already correctly used the
+  bare `supabase` global; this one silently no-opped until fixed. Verified:
+  migration applied + schema/RLS confirmed live, `win_rate` math sanity-
+  checked via a throwaway insert/select/delete, `get_advisors` shows no
+  new findings, and a targeted-mock headless test confirms the fetch
+  actually overwrites live `WEIGHTS` + `localStorage`. Deliberately left
+  alone per explicit user request: the file-based "Breed from champion
+  files" section (see entry below) still does NOT touch Supabase or live
+  weights — that flow is staying local/manual for now.
 - **BOT ARENA: file-based champion breeding (Supabase alternative) +
   visual-run modal fix** — `js/bot-arena.js`, `js/game-ui.js`. Follow-up to
   the Supabase discussion below: rather than a shared backend (no server
@@ -413,4 +450,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (file-based champion breeding via the Bot Training panel — upload 2 parents, auto-download result, no Supabase needed; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-13 (Start Training now persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*

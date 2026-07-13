@@ -120,6 +120,7 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `user_profiles` | gamification.js | XP, gold, level, stats |
 | `user_activities` | gamification.js | Activity log for rewards |
 | `badges` | gamification-ui.js | Badge ownership |
+| `bot_champion_weights` | bot.js, game-ui.js | Trained bot weight tables — append-only submission log; `win_rate` generated column ranks them. Best one auto-applied on load (bot.js), Start Training submits to it when logged in (game-ui.js). Not `game_state`/`shop_items` — those exist but are unused (0 rows). |
 
 ---
 
