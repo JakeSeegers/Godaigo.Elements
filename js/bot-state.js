@@ -426,11 +426,25 @@
                     countTouchingUnrevealedTiles(a.x, a.y) < 2) {
                     return { ok: false, reason: 'player tiles must touch 2+ unrevealed tiles' };
                 }
+                // Capture BEFORE calling placeTile() — its own multiplayer
+                // branch (game-core.js) synchronously advances
+                // activePlayerIndex to the NEXT player as part of processing
+                // THIS placement (turn-tracking broadcast + local turn
+                // advance both happen inside that one call). Reading
+                // activePlayerIndex after the call — as this code used to —
+                // picks up the wrong (next) player's index for the VISUAL
+                // placement broadcast every other client renders from, even
+                // though `color` (read from the still-correct playerColor
+                // global) is right. Only the host's own screen was ever
+                // correct, since it renders the placement directly rather
+                // than through this broadcast — every other client saw the
+                // tile/pawn/color placed one index off.
+                const placingIndex = activePlayerIndex;
                 placeTile(a.x, a.y, 0, false, 'player');
                 if (typeof broadcastGameAction === 'function') {
                     broadcastGameAction('player-tile-place', {
                         x: a.x, y: a.y,
-                        playerIndex: activePlayerIndex,
+                        playerIndex: placingIndex,
                         color: playerColor,
                         cosmetics: null
                     });
