@@ -4254,6 +4254,21 @@
                     if (ownTile && ownTile.isPlayerTile) {
                         ownTile.playerIndex = myPlayerIndex;
                     }
+                    // tilePlayerIndex itself was captured from the SAME stale
+                    // playerPositions.length snapshot, and is what actually
+                    // gets broadcast + tracked in playerTilesPlaced below —
+                    // the two corrections above didn't touch it. Left
+                    // uncorrected, a race (a remote placement broadcast
+                    // arriving between this client's own placePlayer() call
+                    // and this point) permanently attributes THIS placement
+                    // to the WRONG player index: playerTilesPlaced gets the
+                    // wrong index marked (never reaching totalPlayers with
+                    // the real index included), and every other client
+                    // advances activePlayerIndex/waits based on the wrong
+                    // color too — the true owner's placement phase never
+                    // completes, freezing the game waiting on a player who
+                    // in fact already placed.
+                    tilePlayerIndex = myPlayerIndex;
                 }
 
                 // In multiplayer, broadcast tile placement and track placement phase
