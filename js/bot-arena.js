@@ -305,6 +305,11 @@
 
         neutralizeTutorial();
         ensureLocalMode();
+        // A real "out of AP, end turn?" modal from whatever game the human
+        // was just in doesn't get cleared by muting/stubbing
+        // showEndTurnPrompt() (that only stops NEW popups) — any instance
+        // already in the DOM sits there, unclicked, for the whole bot job.
+        document.getElementById('end-turn-empty-ap-modal')?.remove();
         if (typeof resetGameResources === 'function') resetGameResources();
         window.BotSystem.resetMemory();
         startGame(nPlayers);
