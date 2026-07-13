@@ -3996,6 +3996,114 @@ document.getElementById('undo-move').onclick = function() {
             return positions;
         }
 
+        // Stop any currently-running local bot job (spectate/run/evolve) and
+        // wait for it to actually finish — BotArena.isRunning() covers all
+        // three, checked between turns/generations, which can take a few
+        // seconds. Returns false (with a status message already shown) if it
+        // couldn't be stopped in time. Shared by the dev cheat panel and the
+        // Profile-header bot training panel below — hoisted out of either
+        // panel's own IIFE so both call the same instance instead of two
+        // independently-maintained copies of correctness-sensitive cleanup.
+        async function stopAnyRunningBotJob() {
+            if (!window.BotArena.isRunning()) return true;
+            updateStatus('Stopping the current bot job…');
+            for (let i = 0; i < 100 && window.BotArena.isRunning(); i++) {
+                window.BotArena.stop();
+                await new Promise(r => setTimeout(r, 300));
+            }
+            if (window.BotArena.isRunning()) {
+                updateStatus('Could not stop the running bot job');
+                return false;
+            }
+            return true;
+        }
+
+        // Leave the current online room if we're in one — bot jobs
+        // (spectate/run/evolve) run local hot-seat games and would otherwise
+        // collide with a live multiplayer session. Shared, see note above.
+        async function leaveOnlineGameIfAny() {
+            if (!isMultiplayer) return;
+            updateStatus('Leaving the online game…');
+            if (isHost && currentGameId) {
+                try {
+                    const { data: players } = await supabase.from('players')
+                        .select('id, username').eq('game_id', currentGameId);
+                    for (const p of (players || []).filter(p => window.isBotUsername?.(p.username))) {
+                        await supabase.rpc('remove_player', { p_player_id: p.id });
+                    }
+                } catch (e) { console.warn('bot-row cleanup failed (continuing):', e); }
+            }
+            if (typeof _doLeaveGame === 'function') await _doLeaveGame();
+        }
+
+        // Run one weight-training cycle: evolve() a population, then CONFIRM
+        // the champion actually beats the pre-training weights in a real
+        // series before keeping it (reverting to the exact prior
+        // localStorage value otherwise) — see the "Confirmation gate" note
+        // at this function's cheat-panel call site for why. opts.nPlayers
+        // (default 2) and opts.visual (default false, i.e. muted/fast) let
+        // a caller choose training-game size and pacing without changing
+        // the function's own default behavior for existing callers.
+        async function runWeightTraining(preset, onProgress, opts = {}) {
+            const { generations, gamesPerPair, popSize, confirmGames } = preset;
+            const nPlayers = opts.nPlayers ?? 2;
+            const visual = !!opts.visual;
+            const baselineWeights = { ...window.BotSystem.WEIGHTS };
+            let baselineStored = null;
+            try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
+            await leaveOnlineGameIfAny();
+
+            const pairs = popSize * (popSize - 1) / 2;
+            const totalGames = (nPlayers > 2 ? (opts.gamesPerGen ?? popSize * 2) * generations : pairs * gamesPerPair * generations) + confirmGames;
+            const startedAt = Date.now();
+            let gamesDone = 0, lastGen = 0, lastFitness = null;
+            const report = (phase) => onProgress({
+                phase, gamesDone, totalGames, startedAt,
+                gen: lastGen, generations, fitness: lastFitness,
+            });
+
+            const champion = await window.BotArena.evolve(generations, {
+                gamesPerPair, popSize, nPlayers, visual,
+                gamesPerGen: nPlayers > 2 ? (opts.gamesPerGen ?? popSize * 2) : undefined,
+                onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report('training'); },
+                onGame: () => { gamesDone++; report('training'); },
+            });
+
+            // stop() during the evolve phase only cuts THAT phase short —
+            // run() resets the same shared _stopRequested flag the instant
+            // it starts, so without this check a cancelled evolve() would
+            // silently still run the full (un-stoppable) confirmation
+            // series behind it. Treat an early stop like "did not improve":
+            // discard whatever evolve() got to and revert to the exact
+            // pre-training weights.
+            if (window.BotArena.stopRequested()) {
+                window.BotArena.applyWeights(baselineWeights);
+                try {
+                    if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                    else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                } catch (e) {}
+                return { improved: false, record: 'stopped' };
+            }
+
+            report('confirming');
+            const confirm = await window.BotArena.run(
+                champion, baselineWeights, confirmGames, Date.now() % 100000,
+                { visual, onGame: () => { gamesDone++; report('confirming'); } });
+            const improved = confirm.aFitness > confirm.bFitness;
+            const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
+
+            if (improved) {
+                window.BotArena.applyWeights(champion);
+            } else {
+                window.BotArena.applyWeights(baselineWeights);
+                try {
+                    if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                    else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                } catch (e) {}
+            }
+            return { improved, record };
+        }
+
         // ─── Hidden cheat panel ──────────────────────────────────────────────
         // Activate: click the "AP" label in the HUD 5 times within 3 seconds
         (function initCheatPanel() {
@@ -4123,45 +4231,6 @@ document.getElementById('undo-move').onclick = function() {
                 brainBtn.style.color = BRAIN_UI[currentBrain()].color;
                 panel.appendChild(brainBtn);
 
-                // Stop any currently-running local bot job (spectate/run/evolve)
-                // and wait for it to actually finish — BotArena.isRunning() covers
-                // all three, checked between turns/generations, which can take a
-                // few seconds. Returns false (with a status message already
-                // shown) if it couldn't be stopped in time. Used by the Train
-                // Weights buttons below, which do their own leave-online step
-                // via leaveOnlineGameIfAny() as part of runWeightTraining().
-                async function stopAnyRunningBotJob() {
-                    if (!window.BotArena.isRunning()) return true;
-                    updateStatus('Stopping the current bot job…');
-                    for (let i = 0; i < 100 && window.BotArena.isRunning(); i++) {
-                        window.BotArena.stop();
-                        await new Promise(r => setTimeout(r, 300));
-                    }
-                    if (window.BotArena.isRunning()) {
-                        updateStatus('Could not stop the running bot job');
-                        return false;
-                    }
-                    return true;
-                }
-
-                // Leave the current online room if we're in one — bot jobs
-                // (spectate/run/evolve) run local hot-seat games and would
-                // otherwise collide with a live multiplayer session.
-                async function leaveOnlineGameIfAny() {
-                    if (!isMultiplayer) return;
-                    updateStatus('Leaving the online game…');
-                    if (isHost && currentGameId) {
-                        try {
-                            const { data: players } = await supabase.from('players')
-                                .select('id, username').eq('game_id', currentGameId);
-                            for (const p of (players || []).filter(p => window.isBotUsername?.(p.username))) {
-                                await supabase.rpc('remove_player', { p_player_id: p.id });
-                            }
-                        } catch (e) { console.warn('bot-row cleanup failed (continuing):', e); }
-                    }
-                    if (typeof _doLeaveGame === 'function') await _doLeaveGame();
-                }
-
                 // Shared prep for restartAsBots/restartAsEvolve, from ANY game
                 // context: stop whatever bot session is already running, then
                 // leave the online room if we're in one. Returns false (with a
@@ -4281,47 +4350,8 @@ document.getElementById('undo-move').onclick = function() {
                 // what got written, reverting it if the result didn't hold up.
                 // Leaves any online game first, same reasoning as the
                 // bot-match buttons above: this plays local hot-seat games
-                // under the hood.
-                async function runWeightTraining(preset, onProgress) {
-                    const { generations, gamesPerPair, popSize, confirmGames } = preset;
-                    const baselineWeights = { ...window.BotSystem.WEIGHTS };
-                    let baselineStored = null;
-                    try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
-                    await leaveOnlineGameIfAny();
-
-                    const pairs = popSize * (popSize - 1) / 2;
-                    const totalGames = pairs * gamesPerPair * generations + confirmGames;
-                    const startedAt = Date.now();
-                    let gamesDone = 0, lastGen = 0, lastFitness = null;
-                    const report = (phase) => onProgress({
-                        phase, gamesDone, totalGames, startedAt,
-                        gen: lastGen, generations, fitness: lastFitness,
-                    });
-
-                    const champion = await window.BotArena.evolve(generations, {
-                        gamesPerPair, popSize,
-                        onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report('training'); },
-                        onGame: () => { gamesDone++; report('training'); },
-                    });
-
-                    report('confirming');
-                    const confirm = await window.BotArena.run(
-                        champion, baselineWeights, confirmGames, Date.now() % 100000,
-                        { onGame: () => { gamesDone++; report('confirming'); } });
-                    const improved = confirm.aFitness > confirm.bFitness;
-                    const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
-
-                    if (improved) {
-                        window.BotArena.applyWeights(champion);
-                    } else {
-                        window.BotArena.applyWeights(baselineWeights);
-                        try {
-                            if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
-                            else localStorage.setItem('godaigo_bot_weights', baselineStored);
-                        } catch (e) {}
-                    }
-                    return { improved, record };
-                }
+                // under the hood. (runWeightTraining itself is hoisted above
+                // initCheatPanel — shared with the bot training panel.)
 
                 // Shared progress meter for whichever training preset is running.
                 const progressWrap = document.createElement('div');
@@ -4837,6 +4867,164 @@ document.getElementById('undo-move').onclick = function() {
                 if (clickCount >= 5) {
                     clickCount = 0;
                     openCheatPanel();
+                } else {
+                    clickTimer = setTimeout(() => { clickCount = 0; }, 3000);
+                }
+            });
+        })();
+
+        // ─── Bot Training panel ────────────────────────────────────────────
+        // A lighter, player-facing sibling of the dev cheat panel's Train
+        // Weights buttons: pick a player count and a speed, press Start.
+        // Activate: click the Profile modal's header ("Profile" —
+        // <h2 class="gami-title">, always that exact text regardless of
+        // which tab is active, see gamification-ui.js) 5 times within 3
+        // seconds — same debounce pattern as the AP-label trigger above.
+        (function initBotTrainingPanel() {
+            let clickCount = 0;
+            let clickTimer = null;
+            const state = { n: 2, watchable: true };
+
+            function openBotTrainingPanel() {
+                const existing = document.getElementById('bot-training-panel');
+                if (existing) { existing.remove(); return; }
+                if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+
+                const panel = document.createElement('div');
+                panel.id = 'bot-training-panel';
+                Object.assign(panel.style, {
+                    position: 'fixed', bottom: '60px', right: '16px',
+                    background: '#1a1a2e', border: '1px solid #444', borderRadius: '8px',
+                    padding: '10px 14px', zIndex: '9999', display: 'flex',
+                    flexDirection: 'column', gap: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+                    minWidth: '240px', maxWidth: '280px',
+                });
+
+                const title = document.createElement('div');
+                title.textContent = '🧬 Bot Training';
+                title.style.cssText = 'font-size:13px;font-weight:bold;color:#eee;';
+                panel.appendChild(title);
+
+                const desc = document.createElement('div');
+                desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match.';
+                desc.style.cssText = 'font-size:11px;color:#999;';
+                panel.appendChild(desc);
+
+                // A row of mutually-exclusive pick buttons for one setting —
+                // shared render logic for the player-count and speed rows below.
+                function makeChoiceRow(label, options, getValue, setValue) {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                    const lbl = document.createElement('span');
+                    lbl.textContent = label;
+                    lbl.style.cssText = 'font-size:12px;color:#aaa;min-width:44px;';
+                    row.appendChild(lbl);
+                    const buttons = options.map(opt => {
+                        const b = document.createElement('button');
+                        b.textContent = opt.text;
+                        if (opt.title) b.title = opt.title;
+                        row.appendChild(b);
+                        return { b, value: opt.value };
+                    });
+                    function repaint() {
+                        for (const { b, value } of buttons) {
+                            const on = value === getValue();
+                            b.style.cssText = `padding:4px 9px;border-radius:5px;cursor:pointer;font-size:12px;` +
+                                `border:1px solid ${on ? '#6ef' : '#555'};background:${on ? '#2d4a4a' : '#2d2d44'};color:#eee;`;
+                        }
+                    }
+                    for (const { b, value } of buttons) {
+                        b.onclick = () => {
+                            if (startBtnRef.disabled) return; // locked while a run is active
+                            setValue(value);
+                            repaint();
+                        };
+                    }
+                    repaint();
+                    panel.appendChild(row);
+                }
+
+                // startBtnRef is read inside makeChoiceRow's onclick above, so it
+                // needs to exist (even if reassigned below) before the rows are built.
+                const startBtnRef = { disabled: false };
+
+                makeChoiceRow('Players:',
+                    [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })),
+                    () => state.n, (v) => { state.n = v; });
+
+                makeChoiceRow('Speed:', [
+                    { value: true, text: 'Watchable', title: 'Normal pacing — watch the board play out' },
+                    { value: false, text: 'Extreme', title: 'Muted, minimal delay — much faster, nothing to watch (a true no-UI "headless" mode isn\'t possible in the browser tab the live game runs in)' },
+                ], () => state.watchable, (v) => { state.watchable = v; });
+
+                const progressText = document.createElement('div');
+                progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
+                panel.appendChild(progressText);
+
+                function fmtTime(s) { return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`; }
+                function renderProgress(p) {
+                    progressText.style.display = 'block';
+                    const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
+                    const elapsedS = (Date.now() - p.startedAt) / 1000;
+                    const genLine = p.phase === 'confirming' ? 'Confirming result' : `gen ${p.gen}/${p.generations}`;
+                    progressText.textContent = `${genLine} — games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtTime(elapsedS)}`;
+                }
+
+                const startBtn = document.createElement('button');
+                startBtn.textContent = 'Start Training';
+                startBtn.style.cssText = 'padding:6px 10px;background:#2d4a2d;color:#eee;border:1px solid #5a5;border-radius:5px;cursor:pointer;font-size:12px;';
+                startBtn.onclick = async () => {
+                    if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
+                    if (!await stopAnyRunningBotJob()) return;
+                    startBtnRef.disabled = true;
+                    startBtn.disabled = true;
+                    startBtn.textContent = 'Training…';
+                    try {
+                        const preset = { generations: 3, gamesPerPair: 1, popSize: 6, confirmGames: 10 };
+                        const { improved, record } = await runWeightTraining(preset, renderProgress, {
+                            nPlayers: state.n, visual: state.watchable,
+                        });
+                        progressText.style.display = 'none';
+                        updateStatus(improved
+                            ? `Training complete — champion beat the starting weights ${record} in the confirmation match. New weights applied and saved.`
+                            : `Training finished but did not beat the starting weights (${record}) — kept the previous weights.`);
+                    } catch (err) {
+                        console.error('Bot training failed:', err);
+                        progressText.style.display = 'none';
+                        updateStatus('Bot training failed — see console');
+                    } finally {
+                        startBtnRef.disabled = false;
+                        startBtn.disabled = false;
+                        startBtn.textContent = 'Start Training';
+                    }
+                };
+                panel.appendChild(startBtn);
+
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = 'Stop';
+                stopBtn.style.cssText = 'padding:5px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:12px;';
+                stopBtn.onclick = () => {
+                    if (window.BotArena?.isRunning()) { window.BotArena.stop(); updateStatus('Stopping after the current generation…'); }
+                    else updateStatus('No training run in progress');
+                };
+                panel.appendChild(stopBtn);
+
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = '✕ Close';
+                closeBtn.style.cssText = 'padding:4px 9px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:12px;';
+                closeBtn.onclick = () => panel.remove();
+                panel.appendChild(closeBtn);
+
+                document.body.appendChild(panel);
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!e.target || !e.target.classList.contains('gami-title')) return;
+                clickCount++;
+                clearTimeout(clickTimer);
+                if (clickCount >= 5) {
+                    clickCount = 0;
+                    openBotTrainingPanel();
                 } else {
                     clickTimer = setTimeout(() => { clickCount = 0; }, 3000);
                 }

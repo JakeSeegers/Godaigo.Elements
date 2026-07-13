@@ -671,6 +671,7 @@
     window.BotArena = {
         run, evolve, playGame, playMatch, spectate, stop,
         isSpectating, isEvolving, isRunning,
+        stopRequested: () => _stopRequested, // was stop() called for the run in progress (or the one that just ended)?
         applyWeights: setWeights, // apply an {…} weight table to the LIVE WEIGHTS object in place
     };
     log('Loaded — window.BotArena ready (run / evolve / spectate)');
