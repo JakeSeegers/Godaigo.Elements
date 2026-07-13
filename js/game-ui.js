@@ -4094,6 +4094,25 @@ document.getElementById('undo-move').onclick = function() {
 
             if (improved) {
                 window.BotArena.applyWeights(champion);
+                // Best-effort share to the community champion table — only
+                // when logged in (bot_champion_weights requires
+                // auth.uid() = created_by, same pattern as game_room/
+                // players). Never blocks or fails the local training result
+                // on account of this; a network hiccup or being logged out
+                // just means this run's improvement stays local, same as
+                // before this existed.
+                try {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.user?.id) {
+                        await supabase.from('bot_champion_weights').insert({
+                            weights: champion,
+                            confirm_wins: confirm.aWins,
+                            confirm_losses: confirm.bWins,
+                            confirm_draws: confirm.draws,
+                            created_by: session.user.id,
+                        });
+                    }
+                } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
             } else {
                 window.BotArena.applyWeights(baselineWeights);
                 try {

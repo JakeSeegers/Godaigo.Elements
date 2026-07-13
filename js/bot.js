@@ -196,17 +196,58 @@
     } catch (e) { /* corrupt save — keep defaults */ }
 
     // Bot Brain preference (cheat panel: click the HUD "AP" label 5×) —
-    // applied LAST so it wins over both defaults and evolved weights.
+    // applied LAST so it wins over both defaults and evolved/community
+    // weights. Factored into a function so the async community-champion
+    // fetch below can re-apply it after overwriting WEIGHTS — otherwise a
+    // fetched table's own searchDepth/searchHybrid (always equal to
+    // whatever the trainer's Bot Brain happened to be set to, per
+    // mutate()/crossover() excluding those keys) could silently override
+    // the LOCAL player's own Bot Brain choice.
     //   'dumb'   → greedy Stage-1 scoring (searchDepth 0)
     //   'smart'  → 3-ply lookahead on every action
     //   'hybrid' → lookahead only at tactical decision points
-    try {
-        const brain = localStorage.getItem('godaigo_bot_brain');
-        if (brain === 'smart')       { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 0; }
-        else if (brain === 'hybrid') { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 1; }
-        else if (brain === 'dumb')   { WEIGHTS.searchDepth = 0; WEIGHTS.searchHybrid = 0; }
-        if (brain) log(`Bot brain: ${brain}`);
-    } catch (e) { /* keep whatever the weights said */ }
+    function applyBrainPreference() {
+        try {
+            const brain = localStorage.getItem('godaigo_bot_brain');
+            if (brain === 'smart')       { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 0; }
+            else if (brain === 'hybrid') { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 1; }
+            else if (brain === 'dumb')   { WEIGHTS.searchDepth = 0; WEIGHTS.searchHybrid = 0; }
+            if (brain) log(`Bot brain: ${brain}`);
+        } catch (e) { /* keep whatever the weights said */ }
+    }
+    applyBrainPreference();
+
+    // Best-known community champion (Supabase `bot_champion_weights`):
+    // async and non-blocking — bots can act immediately with whatever
+    // loaded synchronously above; if/when this resolves, it overwrites
+    // WEIGHTS in place with the highest win-rate submitted champion and
+    // caches it to localStorage, so a later offline load still has it.
+    // Deliberately "always prefer community" (explicit design choice, see
+    // planning/current.md) — this can supersede a LOCAL Start Training
+    // result the moment the fetch resolves, including on the very run that
+    // just produced it (which is fine: that run's own submission is very
+    // likely the new best, so this just reflects it back). Silent no-op on
+    // any failure (offline, RLS hiccup, table not reachable) — never blocks
+    // or errors the bot on account of a background fetch.
+    (async function loadCommunityChampion() {
+        try {
+            // The initialized client lives in the bare global `supabase`
+            // (config.js: `const supabase = window.supabase.createClient(...)`)
+            // — a top-level const does NOT attach itself to `window`, so
+            // `window.supabase` stays the raw createClient factory forever.
+            if (typeof supabase === 'undefined' || !supabase?.from) return;
+            const { data, error } = await supabase
+                .from('bot_champion_weights')
+                .select('weights')
+                .order('win_rate', { ascending: false })
+                .limit(1);
+            if (error || !data?.length || !data[0].weights || typeof data[0].weights !== 'object') return;
+            Object.assign(WEIGHTS, data[0].weights);
+            applyBrainPreference();
+            try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(WEIGHTS)); } catch (e) {}
+            log('Loaded best community champion from Supabase');
+        } catch (e) { /* offline / RLS / network hiccup — keep whatever loaded synchronously */ }
+    })();
 
     // ----------------------------------------------------------------
     // Derived state helpers (read ONLY from the snapshot — never from
