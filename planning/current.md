@@ -15,6 +15,47 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT WEIGHTS: value held void stones for their standing AP bonus; scoped
+  earth/fire tactics as follow-up** — `js/bot.js`, `docs/bot-roadmap.md`.
+  User question: should place/break weights differ per stone type, since
+  each element has a distinct ability? Investigated per-element: wind's
+  free movement already prices correctly for free (feeds into `a.cost` in
+  the existing generic `moveApPenalty` term); water's value is entirely
+  borrowed from whatever it's chained to (mimics earth/wind depending on
+  the adjacent stone), so a static weight can't represent it and was
+  deliberately left alone. Void's standing AP bonus (`voidAP = pool.void`
+  each turn, game-core.js) WAS a real gap — the evaluator priced void pool
+  stones identically to every other element's (generic need-based terms
+  only). Added 3 weights: `evalVoidHeld` (`evaluateSnapshot()`, additive on
+  top of the existing per-element terms — different value source, not a
+  replacement) so Hybrid-brain search naturally discounts spending void
+  stones (BotSim.simulate() already decrements pool on placeStone);
+  `shrineVoidBonus` (`shrineValue()`, void only) so real movement/endTurn
+  scoring — which stays greedy even under Hybrid ("plain movement stays
+  greedy") — pulls toward void shrines harder; `placeVoidSpendPenalty`
+  (`scoreAction()`'s placeStone case) mirrors the same cost for the
+  non-search "Dumb" brain fallback. Verified: `evaluateSnapshot()`/`score()`
+  called directly with synthetic snapshots via `window.BotSystem` — each
+  new term's contribution matched the exact expected weighted delta;
+  10-game self-play regression (`BotArena.run`) shows no errors, normal
+  win/draw mix. Earth (path-blocking) and fire (destroying an opponent's
+  stones) are real opponent-facing tactics the bot doesn't reason about at
+  all today, but need more than a quick weight: placement position is
+  dictated by the bot's own pattern (`legalActions()` generates candidates
+  relative to the bot's own hex, not free placement anywhere), and the
+  natural home for a leaf-level bonus (`evaluateSnapshot()`) can't afford
+  fresh per-opponent Dijkstra pathfinding at search-leaf call volume (root
+  scores every legal action, then expands `searchBreadth` children per ply
+  down to `searchDepth`). Fire-vs-common-area-scrolls already works for
+  free today, incidentally — `BotSim.simulate()` already models fire
+  destroying adjacent non-fire/non-void stones, and `evaluateSnapshot()`'s
+  existing `commonAreaThreat()` re-checks opponent pattern satisfaction on
+  the post-simulated snapshot. Fire-vs-opponent-hand-scrolls is infeasible
+  regardless — opponent hand scroll NAMES are hidden by design (only
+  `handElements` is public). Full scoped design (cache each opponent's
+  cheapest-path hex set once per decision, not per search leaf; check
+  membership cheaply in `scoreAction()`'s root-level placeStone scoring):
+  docs/bot-roadmap.md § STAGE 4.
 - **BOT ARENA UX: population lineage tracking + Bot Training panel rebuilt as
   a full modal** — `js/bot-arena.js`, `js/game-ui.js`. Follow-up to a user
   Q&A about exactly how `evolve()`/N-player training works (population size
@@ -614,4 +655,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-13 (void pool stones now valued for their standing AP bonus via 3 new weights — evalVoidHeld, shrineVoidBonus, placeVoidSpendPenalty — and earth-blocking/fire-interference tactics scoped as a follow-up in bot-roadmap.md § STAGE 4; evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
