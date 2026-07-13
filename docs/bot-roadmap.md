@@ -644,38 +644,7 @@ otherwise there is no way to tell whether effect-driving actually wins games.
 
 Build order (each step independently commit-able and arena-measurable):
 
-1. **Inventory the choice space (DONE — table below).** From
-   `js/scrolls/effects/scroll-effects.js`, every scroll whose `execute()`
-   returns `requiresSelection:true` (or sets `tileMoveMode`/`takeFlightState`),
-   what is being chosen, what makes a choice valid, and the interaction
-   mechanic (matters for how hard each is to drive programmatically).
-
-   | Scroll | Effect name | Chooses | Mechanic | Valid when | `selectionMode.type` |
-   |---|---|---|---|---|---|
-   | EARTH_SCROLL_2 | Shifting Sands | 2 tiles to swap | click 2 tiles (`handleTileClick`) | tile has no stones/players, in eligible set | `tile-swap` |
-   | EARTH_SCROLL_4 | Heavy Stomp | 1 tile to flip | click 1 tile (`handleTileClick`) | any tile | `tile-flip` |
-   | WATER_SCROLL_3 | Inspiring Draught | a deck, then (if 2 drawn) which to return | 2-step DOM modal (`showDeckSelectionModal` → `showScrollSelectionModal`) | deck non-empty | none (pure modal, IDs `deck-select-modal`/`scroll-select-modal`) |
-   | WATER_SCROLL_4 | Wandering River | 1 tile, then a new element | click tile (`handleTileClick`), then click element in a follow-up modal (`showElementSelectionModal`) | tile not a player tile | `tile-element-change` |
-   | WATER_SCROLL_5 | Control the Current | any number of adjacent water stones, one at a time | click stones (`handleStoneClick`), no fixed count — a "Done"-style exit | stone is water, adjacent to caster | `water-transform` |
-   | FIRE_SCROLL_3 | Sacrificial Pyre | 1 hand scroll to sacrifice | click-based modal (`showScrollSelectionModal`) | hand non-empty | none (modal `scroll-select-modal`) — **cascades**: if the sacrificed scroll itself has a selection effect (e.g. sacrificing EARTH_SCROLL_2), `execute()` is called on it too, opening a SECOND selection mode |
-   | FIRE_SCROLL_4 | Transmute | any number of stones/scrolls to discard for AP | DOM modal, click items repeatedly | AP not already at max | none — modal id `'transmute-modal'`, **NOT in `EFFECT_MODAL_IDS`** (bug, see below) |
-   | FIRE_SCROLL_5 | Arson | an opponent, then one of their stone types | 2-step modal (`showOpponentSelectionModal` → `showArsonElementModal`) | opponent not Excavate-immune, has ≥1 stone of some type | none (modals `opponent-select-modal`/`arson-element-modal`) |
-   | WIND_SCROLL_4 | Take Flight | a player, then a destination hex | modal for player, then **drag** the pawn to a hex (no click handler — `window.takeFlightState`) | destination unoccupied | `take-flight-drag` |
-   | VOID_SCROLL_2 | Scholar's Insight | a deck, then a scroll from it | 2-step DOM modal | deck non-empty | `scholars-insight` (cleanup only; picking is modal-driven) |
-   | VOID_SCROLL_4 | Telekinesis | 1 tile to move | **drag** a highlighted tile (`window.tileMoveMode`), not click — no `handleTileClick` | tile touches ≥2 others after moving; max moves is **1** (execute()'s status text says "(0/3)" — stale/wrong, code says `MAX_MOVES = 1`) | `telekinesis` |
-   | VOID_SCROLL_5 | Create | 1 element type | click a modal button | pool for that element has room | none (modal `create-stone-modal`) |
-   | CATACOMB_SCROLL_3 | Call to Adventure | 1 tile to flip | reuses Heavy Stomp's `enterTileFlipMode` | unoccupied tile | `tile-flip` |
-   | CATACOMB_SCROLL_4 | Excavate | 1 hex to teleport to | click a hex (`handleHexClick`) | **deferred**: opens at the start of the caster's NEXT turn, not at cast time; hex on a revealed non-player tile, no stone/player on it | `excavate-teleport` |
-   | CATACOMB_SCROLL_8 | Plunder | a target player, then one of their active scrolls | 2-step modal (`showPlunderPlayerModal` → `showScrollSelectionModal`) | target has ≥1 active scroll (self-targeting allowed, excludes the scroll being cast) | none (modals `plunder-player-modal`/`scroll-select-modal`) |
-   | CATACOMB_SCROLL_9 | Quick Reflexes | a level-1 scroll from a deck | modal, deck search restricted to level 1 | a level-1 scroll exists in some deck | `quick-reflexes` |
-   | CATACOMB_SCROLL_10 | Combust | 1 tile to destroy all stones on | click 1 tile (`handleTileClick`) | not a player tile | `scorched-earth` |
-
-   Not selection-mode at all but still worth Stage-2.5 attention: **response
-   scrolls** (level 1, step 3 below) — EARTH_SCROLL_1 (Iron Stance, counter),
-   WATER_SCROLL_1 (Reflect, duplicates the last-cast effect — so driving it
-   well requires driving whatever it reflects), FIRE_SCROLL_1 (Unbidden
-   Lamplight), WIND_SCROLL_1 (Sigh of Recollection), VOID_SCROLL_1 (Psychic,
-   counter).
+1. **Inventory the choice space (DONE — see § CHOICE-SPACE INVENTORY below).**
 
    **Two real gaps found while inventorying (fix opportunistically, not
    blocking step 2):**
@@ -696,16 +665,18 @@ Build order (each step independently commit-able and arena-measurable):
      be driven by calling their `handleXClick`/modal-button `onclick`
      directly.
 
-2. **`js/bot-effects.js` — `window.BotEffects.driveSelection()` (IN PROGRESS,
-   first increment DONE):** when a selection mode opens during a BOT cast,
-   enumerate the valid choices via the game's own selection APIs (never
-   reimplement validity — calls `selectionMode.handleTileClick(tile)` etc.
-   directly, or clicks the real modal button/card a human would), score with
-   a small independent `elementNeed()` heuristic (same shape as `bot.js`'s
-   `shrineValue()`, kept separate since this file doesn't share bot.js's
-   closure), and apply the best one. Wired into `waitForQuiescence`: tries
-   `BotEffects.driveSelection()` first, falls back to today's cancel for
-   scrolls it doesn't know.
+2. **`js/bot-effects.js` — `window.BotEffects.driveSelection()` (DONE, first
+   increment) + `driveTransmute()` (DONE):** when a selection mode opens
+   during a BOT cast, enumerate the valid choices via the game's own
+   selection APIs (never reimplement validity — calls
+   `selectionMode.handleTileClick(tile)` etc. directly, or clicks the real
+   modal button/card a human would), score with a small independent
+   `elementNeed()` heuristic (same shape as `bot.js`'s `shrineValue()`, kept
+   separate since this file doesn't share bot.js's closure), and apply the
+   best one. Wired into `waitForQuiescence`: checks for the Transmute modal
+   first (`driveTransmute()` — no `selectionMode` object exists for it),
+   then tries `BotEffects.driveSelection()` for everything else, falling
+   back to today's cancel for scrolls neither one knows.
 
    **Driven so far:** tile-flip (Heavy Stomp EARTH_SCROLL_4, Call to
    Adventure CATACOMB_SCROLL_3 — prefers flipping a hidden tile over hiding
@@ -713,7 +684,8 @@ Build order (each step independently commit-able and arena-measurable):
    tile with the most stones), tile-swap (Shifting Sands EARTH_SCROLL_2 —
    picks the two closest eligible tiles), Create (VOID_SCROLL_5 — most-needed
    element), Scholar's Insight (VOID_SCROLL_2 — most-needed element's deck,
-   then highest-level scroll in it).
+   then highest-level scroll in it), Transmute (FIRE_SCROLL_4 — discards its
+   most-plentiful stone type for AP up to a target, then clicks Done).
 
    **Not yet driven** (falls through to cancel, same as before this file
    existed): Sacrificial Pyre, Inspiring Draught, Wandering River, Control
@@ -739,23 +711,67 @@ Build order (each step independently commit-able and arena-measurable):
    similar (-8.32→-6.93) — driving effects is a net win, not a
    regression, on this small sample. Rerun at scale once more increments
    land.
-3. **Response scrolls.** Hook the response window for bot players: when
-   `ResponseWindowSystem` opens against a bot holding a castable response
-   scroll, decide respond/pass by score (v1 heuristic: respond when the
-   cast would grant the caster their 4th or 5th element, or when the
-   response is free-ish and the bot is ahead). This also removes the "bots
-   never count as responders" carve-out in response-window.js — coordinate
-   both sides, including `bot-arena.js`'s `rw.isBotPlayer = () => true`
-   override (added specifically to force-skip response windows during
-   self-play so games don't sit out the 15s timeout — this becomes real
-   decision logic instead of a skip once bots can actually respond).
-   **Explicit scope decision: no bluffing.** `canPlayerBluff()`/the bluff
-   path in `canAnyPlayerRespondOrBluff()` is a human meta-game mechanic
-   (feign holding a response you don't have); bots should only ever
-   pass-or-respond with what they actually hold — do not build bluff logic.
-   Known related bug this would help: response-only (level-1) scrolls can
-   permanently clog a common-area element slot since neither bot can ever
-   cast OR respond with one today — see the "Related finding" note above.
+
+3. **Response scrolls (DONE — real multiplayer, not just the arena).**
+   `window.BotEffects.decideResponse(responderIndex, casterIndex)`: v1
+   heuristic — counter (Iron Stance/Psychic) when the triggering cast would
+   grant the caster an unactivated element, otherwise play the cheapest
+   pure-response scroll (Reflect/Unbidden Lamplight/Sigh of Recollection)
+   for free value, else pass. **Explicit scope decision: no bluffing.**
+   `canPlayerBluff()`/the bluff path in `canAnyPlayerRespondOrBluff()` is a
+   human meta-game mechanic (feign holding a response you don't have); bots
+   should only ever pass-or-respond with what they actually hold — do not
+   build bluff logic. Two call sites:
+   - **Arena** (`js/bot.js` `waitForQuiescence`): gated on
+     `BotArena.isRunning()`.
+   - **Real multiplayer** (`js/bot-driver.js` `respondForBots()`, ticks
+     alongside the existing 700ms turn watcher): removes the "bots never
+     count as responders" carve-out in `response-window.js`
+     (`canAnyPlayerRespondOrBluff` / `checkAllPlayersResponded`) and adds a
+     `responderIndexOverride` param to `playerResponds()` so the host can
+     submit on an explicit bot index instead of relying on
+     `localResponderIndex()` (which only resolves to whichever identity is
+     locally impersonated for a full TURN, not a one-off response).
+   - **AP-accounting fix (both paths):** `getPlayerAP`/`spendPlayerAP` used
+     to have no correct source of truth for a NON-active responder outside
+     multiplayer (`playerAPs[]` was multiplayer-broadcast-only,
+     `game-core.js`'s `syncPlayerState()` early-returned before recording it
+     locally) — a responding bot's AP checks silently fell back to
+     `currentAP`, i.e. **whichever player is currently active/displayed**,
+     not the responder's own AP. Fixed by always recording
+     `playerAPs[activePlayerIndex]` in `syncPlayerState()` (not gated on
+     `isMultiplayer`), and by giving `spendPlayerAP()` a direct-to-`playerAPs[]`
+     path for "a responder with no live client of their own on this browser"
+     (any non-active player locally, or a bot specifically in real
+     multiplayer — genuine remote human opponents keep the original
+     `spendAP()` path, since on their own separate client `currentAP` is
+     unambiguously theirs). Verified: a simulated bot-responder scenario
+     (active/caster AP=9, bot AP=5) confirms `spendPlayerAP(botIndex, 2)`
+     leaves the caster's AP untouched and correctly drains the bot's own
+     tracked pool (void first, then base) to 3.
+   - **Nested selections (e.g. Reflecting/Psychic-ing an interactive
+     scroll):** SAFE as-is for the response case specifically — none of the
+     five response-eligible scrolls (Iron Stance, Psychic, Reflect,
+     Unbidden Lamplight, Sigh of Recollection) open a selection UI when
+     cast AS A RESPONSE (Reflect's immediate-nested-execution path only
+     fires in its main-phase use, which `decideResponse` never triggers).
+     The QUEUED replay (`processReflectPending`/`processPsychicPending`,
+     fired at the start of the Reflect/Psychic caster's own next turn) DOES
+     already chain through the normal `requiresSelection` UI via
+     `onComplete` callbacks for whatever scroll was queued — if that's an
+     undriven selection scroll, it degrades gracefully to today's
+     cancel-and-continue (same as any other selection the bot can't drive
+     yet), it does not hang or corrupt state.
+   - **Testability caveat:** real networked multiplayer (Supabase) is
+     unreachable from this sandbox, so the cross-client broadcast round
+     trip (`broadcastResponse`/`broadcastPass` → another client's
+     `handleRemoteResponse`/`handleRemotePass`) is unverified beyond code
+     review — everything above it (AP accounting, carve-out removal, the
+     respond/pass decision itself) is verified. Worth a real multiplayer
+     smoke test (host + bot vs. a human) before relying on this.
+   - Known related bug this would help: response-only (level-1) scrolls can
+     permanently clog a common-area element slot since neither bot can ever
+     cast OR respond with one today — see the "Related finding" note above.
 4. **Whitelist effects in the simulator.** For each scroll whose effect the
    bot can now drive, implement it in `BotSim` and add it to
    `SIMULATED_SCROLLS` — ONLY together with harness evidence
@@ -765,6 +781,62 @@ Build order (each step independently commit-able and arena-measurable):
 Acceptance per increment: arena win rate vs. the pre-increment bot improves
 (same weights, same seeds); no increment may regress the Stage-1 fixed bugs
 (recast loops, oscillation, overflow stalls).
+
+### § CHOICE-SPACE INVENTORY (Stage 2.5 step 1 — DONE)
+
+15 scrolls open an interactive selection when cast (`requiresSelection:true`
+plus a `system.enter*Mode()`/`show*Modal()` call); 1 more (Excavate) defers
+its choice to the start of the caster's NEXT turn instead of cast time.
+Everything else either fires automatically or just sets a buff that changes
+the legality of a later ordinary action (placement range, stone-move, AP
+cost) — those don't need `BotEffects` at all, they need `bot-state.js`'s
+legality checks to already account for the buff (Mason's Savvy did, once
+the drag-and-drop bug above was fixed; Seed the Skies/Avalanche do too via
+the same `isInPlacementRange` path). Grouped by interaction shape, since
+that's the natural unit for shared `BotEffects` handlers:
+
+**A — single/double tile click (board)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Shifting Sands (EARTH_SCROLL_2) | 2 tiles, any distance | `getEligibleTilesForSwap()`: not a player tile, no stones, no players (re-checked at 2nd click) | Tiles swap x/y positions |
+| Heavy Stomp (EARTH_SCROLL_4) | 1 tile | same eligible set as above | Hidden→revealed (draws a scroll, via `revealTile`); revealed→hidden (irreversible, clears undo, no scroll) |
+| Call to Adventure (CATACOMB_SCROLL_3) | 1 tile | identical mechanic — reuses `enterTileFlipMode` | Same as Heavy Stomp, plus: reveals for the rest of this turn also grant shrine stones immediately (`activeBuffs.callToAdventure`) |
+| Combust (CATACOMB_SCROLL_10) | 1 tile | `tileHasStones(tile)` true, not a player tile | Destroys every stone on that tile |
+| Wandering River (WATER_SCROLL_4) | 1 tile, then 1 element (2 steps) | tile: `getEligibleTilesForWanderingRiver()` — any non-player tile, revealed OR hidden, **no stone/player exclusion**; element: unfiltered pick of all 5 | Tile counts as chosen element (reveal/collection effects + visual) until caster's next turn |
+
+**B — modal only, no board interaction**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Create (VOID_SCROLL_5) | 1 element | button disabled if caster's own pool has no room for that element | Draws stones = that element's rank (earth 5, water 4, fire 3, wind 2, void 1) |
+| Scholar's Insight (VOID_SCROLL_2) | 1 deck, then 1 scroll from it (2 steps) | deck disabled if empty; scroll is any card in that deck | Scroll added to hand, deck reshuffled |
+| Quick Reflexes (CATACOMB_SCROLL_9) | 1 scroll | flat pooled list of every level-1 scroll across all 5 elemental decks (not deck-then-scroll) | Scroll added to hand + draws 2 stones of its element, deck reshuffled |
+| Inspiring Draught (WATER_SCROLL_3) | 1 deck, then (if 2 drawn) 1 of the 2 to put back | deck disabled if empty; auto-draws top 2 (`deck.pop()` x2), only 1 drawn if deck had 1 left (auto-kept, no 2nd step) | Kept scroll(s) go to hand; returned one reshuffled back in |
+| Sacrificial Pyre (FIRE_SCROLL_3) | 1 scroll from caster's OWN hand | any hand scroll, pattern ignored | Sent to common area; grants its stone reward; **if it has its own effect, that effect executes too** — can open a NESTED selection UI (e.g. sacrificing Shifting Sands opens tile-swap) |
+| Transmute (FIRE_SCROLL_4) | any number of: personal-pool stones (by type) / hand scrolls / active scrolls, repeatable, then Done | stone buttons disabled at 0 count; discarding stops being useful once `currentAP >= 5 + voidPool` | Each discard = +2 AP (capped); **not a single choice — an open multi-select session ended by the bot clicking Done** |
+
+**C — two-step targeting (player, then a thing of theirs)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Arson (FIRE_SCROLL_5) | 1 opponent, then 1 element (2 steps) | opponent: excludes self + Excavate-immune players; element: only types that opponent's pool has >0 of | Destroys 1 stone of that type from their pool |
+| Plunder (CATACOMB_SCROLL_8) | 1 target (self allowed), then 1 of their active scrolls (2 steps) | target: excludes Excavate-immune opponents, self always eligible; targets with 0 plunderable active scrolls shown disabled (self-target excludes the scroll currently being cast) | Chosen active scroll discarded to common area |
+| Take Flight (WIND_SCROLL_4) | 1 target player (self allowed), then a board DRAG (not click) to a hex (2 steps) | target: excludes Excavate-immune opponents; hex: unoccupied | Pawn teleports; scroll goes to target's hand if targeting an opponent, stays in caster's active area if self |
+
+**D — board drag, single actor**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Telekinesis (VOID_SCROLL_4) | DRAG 1 tile to a new spot | same eligible set as Shifting Sands, plus the drop handler enforces "must still touch ≥2 tiles, can't strand a neighbor" | Tile moves. **`MAX_MOVES` is hard-coded to 1** even though the status text says "(0/3)" — stale copy, only 1 move is ever allowed; don't build for 3 |
+
+**E — repeatable board-click session (persists all turn)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Control the Current (WATER_SCROLL_5) | click a water stone, then pick its new element, repeat freely | stone: water-typed AND currently adjacent to caster (re-evaluated live after every caster move — the click targets change as the pawn moves); element: earth/fire/wind/void filtered to only types with >0 in the SOURCE pool (stricter than Wandering River's unfiltered pick) | Stone converts type; caster may repeat for the rest of the turn |
+
+**F — deferred to the start of caster's NEXT turn (not part of `execute()` at all)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Excavate (CATACOMB_SCROLL_4) | Teleport-or-Stay prompt, then (if Teleport) 1 hex | hex: unoccupied, on a revealed non-player tile | Pawn teleports there. Casting itself has zero choices (just grants immunity/no-response buffs) — the prompt fires from `processExcavateTeleport()` at the caster's next turn start, so `BotEffects` can't drive it from `waitForQuiescence`; needs its own turn-start hook |
+
+**Buff-only scrolls (no `BotEffects` needed — just correct legality checks elsewhere):** Mason's Savvy / Seed the Skies / Avalanche (placement range — `isInPlacementRange`, Mason's Savvy's drag-and-drop bug is now fixed), Burning Motivation / Simplify / Steam Vents / Mudslide / Freedom / Mine / Reflecting Pool (automatic on cast or on a later `endTurn`/move, no player choice), Breath of Power (grants a "move an adjacent stone to an adjacent empty space" action that **doesn't exist in the Stage-0 action vocabulary yet** — would need a new `BotState` action type before a bot could use it, separate from this stage's `driveSelection()` work).
 
 ## STAGE 3a — Self-play arena (DONE) — original plan below
 
@@ -898,6 +970,34 @@ games went from 100% frozen draws to ~50-turn completions):
    monkey-patch `isBotPlayer` to `() => true` for the duration of the local
    match (restored after), same save/restore pattern as the other muted
    systems.
+
+**Unified core + visualized/N-player evolve (later addition):** `run()`,
+`evolve()`, and `spectate()` were originally two separate code paths — a
+muted/fast 2-player loop (`playGame`, used by `run`/`evolve`) and a
+visualized 2–5-player loop (`spectate`'s own inline loop, no per-player
+weight swapping). Unified into one shared `playMatch(weightsPerPlayer, opts)`
+that all three now call: `weightsPerPlayer.length` sets the player count
+(2–5), an `undefined` entry leaves `WEIGHTS` untouched (how `spectate()`
+plays with whatever's currently loaded instead of a fixed table), and
+`opts.visual` controls only pacing (muting/status/log-download stays the
+caller's job). This unlocked two things without new game logic:
+- `run()`/`evolve()` accept `opts.visual: true` to watch training games with
+  normal pacing instead of muted-fast (same core as `spectate()`).
+- `evolve()` accepts `opts.nPlayers` (2–5): 2 keeps the original exhaustive
+  pairwise round-robin; >2 samples `opts.gamesPerGen` random N-player
+  groupings per generation (seeded, reproducible) since exhaustive
+  `C(popSize, nPlayers)` explodes — the winner's population slot gets +1
+  fitness, draws get nothing.
+- `stop()` (previously spectate-only) now interrupts `run()`/`evolve()`
+  too — checked in every loop via a shared `_stopRequested` flag, reset
+  only by the true top-level entry point so a mid-evolve stop isn't undone
+  between an evolve run's internal pairwise/grouped games.
+
+Cheat panel gained a "🧬 Evolve" row next to "🤖 Bot match" (same 2/3/4/5
+player-count buttons, shared Stop), running a small visualized 3-generation
+pop-6 evolve by default — tune further from the console with
+`BotArena.evolve(generations, {nPlayers, visual, popSize, gamesPerPair,
+gamesPerGen})`.
 
 ## STAGE 3a — original plan (for reference)
 

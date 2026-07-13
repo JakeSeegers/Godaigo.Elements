@@ -3261,7 +3261,8 @@
             return matchingPos.tiles.some(tile => tile.isPlayerTile);
         }
 
-        function findValidStonePosition(x, y) {
+        function findValidStonePosition(x, y, stoneTypeOverride) {
+            const stoneType = stoneTypeOverride !== undefined ? stoneTypeOverride : draggedStoneType;
             const hexPositions = getAllHexagonPositions();
             let nearest = null;
             let minDist = Infinity;
@@ -3300,7 +3301,7 @@
                 // Check if position is valid for placement based on active buffs
                 // (isInPlacementRange already refuses to place while the pawn
                 // itself is standing on a stone — see its stoneUnderPawn check)
-                const inPlacementRange = playerPosition && isInPlacementRange(nearest.x, nearest.y, draggedStoneType);
+                const inPlacementRange = playerPosition && isInPlacementRange(nearest.x, nearest.y, stoneType);
 
                 if (!occupied && !anyPlayerHere && !onFlippedTile && inPlacementRange) {
                     return { x: nearest.x, y: nearest.y, valid: true };
@@ -5682,18 +5683,15 @@ function clearPlayerPath() {
 
         // Sync current player state (AP and resources) in multiplayer
         function syncPlayerState() {
-            if (!isMultiplayer) return;
-
-            // Record activity
-            recordActivity();
-
-            // Use global currentAP/voidAP only when we ARE the active player;
-            // otherwise fall back to last-known stored values for that player.
-            const isMyTurn = (myPlayerIndex === activePlayerIndex);
-            const apToSend = isMyTurn ? currentAP : (playerAPs[activePlayerIndex]?.currentAP ?? 5);
-            const voidApToSend = isMyTurn ? voidAP : (playerAPs[activePlayerIndex]?.voidAP ?? 0);
-
-            // Update local tracking
+            // Local per-player AP tracking runs regardless of multiplayer — it's
+            // what lets response-window.js's getPlayerAP()/spendPlayerAP() find a
+            // NON-active responder's real AP (needed for response scrolls cast by
+            // anyone but the active player: local hot-seat, arena bots, and real
+            // multiplayer bots that have no client of their own). In local/
+            // hot-seat/arena play there's only one client running every player's
+            // turn, so currentAP/voidAP genuinely belong to activePlayerIndex
+            // whenever this runs — same as the isMyTurn === true multiplayer case.
+            const isMyTurn = !isMultiplayer || (myPlayerIndex === activePlayerIndex);
             if (!playerAPs[activePlayerIndex]) {
                 playerAPs[activePlayerIndex] = { currentAP: 5, voidAP: 0 };
             }
@@ -5701,6 +5699,16 @@ function clearPlayerPath() {
                 playerAPs[activePlayerIndex].currentAP = currentAP;
                 playerAPs[activePlayerIndex].voidAP = voidAP;
             }
+
+            if (!isMultiplayer) return;
+
+            // Record activity
+            recordActivity();
+
+            // Use global currentAP/voidAP only when we ARE the active player;
+            // otherwise fall back to last-known stored values for that player.
+            const apToSend = isMyTurn ? currentAP : (playerAPs[activePlayerIndex]?.currentAP ?? 5);
+            const voidApToSend = isMyTurn ? voidAP : (playerAPs[activePlayerIndex]?.voidAP ?? 0);
 
             // Only broadcast resources when it's our own turn.
             // When it's not our turn, we must not broadcast the other player's

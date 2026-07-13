@@ -1273,7 +1273,7 @@
                 draggedStoneType = null;
                 draggedStoneOriginalPos = null;
 
-                const stonePos = findValidStonePosition(world.x, world.y);
+                const stonePos = findValidStonePosition(world.x, world.y, capturedStoneType);
                 if (stonePos.valid) {
                     if (capturedStoneId === null) {
                         window._pendingFireDestroys = [];
@@ -1950,7 +1950,7 @@
                     draggedStoneId = null;
                     draggedStoneType = null;
 
-                    const stonePos = findValidStonePosition(world.x, world.y);
+                    const stonePos = findValidStonePosition(world.x, world.y, capturedStoneType);
                     if (stonePos.valid) {
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
                         window.SoundSystem?.play(capturedStoneType === 'earth' ? 'placeearthstone' : 'placestone');
@@ -4123,19 +4123,21 @@ document.getElementById('undo-move').onclick = function() {
                 brainBtn.style.color = BRAIN_UI[currentBrain()].color;
                 panel.appendChild(brainBtn);
 
-                // Stop any currently-running local bot job (spectate match or
-                // weight-evolution run) and wait for it to actually finish —
-                // both check BotArena's shared stop flag between turns/generations,
-                // which can take a few seconds. Returns false (with a status
-                // message already shown) if it couldn't be stopped in time.
+                // Stop any currently-running local bot job (spectate/run/evolve)
+                // and wait for it to actually finish — BotArena.isRunning() covers
+                // all three, checked between turns/generations, which can take a
+                // few seconds. Returns false (with a status message already
+                // shown) if it couldn't be stopped in time. Used by the Train
+                // Weights buttons below, which do their own leave-online step
+                // via leaveOnlineGameIfAny() as part of runWeightTraining().
                 async function stopAnyRunningBotJob() {
-                    if (!(window.BotArena.isSpectating() || window.BotArena.isEvolving())) return true;
+                    if (!window.BotArena.isRunning()) return true;
                     updateStatus('Stopping the current bot job…');
-                    for (let i = 0; i < 100 && (window.BotArena.isSpectating() || window.BotArena.isEvolving()); i++) {
+                    for (let i = 0; i < 100 && window.BotArena.isRunning(); i++) {
                         window.BotArena.stop();
                         await new Promise(r => setTimeout(r, 300));
                     }
-                    if (window.BotArena.isSpectating() || window.BotArena.isEvolving()) {
+                    if (window.BotArena.isRunning()) {
                         updateStatus('Could not stop the running bot job');
                         return false;
                     }
@@ -4143,8 +4145,8 @@ document.getElementById('undo-move').onclick = function() {
                 }
 
                 // Leave the current online room if we're in one — bot jobs
-                // (spectate/evolve) run local hot-seat games and would otherwise
-                // collide with a live multiplayer session.
+                // (spectate/run/evolve) run local hot-seat games and would
+                // otherwise collide with a live multiplayer session.
                 async function leaveOnlineGameIfAny() {
                     if (!isMultiplayer) return;
                     updateStatus('Leaving the online game…');
@@ -4160,21 +4162,51 @@ document.getElementById('undo-move').onclick = function() {
                     if (typeof _doLeaveGame === 'function') await _doLeaveGame();
                 }
 
-                // Start an all-bot spectator match with a CHOSEN player count,
-                // from ANY game context. If currently in a multiplayer game it
-                // leaves the online room first (removing the room's bot rows —
-                // the disconnect sweep deliberately skips those). The action
-                // log auto-downloads when the match ends.
-                async function restartAsBots(n) {
-                    if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+                // Shared prep for restartAsBots/restartAsEvolve, from ANY game
+                // context: stop whatever bot session is already running, then
+                // leave the online room if we're in one. Returns false (with a
+                // status message) if prep failed, so the caller can bail before
+                // starting its own bot session.
+                async function stopAnyMatchAndLeaveMultiplayer() {
+                    if (!window.BotArena) { updateStatus('BotArena not loaded'); return false; }
                     panel.remove(); // clear the panel; reopen any time via the AP label
-                    if (!await stopAnyRunningBotJob()) return;
+                    if (!await stopAnyRunningBotJob()) return false;
+                    await leaveOnlineGameIfAny();
+                    return true;
+                }
+
+                // Start an all-bot spectator match with a CHOSEN player count.
+                // The action log auto-downloads when the match ends.
+                async function restartAsBots(n) {
+                    if (!(await stopAnyMatchAndLeaveMultiplayer())) return;
                     try {
-                        await leaveOnlineGameIfAny();
                         await window.BotArena.spectate(n);
                     } catch (err) {
                         console.error('Bot match failed:', err);
                         updateStatus('Bot match failed — see console');
+                    }
+                }
+
+                // Start a VISUALIZED weight-evolution run with n players per
+                // training game (2 = original pairwise round-robin; >2 samples
+                // random N-player groupings each generation — see bot-arena.js).
+                // Small defaults so a full run finishes in a few minutes, not
+                // hours — tune further from the console with BotArena.evolve().
+                async function restartAsEvolve(n) {
+                    if (!(await stopAnyMatchAndLeaveMultiplayer())) return;
+                    try {
+                        const generations = 3;
+                        const popSize = 6;
+                        await window.BotArena.evolve(generations, {
+                            nPlayers: n,
+                            visual: true,
+                            popSize,
+                            gamesPerPair: 1,
+                            gamesPerGen: n > 2 ? popSize * 2 : undefined,
+                        });
+                    } catch (err) {
+                        console.error('Evolve run failed:', err);
+                        updateStatus('Evolve run failed — see console');
                     }
                 }
 
@@ -4194,14 +4226,36 @@ document.getElementById('undo-move').onclick = function() {
                 });
                 const stopBtn = document.createElement('button');
                 stopBtn.textContent = '⏹';
-                stopBtn.title = 'Stop the running bot match (log still downloads)';
+                stopBtn.title = 'Stop the running bot session (match or evolve — action log still downloads for a match)';
                 stopBtn.style.cssText = 'padding:4px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:13px;';
                 stopBtn.onclick = () => {
-                    if (window.BotArena?.isSpectating()) { window.BotArena.stop(); updateStatus('Stopping bot match…'); }
-                    else updateStatus('No bot match running');
+                    if (window.BotArena?.isRunning()) { window.BotArena.stop(); updateStatus('Stopping bot session…'); }
+                    else updateStatus('No bot session running');
                 };
                 matchRow.appendChild(stopBtn);
                 panel.appendChild(matchRow);
+
+                // 🧬 Evolve: same visualized-match core as Bot match above, but
+                // plays a small weight-evolution run (3 generations, pop 6)
+                // instead of a single game — watch the population improve live.
+                // Champion weights are saved to localStorage['godaigo_bot_weights']
+                // after every generation and picked up automatically on reload.
+                const evolveRow = document.createElement('div');
+                evolveRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                const evolveLabel = document.createElement('span');
+                evolveLabel.textContent = '🧬 Evolve:';
+                evolveLabel.title = 'Watch a small weight-evolution run (3 generations, pop 6). Tune further from the console: BotArena.evolve(generations, {nPlayers, visual, popSize, gamesPerPair, gamesPerGen})';
+                evolveLabel.style.cssText = 'font-size:12px;color:#aaa;';
+                evolveRow.appendChild(evolveLabel);
+                [2, 3, 4, 5].forEach(n => {
+                    const b = document.createElement('button');
+                    b.textContent = String(n);
+                    b.title = `Evolve with ${n}-player training games (leaves the online game if needed)`;
+                    b.style.cssText = 'padding:4px 9px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:13px;';
+                    b.onclick = () => restartAsEvolve(n);
+                    evolveRow.appendChild(b);
+                });
+                panel.appendChild(evolveRow);
 
                 // Same-size convenience: your seat handed to a bot, table
                 // size kept. Use the numbered buttons above to pick a count.

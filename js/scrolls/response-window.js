@@ -258,9 +258,11 @@ class ResponseWindowSystem {
     }
 
     /**
-     * Is this player slot a bot? Bots cannot respond (no bot response logic
-     * exists yet), so they neither hold the response window open as potential
-     * responders nor count as expected submitters during arbitration.
+     * Is this player slot a bot? Used to skip bluff consideration (bots
+     * decide deterministically, not performatively — see
+     * canAnyPlayerRespondOrBluff) and by bot-driver.js's watcher to know
+     * which player indices it's responsible for deciding respond/pass for
+     * via window.BotEffects.decideResponse().
      */
     isBotPlayer(playerIndex) {
         try {
@@ -302,14 +304,15 @@ class ResponseWindowSystem {
                 console.log(`  Player ${i}: skipped (no pawn)`);
                 continue;
             }
-            if (this.isBotPlayer(i)) {
-                console.log(`  Player ${i}: skipped (bot — cannot respond)`);
-                continue;
-            }
             const result = this.canPlayerRespond(i);
             console.log(`  Player ${i}: canRespond=${result.canRespond}, reason=${result.reason || 'can respond'}, validScrolls=${result.validScrolls.length}`);
             if (result.canRespond) {
                 return true;
+            }
+            if (this.isBotPlayer(i)) {
+                // Bots decide deterministically via BotEffects — no reason to
+                // open the window "in case they bluff" the way a human might.
+                continue;
             }
             if (this.canPlayerBluff(i)) {
                 console.log(`  Player ${i}: can bluff (matching formation + hand element + AP)`);
@@ -788,8 +791,8 @@ class ResponseWindowSystem {
      * If the scroll is fromHand, it is moved to the active area first.
      * Resolution is deferred until ALL eligible players have responded or passed.
      */
-    playerResponds(scrollInfo) {
-        const myIndex = this.localResponderIndex();
+    playerResponds(scrollInfo, responderIndexOverride) {
+        const myIndex = responderIndexOverride ?? this.localResponderIndex();
         console.log(`playerResponds called: myIndex=${myIndex}, scroll=${scrollInfo.name}, fromHand=${scrollInfo.fromHand}`);
 
         // Double check they can still afford it
@@ -1298,6 +1301,28 @@ class ResponseWindowSystem {
             window.BotDriver.spendDriverAP(amount);
             return;
         }
+
+        // A responder with no live client of their own on THIS browser — a bot
+        // (it never has its own tab) or, in local/hot-seat/arena play, any
+        // player who isn't the one currently active (currentAP only ever holds
+        // ONE player's value at a time on a single client — see
+        // game-core.js's syncPlayerState). Genuine remote human opponents in
+        // real multiplayer keep the plain spendAP() path below: on their OWN
+        // client, currentAP is unambiguously theirs regardless of whose turn
+        // it officially is.
+        const isMultiplayerNow = typeof isMultiplayer !== 'undefined' && isMultiplayer;
+        const isUnclientedBot = typeof window !== 'undefined' && window.BotDriver
+            && typeof window.BotDriver.isBot === 'function' && window.BotDriver.isBot(playerIndex);
+        const isActive = typeof activePlayerIndex !== 'undefined' && playerIndex === activePlayerIndex;
+        if (!isActive && (!isMultiplayerNow || isUnclientedBot) && typeof playerAPs !== 'undefined') {
+            if (!playerAPs[playerIndex]) playerAPs[playerIndex] = { currentAP: 5, voidAP: 0 };
+            const p = playerAPs[playerIndex];
+            const fromVoid = Math.min(p.voidAP || 0, amount);
+            p.voidAP = (p.voidAP || 0) - fromVoid;
+            p.currentAP = Math.max(0, (p.currentAP || 0) - (amount - fromVoid));
+            return;
+        }
+
         if (typeof spendAP === 'function') {
             spendAP(amount);
         }
@@ -1517,14 +1542,15 @@ class ResponseWindowSystem {
 
         const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 1;
 
-        // All non-caster HUMAN players must submit (respond or pass) before we
-        // arbitrate. Bots never submit (they cannot respond), so counting them
-        // would force every window to run out the full timeout.
+        // All non-caster players must submit (respond or pass) before we
+        // arbitrate — including bots (BotEffects.decideResponse, driven from
+        // bot-driver.js's watcher, submits on their behalf). If a bot's host
+        // never gets to it for some reason, the 15s response timeout still
+        // force-resolves the stack as a safety net (startResponseTimeout).
         let expectedResponders = 0;
         for (let i = 0; i < numPlayers; i++) {
             if (i === this.currentCaster) continue;
             if (typeof playerPositions !== 'undefined' && !playerPositions[i]) continue;
-            if (this.isBotPlayer(i)) continue;
             expectedResponders++;
         }
         const requiredResponders = expectedResponders + 1; // +1 for caster (already in set)

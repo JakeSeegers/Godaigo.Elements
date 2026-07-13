@@ -6,8 +6,13 @@
 ---
 
 ## Active Branch
-`claude/bot-refinement-next-steps-yiwl0c` → remote: `JakeSeegers/Godaigo.Elements`
-(previous: `claude/win-screen-trigger-bug-3iv5dx`; base: `4.10.progresscheck`)
+`claude/merge-bot-branches-safe-3p` → remote: `JakeSeegers/Godaigo.Elements`
+(merges `claude/bot-crash-three-player-2wcy9j` (base: `4.10.progresscheck`) with
+`claude/masons-savvy-range-bug-ep7hjm`, which had independently diverged from
+the same lineage and gone further on Stage 2.5. The two branches' bot-arena.js
+rewrites conflicted directly: masons-savvy's `playMatch()` unification dropped
+the `ensureLocalMode()` fix below (it predates that branch's fork point) —
+restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
 - **BOT FIX: spectator match dying after turn 1 (stale isMultiplayer identity)** —
@@ -120,6 +125,42 @@
   `searchPick()` (root + every recursive ply). Confirmed on the exact
   reproducing seed: 200-turn draw → 42-turn decisive win. Full writeup:
   docs/bot-roadmap.md § Stage 1 fixed-bugs list (5th entry).
+- **MASON'S SAVVY PLACEMENT RANGE FIX** — `js/game-core.js`, `js/game-ui.js`:
+  `findValidStonePosition()` read the stone type off the module-global
+  `draggedStoneType`, but both the mouse and touch drop handlers nulled
+  that global *before* calling it, so `isInPlacementRange()` always saw
+  `stoneType = null` and silently skipped the earth-only extended-range
+  check (Mason's Savvy) and the water/wind one (Seed the Skies), falling
+  back to plain adjacency. The keyboard placement-preview path passed the
+  type explicitly and worked fine — hence the "inconsistent" symptom.
+  Fix: `findValidStonePosition(x, y, stoneTypeOverride)` now takes an
+  explicit override; both drop handlers pass the captured type before
+  nulling the global. Verified headless via Playwright (stubbed Supabase
+  client, tutorial board): same distance-3 earth-stone drop with the buff
+  active went from `valid: false` → `valid: true`.
+- **BOT STAGE 2.5 (later increments): Transmute driving + response scrolls in
+  real multiplayer** — `js/bot-effects.js`, `js/bot-driver.js`,
+  `js/response-window.js`(-adjacent), `js/game-core.js`. Added
+  `driveTransmute()` (open-ended discard-for-AP modal, no `selectionMode`
+  object) and `decideResponse(responderIndex, casterIndex)` (v1 respond/pass
+  heuristic, no bluffing). Wired into both the arena (`bot.js`
+  `waitForQuiescence`, gated on `BotArena.isRunning()`) and real multiplayer
+  (`bot-driver.js`'s new `respondForBots()`), which required removing the
+  "bots never count as responders" carve-out in response-window.js and fixing
+  an AP-accounting gap for non-active responders (`syncPlayerState()`/
+  `spendPlayerAP()`). Full writeup: bot-roadmap.md § STAGE 2.5.
+- **BOT ARENA: N-player playMatch() unification** — `js/bot-arena.js`,
+  `js/game-ui.js`. Extracted `playMatch(weightsPerPlayer, opts)` as the
+  single game-runner both `run()`/`evolve()` (previously 2-player only) and
+  `spectate()` (previously its own separate loop) call, so `run()`/`evolve()`
+  gained `opts.visual` (watch training games live) and `evolve()` gained
+  `opts.nPlayers` (2–5; >2 samples random N-player groupings per generation
+  instead of exhaustive pairwise). New "🧬 Evolve" cheat-panel row alongside
+  "🤖 Bot match". **Merge note:** this rewrite was built on a fork of
+  bot-arena.js that predated `ensureLocalMode()` (the stale-isMultiplayer fix
+  above) and the `sideFitness()`/`stuckTurns`/progress-callback machinery
+  from later commits on this branch — the merge re-added all three to the
+  unified `playMatch()`/`run()`/`evolve()` rather than losing them.
 - **BOT STAGE 2 (forward model + lookahead)** — `js/bot-sim.js` (new):
   pure `simulate(snap, action)` over the Stage-0 snapshot (move incl.
   tile-reveal-as-unknown, endTurn incl. shrine collection + COLOR_RANK turn
@@ -278,10 +319,10 @@ The tutorial text is vague. Make these explicit at the appropriate steps:
 ---
 
 ## Known Open Issues
-- `TRANS-WIN-CON`: Transmute (Fire IV) doesn't always stamp fire symbol on player tile
-- `TRANS-DOUBLE-DISP`: Transmute inventory display stale after discard
 - `onPlayerMoved` hook in game-ui.js exists but tutorial-mode.js treats it as no-op
 - Steps 5–14 of tutorial untested in full sequence
+
+(`TRANS-WIN-CON` and `TRANS-DOUBLE-DISP` confirmed cleared — removed from this list.)
 
 ## Files Currently In Flight
 None — all changes committed and pushed.
@@ -294,4 +335,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-12 (stone-rest rule, Freedom exploit fix, spectator-match stale-identity fix, opponent hand element visibility)*
+*Last updated: 2026-07-12 (merged `claude/masons-savvy-range-bug-ep7hjm` — Transmute/response-scroll driving, N-player playMatch() unification, Mason's Savvy placement-range fix — into the stone-rest rule / Freedom exploit fix / spectator-match stale-identity fix / opponent hand element visibility line of work; re-restored `ensureLocalMode()` in the unified `playMatch()`)*

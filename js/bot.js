@@ -110,6 +110,11 @@
                                  // play responses yet (Stage 2.5) — dead weight in a
                                  // 2-slot hand, cycle it out
 
+        // Stage 2.5: Transmute (Fire IV) target — discard stones for AP
+        // until currentTotalAP reaches this (capped at the real max, 5 +
+        // void pool), preferring the stone type held in greatest excess.
+        transmuteTargetAP:   7,
+
         // placement phase: where to put the bot's starting player tile
         placeTileBase:            10,
         placeTileCentroidPenalty: -0.05, // × distance to cluster centroid — prefer compact placement
@@ -1113,6 +1118,13 @@
                 await tick(250);
                 continue;
             }
+            // Stage 2.5: drive what BotEffects knows how to drive, before
+            // falling through to cancelling everything else it can't yet.
+            // Transmute has no selectionMode object (raw DOM modal), so it's
+            // checked directly here rather than via se.selectionMode below.
+            if (document.getElementById('transmute-modal') && window.BotEffects?.driveTransmute) {
+                if (window.BotEffects.driveTransmute()) { await tick(150); continue; }
+            }
             // Selection modes (Sacrificial Pyre, Telekinesis, Take Flight, …)
             // need input — Stage 2.5's BotEffects drives the ones it knows
             // (see js/bot-effects.js); anything else is cancelled so the turn
@@ -1133,8 +1145,25 @@
                 await tick(250);
                 continue;
             }
-            // Response window after a cast (multiplayer): wait the stack out
+            // Response window: in the arena (bot-vs-bot, no multiplayer),
+            // actually decide respond/pass instead of just waiting out the
+            // timer — see BotEffects.decideResponse for why this needs an
+            // explicit responder index. Real multiplayer games still just
+            // wait the stack out (response-window.js's existing "bots
+            // cannot respond" path is untouched).
             if (window.spellSystem?.responseWindow?.isResponseWindowOpen) {
+                const rw = window.spellSystem.responseWindow;
+                const arenaActive = typeof window.BotArena?.isRunning === 'function' && window.BotArena.isRunning();
+                if (arenaActive && window.BotEffects?.decideResponse) {
+                    const casterIdx = rw.currentCaster;
+                    const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 0;
+                    let acted = false;
+                    for (let i = 0; i < numPlayers; i++) {
+                        if (i === casterIdx || rw.respondingPlayers?.has(i)) continue;
+                        if (window.BotEffects.decideResponse(i, casterIdx)) { acted = true; break; }
+                    }
+                    if (acted) { await tick(250); continue; }
+                }
                 await tick(400);
                 continue;
             }
