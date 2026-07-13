@@ -76,6 +76,15 @@
                                   // else to prefer one over the other); weighted by
                                   // recency so undoing your immediately previous move is
                                   // penalized far more than a revisit from several steps back
+        moveFixation:      150,  // ÷ (1 + remaining path cost) when the step is the first hop
+                                 // toward a findFixationTarget() hex — a REVEALED tile
+                                 // elsewhere on the board where an uncast-element pattern is
+                                 // buildable. Only computed when the turn-repeat circuit
+                                 // breaker is armed (see turnRepeatStreak) — stronger than
+                                 // moveExplorePath so it reliably wins over a stale local
+                                 // loop, but still just one term in normal scoring (not a
+                                 // scripted override): a genuinely better action found by the
+                                 // same scoring pass — a cast, a richer shrine — can still win.
 
         // breaking a stone (attemptBreakStone) — costs AP by stone rank
         // (void 1 .. earth 5). Mostly matters for clearing a path an earth
@@ -359,9 +368,22 @@
                         home = WEIGHTS.moveReturnHome / (1 + remaining);
                     }
                 }
+                // Fixation: only set (see findFixationTarget()) when the
+                // turn-repeat circuit breaker is armed — pulls toward a
+                // REVEALED hex elsewhere on the board that still has an
+                // uncast-element pattern buildable, instead of just
+                // suppressing movement on a stuck turn.
+                let fixation = 0;
+                if (ctx.fixationPath && ctx.fixationPath.length) {
+                    const first = ctx.fixationPath[0];
+                    if (Math.hypot(first.x - a.x, first.y - a.y) < 5) {
+                        const remaining = ctx.fixationPath.reduce((c, p) => c + p.cost, 0);
+                        fixation = WEIGHTS.moveFixation / (1 + remaining);
+                    }
+                }
                 const revisit = revisitPenalty(ctx.recentPositions || [], a, WEIGHTS.moveRevisitPenalty);
                 return WEIGHTS.moveBase + WEIGHTS.moveShrineValue * best
-                     + WEIGHTS.moveApPenalty * a.cost + explore + revisit + home;
+                     + WEIGHTS.moveApPenalty * a.cost + explore + revisit + home + fixation;
             }
 
             case 'breakStone': {
@@ -488,6 +510,74 @@
     const cellKey = c => `${c.x.toFixed(1)},${c.y.toFixed(1)},${c.type}`;
     const CELL_FAIL_LIMIT = 2;
 
+    // Scrolls worth planning around right now: hand + ACTIVE AREA + COMMON
+    // AREA (hand-only planning dead-ends games — a catacomb scroll parked in
+    // the active area, or an opponent's discard in the common area, is often
+    // the ONLY remaining source of an unactivated element), each paired with
+    // the win credit casting it would actually grant. Zero credit ⇒ excluded
+    // — an already-won scroll with its pattern still on the board would
+    // otherwise become an infinite recast loop (the plan-level twin of the
+    // castAlreadyWon bug). Catacomb scrolls credit each unactivated
+    // COMPONENT element (no source-pool guard, matching applyScrollEffects).
+    // Shared by makePlan() (anchored at the bot's current hex) and
+    // findFixationTarget() (anchored at candidate hexes elsewhere).
+    function creditableSources(snap, self, noCreditScrolls) {
+        const sources = new Set([...self.hand, ...self.active, ...(snap.commonArea || [])]);
+        const out = [];
+        for (const name of sources) {
+            if (noCreditScrolls.has(name)) continue; // cast before, effect cancelled — don't replan it
+            const def = window.SCROLL_DEFINITIONS?.[name];
+            if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
+            const el = def.element;
+            let credit = 0;
+            if (el === 'catacomb') {
+                for (const c of new Set((def.patterns[0] || []).map(cell => cell.type))) {
+                    if (!self.activated.includes(c)) credit++;
+                }
+            } else if (!self.activated.includes(el) && (snap.sourcePool[el] || 0) > 0) {
+                credit = 1;
+            }
+            if (credit > 0) out.push({ name, def, credit });
+        }
+        return out;
+    }
+
+    // Is `variant` (one pattern shape from a scroll's def.patterns) buildable
+    // anchored at `anchorHex` right now? Cells on face-down tiles or any
+    // player tile (incl. bridge hexes) are illegal to place on, and a
+    // non-fire/non-void stone next to an unvoided fire dies on placement —
+    // don't plan shapes that can't exist. Returns {cells, placed} (placed =
+    // how many cells already hold the right stone) or null if not viable —
+    // including "the pool doesn't cover every missing stone NOW" (a
+    // half-built shape the bot can't finish is worse than nothing). Shared
+    // by makePlan() and findFixationTarget() — the only difference between
+    // them is which hex `anchorHex` is.
+    function viablePatternAt(snap, self, variant, anchorHex, grid, cursedCells) {
+        const cells = variant.map(req => {
+            const px = hexToPixel(anchorHex.q + req.q, anchorHex.r + req.r, TILE_SIZE);
+            return { q: anchorHex.q + req.q, r: anchorHex.r + req.r, x: px.x, y: px.y, type: req.type };
+        });
+        if (!cells.every(c => grid.some(h => Math.hypot(h.x - c.x, h.y - c.y) < 5))) return null;
+        if (cells.some(c => cursedCells.has(cellKey(c)))) return null; // known-doomed cell — skip this variant
+        if (typeof isPositionOnFlippedTile === 'function' &&
+            cells.some(c => isPositionOnFlippedTile(c.x, c.y, grid))) return null;
+        if (typeof isPositionOnPlayerTile === 'function' &&
+            cells.some(c => isPositionOnPlayerTile(c.x, c.y, grid))) return null;
+        if (window.BotSim &&
+            cells.some(c => !window.BotSim.stoneWouldSurvive(snap, c.x, c.y, c.type))) return null;
+        let placed = 0, blocked = false;
+        const need = {};
+        for (const c of cells) {
+            const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
+            if (s && s.type === c.type) placed++;
+            else if (s) { blocked = true; break; }
+            else need[c.type] = (need[c.type] || 0) + 1;
+        }
+        if (blocked) return null;
+        if (Object.entries(need).some(([t, n]) => (self.pool[t] || 0) < n)) return null;
+        return { cells, placed };
+    }
+
     function makePlan(snap) {
         const self = me(snap);
         if (!self || !self.hand) return null;
@@ -498,65 +588,64 @@
         const pHex = pixelToHex(self.x, self.y, TILE_SIZE);
         const grid = window.BotState.hexGrid();
         let best = null;
-        // Plan targets: hand + ACTIVE AREA + COMMON AREA. Hand-only planning
-        // dead-ends games: a catacomb scroll parked in the active area (casts
-        // leave scrolls there) or an opponent's discard in the common area is
-        // often the ONLY remaining source of an unactivated element.
-        const sources = new Set([...self.hand, ...self.active, ...(snap.commonArea || [])]);
-        for (const name of sources) {
-            if (noCreditScrolls.has(name)) continue; // cast before, effect cancelled — don't replan it
-            const def = window.SCROLL_DEFINITIONS?.[name];
-            if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
-            const el = def.element;
-            // Win credit this cast would actually grant. Zero credit ⇒ never
-            // plan it — an already-won scroll with its pattern still on the
-            // board otherwise becomes an infinite recast loop (the plan-level
-            // twin of the castAlreadyWon bug). Catacomb scrolls credit each
-            // unactivated COMPONENT element (no source-pool guard, matching
-            // applyScrollEffects).
-            let credit = 0;
-            if (el === 'catacomb') {
-                for (const c of new Set((def.patterns[0] || []).map(cell => cell.type))) {
-                    if (!self.activated.includes(c)) credit++;
-                }
-            } else if (!self.activated.includes(el) && (snap.sourcePool[el] || 0) > 0) {
-                credit = 1;
-            }
-            if (credit === 0) continue;
+        for (const { name, def, credit } of creditableSources(snap, self, noCreditScrolls)) {
             for (const variant of def.patterns) {
-                const cells = variant.map(req => {
-                    const px = hexToPixel(pHex.q + req.q, pHex.r + req.r, TILE_SIZE);
-                    return { q: pHex.q + req.q, r: pHex.r + req.r, x: px.x, y: px.y, type: req.type };
-                });
-                if (!cells.every(c => grid.some(h => Math.hypot(h.x - c.x, h.y - c.y) < 5))) continue;
-                if (cells.some(c => cursedCells.has(cellKey(c)))) continue; // known-doomed cell — skip this variant
-                // Cells on face-down tiles or any player tile (incl. bridge
-                // hexes) are illegal to place on, and a non-fire/non-void
-                // stone next to an unvoided fire dies on placement — don't
-                // plan shapes that can't exist.
-                if (typeof isPositionOnFlippedTile === 'function' &&
-                    cells.some(c => isPositionOnFlippedTile(c.x, c.y, grid))) continue;
-                if (typeof isPositionOnPlayerTile === 'function' &&
-                    cells.some(c => isPositionOnPlayerTile(c.x, c.y, grid))) continue;
-                if (window.BotSim &&
-                    cells.some(c => !window.BotSim.stoneWouldSurvive(snap, c.x, c.y, c.type))) continue;
-                let placed = 0, blocked = false;
-                const need = {};
-                for (const c of cells) {
-                    const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
-                    if (s && s.type === c.type) placed++;
-                    else if (s) { blocked = true; break; }
-                    else need[c.type] = (need[c.type] || 0) + 1;
-                }
-                if (blocked) continue;
-                // The pool must cover every missing stone NOW — half-built
-                // shapes the bot can't finish are worse than nothing
-                if (Object.entries(need).some(([t, n]) => (self.pool[t] || 0) < n)) continue;
-                const score = placed * 10 + credit * 20; // catacombs can be worth 2 elements
-                if (!best || score > best.score) best = { score, scroll: name, anchor: pHex, cells };
+                const v = viablePatternAt(snap, self, variant, pHex, grid, cursedCells);
+                if (!v) continue;
+                const score = v.placed * 10 + credit * 20; // catacombs can be worth 2 elements
+                if (!best || score > best.score) best = { score, scroll: name, anchor: pHex, cells: v.cells };
             }
         }
         return best ? { scroll: best.scroll, anchor: best.anchor, cells: best.cells } : null;
+    }
+
+    // ----------------------------------------------------------------
+    // Fixation target: when the turn-repeat circuit breaker fires (a stable
+    // N-hex movement loop was detected — see turnRepeatStreak below), look
+    // for a REVEALED hex ANYWHERE ELSE on the board where an uncast-element
+    // pattern is buildable, and hand back its position. Deliberately NOT
+    // anchored at the bot's current position like makePlan() — if the
+    // current position had a viable pattern, makePlan() would already have
+    // found it and the circuit breaker would never run (planAction takes
+    // priority in botAct()). The point is finding an objective the bot's
+    // purely-local plan search never considers.
+    //
+    // Only ever consulted by scoreAction() through ctx.fixationPath (a real
+    // path, set in rankActions() only when turnRepeatStreak >= 1) via a
+    // strong WEIGHTS.moveFixation term — NOT a scripted forced move. A
+    // genuinely better action the same scoring pass finds (a cast, a
+    // richer shrine) can still outscore walking there.
+    // ----------------------------------------------------------------
+    function findFixationTarget(snap) {
+        const self = me(snap);
+        if (!self || !self.hand) return null;
+        const { cursedCells, noCreditScrolls } = mem(snap.turn.activePlayerIndex);
+        if (ELEMENTS.every(el => self.activated.includes(el))) return null; // homePath covers this
+        const grid = window.BotState.hexGrid();
+        const sources = creditableSources(snap, self, noCreditScrolls);
+        if (!sources.length) return null;
+
+        let best = null;
+        for (const h of grid) {
+            // Only revealed ground, never a player tile (own or opponent's)
+            if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(h.x, h.y, grid)) continue;
+            if (typeof isPositionOnPlayerTile === 'function' && isPositionOnPlayerTile(h.x, h.y, grid)) continue;
+            const anchor = pixelToHex(h.x, h.y, TILE_SIZE);
+            for (const { name, def, credit } of sources) {
+                for (const variant of def.patterns) {
+                    const v = viablePatternAt(snap, self, variant, anchor, grid, cursedCells);
+                    if (!v) continue;
+                    const dist = Math.hypot(h.x - self.x, h.y - self.y);
+                    // Same value shape as makePlan()'s score, lightly
+                    // tie-broken toward the nearest viable option — the goal
+                    // is escaping the local trap quickly, not finding the
+                    // single best pattern on the whole board.
+                    const score = v.placed * 10 + credit * 20 - dist * 0.02;
+                    if (!best || score > best.score) best = { score, x: h.x, y: h.y, scroll: name };
+                }
+            }
+        }
+        return best;
     }
 
     function planValid(snap) {
@@ -881,7 +970,12 @@
     }
 
     // Rank all legal actions for the current position (debug + decision core)
-    function rankActions() {
+    // fixationTarget: optional {x,y} from findFixationTarget(), passed by
+    // botAct()'s turn-repeat circuit breaker (see turnRepeatStreak below) —
+    // turns into a real path in ctx.fixationPath for scoreAction()'s move
+    // case. Omitted on every other call site, same as ctx.homePath being
+    // conditional on all-5-activated.
+    function rankActions(fixationTarget) {
         const snap = window.BotState.snapshot();
         const legal = window.BotState.legalActions();
 
@@ -933,6 +1027,11 @@
                 const path = window.BotState.findPath(self.x, self.y, homeTile.x, homeTile.y);
                 if (path && path.length) ctx.homePath = path;
             }
+        }
+        ctx.fixationPath = null;
+        if (fixationTarget) {
+            const path = window.BotState.findPath(self.x, self.y, fixationTarget.x, fixationTarget.y);
+            if (path && path.length) ctx.fixationPath = path;
         }
 
         return legal
@@ -1008,28 +1107,42 @@
         // botTurn() below), the scoring-driven fallback (search or greedy)
         // is stuck re-deriving an unproductive cycle — the anti-oscillation
         // recency-decay penalty is tuned for 2-hex ties and can get rotated
-        // in lockstep by a larger stable N-hex cycle instead of breaking it.
-        // Observed in a real bot-vs-bot game log: an identical 6-hex
-        // hub-and-spoke path (always returning to one fully-explored tile)
-        // repeated turn after turn, forever — nothing about the board
-        // changes between two such turns, so the deterministic scorer just
-        // reproduces the same decisions. For exactly one turn, skip
-        // movement entirely and take whatever non-move action scores best
-        // instead (or end the turn if only movement is legal) — wandering
-        // that accomplished nothing twice in a row won't accomplish
-        // anything a third time either. Self-clearing: botTurn() resets the
+        // in lockstep by a larger stable N-hex cycle instead of breaking it
+        // (RECENT_POS_LIMIT is 6 — any stable loop of 7+ hexes rotates the
+        // whole window out from under the penalty before it ever returns to
+        // a hex still in memory). Observed in a real bot-vs-bot game log: an
+        // identical 7-hex loop repeated turn after turn, immune to the
+        // revisit penalty, with NOTHING about the board changing between
+        // occurrences — the deterministic scorer just reproduces the same
+        // decision. First try findFixationTarget(): a REVEALED hex
+        // elsewhere on the board with an uncast-element pattern still
+        // buildable pulls the bot there via a strong (but not scripted)
+        // scoring term instead of just marking time. Only when no such
+        // target exists do we fall back to the older "skip movement for one
+        // turn" behavior. Self-clearing either way: botTurn() resets the
         // streak once this fires, so it only intervenes once per cycle.
         let choice = null;
         if (m.turnRepeatStreak >= 1) {
-            const ranked = rankActions().filter(r => r.action.type !== 'move');
-            if (ranked.length) {
-                choice = ranked[0];
-                log(`Turn-repeat circuit breaker (streak ${m.turnRepeatStreak}): skipping movement, picked ${choice.action.type}`);
-            } else {
-                const r = window.BotState.applyAction({ type: 'endTurn' });
-                if (r.ok) {
-                    log('Turn-repeat circuit breaker: only movement was legal — ending turn');
-                    return { type: 'endTurn' };
+            const fixationTarget = findFixationTarget(snap);
+            if (fixationTarget) {
+                const ranked = rankActions(fixationTarget);
+                if (ranked.length) {
+                    choice = ranked[0];
+                    log(`Turn-repeat circuit breaker (streak ${m.turnRepeatStreak}): fixating on ` +
+                        `${fixationTarget.scroll} near (${fixationTarget.x.toFixed(0)},${fixationTarget.y.toFixed(0)})`);
+                }
+            }
+            if (!choice) {
+                const ranked = rankActions().filter(r => r.action.type !== 'move');
+                if (ranked.length) {
+                    choice = ranked[0];
+                    log(`Turn-repeat circuit breaker (streak ${m.turnRepeatStreak}): skipping movement, picked ${choice.action.type}`);
+                } else {
+                    const r = window.BotState.applyAction({ type: 'endTurn' });
+                    if (r.ok) {
+                        log('Turn-repeat circuit breaker: only movement was legal — ending turn');
+                        return { type: 'endTurn' };
+                    }
                 }
             }
         }
