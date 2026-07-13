@@ -57,6 +57,14 @@
                                  // weight evolution drift (see hasWinCredit())
         placeDoomed:      -500,  // the stone would be destroyed on placement (non-fire/
                                  // non-void next to an unvoided fire) — pure stone waste
+        planDeficitPenalty:  -3, // × total stones still missing from pool when makePlan()/
+                                 // findFixationTarget() pick a COLLECT-THEN-BUILD plan (one
+                                 // whose pattern isn't fully in-pool yet, but every missing
+                                 // type has a shrine somewhere reachable — see
+                                 // deficitIsCollectible()). Small discount, not a veto: a
+                                 // plan that needs a detour to collect is slower/riskier
+                                 // than one buildable right now, but still far better than
+                                 // no plan at all (the entire point of collect-then-build).
 
         // movement
         moveBase:            2,
@@ -548,15 +556,20 @@
     }
 
     // Is `variant` (one pattern shape from a scroll's def.patterns) buildable
-    // anchored at `anchorHex` right now? Cells on face-down tiles or any
-    // player tile (incl. bridge hexes) are illegal to place on, and a
-    // non-fire/non-void stone next to an unvoided fire dies on placement —
-    // don't plan shapes that can't exist. Returns {cells, placed} (placed =
-    // how many cells already hold the right stone) or null if not viable —
-    // including "the pool doesn't cover every missing stone NOW" (a
-    // half-built shape the bot can't finish is worse than nothing). Shared
-    // by makePlan() and findFixationTarget() — the only difference between
-    // them is which hex `anchorHex` is.
+    // anchored at `anchorHex`? Cells on face-down tiles or any player tile
+    // (incl. bridge hexes) are illegal to place on, and a non-fire/non-void
+    // stone next to an unvoided fire dies on placement — don't plan shapes
+    // that can't exist. Returns null if not viable at all; otherwise
+    // {cells, placed, deficit} — placed = how many cells already hold the
+    // right stone, deficit = {type: shortfall} for any type the pool
+    // doesn't yet cover (empty object when the shape is buildable RIGHT
+    // NOW). Callers decide what a non-empty deficit means: makePlan() and
+    // findFixationTarget() only accept it as a collect-then-build plan when
+    // every short type has a shrine to collect it from somewhere on the
+    // board (see collectibleShrines() below) — otherwise it's just a shape
+    // that will never be finishable, not a real plan. Shared by makePlan()
+    // and findFixationTarget() — the only difference between them is which
+    // hex `anchorHex` is.
     function viablePatternAt(snap, self, variant, anchorHex, grid, cursedCells) {
         const cells = variant.map(req => {
             const px = hexToPixel(anchorHex.q + req.q, anchorHex.r + req.r, TILE_SIZE);
@@ -579,8 +592,20 @@
             else need[c.type] = (need[c.type] || 0) + 1;
         }
         if (blocked) return null;
-        if (Object.entries(need).some(([t, n]) => (self.pool[t] || 0) < n)) return null;
-        return { cells, placed };
+        const deficit = {};
+        for (const [t, n] of Object.entries(need)) {
+            const short = n - (self.pool[t] || 0);
+            if (short > 0) deficit[t] = short;
+        }
+        return { cells, placed, deficit };
+    }
+
+    // Every deficit type must have a shrine somewhere on the revealed board
+    // (collectibleShrines() — value>0 already factors in pool room/dead
+    // source), or this is a shape that can never be finished, not a real
+    // collect-then-build plan.
+    function deficitIsCollectible(deficit, collectible) {
+        return Object.keys(deficit).every(t => collectible.some(s => s.shrineType === t));
     }
 
     function makePlan(snap) {
@@ -592,12 +617,24 @@
         if (ELEMENTS.every(el => self.activated.includes(el))) return null;
         const pHex = pixelToHex(self.x, self.y, TILE_SIZE);
         const grid = window.BotState.hexGrid();
+        const collectible = collectibleShrines(snap);
         let best = null;
         for (const { name, def, credit } of creditableSources(snap, self, noCreditScrolls)) {
             for (const variant of def.patterns) {
                 const v = viablePatternAt(snap, self, variant, pHex, grid, cursedCells);
                 if (!v) continue;
-                const score = v.placed * 10 + credit * 20; // catacombs can be worth 2 elements
+                const totalDeficit = Object.values(v.deficit).reduce((a, b) => a + b, 0);
+                // Missing stone types are fine — planNextAction() routes
+                // through a collect leg (see stepTowardCollect()) — as long
+                // as every missing type is actually obtainable somewhere on
+                // the revealed board. Otherwise this shape can never finish;
+                // it's not a real plan, just a dream.
+                if (totalDeficit && !deficitIsCollectible(v.deficit, collectible)) continue;
+                // catacombs can be worth 2 elements; a plan that still needs
+                // collecting is discounted (slower, riskier) but still far
+                // better than no plan at all — WEIGHTS.planDeficitPenalty is
+                // negative, same sign convention as moveApPenalty etc.
+                const score = v.placed * 10 + credit * 20 + WEIGHTS.planDeficitPenalty * totalDeficit;
                 if (!best || score > best.score) best = { score, scroll: name, anchor: pHex, cells: v.cells };
             }
         }
@@ -629,6 +666,7 @@
         const grid = window.BotState.hexGrid();
         const sources = creditableSources(snap, self, noCreditScrolls);
         if (!sources.length) return null;
+        const collectible = collectibleShrines(snap);
 
         let best = null;
         for (const h of grid) {
@@ -640,12 +678,14 @@
                 for (const variant of def.patterns) {
                     const v = viablePatternAt(snap, self, variant, anchor, grid, cursedCells);
                     if (!v) continue;
+                    const totalDeficit = Object.values(v.deficit).reduce((a, b) => a + b, 0);
+                    if (totalDeficit && !deficitIsCollectible(v.deficit, collectible)) continue;
                     const dist = Math.hypot(h.x - self.x, h.y - self.y);
                     // Same value shape as makePlan()'s score, lightly
                     // tie-broken toward the nearest viable option — the goal
                     // is escaping the local trap quickly, not finding the
                     // single best pattern on the whole board.
-                    const score = v.placed * 10 + credit * 20 - dist * 0.02;
+                    const score = v.placed * 10 + credit * 20 + WEIGHTS.planDeficitPenalty * totalDeficit - dist * 0.02;
                     if (!best || score > best.score) best = { score, x: h.x, y: h.y, scroll: name };
                 }
             }
@@ -664,7 +704,12 @@
         for (const c of plan.cells) {
             const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
             if (s && s.type !== c.type) return false;                       // cell corrupted
-            if (!s && (self.pool[c.type] || 0) <= 0) return false;          // can't supply anymore
+            // NOTE: deliberately no "pool[c.type] > 0" check here — a plan
+            // may legitimately still be in its COLLECT leg for this cell's
+            // type (see makePlan()'s deficit handling and
+            // planNextAction()'s stepTowardCollect()). Rejecting a plan for
+            // not yet having every stone in hand would defeat the entire
+            // point of collect-then-build.
             // A fire stone may have appeared next to a still-missing cell
             // since the plan was made — the stone would die on placement
             if (!s && window.BotSim &&
@@ -692,6 +737,37 @@
         }
         if (bestPath && bestPath.step.cost <= ap) {
             return { type: 'move', x: bestPath.step.x, y: bestPath.step.y, cost: bestPath.step.cost };
+        }
+        return null;
+    }
+
+    // Collect leg of a plan: route toward a shrine that supplies a type the
+    // plan is still short on. Shrine collection isn't a distinct action —
+    // it's a side effect of ENDING YOUR TURN on the shrine's centre hex
+    // (game-ui.js replenishShrineStones(), amount = stone rank, capped by
+    // source pool + player pool room) — so once standing on a shrine that
+    // covers a needed type, the right move IS to end the turn right there,
+    // not linger. Returns a move/endTurn action, or null if nothing needed
+    // is currently collectible (caller falls through to generic scoring).
+    function stepTowardCollect(self, missing, snap) {
+        const neededTypes = new Set(missing
+            .filter(c => (self.pool[c.type] || 0) <= 0)
+            .map(c => c.type));
+        if (!neededTypes.size) return null;
+        const onShrine = shrineUnderfoot(snap);
+        if (onShrine && neededTypes.has(onShrine.shrineType)) return { type: 'endTurn' };
+        const shrines = collectibleShrines(snap).filter(t => neededTypes.has(t.shrineType));
+        if (!shrines.length) return null;
+        let best = null;
+        for (const t of shrines) {
+            const path = window.BotState.findPath(self.x, self.y, t.x, t.y);
+            if (!path || !path.length) continue;
+            const cost = path.reduce((c, p) => c + p.cost, 0);
+            if (!best || cost < best.cost) best = { path, cost };
+        }
+        if (!best) return null;
+        if (snap.turn.ap > 0 && best.path[0].cost <= snap.turn.ap) {
+            return { type: 'move', x: best.path[0].x, y: best.path[0].y, cost: best.path[0].cost };
         }
         return null;
     }
@@ -727,7 +803,14 @@
         }
 
         if (missing.length) {
-            for (const c of missing) {
+            // Only ever attempt/target a cell whose type is ALREADY in pool —
+            // applyAction('placeStone') rejects one that isn't (no stones of
+            // that type), and a failed plan action wipes the WHOLE plan (see
+            // botAct()), which would defeat collect-then-build the instant a
+            // still-collecting cell got attempted early. Cells still short a
+            // type fall through to stepTowardCollect() below instead.
+            const fillableMissing = missing.filter(c => (self.pool[c.type] || 0) > 0);
+            for (const c of fillableMissing) {
                 if (m.cursedCells.has(cellKey(c))) continue;
                 if (typeof isInPlacementRange === 'function' && isInPlacementRange(c.x, c.y, c.type)) {
                     plan._lastTargetKey = cellKey(c);
@@ -736,17 +819,24 @@
                 }
             }
             if (snap.turn.ap > 0) {
-                // fill the farthest-from-anchor cells first so placed stones
-                // (earth blocks movement!) don't wall off the rest of the shape
-                const aPx = hexToPixel(plan.anchor.q, plan.anchor.r, TILE_SIZE);
-                const ordered = [...missing].sort((a, b) =>
-                    Math.hypot(b.x - aPx.x, b.y - aPx.y) - Math.hypot(a.x - aPx.x, a.y - aPx.y));
-                for (const c of ordered) {
-                    const mv = stepTowardCell(self, c, missing, snap.turn.ap);
-                    if (mv) return mv;
+                const fillableOrdered = fillableMissing.filter(c => !m.cursedCells.has(cellKey(c)));
+                if (fillableOrdered.length) {
+                    // fill the farthest-from-anchor cells first so placed stones
+                    // (earth blocks movement!) don't wall off the rest of the shape
+                    const aPx = hexToPixel(plan.anchor.q, plan.anchor.r, TILE_SIZE);
+                    const ordered = [...fillableOrdered].sort((a, b) =>
+                        Math.hypot(b.x - aPx.x, b.y - aPx.y) - Math.hypot(a.x - aPx.x, a.y - aPx.y));
+                    for (const c of ordered) {
+                        const mv = stepTowardCell(self, c, missing, snap.turn.ap);
+                        if (mv) return mv;
+                    }
                 }
+                // Nothing fillable with CURRENT pool — collect leg: route
+                // toward (or end turn on) a shrine for a still-short type.
+                const collect = stepTowardCollect(self, missing, snap);
+                if (collect) return collect;
             }
-            return null; // out of AP / unreachable — generic scoring takes over
+            return null; // out of AP / unreachable / uncollectible — generic scoring takes over
         }
 
         // Shape complete → return to the anchor and cast
@@ -1092,6 +1182,7 @@
         if (planAction) {
             const label = planAction.type === 'cast' ? `cast ${planAction.scroll}`
                         : planAction.type === 'placeStone' ? `place ${planAction.stoneType} for ${planAction.scroll}`
+                        : planAction.type === 'endTurn' ? 'end turn to collect shrine stones'
                         : `move to (${planAction.x.toFixed(0)},${planAction.y.toFixed(0)})`;
             log(`Plan action: ${label}`);
             const r = window.BotState.applyAction(planAction);
