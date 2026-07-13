@@ -16,20 +16,20 @@
 // Coverage so far:
 //   - driveSelection(): tile-flip (Heavy Stomp / Call to Adventure),
 //     scorched-earth (Combust), tile-swap (Shifting Sands), Create,
-//     Scholar's Insight.
+//     Scholar's Insight, Quick Reflexes, Sacrificial Pyre, Inspiring
+//     Draught.
 //   - driveTransmute(): the only scroll with an open-ended discard-for-AP
 //     modal and NO selectionMode object (detected via DOM id directly,
 //     same as scroll-effects.js's EFFECT_MODAL_IDS safety net).
-//   - decideResponse(): response-scroll respond/pass, ARENA-ONLY (gated
-//     on window.BotArena.isRunning()). Real multiplayer still goes
-//     through response-window.js's existing "bots cannot respond" path,
-//     untouched — extending this to live multiplayer games is a
-//     deliberately separate, later step once this is arena-validated.
-// NOT yet driven: Sacrificial Pyre, Inspiring Draught, Wandering River,
-// Control the Current, Arson, Plunder, Quick Reflexes, and Excavate's
-// deferred teleport — cast falls through to cancel for those. Telekinesis
-// and Take Flight's destination step are drag-based (no click handler to
-// call) and are out of scope until a programmatic hook exists.
+//   - decideResponse(): response-scroll respond/pass — both the arena
+//     (gated on window.BotArena.isRunning(), called from bot.js) and real
+//     multiplayer (js/bot-driver.js's respondForBots(), ticking alongside
+//     its turn watcher).
+// NOT yet driven: Wandering River, Control the Current, Arson, Plunder,
+// and Excavate's deferred teleport — cast falls through to cancel for
+// those. Telekinesis and Take Flight's destination step are drag-based
+// (no click handler to call) and are out of scope until a programmatic
+// hook exists.
 //
 // LOAD ORDER: after bot-sim.js, before bot.js (bot.js calls into this) —
 // but this file must not reach into bot.js's closure; it reads game state
@@ -218,6 +218,109 @@
     }
 
     // ----------------------------------------------------------------
+    // Shared helper for Sacrificial Pyre / Inspiring Draught's "put back"
+    // step: both are "give up one of these scrolls" choices. Prefer giving
+    // up a response-only scroll first — dead weight in the main phase
+    // regardless (same reasoning as bot.js's discardResponseOnly weight for
+    // voluntary discards) — otherwise give up the lowest-level one (least
+    // lost value; mirrors driveScholarsInsight's "prefer the strongest
+    // when GAINING", inverted for what to give away).
+    // ----------------------------------------------------------------
+    function scrollDefByDisplayName(label) {
+        const defs = window.SCROLL_DEFINITIONS || {};
+        return Object.values(defs).find(d => d.name === label);
+    }
+
+    function pickWeakestButton(buttons) {
+        const responseOnly = buttons.find(b => scrollDefByDisplayName(b.textContent)?.isResponse);
+        if (responseOnly) return responseOnly;
+        let worst = buttons[0], worstLevel = Infinity;
+        for (const b of buttons) {
+            const level = scrollDefByDisplayName(b.textContent)?.level ?? 0;
+            if (level < worstLevel) { worstLevel = level; worst = b; }
+        }
+        return worst;
+    }
+
+    // ----------------------------------------------------------------
+    // Sacrificial Pyre (FIRE_SCROLL_3) — modal, single click.
+    // Choice: one scroll from the caster's OWN hand to sacrifice (sent to
+    // the common area, but grants stones + runs its own effect too).
+    // Modal id (scroll-select-modal) is shared with Inspiring Draught's
+    // put-back step and Plunder (not yet driven) — disambiguated by the
+    // heading text set by showScrollSelectionModal()'s title param.
+    // ----------------------------------------------------------------
+    function driveSacrificialPyre(modal) {
+        const buttons = [...modal.querySelectorAll('button')].filter(b => b.textContent !== 'Cancel');
+        if (!buttons.length) return false;
+        pickWeakestButton(buttons).click();
+        return true;
+    }
+
+    // ----------------------------------------------------------------
+    // Inspiring Draught (WATER_SCROLL_3) — two steps:
+    //   1. deck-select-modal: toggle ONE element button, then Confirm.
+    //   2. (only if that deck had >=2 scrolls left) scroll-select-modal:
+    //      pick which of the 2 drawn scrolls to put back — the other is
+    //      kept. If only 1 scroll was available it's auto-kept and this
+    //      step never opens; driveSelection()'s polling just sees no more
+    //      modal and moves on, same as any other multi-step flow here.
+    // ----------------------------------------------------------------
+    function driveInspiringDraughtDeck(modal) {
+        const ranked = rankedElements();
+        for (const el of ranked) {
+            const label = el.charAt(0).toUpperCase() + el.slice(1);
+            const btn = [...modal.querySelectorAll('button')].find(b => !b.disabled && b.textContent.startsWith(label));
+            if (btn) {
+                btn.click(); // toggles this deck into the (max 1) selection
+                const confirmBtn = [...modal.querySelectorAll('button')].find(b => b.textContent === 'Confirm');
+                confirmBtn?.click();
+                return true;
+            }
+        }
+        return false; // every deck empty — genuinely nothing to pick
+    }
+
+    function driveInspiringDraughtPutBack(modal) {
+        const buttons = [...modal.querySelectorAll('button')].filter(b => b.textContent !== 'Cancel');
+        if (!buttons.length) return false;
+        pickWeakestButton(buttons).click();
+        return true;
+    }
+
+    // scroll-select-modal is shared by 3 different effects — route by the
+    // exact heading text each one's showScrollSelectionModal() call sets.
+    function driveScrollSelectModal() {
+        const modal = document.getElementById('scroll-select-modal');
+        if (!modal) return false;
+        const heading = modal.querySelector('h3')?.textContent || '';
+        if (heading.startsWith('Select a scroll to sacrifice')) return driveSacrificialPyre(modal);
+        if (heading.startsWith('Choose one ') && heading.includes('scroll to put back')) {
+            return driveInspiringDraughtPutBack(modal);
+        }
+        return false; // e.g. Plunder's "Select an active scroll to plunder:" — not yet driven
+    }
+
+    function driveDeckSelectModal() {
+        const modal = document.getElementById('deck-select-modal');
+        if (!modal) return false;
+        const heading = modal.querySelector('h3')?.textContent || '';
+        if (heading.startsWith('Select 1 deck')) return driveInspiringDraughtDeck(modal);
+        return false; // enterDeckDrawMode's N>1 variant exists but is unused by any live scroll
+    }
+
+    // ----------------------------------------------------------------
+    // Quick Reflexes (CATACOMB_SCROLL_9) — modal, single click.
+    // Choice: 1 level-1 scroll from a flat pooled list across all 5
+    // elemental decks (not deck-then-scroll like Scholar's Insight).
+    // ----------------------------------------------------------------
+    function driveQuickReflexes() {
+        const modal = document.getElementById('quick-reflexes-modal');
+        if (!modal) return false;
+        return !!clickBestElement(modal, rankedElements());
+    }
+
+    // ----------------------------------------------------------------
     // TRANSMUTE (Fire IV) — open-ended "discard for +2 AP each" modal.
     // No selectionMode object exists for this one; it's a raw DOM overlay
     // built by enterTransmuteMode(). Detect + drive via its buttons.
@@ -367,11 +470,20 @@
         if (!acted && document.getElementById('scholars-insight-modal')) {
             acted = driveScholarsInsight(); kind = 'scholars-insight';
         }
+        if (!acted && document.getElementById('quick-reflexes-modal')) {
+            acted = driveQuickReflexes(); kind = 'quick-reflexes';
+        }
+        if (!acted && document.getElementById('deck-select-modal')) {
+            acted = driveDeckSelectModal(); kind = 'inspiring-draught-deck';
+        }
+        if (!acted && document.getElementById('scroll-select-modal')) {
+            acted = driveScrollSelectModal(); kind = 'sacrificial-pyre-or-inspiring-draught-putback';
+        }
 
         if (acted) log(`Drove a ${kind} choice`);
         return acted;
     }
 
     window.BotEffects = { driveSelection, rankedElements, driveTransmute, decideResponse };
-    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Transmute, response scrolls)');
+    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Transmute, response scrolls)');
 })();
