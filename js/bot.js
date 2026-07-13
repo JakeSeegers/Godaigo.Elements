@@ -448,6 +448,7 @@
                 cursedCells: new Set(),
                 lastTurnMoveKey: null,
                 turnRepeatStreak: 0,
+                unproductiveStreak: 0,  // consecutive own turns with no cast/placeStone — see botTurn()
                 noCreditScrolls: new Set(), // scrolls whose special effect cancelled without granting win credit — see trackCastCredit()
             };
         }
@@ -509,6 +510,10 @@
     // place again, burning its whole pool and every turn's AP for zero progress.
     const cellKey = c => `${c.x.toFixed(1)},${c.y.toFixed(1)},${c.type}`;
     const CELL_FAIL_LIMIT = 2;
+    // How many consecutive own turns with no cast/placeStone before botAct()
+    // tries findFixationTarget() unconditionally (not just on an exact move
+    // repeat) — see unproductiveStreak in mem()/botTurn().
+    const UNPRODUCTIVE_LIMIT = 3;
 
     // Scrolls worth planning around right now: hand + ACTIVE AREA + COMMON
     // AREA (hand-only planning dead-ends games — a catacomb scroll parked in
@@ -1110,29 +1115,55 @@
         // in lockstep by a larger stable N-hex cycle instead of breaking it
         // (RECENT_POS_LIMIT is 6 — any stable loop of 7+ hexes rotates the
         // whole window out from under the penalty before it ever returns to
-        // a hex still in memory). Observed in a real bot-vs-bot game log: an
-        // identical 7-hex loop repeated turn after turn, immune to the
-        // revisit penalty, with NOTHING about the board changing between
-        // occurrences — the deterministic scorer just reproduces the same
-        // decision. First try findFixationTarget(): a REVEALED hex
+        // a hex still in memory).
+        //
+        // That exact-repeat check is a NARROW trigger, though — a bot
+        // orbiting a small home region rarely repeats the SAME move list
+        // turn to turn (the revisit penalty perturbs lap order), so it can
+        // stay at streak 0 for 100+ turns while accomplishing nothing.
+        // Confirmed on a real 5-bot 300-turn game log: 4 of 5 bots produced
+        // zero casts/placements for the entire second half, movement
+        // collapsed from a 400+px exploration spread to a ~70px pocket, and
+        // the exact-repeat check fired on almost none of it (different lap
+        // order each time). unproductiveStreak (botTurn(), reset only by an
+        // actual cast/placeStone) is a direct progress signal instead of a
+        // movement-shape one, and triggers the SAME remedy independent of
+        // whether the movement looks like a clean loop.
+        //
+        // Either way, first try findFixationTarget(): a REVEALED hex
         // elsewhere on the board with an uncast-element pattern still
         // buildable pulls the bot there via a strong (but not scripted)
-        // scoring term instead of just marking time. Only when no such
-        // target exists do we fall back to the older "skip movement for one
-        // turn" behavior. Self-clearing either way: botTurn() resets the
-        // streak once this fires, so it only intervenes once per cycle.
+        // scoring term instead of just marking time. If no target exists,
+        // an exact-repeat (turnRepeatStreak) falls back to the older "skip
+        // movement for one turn" safety net — a confirmed frozen loop
+        // genuinely needs SOME intervention. A plain productivity stall
+        // (unproductiveStreak alone, no exact repeat) does NOT force that
+        // fallback: the bot isn't necessarily looping, just not finding
+        // anything to build, and forcing it to stop moving would be actively
+        // harmful if repositioning is the only thing left worth doing — it
+        // just proceeds to normal scoring below with no fixation applied,
+        // same as if this whole block didn't run. Both counters are
+        // independent: turnRepeatStreak self-clears (a one-shot
+        // intervention, reset by botTurn() regardless of outcome);
+        // unproductiveStreak persists across fixation-driven turns and only
+        // clears on an actual cast/placeStone — a genuinely dead position
+        // (nothing anywhere still grants win credit) just means
+        // findFixationTarget() keeps returning null every turn, which is
+        // the correct outcome, not a bug to route around further.
         let choice = null;
-        if (m.turnRepeatStreak >= 1) {
+        const stuckByRepeat = m.turnRepeatStreak >= 1;
+        const stuckByStall = m.unproductiveStreak >= UNPRODUCTIVE_LIMIT;
+        if (stuckByRepeat || stuckByStall) {
             const fixationTarget = findFixationTarget(snap);
             if (fixationTarget) {
                 const ranked = rankActions(fixationTarget);
                 if (ranked.length) {
                     choice = ranked[0];
-                    log(`Turn-repeat circuit breaker (streak ${m.turnRepeatStreak}): fixating on ` +
-                        `${fixationTarget.scroll} near (${fixationTarget.x.toFixed(0)},${fixationTarget.y.toFixed(0)})`);
+                    log(`${stuckByRepeat ? `Turn-repeat circuit breaker (streak ${m.turnRepeatStreak})` : `Unproductive streak (${m.unproductiveStreak})`}: ` +
+                        `fixating on ${fixationTarget.scroll} near (${fixationTarget.x.toFixed(0)},${fixationTarget.y.toFixed(0)})`);
                 }
             }
-            if (!choice) {
+            if (!choice && stuckByRepeat) {
                 const ranked = rankActions().filter(r => r.action.type !== 'move');
                 if (ranked.length) {
                     choice = ranked[0];
@@ -1297,6 +1328,7 @@
         const m = mem(startingPlayer);
         const wasForced = m.turnRepeatStreak >= 1; // circuit breaker armed for this turn
         const turnMoves = [];
+        let productive = false; // cast or placeStone applied this turn — see unproductiveStreak below
         try {
             for (let i = 0; i < 30; i++) {                    // safety cap
                 if (activePlayerIndex !== startingPlayer) break; // turn passed
@@ -1305,6 +1337,7 @@
                 const applied = botAct();
                 if (!applied) break;
                 if (applied.type === 'move') turnMoves.push(`${applied.x.toFixed(1)},${applied.y.toFixed(1)}`);
+                if (applied.type === 'cast' || applied.type === 'placeStone') productive = true;
                 if (applied.type === 'endTurn') break;
                 await tick(350);
             }
@@ -1329,6 +1362,27 @@
                 m.turnRepeatStreak = 0;
             }
             m.lastTurnMoveKey = key || null;
+        }
+        // Broader stuck signal than the exact-repeat check above: a bot
+        // orbiting a small home region rarely repeats the SAME move list
+        // turn to turn (the revisit-penalty perturbs which hex it visits
+        // first each lap), so turnRepeatStreak can stay at 0 for 100+ turns
+        // while the bot accomplishes nothing. Track "how many of my own
+        // turns in a row produced no cast/placeStone" instead — a direct
+        // measure of progress, not movement shape — and let botAct()'s
+        // circuit breaker fire on THIS once it crosses UNPRODUCTIVE_LIMIT,
+        // in addition to the exact-repeat trigger. Not reset by a
+        // fixation-driven turn (unlike turnRepeatStreak) — as long as the
+        // bot keeps failing to progress, keep re-searching for a fixation
+        // target every turn; a genuinely dead position (nothing anywhere
+        // still grants win credit) just means findFixationTarget() keeps
+        // returning null and the old fallback continues, same as before.
+        if (productive) m.unproductiveStreak = 0;
+        else {
+            m.unproductiveStreak++;
+            if (m.unproductiveStreak === UNPRODUCTIVE_LIMIT) {
+                log(`${m.unproductiveStreak} turns with no cast/placeStone — trying fixation targets from now on`);
+            }
         }
         log('Turn autopilot finished');
     }
