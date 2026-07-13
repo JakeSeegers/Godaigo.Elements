@@ -4925,7 +4925,7 @@ document.getElementById('undo-move').onclick = function() {
                 panel.appendChild(title);
 
                 const desc = document.createElement('div');
-                desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match.';
+                desc.textContent = 'Trains the bots you play against. "Repeat" below sets how many generations to run — more generations means a longer run. New weights are only kept if they beat the current ones in a confirmation match at the end.';
                 desc.style.cssText = 'font-size:11px;color:#999;';
                 panel.appendChild(desc);
 
@@ -4980,6 +4980,15 @@ document.getElementById('undo-move').onclick = function() {
                     { value: false, text: 'Extreme', title: 'Muted, minimal delay — much faster, nothing to watch (a true no-UI "headless" mode isn\'t possible in the browser tab the live game runs in)' },
                 ], () => state.watchable, (v) => { state.watchable = v; });
 
+                // Shared by both Start Training and Start Breeding below —
+                // controls evolve()'s generation count for whichever one
+                // runs. More generations = proportionally more games =
+                // proportionally longer (the progress readout under either
+                // button shows live games-done/total once running).
+                makeChoiceRow('Repeat:',
+                    [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
+                    () => state.generations, (v) => { state.generations = v; });
+
                 const progressText = document.createElement('div');
                 progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
                 panel.appendChild(progressText);
@@ -5004,7 +5013,7 @@ document.getElementById('undo-move').onclick = function() {
                     if (breedBtn) breedBtn.disabled = true;
                     startBtn.textContent = 'Training…';
                     try {
-                        const preset = { generations: 3, gamesPerPair: 1, popSize: 6, confirmGames: 10 };
+                        const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10 };
                         const { improved, record } = await runWeightTraining(preset, renderProgress, {
                             nPlayers: state.n, visual: state.watchable,
                         });
@@ -5100,10 +5109,8 @@ document.getElementById('undo-move').onclick = function() {
                 clearSeedsBtn.style.cssText = 'padding:3px 8px;background:#2d2d44;color:#ccc;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:11px;align-self:flex-start;';
                 clearSeedsBtn.onclick = () => { seedFiles.length = 0; renderFileList(); };
                 panel.appendChild(clearSeedsBtn);
-
-                makeChoiceRow('Repeat:',
-                    [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
-                    () => state.generations, (v) => { state.generations = v; });
+                // Repeat count is the shared row built above (with Players/Speed) —
+                // both Start Training and Start Breeding read state.generations.
 
                 breedBtn = document.createElement('button');
                 breedBtn.textContent = 'Start Breeding';
