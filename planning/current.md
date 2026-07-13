@@ -15,6 +15,25 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **MULTIPLAYER: allow more than one bot player in a real lobby** —
+  `index.html`, `js/lobby.js`, `js/bot-driver.js` (comments only),
+  `js/INDEX.md`, `docs/bot-roadmap.md`. The lobby's "🤖 Add Bot" button was
+  a 0/1 toggle (`toggleBotPlayer()`) — once a bot existed, the same button
+  became "Remove Bot" with no way to add a second. Split into
+  `addBotPlayer()`/`removeBotPlayer()`, two separate buttons: Add always
+  inserts another distinct `🤖 Bot N` row up to the room's existing
+  5-player cap; Remove drops the most recently added one (unchanged RPC
+  call from before). `bot-driver.js` needed zero logic changes — its
+  watcher already recomputes the live bot-index set every tick and drives
+  whichever one is active rather than assuming a single hardcoded bot; all
+  bots already share whatever `window.BotSystem.WEIGHTS` currently holds
+  (the Supabase community champion from the entry above, or local
+  training) — this was correctly wired already, just never exercised with
+  more than one bot. Verified with a stateful mock of the `players` table:
+  4 sequential `addBotPlayer()` calls produce `🤖 Bot 1`-`4`, a 5th is
+  rejected with "Room is full!", `removeBotPlayer()` removes the most
+  recent, and the Add/Remove button visibility + `(N)` count label update
+  correctly across empty/partial/full room states.
 - **BOT ARENA: Supabase-backed champion persistence ("Start Training" now
   actually improves the deployed game, not just one browser)** —
   `js/bot.js`, `js/game-ui.js`, new Supabase table on the live `Godaigo`
@@ -450,4 +469,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (Start Training now persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-13 (real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
