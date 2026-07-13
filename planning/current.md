@@ -15,6 +15,42 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT ARENA UX: population lineage tracking + Bot Training panel rebuilt as
+  a full modal** — `js/bot-arena.js`, `js/game-ui.js`. Follow-up to a user
+  Q&A about exactly how `evolve()`/N-player training works (population size
+  vs. player-count selector, "Repeat" = generations not total games,
+  confirmation is always a 2-player gate regardless of training player-
+  count) — the user then asked to surface this mechanism in the UI: "build
+  out the bot training window to show more of these metrics... a roster
+  list with names... click on a 'player' and see a diagram of its weights."
+  `evolve()`'s population members are now `{id, w, parentIds}` objects
+  (`newMember()`/`_nextPopId` counter) instead of bare weight tables — the
+  top-2 elites literally keep the same object/id across generations, bred
+  children get a fresh id and `parentIds:[idA,idB]` (or `[idA]` for
+  self-crossover). `onGeneration()` gained a 4th argument (`members`,
+  ranked best-first) carrying this; existing 3-arg callers (dev cheat
+  panel) untouched. The player-facing "🧬 Bot Training" panel (`.gami-title`
+  ×5 trigger, unchanged) is now a full-screen modal instead of a small
+  floating panel: Players/Speed/Repeat controls gained explainer tooltips,
+  plus a new Population roster (clickable rows: id, fitness bar, lineage
+  label) and Generations log fed by a shared `handleGeneration()` callback,
+  and a click-through weight-diagram detail view (`weightBar()`) grouping
+  `WEIGHT_CATEGORIES` and comparing the selected member's weights against
+  `BotSystem.DEFAULT_WEIGHTS`. Caught on self-review before testing: the
+  lineage label must check "is this id already seen" BEFORE falling back to
+  its birth-parentage text, or a long-surviving elite re-shows its original
+  "bred #X×#Y" forever instead of "elite (surviving)". Verified: a headless
+  data-layer test confirms elites keep their id/empty-parentIds across
+  generations while bred children get correct `parentIds`
+  (`repro_population_ids.js`); a headless UI test running the real "Start
+  Breeding" flow (population tied to the Players selector, fast at
+  population 2) confirms the modal renders 2 roster rows, a generation-log
+  entry, and — after clicking a row — the weight-diagram detail view with
+  category headers, a `castBase` row, and a valid lineage label, zero page
+  errors (`repro_modal_ui_breed.js`). The slower "Start Training" path
+  (hardcoded `popSize:6`, ~25 games) was not separately re-verified after
+  the rewrite — it shares the identical `handleGeneration` code path as the
+  now-verified breeding path, just with a bigger/slower population.
 - **BOT FIX: non-host clients rendered bots' tiles at the wrong position
   with the wrong player's color** — `js/bot-state.js`. User report,
   distinct from the placement-freeze entry below (same general area, real
@@ -578,4 +614,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-13 (evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*

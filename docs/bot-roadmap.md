@@ -1006,6 +1006,14 @@ caller's job). This unlocked two things without new game logic:
   too — checked in every loop via a shared `_stopRequested` flag, reset
   only by the true top-level entry point so a mid-evolve stop isn't undone
   between an evolve run's internal pairwise/grouped games.
+- **Population identity/lineage:** population members are `{id, w,
+  parentIds}` objects (`newMember()`/`_nextPopId`), not bare weight tables.
+  Elites carry their `id`/`parentIds` forward unchanged each generation;
+  bred children get a fresh id and `parentIds:[idA,idB]` (`[idA]` for
+  self-crossover). `onGeneration(gen, total, fitnessArr, members)` gained a
+  4th argument (`members`, ranked best-first) exposing this — existing
+  3-arg callers are unaffected. Powers the Bot Training modal's Population
+  roster/lineage labels and Generations log in game-ui.js.
 
 Cheat panel gained a "🧬 Evolve" row next to "🤖 Bot match" (same 2/3/4/5
 player-count buttons, shared Stop), running a small visualized 3-generation
