@@ -147,7 +147,6 @@
         const saved = {
             random: Math.random,
             sound: window.SoundSystem,
-            joytone: window.JoytoneBridge,
             gami: window.gami,
             endTurnPrompt: window.showEndTurnPrompt,
             levelComplete: window.spellSystem?.showLevelComplete,
@@ -155,7 +154,11 @@
             isBotPlayer: rw?.isBotPlayer,
         };
         window.SoundSystem = null;
-        window.JoytoneBridge = null;
+        // Joytone is handled separately (see suppressJoytone() / run() /
+        // evolve()) — nulling window.JoytoneBridge here only stopped OTHER
+        // code from calling into it, it never actually silenced audio
+        // already playing or stopped the internal lobby-wrapper watcher
+        // from booting a fresh engine on every simulated game.
         window.gami = null; // never grant real XP/gold for arena games
         window.showEndTurnPrompt = () => {};
         if (window.spellSystem) {
@@ -175,7 +178,6 @@
         return function restore() {
             Math.random = saved.random;
             window.SoundSystem = saved.sound;
-            window.JoytoneBridge = saved.joytone;
             window.gami = saved.gami;
             window.showEndTurnPrompt = saved.endTurnPrompt;
             if (window.spellSystem && saved.levelComplete) {
@@ -184,6 +186,18 @@
             window.BotSystem.speedScale = saved.speedScale;
             if (rw && saved.isBotPlayer) rw.isBotPlayer = saved.isBotPlayer;
         };
+    }
+
+    // Silence Joytone for the WHOLE run() / evolve() job, regardless of
+    // opts.visual — unlike spectate() (one continuous game, keeps the
+    // soundtrack on purpose), run()/evolve() play many short simulated
+    // games back to back, each triggering its own #lobby-wrapper hide/show
+    // cycle that would otherwise reboot the engine and restart playback
+    // from scratch every single game. See joytone-bridge.js's
+    // setSuppressed()/startForGame().
+    function suppressJoytone() {
+        window.JoytoneBridge?.setSuppressed(true);
+        return () => window.JoytoneBridge?.setSuppressed(false);
     }
 
     function setWeights(table) {
@@ -448,6 +462,7 @@
         _stopRequested = false;
         const visual = !!opts.visual;
         const restore = visual ? null : muteEnvironment();
+        const unsuppressJoytone = suppressJoytone();
         window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
         try {
             const result = await _playSeries(weightsA, weightsB, nGames, seed, { ...opts, visual });
@@ -459,6 +474,7 @@
             return result;
         } finally {
             if (restore) restore();
+            unsuppressJoytone();
             _running = false;
         }
     }
@@ -541,6 +557,7 @@
         _evolving = true;
         _stopRequested = false; // same stop() flag spectate() uses — shared "cancel a local bot job" signal
         const restore = visual ? null : muteEnvironment();
+        const unsuppressJoytone = suppressJoytone();
         window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
 
         // opts.seedWeights (0-2 uploaded/carried-over weight tables) seeds
@@ -627,6 +644,7 @@
             }
         } finally {
             if (restore) restore();
+            unsuppressJoytone();
             _evolving = false;
         }
         return champion;
