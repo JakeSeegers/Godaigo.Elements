@@ -15,6 +15,53 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT ARENA UX + EVOLUTION: stray modal sweep, crossover, player-facing
+  training panel, un-stoppable confirm phase** — `js/bot-arena.js`,
+  `js/game-ui.js`. Four related fixes from a user Q&A session:
+  (1) `playMatch()` now removes any stray `#end-turn-empty-ap-modal` at
+  startup — `showEndTurnPrompt()` being stubbed during a bot job only
+  blocks NEW popups, so a real "out of AP?" modal left up from whatever
+  game the human was just in sat unclicked for the whole run (reported as
+  "menus that would remain unclicked" during Train Weights, regression
+  from an earlier version that apparently swept this).
+  (2) `evolve()`'s `mutate()`-only reproduction (top-2 elites, rest =
+  mutate(single elite)) replaced with uniform crossover across the top-3
+  pool + mutation — two different good strategies can now combine instead
+  of only drifting apart independently; top-2 still carry over unchanged
+  (pure elitism preserved). New `crossover(a, b, rng)`.
+  (3) New player-facing "🧬 Bot Training" panel — click the Profile
+  modal's header (`.gami-title`, always literal text "Profile" regardless
+  of active tab) 5× within 3s, same debounce as the dev cheat panel's
+  AP-label trigger. Lets a player pick 2-5 players and Watchable/Extreme
+  speed, then Start/Stop — reuses the same confirmation-gated
+  `runWeightTraining()` the existing "Train Weights" buttons use ("Extreme"
+  = muted + minimal delay, same mechanism Train Weights already used; a
+  true no-DOM headless mode isn't possible in the tab the live static site
+  runs in, so it's labeled honestly instead of promised). Hoisted
+  `stopAnyRunningBotJob`/`leaveOnlineGameIfAny`/`runWeightTraining` out of
+  the dev cheat panel's per-open closure so both panels share one instance
+  instead of drifting copies of this correctness-sensitive cleanup;
+  `runWeightTraining` gained optional `{nPlayers, visual}`, defaulting to
+  prior behavior for existing callers.
+  (4) Fixed: clicking Stop during the evolve() phase of Train Weights only
+  cut that phase short — `run()` resets the same shared `_stopRequested`
+  flag the instant it starts, so the confirmation series behind it ran to
+  completion regardless, un-stoppable (could be 10-20+ un-cancellable
+  games). Exposed `BotArena.stopRequested()`; `runWeightTraining` now
+  checks it before starting confirmation and reverts to the pre-training
+  weights instead. Fixes both the new panel and the pre-existing cheat-panel
+  buttons. Also discussed but NOT built (deferred pending user direction):
+  Supabase persistence for champion weights (currently `localStorage` only
+  — the only way evolved weights currently reach every player is the
+  existing manual "copy champion JSON from console → paste into
+  `DEFAULT_WEIGHTS` → commit → GitHub Pages redeploy" path; this app's
+  Supabase schema has no RLS at all today, so an auto-apply-from-Supabase
+  design needs a fitness-must-improve gate before any open anon-write table
+  could safely drive live gameplay for every visitor).
+  Verified: 4 targeted headless Playwright repros (stray-modal sweep,
+  crossover-enabled evolve() at popSize 4, new panel's full click-through
+  including Start/Stop, existing cheat panel + its own Train Weights/Stop
+  still work unchanged after the hoist).
 - **BOT FIX: spectator match dying after turn 1 (stale isMultiplayer identity)** —
   `js/bot-arena.js`. `BotArena.spectate()`/`playGame()` never reset
   `isMultiplayer`/`myPlayerIndex` before starting a LOCAL match — they relied
@@ -335,4 +382,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-12 (merged `claude/masons-savvy-range-bug-ep7hjm` — Transmute/response-scroll driving, N-player playMatch() unification, Mason's Savvy placement-range fix — into the stone-rest rule / Freedom exploit fix / spectator-match stale-identity fix / opponent hand element visibility line of work; re-restored `ensureLocalMode()` in the unified `playMatch()`)*
+*Last updated: 2026-07-13 (stray out-of-AP modal sweep in playMatch(); evolve() crossover between elites; new player-facing "Bot Training" panel via Profile-header x5; fixed Stop being ignored during Train Weights' confirmation phase)*
