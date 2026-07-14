@@ -49,6 +49,16 @@
 // bookkeeping is the CALLER's job (run/evolve mute+stay silent, spectate
 // keeps everything on and drives the status bar + log download).
 //
+// STALL RESTART: if two (or more) bots each end STALL_TURNS (7) consecutive
+// own turns parked on one revealed elemental tile (each on its own tile —
+// they don't have to share one), the game is declared a trap-loop stall and
+// the whole round is RESTARTED from scratch with a derived seed (same
+// weights), instead of grinding on to the 200-turn cap just to record a
+// meaningless draw. opts.maxStallRestarts (default 3) caps the retries; a
+// game still stalled after the last retry is returned as-is (winner null,
+// result.stalled true) so a pathological weight table can't loop forever.
+// result.restarts reports how many restarts the returned game consumed.
+//
 // HOW A GAME RUNS (local hot-seat — no Supabase, no multiplayer):
 //   ensureLocalMode() + resetGameResources() + startGame(n) reset
 //   everything; Math.random is temporarily seeded (mulberry32) so
@@ -290,6 +300,37 @@
     function stop() { _stopRequested = true; }
 
     // ----------------------------------------------------------------
+    // Trap-loop stall detection: bots sometimes wedge each other into a
+    // stable non-position (e.g. both camped on a shrine with full pools,
+    // neither willing to move first) that takes the full 200-turn cap to
+    // "resolve" as a draw. If STALL_MIN_BOTS players each end STALL_TURNS
+    // consecutive own turns standing on the SAME revealed elemental tile
+    // (each has their own tile — they needn't share one), the round is
+    // restarted instead (see playMatch()).
+    // ----------------------------------------------------------------
+    const STALL_TURNS = 7;
+    const STALL_MIN_BOTS = 2;
+    const ELEMENTAL_SHRINES = ['earth', 'water', 'fire', 'wind', 'void'];
+
+    // The revealed elemental tile the position stands on, else null.
+    // Same closest-center-within-radius rule as game-core's
+    // findTileAtPosition() (a tile covers 19 hexes; TILE_SIZE*5.5 spans the
+    // whole tile including edges), which isn't exported — plus the
+    // revealed + elemental filters this check needs. Never reads shrineType
+    // off an unrevealed tile (t.flipped = face-down).
+    function elementalTileAt(x, y) {
+        const tileRadius = TILE_SIZE * 5.5;
+        let closest = null, closestDist = Infinity;
+        for (const t of placedTiles) {
+            if (t.isPlayerTile) continue;
+            const d = Math.hypot(t.x - x, t.y - y);
+            if (d < tileRadius && d < closestDist) { closest = t; closestDist = d; }
+        }
+        if (!closest || closest.flipped) return null;
+        return ELEMENTAL_SHRINES.includes(closest.shrineType) ? closest : null;
+    }
+
+    // ----------------------------------------------------------------
     // SHARED CORE: one full game for weightsPerPlayer.length players (2–5).
     // weightsPerPlayer[i] is that player's weight table; an `undefined`
     // entry means "don't touch WEIGHTS for this player's turn" (how
@@ -298,21 +339,30 @@
     // turnCap default) — muting the environment and any status/log UI is
     // the caller's job.
     // Returns { winner: 0..n-1 | null, turns, activated: [n0..], stuckTurns:
-    // {0: n, 1: n, ...} }. `activated` = each player's elements-activated
-    // count at game end (win progress, 0-5) and `stuckTurns` = how many
-    // times each player's turn had to be force-ended because botTurn()
-    // never chose to end it itself (stuck/no productive action). Both feed
-    // sideFitness() so a bot that stalls scores worse than one that plays
-    // actively, even when neither wins outright — see
-    // docs/bot-roadmap.md Stage 3a fitness note.
+    // {0: n, 1: n, ...}, stalled }. `activated` = each player's
+    // elements-activated count at game end (win progress, 0-5) and
+    // `stuckTurns` = how many times each player's turn had to be
+    // force-ended because botTurn() never chose to end it itself (stuck/no
+    // productive action). Both feed sideFitness() so a bot that stalls
+    // scores worse than one that plays actively, even when neither wins
+    // outright — see docs/bot-roadmap.md Stage 3a fitness note. `stalled` =
+    // the game was aborted by the two-bots-camped trap-loop detector (see
+    // STALL_TURNS above); playMatch() (the public wrapper below) restarts
+    // stalled rounds rather than returning them, so callers only ever see
+    // stalled:true when the restart budget ran out.
     // ----------------------------------------------------------------
-    async function playMatch(weightsPerPlayer, opts = {}) {
+    async function _playMatchOnce(weightsPerPlayer, opts = {}) {
         const nPlayers = weightsPerPlayer.length;
         const visual = !!opts.visual;
         const turnCap = opts.turnCap ?? (visual ? 300 : 200);
         const seed = opts.seed ?? Math.floor(Math.random() * 1e9);
         const stuckTurns = {};
         for (let i = 0; i < nPlayers; i++) stuckTurns[i] = 0;
+        // Per-player camping streak for the trap-loop detector: which
+        // elemental tile this player ended their last turn on, and for how
+        // many consecutive own turns they've stayed on that same tile.
+        const camp = {};
+        for (let i = 0; i < nPlayers; i++) camp[i] = { tileId: null, count: 0 };
 
         // Seed ALL shuffle randomness (tile deck, scroll decks) for this game
         Math.random = mulberry32(seed);
@@ -345,7 +395,7 @@
         const savedShowEndTurnPrompt = window.showEndTurnPrompt;
         window.showEndTurnPrompt = () => {};
 
-        const result = { winner: null, turns: 0, activated: new Array(nPlayers).fill(0), stuckTurns };
+        const result = { winner: null, turns: 0, activated: new Array(nPlayers).fill(0), stuckTurns, stalled: false };
         try {
             for (let turn = 0; turn < turnCap && !_stopRequested; turn++) {
                 if (visual) { try { currentTurnNumber = turn + 1; } catch (e) {} }
@@ -359,6 +409,25 @@
                 result.activated = snap.players.map(p => p.activated.length);
                 const w = window.BotSim.winner(snap);
                 if (w !== null) { result.winner = w; break; }
+
+                // Trap-loop detector: extend/reset this player's camping
+                // streak based on where they ended this turn, then stall out
+                // if enough players are camped simultaneously.
+                const pos = playerPositions[idx];
+                const campTile = pos ? elementalTileAt(pos.x, pos.y) : null;
+                const streak = camp[idx];
+                if (campTile && streak.tileId === campTile.id) {
+                    streak.count++;
+                } else {
+                    streak.tileId = campTile ? campTile.id : null;
+                    streak.count = campTile ? 1 : 0;
+                }
+                const camped = Object.values(camp).filter(c => c.count >= STALL_TURNS).length;
+                if (camped >= STALL_MIN_BOTS) {
+                    result.stalled = true;
+                    log(`match seed ${seed}: ${camped} bots each parked on an elemental tile for ${STALL_TURNS} straight turns — trap loop, aborting round on turn ${turn + 1}`);
+                    break;
+                }
 
                 if (activePlayerIndex === idx) {
                     // Bot didn't end its own turn (stuck/no actions) — force it.
@@ -381,6 +450,34 @@
         } finally {
             window.showEndTurnPrompt = savedShowEndTurnPrompt;
         }
+        return result;
+    }
+
+    // ----------------------------------------------------------------
+    // Public playMatch(): _playMatchOnce() plus the stall-restart loop.
+    // A round aborted by the trap-loop detector is replayed from scratch
+    // with a DERIVED seed — replaying the identical seed would just walk
+    // the same deterministic decisions back into the same trap. Capped by
+    // opts.maxStallRestarts (default 3): a round still stalled after the
+    // last retry is returned as-is (winner null → counts as a draw) so a
+    // pathological weight table can't spin restarts forever. Restarted
+    // attempts are discarded entirely — only the final attempt's result
+    // (with result.restarts = how many restarts it took) reaches the
+    // caller, so run()/evolve()/spectate() stats never double-count a
+    // restarted round.
+    // ----------------------------------------------------------------
+    async function playMatch(weightsPerPlayer, opts = {}) {
+        const baseSeed = opts.seed ?? Math.floor(Math.random() * 1e9);
+        const maxStallRestarts = opts.maxStallRestarts ?? 3;
+        let result;
+        for (let attempt = 0; ; attempt++) {
+            const seed = (baseSeed + attempt * 1000003) >>> 0; // deterministic per-restart reshuffle
+            result = await _playMatchOnce(weightsPerPlayer, { ...opts, seed });
+            result.restarts = attempt;
+            if (!result.stalled || _stopRequested || attempt >= maxStallRestarts) break;
+            log(`restarting stalled round (restart ${attempt + 1}/${maxStallRestarts}, next seed ${(baseSeed + (attempt + 1) * 1000003) >>> 0})`);
+        }
+        if (result.stalled) log(`round still stalled after ${result.restarts} restart(s) — returning it as a draw`);
         return result;
     }
 

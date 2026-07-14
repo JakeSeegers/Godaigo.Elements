@@ -15,6 +15,32 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT ARENA: trap-loop stall restart** — `js/bot-arena.js`, `js/INDEX.md`.
+  User request: arena/evolution games where bots wedge into a stable camp
+  (each parked on an elemental tile, neither moving) previously ground on to
+  the full 200-turn cap before registering as a draw. `playMatch()` is now a
+  wrapper around `_playMatchOnce()`: after each player's turn, a per-player
+  streak counter tracks consecutive own turns ended on the SAME revealed
+  elemental tile (closest-center-within-`TILE_SIZE*5.5` rule mirroring
+  game-core's unexported `findTileAtPosition()`, filtered to
+  revealed + earth/water/fire/wind/void — never reads `shrineType` off a
+  face-down tile). When ≥2 players' streaks hit 7 (`STALL_TURNS`/
+  `STALL_MIN_BOTS`), the round aborts (`result.stalled:true`) and playMatch
+  restarts it from scratch with a DERIVED seed (`baseSeed + attempt*1000003`
+  — replaying the identical seed would deterministically walk back into the
+  same trap). `opts.maxStallRestarts` (default 3) caps retries so a
+  pathological weight table can't spin forever; a round still stalled after
+  the budget is returned as-is (winner null → draw, `result.restarts` =
+  restarts consumed). Discarded attempts never reach
+  run()/evolve()/spectate() stats, so nothing double-counts. Applies to ALL
+  playMatch callers (run/evolve/spectate/playGame) uniformly. Verified
+  headless (Playwright, stubbed Supabase CDN): stubbed bot turns parking
+  both bots on two different elemental tiles trigger the abort exactly on
+  turn 14 (7 own turns each) and consume the full restart budget
+  (`stalled:true, restarts:1` with `maxStallRestarts:1`, 2 abort logs +
+  1 restart log); negative control with only ONE bot parked runs to its
+  turnCap untouched (`stalled:false, restarts:0`); a real 2-game
+  `BotArena.run()` batch completes clean with zero page errors.
 - **BOT STAGE 2.5 COMPLETE: drive Control the Current, the last selection
   effect** — `js/bot-effects.js`, `js/bot.js`, `docs/bot-roadmap.md`.
   Different SHAPE of problem from every other scroll effect driven so
@@ -799,4 +825,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (Stage 2.5 scroll-effect driving is now COMPLETE for all 12 selection effects — Control the Current was the last one, needing a waitForQuiescence() architecture change since it's a persistent whole-turn ability, not a one-shot pick, unlike everything driven before it; earlier this session: 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-07-14 (latest: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; earlier: Stage 2.5 scroll-effect driving is now COMPLETE for all 12 selection effects — Control the Current was the last one, needing a waitForQuiescence() architecture change since it's a persistent whole-turn ability, not a one-shot pick, unlike everything driven before it; earlier this session: 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
