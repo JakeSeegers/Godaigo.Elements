@@ -613,28 +613,37 @@ exist in code but are untested end-to-end. Docs system fully in place.
    Track B (generalize `playGame()`/`run()`/`evolve()` past 2 players)
    remains unscoped/unbuilt as originally planned. Track C (catacomb/Freedom
    teleport action) is **DONE** — see the BOT STAGE 5 entry above.
-5. **KNOWN ISSUE, not yet fixed: response-only (level-1) scrolls can
-   permanently clog a common-area element slot ("elemental lockout").**
-   Neither bot can ever cast OR respond with a level-1 scroll (main-phase
-   casting is blocked by rule — "Level 1 scrolls can only be used as
-   responses" — and `response-window.js`'s `isBotPlayer()` hard-excludes
-   bots from ever being considered as responders). The bot already has a
-   mitigation for holding them (`discardResponseOnly: +25` nudges voluntary
-   discard) — but discarding just moves the dead scroll into the shared
-   common-area slot for its element, and nothing ever displaces it again
-   unless someone discards ANOTHER scroll of that same element there.
-   Confirmed on real data: in a 200-turn drawn arena game (seed 40000, game
-   6 of a 30-game batch), `EARTH_SCROLL_1` and `FIRE_SCROLL_1` each landed in
-   their element's common-area slot around the 65-70% mark and were never
-   replaced for the rest of the game — while every other element's slot kept
-   churning normally. This reduces both players' win paths for that element
-   for the remainder of the game and is a real, verified contributor to
-   draws (independent of the opponent-threat work above — same draw rate
-   with or without it on this seed). Real fix is full response-scroll
-   support (see bot-roadmap § STAGE 2.5 step 3, not started — needs
-   `response-window.js`'s bot-exclusion removed, priority/no-bluff response
-   logic per user's explicit call: bots should only pass-or-respond, no
-   bluffing). Cheaper interim mitigation not yet scoped.
+5. **KNOWN ISSUE, still open, DIAGNOSIS CORRECTED: response-only (level-1)
+   scrolls can sit stuck in a common-area element slot for a long stretch
+   ("elemental lockout").** Original theory (now stale): the fix was "give
+   bots response-scroll support" (`response-window.js`'s `isBotPlayer()`
+   hard-exclusion). That support shipped (STAGE 2.5 step 3,
+   `BotEffects.decideResponse()`, arena + real multiplayer) — but it does
+   **NOT** close this gap, because casting a common-area scroll (main-phase
+   by anyone, or as a response) was never what clears its slot. Confirmed
+   directly in `game-core.js`'s `handleScrollDisposition()`: *"Common area
+   scrolls are permanent shared resources — casting them does NOT remove
+   them from the common area. They only leave when replaced by a new
+   scroll of the same element type."* — an explicit, unconditional game
+   rule, true for humans and bots alike, unrelated to who's allowed to
+   respond. The ACTUAL mechanic (`discardToCommonArea()`): any discard of a
+   scroll of that element, by anyone, ALWAYS unconditionally overwrites the
+   slot (old occupant goes to the bottom of its deck) — a same-element
+   discard is never wasted. So the real bottleneck isn't casting/responding
+   at all, it's simply whether anyone ever draws-then-discards another
+   scroll of that specific element again — ordinary draw variance, not a
+   bot-specific exclusion bug. Confirmed on real data: in a 200-turn drawn
+   arena game (seed 40000, game 6 of a 30-game batch), `EARTH_SCROLL_1` and
+   `FIRE_SCROLL_1` each landed in their element's common-area slot around
+   the 65-70% mark and were never replaced for the rest of the game, while
+   every other element's slot kept churning normally. A real bot-side
+   mitigation would mean specifically valuing "does discarding this scroll
+   displace a bad common-area occupant" as its own signal (separate from
+   the existing per-scroll dead/activated discard checks, which only look
+   at the scroll being discarded, never at what's currently sitting in that
+   element's slot) — not yet scoped, and it's unclear this is worth scoping
+   given the underlying cause is draw variance rather than a fixable logic
+   gap.
 
 ### 1. Tutorial — Earth Shrine Step (MEDIUM, tutorial-mode.js)
 After step 4 (scroll found), the tutorial should:
@@ -697,4 +706,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (bots can now use catacomb/Freedom shrine teleports — a new free-repositioning action added across bot-state.js/bot-sim.js/bot.js, closing the long-flagged Track C gap; void pool stones now valued for their standing AP bonus via 3 new weights — evalVoidHeld, shrineVoidBonus, placeVoidSpendPenalty — and earth-blocking/fire-interference tactics scoped as a follow-up in bot-roadmap.md § STAGE 4; evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-14 (corrected the "elemental lockout" bug's stale diagnosis — bot response support, already shipped, doesn't actually clear a stuck common-area scroll since casting never touches slot residency, only a same-element discard does; corrected bot-roadmap.md's STAGE STATUS table and response-window.js's own header comment, both still claiming bots can't respond; bots can now use catacomb/Freedom shrine teleports — a new free-repositioning action added across bot-state.js/bot-sim.js/bot.js, closing the long-flagged Track C gap; void pool stones now valued for their standing AP bonus via 3 new weights — evalVoidHeld, shrineVoidBonus, placeVoidSpendPenalty — and earth-blocking/fire-interference tactics scoped as a follow-up in bot-roadmap.md § STAGE 4; evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*

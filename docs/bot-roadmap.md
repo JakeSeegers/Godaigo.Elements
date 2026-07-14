@@ -32,7 +32,7 @@ different concerns and neither blocks the other:
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
 | 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5; cheat-panel "🧬 Train Weights" button runs a modest preset without the console) | `js/bot-arena.js`, `js/game-ui.js` cheat panel |
-| 2.5 | Scroll-effect usage: selection targets + response scrolls | IN PROGRESS (5/12 selection effects driven; response scrolls not started) | `js/bot-effects.js` + bot-sim whitelist |
+| 2.5 | Scroll-effect usage: selection targets + response scrolls | IN PROGRESS (8/12 selection effects driven; response scrolls **DONE**, arena + real multiplayer) | `js/bot-effects.js` + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
 

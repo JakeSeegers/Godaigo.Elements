@@ -21,7 +21,9 @@
  * - The window only OPENS when at least one opponent could respond (canPlayerRespond)
  *   or plausibly bluff a response (canPlayerBluff: matching formation + hand scroll of
  *   that element + open active slot + enough AP). Otherwise the cast resolves instantly.
- *   Bots are excluded — they cannot respond.
+ *   Bots CAN respond (via window.BotEffects.decideResponse(), see isBotPlayer() below) —
+ *   they're only excluded from the BLUFF branch, since they decide deterministically
+ *   rather than performatively.
  */
 
 // Element rank for response arbitration: higher = wins over lower
