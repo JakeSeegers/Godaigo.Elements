@@ -17,7 +17,7 @@
 //   - driveSelection(): tile-flip (Heavy Stomp / Call to Adventure),
 //     scorched-earth (Combust), tile-swap (Shifting Sands), Create,
 //     Scholar's Insight, Quick Reflexes, Sacrificial Pyre, Inspiring
-//     Draught.
+//     Draught, Wandering River, Arson, Plunder.
 //   - driveTransmute(): the only scroll with an open-ended discard-for-AP
 //     modal and NO selectionMode object (detected via DOM id directly,
 //     same as scroll-effects.js's EFFECT_MODAL_IDS safety net).
@@ -25,11 +25,22 @@
 //     (gated on window.BotArena.isRunning(), called from bot.js) and real
 //     multiplayer (js/bot-driver.js's respondForBots(), ticking alongside
 //     its turn watcher).
-// NOT yet driven: Wandering River, Control the Current, Arson, Plunder,
-// and Excavate's deferred teleport — cast falls through to cancel for
-// those. Telekinesis and Take Flight's destination step are drag-based
-// (no click handler to call) and are out of scope until a programmatic
-// hook exists.
+// NOT yet driven:
+//   - Control the Current (WATER_SCROLL_5) — architecturally different
+//     from everything else here: a persistent "this turn, no Done button"
+//     mode (selectionMode.type 'water-transform') meant to coexist with
+//     the rest of the bot's turn (transform an adjacent water stone
+//     opportunistically while moving), not a one-shot pick-then-done
+//     choice. waitForQuiescence() cancels any selectionMode driveSelection()
+//     can't act on — for a persistent mode that would prematurely END the
+//     effect's whole-turn duration the instant no water stone happens to
+//     be adjacent yet, denying any benefit from moving toward one later.
+//     Needs a bot.js waitForQuiescence() change (treat this mode as
+//     non-blocking: act if a stone is adjacent, else let the normal turn
+//     loop continue without cancelling), not just a driver function here.
+//   - Excavate's deferred teleport, Telekinesis, and Take Flight's
+//     destination step are drag-based (no click handler to call) and are
+//     out of scope until a programmatic hook exists.
 //
 // LOAD ORDER: after bot-sim.js, before bot.js (bot.js calls into this) —
 // but this file must not reach into bot.js's closure; it reads game state
@@ -181,6 +192,109 @@
     }
 
     // ----------------------------------------------------------------
+    // Wandering River (WATER_SCROLL_4) — two steps:
+    //   1. tile-element-change selectionMode: pick any eligible (non-player)
+    //      tile. Heuristic: closest to the bot's own position — makes an
+    //      immediate end-turn-here collection this turn plausible, the
+    //      most likely way to actually benefit before the effect expires
+    //      next turn.
+    //   2. element-select-modal: pick which element the tile counts as.
+    //      Generic "Earth"/"Water"/... buttons, same shape as Create's —
+    //      reuse clickBestElement(rankedElements()).
+    // GOTCHA: selectionMode.type stays 'tile-element-change' even after
+    // step 1 opens the element modal (only cleared once step 2 resolves),
+    // so without the modal-open guard below this would re-click a tile
+    // (and re-open a fresh element-select-modal) every polling tick
+    // instead of ever reaching step 2's driver.
+    // ----------------------------------------------------------------
+    function driveWanderingRiver(se, sm) {
+        if (document.getElementById('element-select-modal')) return false; // step 2 already open
+        const tiles = sm.eligibleTiles || [];
+        if (!tiles.length) return false;
+        const me = self(snap());
+        const nearest = tiles.reduce((a, b) => (!a || dist(me, b) < dist(me, a)) ? b : a, null);
+        sm.handleTileClick(nearest);
+        return true;
+    }
+
+    function driveElementSelectModal() {
+        const modal = document.getElementById('element-select-modal');
+        if (!modal) return false;
+        return !!clickBestElement(modal, rankedElements());
+    }
+
+    // ----------------------------------------------------------------
+    // Arson (FIRE_SCROLL_5) — two steps:
+    //   1. opponent-select-modal: pick a target opponent. Heuristic: the
+    //      biggest threat (rankedOpponents() — most activated elements,
+    //      tie-broken by total pool size).
+    //   2. arson-element-modal: pick which stone type to destroy from
+    //      their pool. Only lists elements they actually have; buttons
+    //      show the count, e.g. "Earth (3 in pool)" — pick the highest
+    //      count for the single biggest denial hit.
+    // ----------------------------------------------------------------
+    function driveOpponentSelectModal() {
+        const modal = document.getElementById('opponent-select-modal');
+        if (!modal) return false;
+        const buttons = [...modal.querySelectorAll('button')];
+        for (const idx of rankedOpponents()) {
+            const name = (typeof getPlayerColorName === 'function') ? getPlayerColorName(idx) : null;
+            const btn = name ? buttons.find(b => b.textContent === name) : null;
+            if (btn) { btn.click(); return true; }
+        }
+        return false;
+    }
+
+    function driveArsonElementModal() {
+        const modal = document.getElementById('arson-element-modal');
+        if (!modal) return false;
+        const buttons = [...modal.querySelectorAll('button')];
+        if (!buttons.length) return false;
+        let best = buttons[0], bestCount = -1;
+        for (const b of buttons) {
+            const m = b.textContent.match(/\((\d+) in pool\)/);
+            const count = m ? parseInt(m[1], 10) : 0;
+            if (count > bestCount) { bestCount = count; best = b; }
+        }
+        best.click();
+        return true;
+    }
+
+    // ----------------------------------------------------------------
+    // Plunder (CATACOMB_SCROLL_8) — two steps:
+    //   1. plunder-player-modal: pick a target player (self allowed by the
+    //      game, but never worth it here — a plain voluntary discardScroll
+    //      already covers what self-targeting would do, with no wasted
+    //      cast). Buttons are only clickable when the target actually has
+    //      a plunderable active scroll — rankedOpponents(hasActive) mirrors
+    //      that filter using the snapshot's public `active` list, so the
+    //      bot never tries a target the modal itself would refuse.
+    //   2. scroll-select-modal (SHARED with Sacrificial Pyre / Inspiring
+    //      Draught's put-back step — routed by heading text in
+    //      driveScrollSelectModal() below): pick which of the target's
+    //      active scrolls to send to the common area. Opposite of
+    //      pickWeakestButton — take their BEST scroll, not our worst.
+    // ----------------------------------------------------------------
+    function drivePlunderPlayerModal() {
+        const modal = document.getElementById('plunder-player-modal');
+        if (!modal) return false;
+        const buttons = [...modal.querySelectorAll('button')];
+        for (const idx of rankedOpponents(p => p.active && p.active.length > 0)) {
+            const name = (typeof getPlayerColorName === 'function') ? getPlayerColorName(idx) : null;
+            const btn = name ? buttons.find(b => b.textContent.startsWith(name) && b.textContent.includes('active')) : null;
+            if (btn) { btn.click(); return true; }
+        }
+        return false;
+    }
+
+    function drivePlunderScrollPick(modal) {
+        const buttons = [...modal.querySelectorAll('button')].filter(b => b.textContent !== 'Cancel');
+        if (!buttons.length) return false;
+        pickStrongestButton(buttons).click();
+        return true;
+    }
+
+    // ----------------------------------------------------------------
     // Create (VOID_SCROLL_5) — modal, single click.
     // Choice: element type to draw rank-many stones of.
     // ----------------------------------------------------------------
@@ -242,6 +356,39 @@
         return worst;
     }
 
+    // Inverse of pickWeakestButton — for choosing what to TAKE/DENY from an
+    // opponent (Plunder) rather than what to give up of our own.
+    function pickStrongestButton(buttons) {
+        let best = buttons[0], bestLevel = -1;
+        for (const b of buttons) {
+            const level = scrollDefByDisplayName(b.textContent)?.level ?? 0;
+            if (level > bestLevel) { bestLevel = level; best = b; }
+        }
+        return best;
+    }
+
+    // Shared opponent-targeting heuristic for Arson (destroy a stone) and
+    // Plunder (discard an active scroll) — "hit the biggest threat": most
+    // activated elements first, tie-broken by total pool stones. Returns
+    // opponent indices ranked best-target-first; optional filterFn narrows
+    // to opponents who are actually a valid target (e.g. Plunder needs at
+    // least one active scroll to plunder). Never includes self — targeting
+    // yourself is never useful here (a plain voluntary discardScroll already
+    // covers what self-targeted Plunder would do, with no wasted cast).
+    function rankedOpponents(filterFn) {
+        const s = snap();
+        const meIdx = s.turn.activePlayerIndex;
+        return s.players
+            .map((p, i) => ({ i, p }))
+            .filter(({ i, p }) => i !== meIdx && p && (!filterFn || filterFn(p)))
+            .sort((a, b) => {
+                const score = x => x.p.activated.length * 1000 +
+                    Object.values(x.p.pool || {}).reduce((sum, n) => sum + n, 0);
+                return score(b) - score(a);
+            })
+            .map(({ i }) => i);
+    }
+
     // ----------------------------------------------------------------
     // Sacrificial Pyre (FIRE_SCROLL_3) — modal, single click.
     // Choice: one scroll from the caster's OWN hand to sacrifice (sent to
@@ -298,7 +445,8 @@
         if (heading.startsWith('Choose one ') && heading.includes('scroll to put back')) {
             return driveInspiringDraughtPutBack(modal);
         }
-        return false; // e.g. Plunder's "Select an active scroll to plunder:" — not yet driven
+        if (heading.startsWith('Select an active scroll to plunder')) return drivePlunderScrollPick(modal);
+        return false;
     }
 
     function driveDeckSelectModal() {
@@ -456,12 +604,14 @@
         // ever ran (found via arena testing: Scholar's Insight was always
         // falling through to cancel despite driveScholarsInsight() existing).
         switch (sm?.type) {
-            case 'tile-flip':      acted = driveTileFlip(se, sm); kind = 'tile-flip'; break;
-            case 'scorched-earth': acted = driveScorchedEarth(se, sm); kind = 'scorched-earth'; break;
-            case 'tile-swap':      acted = driveTileSwap(se, sm); kind = 'tile-swap'; break;
+            case 'tile-flip':          acted = driveTileFlip(se, sm); kind = 'tile-flip'; break;
+            case 'scorched-earth':     acted = driveScorchedEarth(se, sm); kind = 'scorched-earth'; break;
+            case 'tile-swap':          acted = driveTileSwap(se, sm); kind = 'tile-swap'; break;
+            case 'tile-element-change': acted = driveWanderingRiver(se, sm); kind = 'wandering-river'; break;
             // telekinesis / take-flight-drag: drag-based, not driven yet.
-            // water-transform / tile-element-change / excavate-teleport:
-            // click-based but not yet implemented — falls through to cancel.
+            // water-transform: persistent whole-turn mode, needs a
+            // waitForQuiescence() change — see file header. Not driven here.
+            // excavate-teleport: click-based but not yet implemented.
             default: break;
         }
         if (!acted && document.getElementById('create-stone-modal')) {
@@ -477,7 +627,19 @@
             acted = driveDeckSelectModal(); kind = 'inspiring-draught-deck';
         }
         if (!acted && document.getElementById('scroll-select-modal')) {
-            acted = driveScrollSelectModal(); kind = 'sacrificial-pyre-or-inspiring-draught-putback';
+            acted = driveScrollSelectModal(); kind = 'sacrificial-pyre-or-inspiring-draught-putback-or-plunder-pick';
+        }
+        if (!acted && document.getElementById('element-select-modal')) {
+            acted = driveElementSelectModal(); kind = 'wandering-river-element';
+        }
+        if (!acted && document.getElementById('opponent-select-modal')) {
+            acted = driveOpponentSelectModal(); kind = 'arson-opponent';
+        }
+        if (!acted && document.getElementById('arson-element-modal')) {
+            acted = driveArsonElementModal(); kind = 'arson-element';
+        }
+        if (!acted && document.getElementById('plunder-player-modal')) {
+            acted = drivePlunderPlayerModal(); kind = 'plunder-player';
         }
 
         if (acted) log(`Drove a ${kind} choice`);
@@ -485,5 +647,5 @@
     }
 
     window.BotEffects = { driveSelection, rankedElements, driveTransmute, decideResponse };
-    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Transmute, response scrolls)');
+    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder, Transmute, response scrolls)');
 })();

@@ -32,7 +32,7 @@ different concerns and neither blocks the other:
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
 | 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5; cheat-panel "🧬 Train Weights" button runs a modest preset without the console) | `js/bot-arena.js`, `js/game-ui.js` cheat panel |
-| 2.5 | Scroll-effect usage: selection targets + response scrolls | IN PROGRESS (8/12 selection effects driven; response scrolls **DONE**, arena + real multiplayer) | `js/bot-effects.js` + bot-sim whitelist |
+| 2.5 | Scroll-effect usage: selection targets + response scrolls | IN PROGRESS (11/12 selection effects driven; response scrolls **DONE**, arena + real multiplayer; only Control the Current left, needs a waitForQuiescence() change) | `js/bot-effects.js` + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
 
@@ -697,17 +697,52 @@ Build order (each step independently commit-able and arena-measurable):
    response-only hand scroll first, else the lowest-level one), Inspiring
    Draught (WATER_SCROLL_3 — draws from the most-needed element's deck,
    puts back the weaker of the 2 drawn scrolls using the same
-   response-only/lowest-level rule as Sacrificial Pyre). The latter two
-   share `scroll-select-modal` with Plunder (not yet driven) — routed by
-   the exact heading text each effect's `showScrollSelectionModal()` call
-   sets, verified not to cross-contaminate.
+   response-only/lowest-level rule as Sacrificial Pyre), Wandering River
+   (WATER_SCROLL_4 — tile closest to the caster, then most-needed element),
+   Arson (FIRE_SCROLL_5 — targets the opponent closest to winning, most
+   activated elements tie-broken by pool size, then destroys the element
+   they hold the most of), Plunder (CATACOMB_SCROLL_8 — same "biggest
+   threat" opponent-targeting as Arson filtered to those with a plunderable
+   active scroll, then takes their highest-level active scroll, opposite of
+   Sacrificial Pyre/Inspiring Draught's "give up the weakest of MY OWN"
+   logic). Arson/Plunder share a new `rankedOpponents(filterFn)` helper.
+   Plunder's scroll-pick step shares `scroll-select-modal` with Sacrificial
+   Pyre and Inspiring Draught's put-back step — routed by the exact heading
+   text each effect's `showScrollSelectionModal()` call sets, verified not
+   to cross-contaminate. Wandering River's tile-pick and element-pick steps
+   are split across a `selectionMode.type` switch case and a separate
+   `element-select-modal` DOM check — needed an explicit "is the element
+   modal already open" guard in the tile-pick driver, since
+   `selectionMode.type` stays `'tile-element-change'` through BOTH steps
+   (only clears once the element is chosen) and the switch always runs
+   before the modal-check chain, so without the guard it would re-click a
+   tile (destroying and recreating a fresh element modal) every polling
+   tick forever instead of ever reaching the element driver.
+   Verified against a real running game (direct `enterX` invocation, not a
+   full pattern-satisfied cast — same testing style used for the earlier
+   3 effects): Wandering River completes both steps and applies the buff;
+   Arson correctly targets the bigger threat and destroys their largest
+   stockpiled element; Plunder correctly skips a target with nothing to
+   plunder, targets the one with an active scroll, and moves it to the
+   common area. 10-game arena regression shows no errors.
 
-   **Not yet driven** (falls through to cancel, same as before this file
-   existed): Wandering River, Control the Current, Arson, Plunder,
-   Excavate's deferred teleport — all click/modal-based per the inventory
-   table above, next in line. Telekinesis and Take Flight's destination
-   step are drag-based (no click handler to call) and need a decision on
-   approach before starting.
+   **Not yet driven** (falls through to cancel): Control the Current,
+   Excavate's deferred teleport. Control the Current is a different SHAPE
+   of problem from every other effect here — see the "architecturally
+   different" note in bot-effects.js's own header comment: it's a
+   persistent whole-turn ability with no "Done" button
+   (`selectionMode.type: 'water-transform'`), meant to coexist with the
+   rest of the bot's turn (opportunistically transform an adjacent water
+   stone while moving), not a one-shot pick. `waitForQuiescence()` cancels
+   any selectionMode `driveSelection()` can't act on — for a persistent
+   mode that would prematurely end the effect's whole-turn duration the
+   instant no water stone happens to be adjacent yet. Needs a
+   `waitForQuiescence()` change (treat this mode as non-blocking — act if a
+   stone is adjacent, else let the turn continue without cancelling), not
+   just a driver function, so it's deferred as its own follow-up rather
+   than rushed alongside the other 3. Telekinesis and Take Flight's
+   destination step are drag-based (no click handler to call) and need a
+   decision on approach before starting.
 
    **Bug found via arena testing (fixed):** the dispatcher originally
    chained the DOM-modal checks (Create, Scholar's Insight) as `else if`
