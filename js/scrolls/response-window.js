@@ -793,7 +793,15 @@ class ResponseWindowSystem {
      */
     playerResponds(scrollInfo, responderIndexOverride) {
         const myIndex = responderIndexOverride ?? this.localResponderIndex();
-        console.log(`playerResponds called: myIndex=${myIndex}, scroll=${scrollInfo.name}, fromHand=${scrollInfo.fromHand}`);
+        // Is this THIS client's own decision, or a host submitting on behalf
+        // of a bot it drives (BotEffects.decideResponse passes an explicit
+        // bot index)? Only the former owns this client's response modal/
+        // timer — a driven bot has no UI of its own, and closing/clearing
+        // those here would wrongly cut off the local human's own in-progress
+        // decision if their response window happens to be open at the same
+        // time (same ResponseWindowSystem instance, shared by both).
+        const isLocalSubmission = responderIndexOverride === undefined || responderIndexOverride === this.localResponderIndex();
+        console.log(`playerResponds called: myIndex=${myIndex}, scroll=${scrollInfo.name}, fromHand=${scrollInfo.fromHand}, isLocalSubmission=${isLocalSubmission}`);
 
         // Double check they can still afford it
         const myAP = this.getPlayerAP(myIndex);
@@ -846,7 +854,8 @@ class ResponseWindowSystem {
         }
 
         // Close the current modal and show "waiting" screen while others decide
-        this.closeResponseModal();
+        // — only OUR OWN modal, see isLocalSubmission above.
+        if (isLocalSubmission) this.closeResponseModal();
 
         const isCasterClient = this.isArbitratorClient();
         if (isCasterClient) {
@@ -856,15 +865,19 @@ class ResponseWindowSystem {
         } else {
             // Non-caster: sent our response, wait for caster to arbitrate and broadcast result
             console.log(`  Response sent, waiting for caster to resolve`);
-            this.clearResponseTimeout();
+            if (isLocalSubmission) this.clearResponseTimeout();
         }
     }
 
     /**
-     * Handle player passing (no response)
+     * Handle player passing (no response). playerIndex may be a bot the
+     * local host is driving (BotEffects.decideResponse) rather than this
+     * client's own identity — see the isLocalSubmission comment in
+     * playerResponds() above for why that matters for the modal/timer.
      */
     playerPasses(playerIndex) {
         this.respondingPlayers.add(playerIndex);
+        const isLocalSubmission = playerIndex === this.localResponderIndex();
 
         // Broadcast pass in multiplayer
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
@@ -876,9 +889,9 @@ class ResponseWindowSystem {
         if (isCasterClient) {
             // Caster's client: check if all non-casters have submitted
             this.checkAllPlayersResponded();
-        } else {
-            // Non-caster's client: just close the modal and wait for
-            // the caster to resolve and broadcast 'response-resolved'
+        } else if (isLocalSubmission) {
+            // Non-caster's client, own decision: close the modal and wait
+            // for the caster to resolve and broadcast 'response-resolved'
             this.closeResponseModal();
             this.clearResponseTimeout();
         }
