@@ -135,8 +135,20 @@ scroll whose ELEMENT matches a response/counter scroll whose formation is
 currently up for them, plus an open active slot and ≥ 2 AP. Bluffers see a
 window with no scroll cards so opponents can't tell they have nothing to play.
 If nobody qualifies, the cast resolves instantly with no waiting screen.
-Bots never count (no bot response logic) and are not expected submitters
-during arbitration.
+Bots DO respond (BotEffects.decideResponse(), driven by bot.js in the arena
+and bot-driver.js's respondForBots() in real multiplayer) and count as
+expected submitters during arbitration — they're only excluded from the
+bluff branch (they decide deterministically, not performatively).
+
+### Bot submissions never tear down the host's own window
+playerPasses()/playerResponds() close THIS screen's modal + countdown only
+when the submitter is the local human (localResponderIndex()), and
+checkAllPlayersResponded() only swaps in the "waiting for others" spinner
+once the local human has submitted. Without these gates, the host's client
+— the one that submits passes/responses on behalf of every bot via
+respondForBots(), and arbitrates when a host-driven bot is the caster —
+had its own still-open response window auto-cleared the moment any bot
+(or, while arbitrating, any remote player) submitted first.
 
 ### Conflict resolution
 If two players respond simultaneously, higher-rank element wins:

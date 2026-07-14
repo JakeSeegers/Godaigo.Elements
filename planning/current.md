@@ -15,6 +15,36 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT FIX: host's response window auto-cleared when a bot submitted first
+  (real multiplayer with lobby bots)** — `js/scrolls/response-window.js`,
+  `js/scrolls/INDEX.md`. User report: with a bot in the game, the host's
+  own response window got auto-cleared as if the host were a bot. Two
+  related causes, both "UI teardown not gated on WHO submitted": (1)
+  `playerPasses()`/`playerResponds()` on a non-arbitrator client
+  unconditionally ran `closeResponseModal()`/`clearResponseTimeout()` —
+  but the host's client is the one that submits passes/responses ON BEHALF
+  OF every bot (`bot-driver.js`'s `respondForBots()` →
+  `BotEffects.decideResponse()` → `rw.playerPasses(botIndex)`), so a bot's
+  pass within 700ms of the window opening wiped the host's own still-open
+  modal and its countdown. Only the host runs `respondForBots()`, matching
+  the "maybe only the host" in the report exactly. (2) The arbitrator-side
+  variant: when a host-driven bot is the CASTER, the host client
+  arbitrates, so any other player's pass/response lands in
+  `checkAllPlayersResponded()` → `showWaitingForOthers()`, which replaced
+  the host's open response options with the waiting spinner mid-decision.
+  Fixed by gating all three teardown paths on the local human
+  (`localResponderIndex()`): modal close + timer clear only when the
+  submitter IS the human at this screen; the waiting spinner only once
+  that human has themselves submitted. Human-vs-human play is unchanged
+  (`BotDriver.driverRealIndex()` is null outside impersonation, so
+  `localResponderIndex()` = plain `myPlayerIndex`). Arena/local games are
+  unchanged too (their teardown runs through `resolveResponseStack()`,
+  which still closes everything at resolution). Verified headless
+  (Playwright, real `ResponseWindowSystem` against a staged 3-player
+  multiplayer identity): bot pass leaves the host's modal + countdown
+  intact and the host's own pass still closes both; while arbitrating for
+  a bot caster, a remote pass no longer clobbers the host's response UI;
+  negative control (fix stashed) reproduces all 4 failures.
 - **BOT ARENA: trap-loop stall restart** — `js/bot-arena.js`, `js/INDEX.md`.
   User request: arena/evolution games where bots wedge into a stable camp
   (each parked on an elemental tile, neither moving) previously ground on to
@@ -946,4 +976,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (latest: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-07-14 (latest: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
