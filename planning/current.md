@@ -15,6 +15,40 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT STAGE 2.5 COMPLETE: drive Control the Current, the last selection
+  effect** — `js/bot-effects.js`, `js/bot.js`, `docs/bot-roadmap.md`.
+  Different SHAPE of problem from every other scroll effect driven so
+  far: Control the Current (WATER_SCROLL_5) is a persistent whole-turn
+  ability with no "Done" button (`selectionMode.type: 'water-transform'`),
+  meant to coexist with the rest of the bot's turn (opportunistically
+  transform an adjacent water stone while moving) rather than resolve
+  once. `bot.js`'s `waitForQuiescence()` previously cancelled ANY
+  selectionMode `driveSelection()` couldn't act on — for this persistent
+  mode that would have prematurely ended the effect's whole-turn duration
+  the instant no water stone happened to be adjacent yet, discarding any
+  benefit from moving toward one later. Fixed with a targeted exception:
+  when `driveSelection()` returns false AND `selectionMode.type ===
+  'water-transform'`, treat it as quiescent (just `return`) instead of
+  cancelling — every other undriven selection is still cancelled exactly
+  as before. New `driveWaterTransform()` recomputes eligible stones FRESH
+  via `se.getAdjacentWaterStones()` on every call rather than trusting
+  `selectionMode.highlightedStones` — that cache is only refreshed by
+  `placePlayer()`'s move branch (game-core.js), which `bot-state.js`'s
+  `move` action bypasses (mutates position directly instead), so trusting
+  the cached list would have silently missed stones that became adjacent
+  after a bot move. The actual end-of-effect cleanup is unchanged —
+  `clearTurnBuffs()` (`scroll-effects.js`, called on End Turn) already
+  tears the selectionMode down correctly; this fix only stops something
+  ELSE from doing it prematurely. Verified against a real running game:
+  casting with no water stone adjacent — `waitForQuiescence()` returns in
+  ~1ms (not the 25s timeout, not a cancel) and the selectionMode
+  survives; placing a stone adjacent afterward — the next call correctly
+  drives the transform and the mode stays active for further use;
+  simulating End Turn's `clearTurnBuffs()` correctly clears it. 10-game
+  arena regression shows no errors. **Stage 2.5 is now 12/12 selection
+  effects driven** — only the 2 drag-based scrolls (Telekinesis, Take
+  Flight) and Excavate's deferred teleport remain, needing a programmatic
+  drag hook before they can even be scoped.
 - **BOT STAGE 2.5: drive 3 more scroll effects (Wandering River, Arson,
   Plunder)** — `js/bot-effects.js`, `docs/bot-roadmap.md`. Continuation of
   the Stage 2.5 remainder after fixing the two stale doc entries below
@@ -631,20 +665,20 @@ exist in code but are untested end-to-end. Docs system fully in place.
    cache, cul-de-sac freezes, hand-only planning, missing common-area
    casts/voluntary discards, anti-freeze vs shrine collection) — details
    in bot-roadmap § STAGE 3a.
-2. **IN PROGRESS: Stage 2.5 — scroll-effect usage.** Step 1 (inventory) is
-   **DONE** — full table of all 17 selection-mode/response scrolls in
-   bot-roadmap.md § STAGE 2.5. Step 2 (`js/bot-effects.js`) is
-   **STARTED**: 11 of 12 selection effects driven (tile-flip,
-   scorched-earth, tile-swap, Create, Scholar's Insight, Quick Reflexes,
-   Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder),
-   A/B-measured in the arena (fewer draws, no regressions vs. baseline on
-   identical seeds). Step 3 (response scrolls) is **DONE** — arena AND
-   real multiplayer, via `bot-driver.js`'s `respondForBots()`. NEXT: only
-   Control the Current left (needs a `waitForQuiescence()` architecture
-   change, not just a driver — it's a persistent whole-turn ability, not a
-   one-shot pick, see bot-roadmap.md § STAGE 2.5 for the precise scope),
-   then decide an approach for the 2 drag-based scrolls (Telekinesis, Take
-   Flight). Full plan: bot-roadmap § STAGE 2.5.
+2. **Stage 2.5 — scroll-effect usage: selection effects DONE (12/12),
+   response scrolls DONE.** Step 1 (inventory) is **DONE** — full table of
+   all 17 selection-mode/response scrolls in bot-roadmap.md § STAGE 2.5.
+   Step 2 (`js/bot-effects.js`) is **DONE**: all 12 selection effects
+   driven (tile-flip, scorched-earth, tile-swap, Create, Scholar's
+   Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering
+   River, Arson, Plunder, Control the Current), A/B-measured in the arena
+   (fewer draws, no regressions vs. baseline on identical seeds). Step 3
+   (response scrolls) is **DONE** — arena AND real multiplayer, via
+   `bot-driver.js`'s `respondForBots()`. NEXT: the 2 drag-based scrolls
+   (Telekinesis, Take Flight) and Excavate's deferred teleport — need a
+   decision on approach (no click handler to call; a programmatic drag
+   hook doesn't exist yet) before they can even be scoped. Full plan:
+   bot-roadmap § STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
 4. **Opponent-awareness — Track A DONE (evaluator term), Tracks B/C not
@@ -765,4 +799,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (bots now drive 3 more scroll effects — Wandering River, Arson, Plunder — via a new rankedOpponents() "hit the biggest threat" targeting helper shared by the latter two; Control the Current deliberately deferred as its own follow-up, a persistent whole-turn ability that needs a waitForQuiescence() architecture change rather than a one-shot driver; corrected the "elemental lockout" bug's stale diagnosis — bot response support, already shipped, doesn't actually clear a stuck common-area scroll since casting never touches slot residency, only a same-element discard does; corrected bot-roadmap.md's STAGE STATUS table and response-window.js's own header comment, both still claiming bots can't respond; bots can now use catacomb/Freedom shrine teleports — a new free-repositioning action added across bot-state.js/bot-sim.js/bot.js, closing the long-flagged Track C gap; void pool stones now valued for their standing AP bonus via 3 new weights — evalVoidHeld, shrineVoidBonus, placeVoidSpendPenalty — and earth-blocking/fire-interference tactics scoped as a follow-up in bot-roadmap.md § STAGE 4; evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-14 (Stage 2.5 scroll-effect driving is now COMPLETE for all 12 selection effects — Control the Current was the last one, needing a waitForQuiescence() architecture change since it's a persistent whole-turn ability, not a one-shot pick, unlike everything driven before it; earlier this session: 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
