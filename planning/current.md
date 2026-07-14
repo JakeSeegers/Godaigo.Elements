@@ -15,6 +15,74 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT STAGE 2.5 FULLY COMPLETE: drive Excavate, Take Flight, and
+  Telekinesis — the entire choice-space inventory is now covered** —
+  `js/bot-effects.js`, `docs/bot-roadmap.md`, `js/INDEX.md`. User request:
+  "let's move forward with the take flight - telekinesis - excavate
+  system." Excavate (CATACOMB_SCROLL_4) turned out to be misfiled in
+  earlier notes as "drag-based" — it never was. Its deferred teleport
+  (fires at the start of the caster's NEXT turn via
+  `processExcavateTeleport()`) is a clean 2-step flow identical in shape
+  to everything else: a Teleport/Stay Here prompt (always take it — free
+  repositioning, no downside) then a `handleHexClick(hexPos)`
+  selectionMode exactly like tile-flip/tile-swap. Candidate hexes come
+  from `BotState.hexGrid()`, filtered to the SAME rule `handleHexClick()`
+  itself enforces (revealed non-player tile, no stone, no player);
+  heuristic picks whichever candidate is closest to the bot's current
+  objective (home if all 5 activated, else nearest hidden tile). Can't
+  land ON a player tile at all, so unlike catacomb/Freedom teleport this
+  never doubles as a direct win.
+  Take Flight (WIND_SCROLL_4) and Telekinesis (VOID_SCROLL_4) genuinely
+  ARE drag-only at the UI layer — no `handleXClick()`/`onComplete(x,y)`
+  API covers the actual move, unlike every other effect driven so far.
+  Rather than simulating raw mouse drag events (fragile, timing-dependent,
+  and against the "never reimplement game rules" philosophy this whole
+  file follows), both drivers call the EXACT SAME functions the real drop
+  handler calls, in the same order, just triggered directly:
+  - **Take Flight**: v1 ALWAYS targets self — a downside-free "teleport
+    anywhere unoccupied" (the scroll stays in the caster's active area
+    for self-targeting), while opponent-targeting has a real strategic
+    tradeoff (denial value vs. handing them a scroll for their hand)
+    deliberately left unscoped rather than guessed at.
+    `window.takeFlightState.onComplete(x,y)` only finalizes scroll
+    disposition/broadcast — it does NOT move the pawn itself. The real
+    drop handler (`game-ui.js`) calls `placePlayer()` (self-target) or
+    `movePlayerVisually()` (opponent-target) FIRST, then `onComplete()` —
+    the driver mirrors both calls exactly. Any hex works as a destination
+    (no revealed/tile-type restriction, unlike Excavate), so a direct
+    teleport home is legal and correctly wins via `placePlayer()`'s own
+    `checkWinCondition()` once all 5 elements are activated.
+  - **Telekinesis**: no target-picker — goes straight into drag mode.
+    Mirrors `startTileDrag(tileId, event)` (pickup — removes the tile
+    from `placedTiles` + DOM, exactly what a human mousedown does) then
+    `placeTile(x, y, rotation, flipped, shrineType, false, false,
+    tileId)` with the SAME tile id (drop — re-adds it at the new
+    position). `findNearestSnapPoint()` already enforces the "must touch
+    1 other tile" rule internally whenever
+    `window.telekinesisState.active` is true, so no extra validation
+    logic was needed. The move-counter/broadcast bookkeeping the real
+    mouseup handler does inline (no separate function exists for it) is
+    mirrored explicitly. No clear strategic value model for which tile to
+    move or where (same reasoning `driveTileSwap` already uses for
+    Shifting Sands) — v1 picks the least-disruptive relocation: an
+    eligible tile moved to an empty slot immediately adjacent to its own
+    current position. **Bug caught during testing, fixed before
+    verifying:** the first eligible tile isn't a safe default — an
+    interior tile deep in a compact cluster never has a free adjacent
+    slot (that's what makes it interior), so trying only `eligible[0]`
+    silently did nothing useful against a real board layout (11 eligible
+    tiles, 0 moved). Fixed by dry-running the destination check
+    (`findNearestSnapPoint` is side-effect-free) across ALL eligible
+    tiles first and only starting the real pickup once a tile+destination
+    pair is confirmed to work.
+  Verified against a real running game (direct `enterX`/`processX`
+  invocation, same testing style as every other effect here): Excavate
+  completes both steps and teleports to a valid revealed hex; Take Flight
+  completes both steps, moves the pawn, and correctly keeps the scroll in
+  the caster's active area; Telekinesis correctly skips the boxed-in tile
+  and moves a different eligible one instead, tile count unchanged
+  before/after (no duplication/loss), all drag-state cleared afterward.
+  10-game arena regression shows no errors.
 - **BOT STAGE 2.5 COMPLETE: drive Control the Current, the last selection
   effect** — `js/bot-effects.js`, `js/bot.js`, `docs/bot-roadmap.md`.
   Different SHAPE of problem from every other scroll effect driven so
@@ -665,20 +733,17 @@ exist in code but are untested end-to-end. Docs system fully in place.
    cache, cul-de-sac freezes, hand-only planning, missing common-area
    casts/voluntary discards, anti-freeze vs shrine collection) — details
    in bot-roadmap § STAGE 3a.
-2. **Stage 2.5 — scroll-effect usage: selection effects DONE (12/12),
-   response scrolls DONE.** Step 1 (inventory) is **DONE** — full table of
-   all 17 selection-mode/response scrolls in bot-roadmap.md § STAGE 2.5.
-   Step 2 (`js/bot-effects.js`) is **DONE**: all 12 selection effects
-   driven (tile-flip, scorched-earth, tile-swap, Create, Scholar's
-   Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering
-   River, Arson, Plunder, Control the Current), A/B-measured in the arena
-   (fewer draws, no regressions vs. baseline on identical seeds). Step 3
-   (response scrolls) is **DONE** — arena AND real multiplayer, via
-   `bot-driver.js`'s `respondForBots()`. NEXT: the 2 drag-based scrolls
-   (Telekinesis, Take Flight) and Excavate's deferred teleport — need a
-   decision on approach (no click handler to call; a programmatic drag
-   hook doesn't exist yet) before they can even be scoped. Full plan:
-   bot-roadmap § STAGE 2.5.
+2. **Stage 2.5 — scroll-effect usage: FULLY DONE.** Step 1 (inventory) is
+   **DONE** — full table of all 17 selection-mode/response scrolls in
+   bot-roadmap.md § STAGE 2.5. Step 2 (`js/bot-effects.js`) is **DONE**:
+   every selection effect is driven (tile-flip, scorched-earth, tile-swap,
+   Create, Scholar's Insight, Quick Reflexes, Sacrificial Pyre, Inspiring
+   Draught, Wandering River, Arson, Plunder, Control the Current, Excavate,
+   Take Flight, Telekinesis), A/B-measured in the arena (fewer draws, no
+   regressions vs. baseline on identical seeds). Step 3 (response scrolls)
+   is **DONE** — arena AND real multiplayer, via `bot-driver.js`'s
+   `respondForBots()`. Nothing left in Stage 2.5's original scope. Full
+   plan + writeups: bot-roadmap § STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
 4. **Opponent-awareness — Track A DONE (evaluator term), Tracks B/C not
@@ -799,4 +864,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (Stage 2.5 scroll-effect driving is now COMPLETE for all 12 selection effects — Control the Current was the last one, needing a waitForQuiescence() architecture change since it's a persistent whole-turn ability, not a one-shot pick, unlike everything driven before it; earlier this session: 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-07-14 (Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
