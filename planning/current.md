@@ -15,6 +15,31 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT FIX: stones placed on the void left behind by a moved tile
+  (Telekinesis / Shifting Sands)** — `js/bot-state.js`, `js/bot.js`,
+  `js/INDEX.md`. User screenshot: a tile was Telekinesis'd away and bots
+  kept placing stones onto the black empty space where it used to be.
+  Root cause chain: a bot's build plan validates its cells against the
+  board grid only when the plan is MADE (`viablePatternAt`); Telekinesis
+  eligibility requires the tile to be stone-free, so the move is legal
+  mid-plan; `planValid()` re-checks holding/corruption/fire-survival every
+  turn but never board membership; and `applyAction('placeStone')` checked
+  stones/pawns/face-down/range but not "is this a real hex" —
+  `isInPlacementRange()` is pure distance+buffs, and
+  `isPositionOnFlippedTile()` returns false when there's NO hex at all.
+  Humans were never affected because drag-drop snaps to
+  `getAllHexagonPositions()` — the bot plan path passes raw coordinates
+  straight through. Fixed at both layers: `applyAction('placeStone')` now
+  rejects any target not on a board hex (authoritative gate for every bot
+  path — plans, arena, effects, console), and `planValid()` re-checks all
+  plan cells against the live grid so a plan whose tile moved away dies
+  immediately and the bot replans instead of burning an attempt. Verified
+  headless: staged pawn on a revealed tile, moved the tile 5000px away →
+  placement rejected ('not on the board'), zero stones created; moved the
+  tile back → the IDENTICAL placement succeeds; negative control (fixes
+  stashed) reproduces the bug exactly — the void placement succeeds and a
+  floating stone appears; 2-game arena regression clean (plans still
+  work).
 - **BOT: catacomb teleport ping-pong fix + arena no-cast stall cap** —
   `js/bot.js`, `js/bot-arena.js`, `js/INDEX.md`. User report: bots get
   stuck teleporting back and forth between catacomb tiles (it's free
@@ -1005,4 +1030,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (latest: catacomb teleport ping-pong is now penalized in the weights (teleportRevisitPenalty — return hops score -55, fresh hops keep +5) and the arena gained a second stall detector — 15 rounds with no one casting anything restarts the round, catching the free-teleport loops the elemental-tile camping detector can't see; before that: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-07-14 (latest: bots can no longer place stones on the empty space left by a Telekinesis/Shifting-Sands-moved tile — applyAction('placeStone') now requires a real board hex and planValid() re-checks plan cells against the live grid; before that: catacomb teleport ping-pong is now penalized in the weights (teleportRevisitPenalty — return hops score -55, fresh hops keep +5) and the arena gained a second stall detector — 15 rounds with no one casting anything restarts the round, catching the free-teleport loops the elemental-tile camping detector can't see; before that: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
