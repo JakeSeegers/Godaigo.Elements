@@ -60,11 +60,13 @@
                 ap: getTotalAP(),
             },
             sourcePool: { ...window.stonePools },
+            commonArea: window.spellSystem?.getCommonAreaScrolls?.() || [], // shared, public, castable by anyone
             tiles: placedTiles.map(t => ({
                 id: t.id,
                 x: +t.x.toFixed(1), y: +t.y.toFixed(1),
                 revealed: !t.flipped,
                 isPlayerTile: !!t.isPlayerTile,
+                playerIndex: t.isPlayerTile ? (t.playerIndex ?? null) : null, // public — whose shrine
                 // MASKED when face-down — reading it would be cheating
                 shrineType: t.flipped ? null : t.shrineType,
             })),
@@ -76,11 +78,23 @@
     // ----------------------------------------------------------------
     // Hex grid + Dijkstra cheapest path (stone terrain changes step costs).
     // ----------------------------------------------------------------
-    let _grid = null, _gridAt = 0;
+    let _grid = null, _gridKey = '';
     function hexGrid() {
-        // getAllHexagonPositions() is moderately expensive; cache briefly
-        const now = Date.now();
-        if (!_grid || now - _gridAt > 1500) { _grid = getAllHexagonPositions(); _gridAt = now; }
+        // getAllHexagonPositions() is moderately expensive — cache it, but
+        // invalidate on BOARD CHANGE, never on time. A time-based cache
+        // (formerly 1.5s) served pre-reveal grids to every caller right
+        // after a tile flip; at bot/arena speed whole games fit inside one
+        // stale window and the bot "froze" on hexes that no longer matched
+        // the board. Key covers: tile count, reveal count, and positions
+        // (tiles can move via Telekinesis / Shifting Sands).
+        let key = placedTiles.length + ':';
+        let revealed = 0, posHash = 0;
+        for (const t of placedTiles) {
+            if (!t.flipped) revealed++;
+            posHash = (posHash + Math.round(t.x * 10) * 31 + Math.round(t.y * 10)) | 0;
+        }
+        key += revealed + ':' + posHash;
+        if (!_grid || key !== _gridKey) { _grid = getAllHexagonPositions(); _gridKey = key; }
         return _grid;
     }
 
@@ -171,6 +185,10 @@
                 const p = hexToPixel(h.q + dq, h.r + dr, S);
                 if (placedTiles.some(o => Math.hypot(o.x - p.x, o.y - p.y) < 40)) continue; // occupied
                 if (candidates.some(c => Math.hypot(c.x - p.x, c.y - p.y) < 40)) continue;  // dupe
+                // Same rule the drag-drop path enforces: a player tile must
+                // touch at least 2 unrevealed tiles at placement time
+                if (typeof countTouchingUnrevealedTiles === 'function' &&
+                    countTouchingUnrevealedTiles(p.x, p.y) < 2) continue;
                 candidates.push({ x: p.x, y: p.y, distToCentroid: Math.hypot(p.x - cx, p.y - cy) });
             }
         }
@@ -212,11 +230,15 @@
             }
         }
 
-        // ── cast: any hand/active scroll whose pattern is satisfied now ──
+        // ── cast: any hand/active/COMMON-AREA scroll whose pattern is
+        // satisfied now. Common-area scrolls are shared and castable by
+        // anyone (castSpell scans them natively); without them a bot whose
+        // hand jams up with already-won scrolls can never progress again.
         // Casting costs 2 AP (activateScroll validates it — don't offer casts
         // the game will reject).
         if (scrolls && ap >= 2) {
-            for (const name of [...scrolls.active, ...scrolls.hand]) {
+            const common = window.spellSystem.getCommonAreaScrolls?.() || [];
+            for (const name of new Set([...scrolls.active, ...scrolls.hand, ...common])) {
                 const def = window.SCROLL_DEFINITIONS?.[name];
                 if (!def || def.level === 1) continue; // level 1 = response-only
                 if (window.spellSystem.checkPattern(name)) {
@@ -253,10 +275,16 @@
                     if (blocked) continue;
                     for (const c of missing) {
                         if ((pool[c.type] || 0) <= 0) continue;
-                        // Same placement-range rule the drag-drop UI enforces —
-                        // out-of-range placements would desync other clients
+                        // Mirror the FULL validity the drag-drop path enforces
+                        // (findValidStonePosition): in range, not on any
+                        // face-down tile, no pawn standing there. applyAction
+                        // re-checks these; enumerating illegal cells would
+                        // desync other clients.
                         if (typeof isInPlacementRange === 'function' &&
                             !isInPlacementRange(c.x, c.y, c.type)) continue;
+                        if (typeof isPositionOnFlippedTile === 'function' &&
+                            isPositionOnFlippedTile(c.x, c.y, grid)) continue;
+                        if (playerPositions.some(p => p && Math.hypot(p.x - c.x, p.y - c.y) < HEX_NEAR)) continue;
                         const key = `${c.x.toFixed(1)},${c.y.toFixed(1)},${c.type}`;
                         if (seen.has(key)) continue;
                         seen.add(key);
@@ -282,6 +310,20 @@
             }
         }
 
+        // ── voluntary discard: cycle a hand/active scroll to the common area
+        // (legal any time via spellSystem.discardScroll — the same move the
+        // overflow flow uses). This is how a bot frees a hand slot jammed
+        // with an already-won or dead-source scroll; scoring's
+        // discardVoluntary penalty keeps it rare.
+        if (scrolls) {
+            for (const name of scrolls.hand) {
+                actions.push({ type: 'discardScroll', scroll: name, from: 'hand', voluntary: true });
+            }
+            for (const name of scrolls.active) {
+                actions.push({ type: 'discardScroll', scroll: name, from: 'active', voluntary: true });
+            }
+        }
+
         // ── endTurn: always available while the button is live ──
         const btn = document.getElementById('end-turn');
         if (btn && !btn.disabled) actions.push({ type: 'endTurn' });
@@ -304,6 +346,10 @@
                 if (typeof isPlacementPhase === 'undefined' || !isPlacementPhase) {
                     return { ok: false, reason: 'not placement phase' };
                 }
+                if (typeof countTouchingUnrevealedTiles === 'function' &&
+                    countTouchingUnrevealedTiles(a.x, a.y) < 2) {
+                    return { ok: false, reason: 'player tiles must touch 2+ unrevealed tiles' };
+                }
                 placeTile(a.x, a.y, 0, false, 'player');
                 if (typeof broadcastGameAction === 'function') {
                     broadcastGameAction('player-tile-place', {
@@ -318,12 +364,47 @@
             case 'cast': {
                 const scrolls = window.spellSystem.getPlayerScrolls(false);
                 if (scrolls.hand.has(a.scroll)) window.spellSystem.moveToActive(a.scroll);
-                window.spellSystem.castSpell();
-                return { ok: true };
+                const ok = window.spellSystem.castSpell();
+                // When several scrolls match at once castSpell() opens a
+                // "Select Scroll to Cast" popup instead of executing — pick
+                // the scroll this action asked for (otherwise the cast
+                // silently no-ops and the caller loops on it forever).
+                const title = [...document.querySelectorAll('h3')]
+                    .find(h => h.textContent === 'Select Scroll to Cast');
+                const popup = title?.parentElement?.parentElement;
+                if (popup) {
+                    const displayName = window.spellSystem.patterns?.[a.scroll]?.name ||
+                                        window.SCROLL_DEFINITIONS?.[a.scroll]?.name || a.scroll;
+                    const btn = [...popup.querySelectorAll('button')]
+                        .find(b => b.textContent.startsWith(displayName));
+                    if (btn) { btn.click(); return { ok: true }; }
+                    popup.querySelector('button[title="Close"]')?.click();
+                    return { ok: false, reason: `selection popup had no option for ${a.scroll}` };
+                }
+                return ok === false
+                    ? { ok: false, reason: 'castSpell() reported failure' }
+                    : { ok: true };
             }
             case 'placeStone': {
                 const pool = playerPools[activePlayerIndex] || {};
                 if ((pool[a.stoneType] || 0) <= 0) return { ok: false, reason: `no ${a.stoneType} stones` };
+                // Enforce the same validity the drag-drop path does — callers
+                // (plans, effects, harnesses) may request cells legalActions
+                // never offered. Placing on a face-down tile is illegal.
+                if (placedStones.some(s => Math.hypot(s.x - a.x, s.y - a.y) < HEX_NEAR)) {
+                    return { ok: false, reason: 'cell already holds a stone' };
+                }
+                if (playerPositions.some(p => p && Math.hypot(p.x - a.x, p.y - a.y) < HEX_NEAR)) {
+                    return { ok: false, reason: 'a pawn occupies that hex' };
+                }
+                if (typeof isPositionOnFlippedTile === 'function' &&
+                    isPositionOnFlippedTile(a.x, a.y, hexGrid())) {
+                    return { ok: false, reason: 'cannot place a stone on a face-down tile' };
+                }
+                if (typeof isInPlacementRange === 'function' &&
+                    !isInPlacementRange(a.x, a.y, a.stoneType)) {
+                    return { ok: false, reason: 'out of placement range' };
+                }
                 placeStone(a.x, a.y, a.stoneType);
                 pool[a.stoneType]--;
                 if (typeof updateStoneCount === 'function') updateStoneCount(a.stoneType);

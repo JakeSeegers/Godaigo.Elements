@@ -20,7 +20,17 @@
     const MAX_ENTRIES = 3000;
     const log = [];
 
+    // Optional roster override for LOCAL games (multiplayer games derive the
+    // roster from allPlayersData). BotArena.spectate sets this so bot-vs-bot
+    // spectator logs label every actor correctly.
+    let rosterOverride = null; // [{index, username, isBot}] | null
+    function setRoster(players) { rosterOverride = Array.isArray(players) ? players : null; }
+
     function actorLabel(playerIndex) {
+        if (rosterOverride) {
+            const p = rosterOverride.find(p => p.index === playerIndex);
+            if (p) return p.isBot ? 'bot' : 'human';
+        }
         try {
             if (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData)) {
                 const p = allPlayersData.find(p => p.player_index === playerIndex);
@@ -116,13 +126,14 @@
             exportedAt: new Date().toISOString(),
             isMultiplayer: (typeof isMultiplayer !== 'undefined') ? isMultiplayer : null,
             currentGameId: (typeof currentGameId !== 'undefined') ? currentGameId : null,
-            players: (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
+            players: rosterOverride ||
+                ((typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
                 ? allPlayersData.map(p => ({
                     index: p.player_index,
                     username: p.username,
                     isBot: !!(window.isBotUsername && window.isBotUsername(p.username)),
                   }))
-                : null,
+                : null),
             entryCount: log.length,
         };
         const blob = new Blob([JSON.stringify({ meta, entries: log }, null, 1)], { type: 'application/json' });
@@ -136,6 +147,8 @@
         URL.revokeObjectURL(url);
     }
 
-    window.ActionLog = { record, download, entries: () => log.slice() };
+    function clear() { log.length = 0; }
+
+    window.ActionLog = { record, download, clear, setRoster, entries: () => log.slice() };
     console.log('📋 [ActionLog] Loaded — window.ActionLog.download() or the cheat panel button');
 })();

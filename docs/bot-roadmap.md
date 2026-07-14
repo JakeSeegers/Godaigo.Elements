@@ -30,8 +30,9 @@ different concerns and neither blocks the other:
 | R3 | Backend-authoritative turn validation | TODO | Supabase edge function + game-core.js call sites |
 | R4 | Replace host-browser impersonation with backend-driven bot turns | TODO | `js/bot-driver.js` (removed), backend service |
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
-| 2 | Forward model + lookahead search | TODO | `js/bot-sim.js` (new) |
-| 3a | Weight evolution via self-play arena | TODO | `js/bot-arena.js` (new) |
+| 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
+| 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5) | `js/bot-arena.js` |
+| 2.5 | Scroll-effect usage: selection targets + response scrolls | TODO (after 3a) | `js/bot-effects.js` (new) + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
 
@@ -61,10 +62,15 @@ different concerns and neither blocks the other:
      what some older notes say — it is another alias of the display player's pool.
 
 3. **Win condition** = a player's `spellSystem.playerScrolls[i].activated` Set
-   contains all five of `earth, water, fire, wind, void`. Casting a scroll of an
-   element whose SOURCE pool is 0 should still fire the effect but NOT award the
-   win-condition element (see `planning/current.md` task 2 — check whether that
-   rule is implemented in `applyScrollEffects()` before relying on it).
+   contains all five of `earth, water, fire, wind, void` AND their pawn stands on
+   the centre of their own player tile (the "player shrine"). The shared gate is
+   `checkWinCondition(playerIndex)` in game-core.js; movement paths call it on
+   arrival. Bot support: snapshot tiles carry `playerIndex` for player tiles, and
+   bot.js walks home via `WEIGHTS.moveReturnHome` once all five are activated.
+   Casting a scroll of an element whose SOURCE pool is 0 should still fire the
+   effect but NOT award the win-condition element (see `planning/current.md`
+   task 2 — check whether that rule is implemented in `applyScrollEffects()`
+   before relying on it).
 
 4. **Scroll rules the bot must respect:**
    - `SCROLL_DEFINITIONS[name].level === 1` → response-only, never proactively castable.
@@ -381,49 +387,299 @@ instead of fixing it.
 
 ---
 
-## STAGE 2 — Forward model + lookahead (TODO)
+## STAGE 2 — Forward model + lookahead (DONE except optional MCTS)
 
 Goal: `simulate(snapshot, action) → snapshot'` as PURE functions (no DOM, no
-globals), then search.
+globals), then search. Steps 1–4 below are DONE; step 5 (MCTS) is optional
+and not started.
 
-Build order (each step is independently commit-able):
+1. **`js/bot-sim.js` (DONE)** — `window.BotSim = { simulate, legalActions,
+   isTerminal, winner, checkPattern, canMoveTo, grid, diffSnapshots, validate,
+   SIMULATED_SCROLLS }`. Input/output is exclusively the Stage-0 snapshot
+   JSON; the only globals read are static `SCROLL_DEFINITIONS` (and, inside
+   `validate()` only, the live BotState/BotSystem). Includes a PURE
+   `legalActions(snap)` mirror of BotState's (search needs to enumerate from
+   SIMULATED states) and a pure movement-cost model (earth block, wind free,
+   water chaining flood fill, void nullification, other-player occupancy).
+2. **Simulated actions (DONE)**: `move` (incl. tile reveal as
+   `shrineType:'unknown'` — never invents the element; reveal draw goes to
+   HAND even past capacity, matching the real pending-cascade behaviour),
+   `endTurn` (rank-based shrine collection capped by source/pool; turn
+   advance in COLOR_RANK order; AP reset to 5 + void stones), `placeStone`
+   (pool decrement + the fire-destruction interaction rules),
+   `discardScroll`, and `cast` (AP, hand→active, win-condition activation
+   incl. the empty-source-pool rule and catacomb component elements are
+   EXACT; the effect itself is whitelist-gated: scrolls not in
+   `SIMULATED_SCROLLS` — currently all of them — are recorded in
+   `snap.sim.unsimulatedCasts` instead of pretended-simulated).
+3. **Validation harness (DONE)** — `BotSim.validate({actions, seed, policy})`
+   runs in a live game: picks seeded random (or ε-greedy 'builder') legal
+   actions, predicts each with `simulate()`, applies it for real via
+   `BotState.applyAction`, diffs predicted vs settled real snapshot.
+   Measured (tutorial board, headless Chromium): move 0/550+, endTurn 0/120+,
+   placeStone 0/60+, discard 0/9 — 0% divergence, target was <1%. Cast
+   effect side-effects divert as designed and are counted "accepted".
+   A second mode mirrors the REAL bot's own action stream (plan builds +
+   casts included) by wrapping `BotState.applyAction` — see the Playwright
+   driver pattern in the session notes below.
+4. **Search, within one turn only (DONE)** — `searchPick()` in bot.js:
+   depth-limited beam search (`WEIGHTS.searchDepth` plies,
+   `WEIGHTS.searchBreadth` children per node) over own-turn actions; an
+   endTurn edge is a leaf. Leaves valued by `evaluateSnapshot()` (bot.js),
+   all knobs in `WEIGHTS.eval*`. Wired exactly as planned:
+   `WEIGHTS.searchDepth > 0 ? searchPick() : greedyPick()` — **default is 0
+   (greedy)** until the Stage-3a arena can measure the acceptance criterion.
+   Enable from the console (`BotSystem.WEIGHTS.searchDepth = 3`, ≈10ms per
+   decision on the tutorial board) or via the cheat panel (click the HUD
+   "AP" label 5×): **Bot Brain** cycles Dumb (greedy) → Smart (search every
+   action) → Hybrid (`WEIGHTS.searchHybrid`: search only when a cast or
+   stone placement is among the legal actions; plain movement stays greedy).
+   Persisted in `localStorage['godaigo_bot_brain']`, applied by bot.js at
+   load — and it deliberately overrides evolved weights.
+5. **Multi-turn MCTS (optional, not started)**: UCT over turns; unknown
+   face-down tiles and opponent hands are DETERMINIZED — sample K plausible
+   completions (uniform over the unseen tile-deck distribution), run the
+   search per sample, majority-vote the root action. K=8 is plenty.
+   Rollout policy = Stage-1 greedy.
 
-1. **`js/bot-sim.js`** exposing `window.BotSim = { simulate, isTerminal, winner }`.
-   Input/output is exclusively the Stage-0 snapshot JSON. Never touch live game
-   state from this file.
-2. Implement, in this order (easiest → hardest):
-   a. `move` (pawn xy + AP − cost; if target tile was unrevealed, mark revealed
-      but DO NOT invent its element — model it as `shrineType:'unknown'` and
-      treat as a probability node or heuristic bump),
-   b. `endTurn` (collection when on shrine centre: refill active player's pool
-      from sourcePool up to capacity; AP reset; advance activePlayerIndex),
-   c. `placeStone` (append stone, decrement pool),
-   d. `cast` for SIMPLE scrolls only: consume pattern stones per the game's
-      disposal rule, add element to `activated` if sourcePool > 0.
-      Maintain a whitelist `SIMULATED_SCROLLS`; any scroll not on it gets a flat
-      heuristic value instead of simulation (`+CAST_VALUE`), which keeps the
-      model honest about what it doesn't know.
-3. **Validation harness before any search**: play 50 seeded random-action games
-   where every applied real action (via `BotState.applyAction`) is mirrored in
-   the simulator; diff the real `BotState.snapshot()` against the simulated one
-   after each action and log divergences. Fix until move/endTurn/placeStone
-   diverge in <1% of steps. Scroll casts may diverge (whitelist-gated) — that's
-   accepted and logged, not fixed.
-4. **Search, within one turn only** (small tree: AP ≤ 5–10):
-   depth-limited exhaustive search over own-turn actions, leaf-evaluated with
-   the Stage-1 scoring function on the simulated snapshot. Wire it in as
-   `WEIGHTS.searchDepth > 0 ? searchPick() : greedyPick()`.
-5. **Multi-turn MCTS (optional)**: UCT over turns; unknown face-down tiles and
-   opponent hands are DETERMINIZED — sample K plausible completions (uniform
-   over the unseen tile-deck distribution), run the search per sample, majority-vote
-   the root action. K=8 is plenty. Rollout policy = Stage-1 greedy.
+Acceptance — MEASURED (BotArena, 2×10 games, seeds 11/23, alternating
+sides): **HYBRID search beat greedy 12-3 with 5 draws** (80% of decided
+games; 60% counting draws as non-wins) → default flipped to hybrid
+(`searchDepth: 3, searchHybrid: 1`). **FULL search LOST its series 1-3-4**
+— always-on lookahead's movement choices fight the plan/path logic; do NOT
+enable `searchHybrid: 0` by default without new evidence. Caveat: 20 games,
+not the spec's 100 — rerun at scale once R5 makes games cheap.
 
-Acceptance: search bot beats greedy Stage-1 bot ≥60% over 100 arena games (Stage 3a
-harness) with the same weights.
+**Gotchas found while building Stage 2 (all fixed, don't re-break):**
+- `getAllHexagonPositions()` also emits **trapezoid bridge hexes** at
+  large-tile offsets `(±2,0),(0,±2),(-2,2),(2,-2)` wherever ≥2 tiles'
+  trapezoids coincide — hidden tiles contribute too, and landing on one
+  reveals them. A grid model without these misses real moves AND reveals.
+- `castSpell()` opens a "Select Scroll to Cast" popup when several scrolls
+  match at once, and previously `BotState.applyAction('cast')` returned
+  `ok:true` while the cast silently no-opped — the bot then looped on it.
+  applyAction now clicks the requested scroll's button (or reports failure).
+- A state evaluator must NOT credit AP across a simulated endTurn
+  (`snap.sim.turnsEnded`) — in single-player the activePlayerIndex doesn't
+  change, so the AP reset otherwise makes passing the turn look like free
+  value and the search ends every turn instantly.
+- The flat heuristic for unsimulated cast effects must only count casts that
+  granted a NEW activation (`unsimulatedCasts[].grantedNew`), or the search
+  farms the flat value by re-casting an already-won scroll — the same
+  infinite-recast loop Stage 1's `castAlreadyWon` fixed for greedy.
+- Reveal-drawn scrolls go to the hand even when it's full (pending cascade);
+  catacomb reveals also grant +1 AP, which is unknowable pre-reveal and is
+  an accepted, documented divergence.
 
 ---
 
-## STAGE 3a — Weight evolution via self-play (TODO)
+## STAGE 2.5 — Scroll-effect usage (TODO — sequenced AFTER 3a)
+
+The bot casts scrolls but wastes their power: selection-mode effects are
+cancelled (`waitForQuiescence` cancels any `selectionMode` /
+`takeFlightState` it can't drive), response scrolls (level 1) are never
+played, and the Stage-2 simulator treats all effects as unknown. Weight
+evolution (3a) CANNOT fix any of this — a weight can't pick a Telekinesis
+target. This stage adds the missing capability. Build 3a FIRST: every
+increment below must be A/B-measured in the arena (with vs. without),
+otherwise there is no way to tell whether effect-driving actually wins games.
+
+Build order (each step independently commit-able and arena-measurable):
+
+1. **Inventory the choice space (DONE — see § CHOICE-SPACE INVENTORY below).**
+2. **`js/bot-effects.js`** — `window.BotEffects.driveTransmute()` (DONE,
+   Transmute only so far — see § CHOICE-SPACE INVENTORY for what's still
+   outstanding). Other selection-mode scrolls (Shifting Sands, Telekinesis,
+   Sacrificial Pyre, …) still fall through to today's cancel-and-continue in
+   `waitForQuiescence`; expand opportunistically, one driver at a time,
+   each A/B-measured in the arena.
+3. **Response scrolls (DONE — real multiplayer, not just the arena).**
+   `window.BotEffects.decideResponse(responderIndex, casterIndex)`: v1
+   heuristic — counter (Iron Stance/Psychic) when the triggering cast would
+   grant the caster an unactivated element, otherwise play the cheapest
+   pure-response scroll (Reflect/Unbidden Lamplight/Sigh of Recollection)
+   for free value, else pass. Two call sites:
+   - **Arena** (`js/bot.js` `waitForQuiescence`): gated on
+     `BotArena.isRunning()`.
+   - **Real multiplayer** (`js/bot-driver.js` `respondForBots()`, ticks
+     alongside the existing 700ms turn watcher): removes the "bots never
+     count as responders" carve-out in `response-window.js`
+     (`canAnyPlayerRespondOrBluff` / `checkAllPlayersResponded`) and adds a
+     `responderIndexOverride` param to `playerResponds()` so the host can
+     submit on an explicit bot index instead of relying on
+     `localResponderIndex()` (which only resolves to whichever identity is
+     locally impersonated for a full TURN, not a one-off response).
+   - **AP-accounting fix (both paths):** `getPlayerAP`/`spendPlayerAP` used
+     to have no correct source of truth for a NON-active responder outside
+     multiplayer (`playerAPs[]` was multiplayer-broadcast-only,
+     `game-core.js`'s `syncPlayerState()` early-returned before recording it
+     locally) — a responding bot's AP checks silently fell back to
+     `currentAP`, i.e. **whichever player is currently active/displayed**,
+     not the responder's own AP. Fixed by always recording
+     `playerAPs[activePlayerIndex]` in `syncPlayerState()` (not gated on
+     `isMultiplayer`), and by giving `spendPlayerAP()` a direct-to-`playerAPs[]`
+     path for "a responder with no live client of their own on this browser"
+     (any non-active player locally, or a bot specifically in real
+     multiplayer — genuine remote human opponents keep the original
+     `spendAP()` path, since on their own separate client `currentAP` is
+     unambiguously theirs). Verified: a simulated bot-responder scenario
+     (active/caster AP=9, bot AP=5) confirms `spendPlayerAP(botIndex, 2)`
+     leaves the caster's AP untouched and correctly drains the bot's own
+     tracked pool (void first, then base) to 3.
+   - **Nested selections (e.g. Reflecting/Psychic-ing an interactive
+     scroll):** SAFE as-is for the response case specifically — none of the
+     five response-eligible scrolls (Iron Stance, Psychic, Reflect,
+     Unbidden Lamplight, Sigh of Recollection) open a selection UI when
+     cast AS A RESPONSE (Reflect's immediate-nested-execution path only
+     fires in its main-phase use, which `decideResponse` never triggers).
+     The QUEUED replay (`processReflectPending`/`processPsychicPending`,
+     fired at the start of the Reflect/Psychic caster's own next turn) DOES
+     already chain through the normal `requiresSelection` UI via
+     `onComplete` callbacks for whatever scroll was queued — if that's an
+     undriven selection scroll, it degrades gracefully to today's
+     cancel-and-continue (same as any other selection the bot can't drive
+     yet), it does not hang or corrupt state.
+   - **Testability caveat:** real networked multiplayer (Supabase) is
+     unreachable from this sandbox, so the cross-client broadcast round
+     trip (`broadcastResponse`/`broadcastPass` → another client's
+     `handleRemoteResponse`/`handleRemotePass`) is unverified beyond code
+     review — everything above it (AP accounting, carve-out removal, the
+     respond/pass decision itself) is verified. Worth a real multiplayer
+     smoke test (host + bot vs. a human) before relying on this.
+4. **Whitelist effects in the simulator.** For each scroll whose effect the
+   bot can now drive, implement it in `BotSim` and add it to
+   `SIMULATED_SCROLLS` — ONLY together with harness evidence
+   (`BotSim.validate`) that the simulation matches reality. This is what
+   lets `searchPick()` plan around effects instead of scoring them blind.
+
+Acceptance per increment: arena win rate vs. the pre-increment bot improves
+(same weights, same seeds); no increment may regress the Stage-1 fixed bugs
+(recast loops, oscillation, overflow stalls).
+
+### § CHOICE-SPACE INVENTORY (Stage 2.5 step 1 — DONE)
+
+15 scrolls open an interactive selection when cast (`requiresSelection:true`
+plus a `system.enter*Mode()`/`show*Modal()` call); 1 more (Excavate) defers
+its choice to the start of the caster's NEXT turn instead of cast time.
+Everything else either fires automatically or just sets a buff that changes
+the legality of a later ordinary action (placement range, stone-move, AP
+cost) — those don't need `BotEffects` at all, they need `bot-state.js`'s
+legality checks to already account for the buff (Mason's Savvy did, once
+the drag-and-drop bug above was fixed; Seed the Skies/Avalanche do too via
+the same `isInPlacementRange` path). Grouped by interaction shape, since
+that's the natural unit for shared `BotEffects` handlers:
+
+**A — single/double tile click (board)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Shifting Sands (EARTH_SCROLL_2) | 2 tiles, any distance | `getEligibleTilesForSwap()`: not a player tile, no stones, no players (re-checked at 2nd click) | Tiles swap x/y positions |
+| Heavy Stomp (EARTH_SCROLL_4) | 1 tile | same eligible set as above | Hidden→revealed (draws a scroll, via `revealTile`); revealed→hidden (irreversible, clears undo, no scroll) |
+| Call to Adventure (CATACOMB_SCROLL_3) | 1 tile | identical mechanic — reuses `enterTileFlipMode` | Same as Heavy Stomp, plus: reveals for the rest of this turn also grant shrine stones immediately (`activeBuffs.callToAdventure`) |
+| Combust (CATACOMB_SCROLL_10) | 1 tile | `tileHasStones(tile)` true, not a player tile | Destroys every stone on that tile |
+| Wandering River (WATER_SCROLL_4) | 1 tile, then 1 element (2 steps) | tile: `getEligibleTilesForWanderingRiver()` — any non-player tile, revealed OR hidden, **no stone/player exclusion**; element: unfiltered pick of all 5 | Tile counts as chosen element (reveal/collection effects + visual) until caster's next turn |
+
+**B — modal only, no board interaction**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Create (VOID_SCROLL_5) | 1 element | button disabled if caster's own pool has no room for that element | Draws stones = that element's rank (earth 5, water 4, fire 3, wind 2, void 1) |
+| Scholar's Insight (VOID_SCROLL_2) | 1 deck, then 1 scroll from it (2 steps) | deck disabled if empty; scroll is any card in that deck | Scroll added to hand, deck reshuffled |
+| Quick Reflexes (CATACOMB_SCROLL_9) | 1 scroll | flat pooled list of every level-1 scroll across all 5 elemental decks (not deck-then-scroll) | Scroll added to hand + draws 2 stones of its element, deck reshuffled |
+| Inspiring Draught (WATER_SCROLL_3) | 1 deck, then (if 2 drawn) 1 of the 2 to put back | deck disabled if empty; auto-draws top 2 (`deck.pop()` x2), only 1 drawn if deck had 1 left (auto-kept, no 2nd step) | Kept scroll(s) go to hand; returned one reshuffled back in |
+| Sacrificial Pyre (FIRE_SCROLL_3) | 1 scroll from caster's OWN hand | any hand scroll, pattern ignored | Sent to common area; grants its stone reward; **if it has its own effect, that effect executes too** — can open a NESTED selection UI (e.g. sacrificing Shifting Sands opens tile-swap) |
+| Transmute (FIRE_SCROLL_4) | any number of: personal-pool stones (by type) / hand scrolls / active scrolls, repeatable, then Done | stone buttons disabled at 0 count; discarding stops being useful once `currentAP >= 5 + voidPool` | Each discard = +2 AP (capped); **not a single choice — an open multi-select session ended by the bot clicking Done** |
+
+**C — two-step targeting (player, then a thing of theirs)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Arson (FIRE_SCROLL_5) | 1 opponent, then 1 element (2 steps) | opponent: excludes self + Excavate-immune players; element: only types that opponent's pool has >0 of | Destroys 1 stone of that type from their pool |
+| Plunder (CATACOMB_SCROLL_8) | 1 target (self allowed), then 1 of their active scrolls (2 steps) | target: excludes Excavate-immune opponents, self always eligible; targets with 0 plunderable active scrolls shown disabled (self-target excludes the scroll currently being cast) | Chosen active scroll discarded to common area |
+| Take Flight (WIND_SCROLL_4) | 1 target player (self allowed), then a board DRAG (not click) to a hex (2 steps) | target: excludes Excavate-immune opponents; hex: unoccupied | Pawn teleports; scroll goes to target's hand if targeting an opponent, stays in caster's active area if self |
+
+**D — board drag, single actor**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Telekinesis (VOID_SCROLL_4) | DRAG 1 tile to a new spot | same eligible set as Shifting Sands, plus the drop handler enforces "must still touch ≥2 tiles, can't strand a neighbor" | Tile moves. **`MAX_MOVES` is hard-coded to 1** even though the status text says "(0/3)" — stale copy, only 1 move is ever allowed; don't build for 3 |
+
+**E — repeatable board-click session (persists all turn)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Control the Current (WATER_SCROLL_5) | click a water stone, then pick its new element, repeat freely | stone: water-typed AND currently adjacent to caster (re-evaluated live after every caster move — the click targets change as the pawn moves); element: earth/fire/wind/void filtered to only types with >0 in the SOURCE pool (stricter than Wandering River's unfiltered pick) | Stone converts type; caster may repeat for the rest of the turn |
+
+**F — deferred to the start of caster's NEXT turn (not part of `execute()` at all)**
+| Scroll | Chooses | Validity | Outcome |
+|---|---|---|---|
+| Excavate (CATACOMB_SCROLL_4) | Teleport-or-Stay prompt, then (if Teleport) 1 hex | hex: unoccupied, on a revealed non-player tile | Pawn teleports there. Casting itself has zero choices (just grants immunity/no-response buffs) — the prompt fires from `processExcavateTeleport()` at the caster's next turn start, so `BotEffects` can't drive it from `waitForQuiescence`; needs its own turn-start hook |
+
+**Buff-only scrolls (no `BotEffects` needed — just correct legality checks elsewhere):** Mason's Savvy / Seed the Skies / Avalanche (placement range — `isInPlacementRange`, Mason's Savvy's drag-and-drop bug is now fixed), Burning Motivation / Simplify / Steam Vents / Mudslide / Freedom / Mine / Reflecting Pool (automatic on cast or on a later `endTurn`/move, no player choice), Breath of Power (grants a "move an adjacent stone to an adjacent empty space" action that **doesn't exist in the Stage-0 action vocabulary yet** — would need a new `BotState` action type before a bot could use it, separate from this stage's `driveSelection()` work).
+
+## STAGE 3a — Self-play arena (DONE) — original plan below
+
+`js/bot-arena.js`: `BotArena.run(weightsA, weightsB, nGames, seed, opts)`
+plays local hot-seat 2-player games (no Supabase, no multiplayer), both
+players bot-driven, per-player weight tables (swapped into
+`BotSystem.WEIGHTS` each turn), seeded `Math.random` per game (deck
+shuffles reproducible), alternating sides per game, turn cap → draw.
+Winner via `BotSim.winner`. Mutes sound/music/`window.gami` (no arena XP
+farming) and the win modal during runs; restores everything after.
+`BotArena.evolve(generations, opts)` implements the evolution loop below
+(configurable `gamesPerPair` — a full spec generation is hours in-browser;
+serious evolution wants R5's server-side execution).
+
+Support added for the arena: `BotSystem.speedScale` (delay scaling; arena
+default 0.1 ≈ 35ms/action) and `BotSystem.resetMemory()` (per-game wipe of
+plan/oscillation-history/cursed-cells — positions repeat across games).
+
+**Five real bot/infra bugs found by the first arena runs** (all fixed —
+games went from 100% frozen draws to ~50-turn completions):
+1. `BotState.hexGrid()`'s TIME-based cache (1.5s) served pre-reveal grids;
+   at bot speed whole games fit in one stale window and pawns froze on a
+   board that no longer existed. Now invalidated by board change.
+2. Euclidean-only exploration froze pawns in cul-de-sacs (every legal move
+   "increased distance" even when it was the only way out). Now scored by
+   real cheapest path (`ctx.explorePath`, `WEIGHTS.moveExplorePath`), with
+   a multi-source path field for search leaf evaluation.
+3. `makePlan()` was hand-only; games dead-ended when the only source of a
+   needed element was a scroll parked in the ACTIVE area (casts leave it
+   there) or the COMMON area. Plans now consider hand+active+common, gated
+   on actual win credit — which also fixed a plan-level infinite recast
+   loop (the plan had no `castAlreadyWon` equivalent) and made catacomb
+   dual-credit count.
+4. Stage-0 vocabulary gaps: casts from the common area and voluntary
+   discards (cycle a jammed 2-slot hand to the common area) didn't exist,
+   so bots plateaued at 2/5 elements with dead scrolls in hand forever.
+5. The anti-freeze rule (clear stale revisit memory when endTurn wins with
+   AP to spare) initially overrode SHRINE COLLECTION and caused a cost-0
+   wind-stone ping-pong; now thresholded to fallback-scored endTurns only.
+
+**Unified core + visualized/N-player evolve (later addition):** `run()`,
+`evolve()`, and `spectate()` were originally two separate code paths — a
+muted/fast 2-player loop (`playGame`, used by `run`/`evolve`) and a
+visualized 2–5-player loop (`spectate`'s own inline loop, no per-player
+weight swapping). Unified into one shared `playMatch(weightsPerPlayer, opts)`
+that all three now call: `weightsPerPlayer.length` sets the player count
+(2–5), an `undefined` entry leaves `WEIGHTS` untouched (how `spectate()`
+plays with whatever's currently loaded instead of a fixed table), and
+`opts.visual` controls only pacing (muting/status/log-download stays the
+caller's job). This unlocked two things without new game logic:
+- `run()`/`evolve()` accept `opts.visual: true` to watch training games with
+  normal pacing instead of muted-fast (same core as `spectate()`).
+- `evolve()` accepts `opts.nPlayers` (2–5): 2 keeps the original exhaustive
+  pairwise round-robin; >2 samples `opts.gamesPerGen` random N-player
+  groupings per generation (seeded, reproducible) since exhaustive
+  `C(popSize, nPlayers)` explodes — the winner's population slot gets +1
+  fitness, draws get nothing.
+- `stop()` (previously spectate-only) now interrupts `run()`/`evolve()`
+  too — checked in every loop via a shared `_stopRequested` flag, reset
+  only by the true top-level entry point so a mid-evolve stop isn't undone
+  between an evolve run's internal pairwise/grouped games.
+
+Cheat panel gained a "🧬 Evolve" row next to "🤖 Bot match" (same 2/3/4/5
+player-count buttons, shared Stop), running a small visualized 3-generation
+pop-6 evolve by default — tune further from the console with
+`BotArena.evolve(generations, {nPlayers, visual, popSize, gamesPerPair,
+gamesPerGen})`.
+
+## STAGE 3a — original plan (for reference)
 
 Goal: the "slowly evolving" learner, no ML infrastructure.
 

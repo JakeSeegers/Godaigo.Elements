@@ -1254,7 +1254,7 @@
                 draggedStoneType = null;
                 draggedStoneOriginalPos = null;
 
-                const stonePos = findValidStonePosition(world.x, world.y);
+                const stonePos = findValidStonePosition(world.x, world.y, capturedStoneType);
                 if (stonePos.valid) {
                     if (capturedStoneId === null) {
                         window._pendingFireDestroys = [];
@@ -1931,7 +1931,7 @@
                     draggedStoneId = null;
                     draggedStoneType = null;
 
-                    const stonePos = findValidStonePosition(world.x, world.y);
+                    const stonePos = findValidStonePosition(world.x, world.y, capturedStoneType);
                     if (stonePos.valid) {
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
                         window.SoundSystem?.play(capturedStoneType === 'earth' ? 'placeearthstone' : 'placestone');
@@ -4025,6 +4025,168 @@ document.getElementById('undo-move').onclick = function() {
                     }
                 });
                 panel.appendChild(placeAnywhereBtn);
+
+                // Bot Brain toggle — cycles Dumb → Smart → Hybrid.
+                //   Dumb   = Stage-1 greedy scoring (default)
+                //   Smart  = Stage-2 lookahead search (3 plies) on every action
+                //   Hybrid = lookahead only when a cast/stone placement is on
+                //            the table; plain movement stays greedy (cheap)
+                // Persisted to localStorage; bot.js applies it at load, and we
+                // also apply it live so no reload is needed.
+                const BRAIN_ORDER = ['dumb', 'smart', 'hybrid'];
+                const BRAIN_UI = {
+                    dumb:   { label: '🤖 Bot Brain: Dumb (greedy)',    color: '#eee' },
+                    smart:  { label: '🧠 Bot Brain: Smart (lookahead)', color: '#6ef' },
+                    hybrid: { label: '🧠 Bot Brain: Hybrid',            color: '#fc6' },
+                };
+                function currentBrain() {
+                    // default matches DEFAULT_WEIGHTS (hybrid, per arena evidence)
+                    try { return localStorage.getItem('godaigo_bot_brain') || 'hybrid'; }
+                    catch (e) { return 'hybrid'; }
+                }
+                function applyBrain(mode) {
+                    const W = window.BotSystem?.WEIGHTS;
+                    if (W) {
+                        W.searchDepth = (mode === 'dumb') ? 0 : 3;
+                        W.searchHybrid = (mode === 'hybrid') ? 1 : 0;
+                    }
+                    try { localStorage.setItem('godaigo_bot_brain', mode); } catch (e) {}
+                }
+                const brainBtn = makeBtn('', () => {
+                    const next = BRAIN_ORDER[(BRAIN_ORDER.indexOf(currentBrain()) + 1) % BRAIN_ORDER.length];
+                    applyBrain(next);
+                    brainBtn.textContent = BRAIN_UI[next].label;
+                    brainBtn.style.color = BRAIN_UI[next].color;
+                    updateStatus(
+                        next === 'dumb'  ? 'Bot brain: DUMB — one-step greedy scoring'
+                      : next === 'smart' ? 'Bot brain: SMART — 3-ply lookahead on every action'
+                      : 'Bot brain: HYBRID — lookahead for casts/stone placements, greedy movement');
+                });
+                brainBtn.textContent = BRAIN_UI[currentBrain()].label;
+                brainBtn.style.color = BRAIN_UI[currentBrain()].color;
+                panel.appendChild(brainBtn);
+
+                // Shared prep for any "restart the game as an all-bot session"
+                // action, from ANY game context: stop whatever bot session is
+                // already running (spectate or evolve — the stop takes effect
+                // between turns, which can be seconds) and, if currently in a
+                // multiplayer game, leave the online room first (removing the
+                // room's bot rows — the disconnect sweep deliberately skips
+                // those). Returns false (with a status message) if prep failed,
+                // so the caller can bail before starting its own bot session.
+                async function stopAnyMatchAndLeaveMultiplayer() {
+                    if (!window.BotArena) { updateStatus('BotArena not loaded'); return false; }
+                    panel.remove(); // clear the panel; reopen any time via the AP label
+                    if (window.BotArena.isRunning()) {
+                        updateStatus('Stopping the current bot session…');
+                        for (let i = 0; i < 100 && window.BotArena.isRunning(); i++) {
+                            window.BotArena.stop();
+                            await new Promise(r => setTimeout(r, 300));
+                        }
+                        if (window.BotArena.isRunning()) { updateStatus('Could not stop the running session'); return false; }
+                    }
+                    if (isMultiplayer) {
+                        updateStatus('Leaving the online game…');
+                        if (isHost && currentGameId) {
+                            try {
+                                const { data: players } = await supabase.from('players')
+                                    .select('id, username').eq('game_id', currentGameId);
+                                for (const p of (players || []).filter(p => window.isBotUsername?.(p.username))) {
+                                    await supabase.rpc('remove_player', { p_player_id: p.id });
+                                }
+                            } catch (e) { console.warn('bot-row cleanup failed (continuing):', e); }
+                        }
+                        if (typeof _doLeaveGame === 'function') await _doLeaveGame();
+                    }
+                    return true;
+                }
+
+                // Start an all-bot spectator match with a CHOSEN player count.
+                // The action log auto-downloads when the match ends.
+                async function restartAsBots(n) {
+                    if (!(await stopAnyMatchAndLeaveMultiplayer())) return;
+                    try {
+                        await window.BotArena.spectate(n);
+                    } catch (err) {
+                        console.error('Bot match failed:', err);
+                        updateStatus('Bot match failed — see console');
+                    }
+                }
+
+                // Start a VISUALIZED weight-evolution run with n players per
+                // training game (2 = original pairwise round-robin; >2 samples
+                // random N-player groupings each generation — see bot-arena.js).
+                // Small defaults so a full run finishes in a few minutes, not
+                // hours — tune further from the console with BotArena.evolve().
+                async function restartAsEvolve(n) {
+                    if (!(await stopAnyMatchAndLeaveMultiplayer())) return;
+                    try {
+                        const generations = 3;
+                        const popSize = 6;
+                        await window.BotArena.evolve(generations, {
+                            nPlayers: n,
+                            visual: true,
+                            popSize,
+                            gamesPerPair: 1,
+                            gamesPerGen: n > 2 ? popSize * 2 : undefined,
+                        });
+                    } catch (err) {
+                        console.error('Evolve run failed:', err);
+                        updateStatus('Evolve run failed — see console');
+                    }
+                }
+
+                const matchRow = document.createElement('div');
+                matchRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                const matchLabel = document.createElement('span');
+                matchLabel.textContent = '🤖 Bot match:';
+                matchLabel.style.cssText = 'font-size:12px;color:#aaa;';
+                matchRow.appendChild(matchLabel);
+                [2, 3, 4, 5].forEach(n => {
+                    const b = document.createElement('button');
+                    b.textContent = String(n);
+                    b.title = `Restart as a ${n}-bot spectator match (leaves the online game if needed)`;
+                    b.style.cssText = 'padding:4px 9px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:13px;';
+                    b.onclick = () => restartAsBots(n);
+                    matchRow.appendChild(b);
+                });
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = '⏹';
+                stopBtn.title = 'Stop the running bot session (match or evolve — action log still downloads for a match)';
+                stopBtn.style.cssText = 'padding:4px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:13px;';
+                stopBtn.onclick = () => {
+                    if (window.BotArena?.isRunning()) { window.BotArena.stop(); updateStatus('Stopping bot session…'); }
+                    else updateStatus('No bot session running');
+                };
+                matchRow.appendChild(stopBtn);
+                panel.appendChild(matchRow);
+
+                // 🧬 Evolve: same visualized-match core as Bot match above, but
+                // plays a small weight-evolution run (3 generations, pop 6)
+                // instead of a single game — watch the population improve live.
+                // Champion weights are saved to localStorage['godaigo_bot_weights']
+                // after every generation and picked up automatically on reload.
+                const evolveRow = document.createElement('div');
+                evolveRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                const evolveLabel = document.createElement('span');
+                evolveLabel.textContent = '🧬 Evolve:';
+                evolveLabel.title = 'Watch a small weight-evolution run (3 generations, pop 6). Tune further from the console: BotArena.evolve(generations, {nPlayers, visual, popSize, gamesPerPair, gamesPerGen})';
+                evolveLabel.style.cssText = 'font-size:12px;color:#aaa;';
+                evolveRow.appendChild(evolveLabel);
+                [2, 3, 4, 5].forEach(n => {
+                    const b = document.createElement('button');
+                    b.textContent = String(n);
+                    b.title = `Evolve with ${n}-player training games (leaves the online game if needed)`;
+                    b.style.cssText = 'padding:4px 9px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:13px;';
+                    b.onclick = () => restartAsEvolve(n);
+                    evolveRow.appendChild(b);
+                });
+                panel.appendChild(evolveRow);
+
+                // Same-size convenience: your seat handed to a bot, table
+                // size kept. Use the numbered buttons above to pick a count.
+                panel.appendChild(makeBtn('🔁 Restart bot game without player (same size)', () =>
+                    restartAsBots(Math.max(2, Math.min(5, (playerPositions || []).filter(Boolean).length || 2)))));
 
                 // ── Overlay Editor ───────────────────────────────────────────
                 const overlaySection = document.createElement('div');

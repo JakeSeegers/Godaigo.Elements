@@ -215,14 +215,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 // The responder's own client added to `activated` above but does
                                 // not receive its own scroll-effect broadcast (self: false), so
                                 // check here — mirroring the counter-scroll branch below.
-                                if (spellSystem.playerScrolls[entry.casterIndex].activated.size === 5) {
+                                if (typeof checkWinCondition === 'function' &&
+                                    checkWinCondition(entry.casterIndex, { announce: true })) {
                                     console.log(`🏆 Win condition met for responder player ${entry.casterIndex} (response scroll)`);
-                                    if (typeof spellSystem.showLevelComplete === 'function') {
-                                        spellSystem.showLevelComplete(entry.casterIndex);
-                                    }
-                                    if (typeof handleGameOver === 'function') {
-                                        handleGameOver(entry.casterIndex);
-                                    }
                                 }
                             }
                         }
@@ -287,14 +282,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Player B's 5th scroll). The caster's client (which runs resolveResponseStack)
                             // doesn't receive its own scroll-effect broadcast (self: false), so we must
                             // check here. The receiving client also checks via the scroll-effect handler.
-                            if (spellSystem.playerScrolls[counterCasterIdx].activated.size === 5) {
+                            if (typeof checkWinCondition === 'function' &&
+                                checkWinCondition(counterCasterIdx, { announce: true })) {
                                 console.log(`🏆 Win condition met for counter-caster player ${counterCasterIdx} (Iron Stance / counter scroll)`);
-                                if (typeof spellSystem.showLevelComplete === 'function') {
-                                    spellSystem.showLevelComplete(counterCasterIdx);
-                                }
-                                if (typeof handleGameOver === 'function') {
-                                    handleGameOver(counterCasterIdx);
-                                }
                             }
                         }
                     }

@@ -39,6 +39,8 @@ ResponseWindowSystem.openWindow(castData)           [response-window.js]
     │
     ▼
 Win condition tracked in spellSystem.activated Set
+(win = all 5 elements activated + pawn returned to own player-tile centre;
+ gate: checkWinCondition() in game-core.js)
 ```
 
 ---
@@ -121,9 +123,20 @@ Some scrolls pause normal gameplay to collect player input:
 
 ### Response eligibility
 A player can respond if:
-1. They have a level-1 scroll of ANY element in active area
-2. They have ≥ 2 AP remaining
-3. The response window is open (15s after cast)
+1. They have a response/counter scroll castable: in active area, common area, or hand + open active slot
+2. The scroll's stone pattern is formed around their current position
+3. They have enough AP (normally 2)
+4. The response window is open (15s after cast)
+
+### Window gating (canAnyPlayerRespondOrBluff)
+The window only opens when a non-caster, non-bot player either meets the full
+response eligibility above, OR qualifies for a bluff (canPlayerBluff): a hand
+scroll whose ELEMENT matches a response/counter scroll whose formation is
+currently up for them, plus an open active slot and ≥ 2 AP. Bluffers see a
+window with no scroll cards so opponents can't tell they have nothing to play.
+If nobody qualifies, the cast resolves instantly with no waiting screen.
+Bots never count (no bot response logic) and are not expected submitters
+during arbitration.
 
 ### Conflict resolution
 If two players respond simultaneously, higher-rank element wins:

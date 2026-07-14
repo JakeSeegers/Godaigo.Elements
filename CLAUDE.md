@@ -62,9 +62,17 @@ Order matters — later scripts depend on earlier ones.
 15. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 16. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
 17. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
-18. bot.js                 ← window.BotSystem — utility-scored bot; Shift+R = one step, Shift+B = full turn
+17b. bot-sim.js            ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
+17c. bot-effects.js        ← window.BotEffects — Stage 2.5 scroll-effect usage: driveTransmute() (open-ended
+                             discard-for-AP modal), decideResponse() (response-scroll respond/pass — both
+                             arena and real multiplayer, wired from bot.js and bot-driver.js respectively)
+18. bot.js                 ← window.BotSystem — utility-scored bot + optional lookahead (WEIGHTS.searchDepth, default 0);
+                             Shift+R = one step, Shift+B = full turn
 19. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
                              host's client impersonates the bot's index to drive its turns
+19b. bot-arena.js          ← window.BotArena — self-play arena (bot-vs-bot local games, weight evolution).
+                             Shared playMatch() core for 2-5 players; run/evolve/spectate all support
+                             opts.visual (watch instead of muted-fast) and evolve supports opts.nPlayers (2-5)
                              Roadmap for smarter stages: docs/bot-roadmap.md
 ```
 
@@ -113,6 +121,6 @@ Full list: see `js/INDEX.md § Window Globals`.
 ---
 
 ## KNOWN ACTIVE BUGS
-See `TODO.md` for full list. Top open items as of last update:
-- `TRANS-WIN-CON`: Transmute (Fire IV) doesn't always stamp fire symbol on player tile
-- `TRANS-DOUBLE-DISP`: Transmute inventory display stale after discard
+See `TODO.md` for full list. `TRANS-WIN-CON` and `TRANS-DOUBLE-DISP` (Transmute
+fire-symbol stamp / stale inventory display) are confirmed cleared. No other
+top-level items as of last update.
