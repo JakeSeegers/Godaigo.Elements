@@ -112,6 +112,15 @@
                                  // destinations have no shrineValue). No path-cost division
                                  // like moveShrineValue gets — the hop is free, so the full
                                  // value applies, not a discounted one
+        teleportRevisitPenalty: -60, // ÷ steps-since-visited (same recency decay as
+                                 // moveRevisitPenalty) on the teleport DESTINATION. Teleports
+                                 // are free, so with no memory of them a bot can ping-pong
+                                 // between two catacomb shrines forever at zero cost — and
+                                 // teleportBase is only +5, so even the decayed penalty makes
+                                 // "hop straight back to where I just was" strongly negative
+                                 // while a hop somewhere NEW keeps the full base nudge.
+                                 // Both ends of an applied hop are recorded (see botAct) so
+                                 // the immediate reversal always draws the k=1 penalty
 
         // breaking a stone (attemptBreakStone) — costs AP by stone rank
         // (void 1 .. earth 5). Mostly matters for clearing a path an earth
@@ -475,6 +484,9 @@
                 if (ELEMENTS.includes(a.shrineType)) {
                     s += WEIGHTS.teleportShrineValue * shrineValue(snap, a.shrineType);
                 }
+                // Same anti-oscillation memory movement uses — without it,
+                // free hops between two catacombs ping-pong forever.
+                s += revisitPenalty(ctx.recentPositions || [], a, WEIGHTS.teleportRevisitPenalty);
                 return s;
             }
 
@@ -566,6 +578,11 @@
     // (1 step ago) is penalized far more than "revisit somewhere from 3+
     // steps ago," so a 2-cycle can no longer look equally bad in both
     // directions and the tie actually breaks.
+    // Monotonic count of successfully APPLIED main-phase casts, any player.
+    // Never reset — consumers (bot-arena.js's no-cast stall cap) read deltas,
+    // so a fresh game just remembers its own starting value.
+    let _castsApplied = 0;
+
     const RECENT_POS_LIMIT = 6;
     function recordVisited(idx, x, y) {
         const rp = mem(idx).recentPositions;
@@ -1143,6 +1160,7 @@
         for (const c of rootChildren) {
             let v = value(c.s1, depth - 1);
             if (c.a.type === 'move') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
+            if (c.a.type === 'teleport') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.teleportRevisitPenalty);
             if (!best || v > best.score) best = { action: c.a, score: v };
         }
         _exploreField = null; // valid only for this decision's root snapshot
@@ -1274,6 +1292,7 @@
             if (r.ok) {
                 if (planAction.type === 'cast') {
                     trackCastCredit(idx, snap, planAction.scroll);
+                    _castsApplied++;
                     m.plan = null; // plan fulfilled
                 }
                 if (planAction.type === 'move') recordVisited(idx, planAction.x, planAction.y);
@@ -1405,7 +1424,16 @@
         const res = window.BotState.applyAction(action);
         if (!res.ok) { log(`Action failed: ${res.reason}`); return null; }
         if (action.type === 'move') recordVisited(idx, action.x, action.y);
-        if (action.type === 'cast') trackCastCredit(idx, snap, action.scroll);
+        if (action.type === 'teleport') {
+            // Record BOTH ends of the hop: the origin first, so "teleport
+            // straight back to where I just was" draws the strongest (k=1)
+            // revisit penalty on the next decision, then the destination as
+            // the new current position.
+            const self = snap.players[idx];
+            if (self) recordVisited(idx, self.x, self.y);
+            recordVisited(idx, action.x, action.y);
+        }
+        if (action.type === 'cast') { trackCastCredit(idx, snap, action.scroll); _castsApplied++; }
         return action;
     }
 
@@ -1617,6 +1645,7 @@
         searchPick,           // Stage 2 lookahead pick — used when WEIGHTS.searchDepth > 0
         evaluateSnapshot,     // Stage 2 state evaluator (search leaves)
         resetMemory,          // wipe plan/history/blacklists (arena: call per game)
+        castsApplied: () => _castsApplied, // monotonic cast counter — arena's no-cast stall cap reads deltas
         speedScale: 1,        // scales all between-action delays (arena sets ~0.1)
         waitForQuiescence,    // settle response windows / selection modes / cascades
         WEIGHTS,              // live tuning surface (Stage 3a evolves this)

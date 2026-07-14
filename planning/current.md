@@ -15,6 +15,35 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT: catacomb teleport ping-pong fix + arena no-cast stall cap** —
+  `js/bot.js`, `js/bot-arena.js`, `js/INDEX.md`. User report: bots get
+  stuck teleporting back and forth between catacomb tiles (it's free
+  movement), and the arena never restarts those games — the camping
+  detector above can't see it (catacombs aren't elemental tiles, and
+  alternating tiles resets the per-tile streak every turn). Two fixes:
+  (1) WEIGHTS-level: new `teleportRevisitPenalty` (-60) applies the SAME
+  recency-decayed `revisitPenalty()` movement already uses to teleport
+  destinations, in both greedy `scoreAction()` and `searchPick()`'s root.
+  Teleports previously had NO anti-oscillation memory at all — applied
+  hops now record BOTH ends into `recentPositions` (origin first, so "hop
+  straight back" always draws the strongest k=1 penalty). `teleportBase`
+  is only +5, so a return hop scores -55 (firmly vetoed) while a hop
+  somewhere NEW keeps the full +5 nudge — teleporting for movement stays
+  encouraged, per the user's constraint. (2) ARENA-level: second stall
+  detector sharing the existing restart machinery — if
+  `opts.stallNoCastRounds` (default 15) full rounds pass with NO bot
+  casting a single scroll, the round aborts and restarts with a derived
+  seed, exactly like the camping stall. Cast detection via a new
+  monotonic `BotSystem.castsApplied()` counter (incremented at both
+  apply sites in bot.js — plan-driven and scored casts; the arena reads
+  deltas, so no reset is needed). Verified headless: score of a
+  return-hop = base + full penalty (-55) vs. +5 for a fresh destination
+  with identical history; a castless stubbed game stalls at exactly
+  3 rounds with `stallNoCastRounds:3` and consumes its restart budget;
+  a high cap (50 rounds) never false-fires inside a 12-turn cap; the
+  camping-detector tests and a real 2-game batch still pass (the
+  camping tests now pin `stallNoCastRounds:999` to isolate detectors,
+  since their stub bots never cast).
 - **BOT FIX: host's response window auto-cleared when a bot submitted first
   (real multiplayer with lobby bots)** — `js/scrolls/response-window.js`,
   `js/scrolls/INDEX.md`. User report: with a bot in the game, the host's
@@ -976,4 +1005,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (latest: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-07-14 (latest: catacomb teleport ping-pong is now penalized in the weights (teleportRevisitPenalty — return hops score -55, fresh hops keep +5) and the arena gained a second stall detector — 15 rounds with no one casting anything restarts the round, catching the free-teleport loops the elemental-tile camping detector can't see; before that: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*

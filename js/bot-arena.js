@@ -49,10 +49,19 @@
 // bookkeeping is the CALLER's job (run/evolve mute+stay silent, spectate
 // keeps everything on and drives the status bar + log download).
 //
-// STALL RESTART: if two (or more) bots each end STALL_TURNS (7) consecutive
-// own turns parked on one revealed elemental tile (each on its own tile —
-// they don't have to share one), the game is declared a trap-loop stall and
-// the whole round is RESTARTED from scratch with a derived seed (same
+// STALL RESTART — two independent trap-loop detectors, one shared outcome
+// (abort the game, result.stalled = true, playMatch() replays the round):
+//   1. CAMPING: two (or more) bots each end STALL_TURNS (7) consecutive own
+//      turns parked on one revealed elemental tile (each on its own tile —
+//      they don't have to share one).
+//   2. NO-CAST: opts.stallNoCastRounds (default 15) full rounds pass with
+//      NO bot casting a single scroll. Catches the loops camping can't —
+//      e.g. free catacomb-teleport ping-pong, where the tile alternates
+//      every turn (resetting any per-tile streak) and catacombs aren't
+//      elemental tiles anyway. A game where nobody has cast anything for
+//      15 straight rounds is going nowhere regardless of the movement
+//      shape. Reads deltas of BotSystem.castsApplied().
+// Either way the round is RESTARTED from scratch with a derived seed (same
 // weights), instead of grinding on to the 200-turn cap just to record a
 // meaningless draw. opts.maxStallRestarts (default 3) caps the retries; a
 // game still stalled after the last retry is returned as-is (winner null,
@@ -380,6 +389,15 @@
         // many consecutive own turns they've stayed on that same tile.
         const camp = {};
         for (let i = 0; i < nPlayers; i++) camp[i] = { tileId: null, count: 0 };
+        // No-cast stall cap (detector 2 — see the STALL RESTART header note):
+        // this many consecutive player-turns with zero casts by ANYONE ends
+        // the game as stalled. Expressed in rounds so it means the same
+        // thing at every player count. Skipped gracefully on an older
+        // bot.js without the castsApplied() counter.
+        const noCastTurnCap = Math.max(1, opts.stallNoCastRounds ?? 15) * nPlayers;
+        const castCounter = window.BotSystem.castsApplied;
+        let castsSeen = castCounter ? castCounter() : null;
+        let lastCastTurn = -1; // -1 = no cast yet this game
 
         // Seed ALL shuffle randomness (tile deck, scroll decks) for this game
         Math.random = mulberry32(seed);
@@ -444,6 +462,18 @@
                     result.stalled = true;
                     log(`match seed ${seed}: ${camped} bots each parked on an elemental tile for ${STALL_TURNS} straight turns — trap loop, aborting round on turn ${turn + 1}`);
                     break;
+                }
+
+                // No-cast stall: nobody has cast anything for too many rounds
+                // (free-teleport ping-pong and other zero-progress loops).
+                if (castsSeen !== null) {
+                    const c = castCounter();
+                    if (c !== castsSeen) { castsSeen = c; lastCastTurn = turn; }
+                    else if (turn - lastCastTurn >= noCastTurnCap) {
+                        result.stalled = true;
+                        log(`match seed ${seed}: no scroll cast by anyone for ${Math.round(noCastTurnCap / nPlayers)} straight rounds (${noCastTurnCap} turns) — stalled, aborting round on turn ${turn + 1}`);
+                        break;
+                    }
                 }
 
                 if (activePlayerIndex === idx) {
