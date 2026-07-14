@@ -32,7 +32,7 @@ different concerns and neither blocks the other:
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
 | 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5; cheat-panel "🧬 Train Weights" button runs a modest preset without the console) | `js/bot-arena.js`, `js/game-ui.js` cheat panel |
-| 2.5 | Scroll-effect usage: selection targets + response scrolls | IN PROGRESS (12/12 selection effects driven — response scrolls **DONE** too, arena + real multiplayer; only the 2 drag-based scrolls (Telekinesis, Take Flight) + Excavate's deferred teleport remain, need a programmatic drag hook) | `js/bot-effects.js` + bot-sim whitelist |
+| 2.5 | Scroll-effect usage: selection targets + response scrolls | **DONE** — full choice-space inventory covered: all selection effects, response scrolls, Excavate's deferred teleport, and the 2 previously-drag-only scrolls (Take Flight, Telekinesis) | `js/bot-effects.js` + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
 
@@ -761,10 +761,79 @@ Build order (each step independently commit-able and arena-measurable):
    opportunistic use; simulating End Turn's `clearTurnBuffs()` correctly
    clears it. 10-game arena regression shows no errors.
 
-   **Not yet driven** (falls through to cancel): Excavate's deferred
-   teleport. Telekinesis and Take Flight's destination step are drag-based
-   (no click handler to call) and need a
-   decision on approach before starting.
+   **Excavate, Take Flight, and Telekinesis — DONE. Stage 2.5's full
+   choice-space inventory is now covered end to end.**
+
+   Excavate (CATACOMB_SCROLL_4) turned out to be misfiled in earlier notes
+   as "drag-based" — it never was. Its deferred teleport (fires at the
+   start of the caster's next turn via `processExcavateTeleport()`) is a
+   2-step flow identical in shape to everything else here:
+   `excavate-teleport-modal` ("Teleport"/"Stay Here" — always take it,
+   free repositioning with no downside) then a `handleHexClick(hexPos)`
+   selectionMode exactly like tile-flip/tile-swap. Candidate hexes come
+   from `BotState.hexGrid()`, filtered to the SAME rule
+   `handleHexClick()` itself enforces (revealed non-player tile, no
+   stone, no player); heuristic picks the candidate closest to whatever
+   the bot's next objective already is (home if all 5 activated, else the
+   nearest hidden tile). Can't land ON a player tile at all — excluded by
+   the game's own check — so unlike catacomb/Freedom teleport this can
+   never double as a direct win.
+
+   Take Flight (WIND_SCROLL_4) and Telekinesis (VOID_SCROLL_4) genuinely
+   ARE drag-only at the UI layer — no `selectionMode.handleXClick()` or
+   `onComplete(x,y)`-style API covers the actual move, unlike every other
+   effect here. Rather than simulating raw mouse drag events (fragile,
+   timing-dependent, and the antithesis of "never reimplement game
+   rules"), both drivers call the EXACT SAME functions the real drop
+   handler calls, in the same order — just triggered directly instead of
+   via a mouseup event:
+   - **Take Flight**: `take-flight-player-modal` (pick a target — v1
+     ALWAYS targets self; self-targeting is a downside-free "teleport
+     anywhere unoccupied," since the scroll just stays in the caster's
+     active area, while opponent-targeting has a real tradeoff — denial
+     value vs. handing them a scroll — deliberately left unscoped rather
+     than guessed at) then the drag completion:
+     `window.takeFlightState.onComplete(x, y)` alone only finalizes
+     scroll disposition/broadcast — it does NOT move the pawn. The real
+     drop handler (`game-ui.js`) calls `placePlayer()` (self) or
+     `movePlayerVisually()` (opponent) FIRST, then `onComplete()` —
+     `driveTakeFlightDrag()` mirrors both calls. Any hex works as a
+     destination (no revealed/tile-type restriction, unlike Excavate),
+     so a direct teleport home is legal and correctly wins via
+     `placePlayer()`'s own `checkWinCondition()` once all 5 elements are
+     activated.
+   - **Telekinesis**: no target-picker modal — goes straight into drag
+     mode. The pickup/drop pair is `startTileDrag(tileId, event)` (removes
+     the tile from `placedTiles` + DOM, exactly what a human's mousedown
+     does) then `placeTile(x, y, rotation, flipped, shrineType, false,
+     false, tileId)` with the SAME tile id (re-adds it at the new
+     position) — `findNearestSnapPoint()` already enforces the "must
+     touch 1 other tile" rule internally whenever
+     `window.telekinesisState.active` is true, so no extra validation
+     logic was needed there. The move-counter/broadcast bookkeeping the
+     real mouseup handler does inline (no separate function exists for
+     it) is mirrored explicitly. No clear strategic value model for WHICH
+     tile to move or where (same reasoning `driveTileSwap` already uses
+     for Shifting Sands) — v1 picks the least-disruptive relocation: an
+     eligible tile moved to an empty slot immediately adjacent to its own
+     current position. **Bug caught during testing, fixed before
+     verifying:** the first eligible tile isn't a safe default — an
+     interior tile deep in a compact cluster never has a free adjacent
+     slot (that's what makes it interior), so trying only `eligible[0]`
+     silently did nothing useful in a real board layout. Fixed by
+     dry-running the destination check (`findNearestSnapPoint` is
+     side-effect-free) across ALL eligible tiles first and only starting
+     the real pickup once a tile+destination pair is confirmed to work.
+
+   Verified against a real running game (direct `enterX`/`processX`
+   invocation, same testing style as every other effect here): Excavate
+   completes both steps and teleports to a valid revealed hex; Take
+   Flight completes both steps, moves the pawn, and correctly keeps the
+   scroll in the caster's active area (self-target disposition); Telekinesis
+   correctly skips a boxed-in interior tile and moves a different eligible
+   one instead, tile count unchanged before/after (no duplication/loss),
+   all drag-state and telekinesis-state cleared afterward. 10-game arena
+   regression shows no errors.
 
    **Bug found via arena testing (fixed):** the dispatcher originally
    chained the DOM-modal checks (Create, Scholar's Insight) as `else if`

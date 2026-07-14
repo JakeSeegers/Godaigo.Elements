@@ -31,6 +31,18 @@
 //     undriven selection would be, so the effect survives for the bot's
 //     whole turn instead of getting force-cancelled the instant no water
 //     stone happens to be adjacent yet.
+//     Excavate's deferred teleport, Take Flight, and Telekinesis are ALSO
+//     driven now: Excavate is a clean handleHexClick() like tile-flip/
+//     tile-swap (its "drag-based" label in earlier notes was simply
+//     wrong — it was never actually drag-based). Take Flight and
+//     Telekinesis genuinely ARE drag-only at the UI layer (no
+//     selectionMode.handleXClick()/onComplete(x,y)-style API for the
+//     drop itself) — driveTakeFlightDrag()/driveTelekinesis() mirror the
+//     real drop handler's call sequence exactly (placePlayer()/
+//     movePlayerVisually() + takeFlightState.onComplete() for Take
+//     Flight; startTileDrag() + placeTile() + the move-counter bookkeeping
+//     for Telekinesis) instead of reimplementing the underlying game
+//     rules — see each driver's own comment for the full reasoning.
 //   - driveTransmute(): the only scroll with an open-ended discard-for-AP
 //     modal and NO selectionMode object (detected via DOM id directly,
 //     same as scroll-effects.js's EFFECT_MODAL_IDS safety net).
@@ -38,9 +50,8 @@
 //     (gated on window.BotArena.isRunning(), called from bot.js) and real
 //     multiplayer (js/bot-driver.js's respondForBots(), ticking alongside
 //     its turn watcher).
-// NOT yet driven: Excavate's deferred teleport, Telekinesis, and Take
-// Flight's destination step are drag-based (no click handler to call) and
-// are out of scope until a programmatic hook exists.
+// Stage 2.5's full choice-space inventory (docs/bot-roadmap.md §
+// CHOICE-SPACE INVENTORY) is now covered end to end.
 //
 // LOAD ORDER: after bot-sim.js, before bot.js (bot.js calls into this) —
 // but this file must not reach into bot.js's closure; it reads game state
@@ -604,6 +615,204 @@
     }
 
     // ----------------------------------------------------------------
+    // Excavate (CATACOMB_SCROLL_4) — deferred to the start of the caster's
+    // NEXT turn, two steps:
+    //   1. excavate-teleport-modal: "Teleport" or "Stay Here" prompt.
+    //      Teleporting is free with no real downside (repositioning to
+    //      anywhere already-revealed), so always take it.
+    //   2. excavate-teleport selectionMode: handleHexClick(hexPos) — same
+    //      shape as tile-flip/tile-swap. Candidate hexes come from
+    //      BotState.hexGrid(), filtered to the same rule
+    //      handleHexClick() itself enforces (revealed non-player tile, no
+    //      stone, no player) so nothing gets offered that would just be
+    //      rejected. Heuristic: closest candidate to whatever the bot
+    //      would already be aiming for — home if all 5 elements are
+    //      activated, else the nearest hidden tile to keep exploring.
+    //      (Can't land ON a player tile at all — handleHexClick excludes
+    //      them — so this can't double as an instant win the way walking
+    //      home can; it's pure repositioning.)
+    // ----------------------------------------------------------------
+    function driveExcavateTeleportModal() {
+        const modal = document.getElementById('excavate-teleport-modal');
+        if (!modal) return false;
+        const btn = [...modal.querySelectorAll('button')].find(b => b.textContent === 'Teleport');
+        if (!btn) return false;
+        btn.click();
+        return true;
+    }
+
+    function driveExcavateTeleport(se, sm) {
+        const s = snap();
+        const me = self(s);
+        if (!me) return false;
+        const grid = window.BotState?.hexGrid?.() || [];
+        const candidates = grid.filter(h => {
+            if (!h.tiles || !h.tiles.some(t => !t.flipped && !t.isPlayerTile)) return false;
+            if (typeof placedStones !== 'undefined' && placedStones.some(st => dist(st, h) < 5)) return false;
+            if (typeof playerPositions !== 'undefined' && playerPositions.some(p => p && dist(p, h) < 5)) return false;
+            return true;
+        });
+        if (!candidates.length) return false;
+
+        let goal = null;
+        if (ELEMENTS.every(el => me.activated.includes(el))) {
+            goal = s.tiles.find(t => t.isPlayerTile && t.playerIndex === s.turn.activePlayerIndex);
+        } else {
+            const hidden = s.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            goal = hidden.length ? hidden.reduce((a, b) => (!a || dist(me, b) < dist(me, a)) ? b : a, null) : null;
+        }
+        const best = goal
+            ? candidates.reduce((a, b) => (!a || dist(goal, b) < dist(goal, a)) ? b : a, null)
+            : candidates[0];
+        sm.handleHexClick(best);
+        return true;
+    }
+
+    // ----------------------------------------------------------------
+    // Take Flight (WIND_SCROLL_4) — two steps:
+    //   1. take-flight-player-modal: pick a target. v1 ALWAYS targets
+    //      SELF — self-targeting is a clean, downside-free "teleport
+    //      anywhere unoccupied" (the scroll just stays in the caster's
+    //      active area, per the effect text) with no strategic tradeoff to
+    //      model. Opponent-targeting has a real one (denial value vs.
+    //      handing them a scroll for their hand) that's out of scope for
+    //      v1 — deliberately not attempted here rather than guessed at.
+    //   2. Drag-drop: NOT a selectionMode.handleXClick() — the real drop
+    //      handler (game-ui.js) does double duty: it moves the pawn itself
+    //      (placePlayer() for self, movePlayerVisually() for an opponent)
+    //      AND THEN calls window.takeFlightState.onComplete(x, y), which
+    //      only finalizes scroll disposition/broadcast. Mirror BOTH calls
+    //      exactly — onComplete alone would leave the pawn never actually
+    //      moved. Any hex on the grid works as a destination (no
+    //      revealed/tile-type restriction, unlike Excavate) — only stones
+    //      and other players block it, so a direct teleport home is legal
+    //      and correctly triggers a win via placePlayer()'s own
+    //      checkWinCondition() call once all 5 elements are activated.
+    // ----------------------------------------------------------------
+    function driveTakeFlightPlayerModal() {
+        const modal = document.getElementById('take-flight-player-modal');
+        if (!modal) return false;
+        const btn = [...modal.querySelectorAll('button')].find(b => b.textContent.includes('(you)'));
+        if (!btn) return false;
+        btn.click();
+        return true;
+    }
+
+    function driveTakeFlightDrag() {
+        const tf = window.takeFlightState;
+        if (!tf || !tf.active) return false;
+
+        const s = snap();
+        const target = s.players[tf.targetPlayerIndex];
+        if (!target) return false;
+        const grid = window.BotState?.hexGrid?.() || [];
+        const candidates = grid.filter(h => {
+            if (typeof placedStones !== 'undefined' && placedStones.some(st => dist(st, h) < 5)) return false;
+            if (typeof playerPositions !== 'undefined' &&
+                playerPositions.some((p, idx) => p && idx !== tf.targetPlayerIndex && dist(p, h) < 5)) return false;
+            return true;
+        });
+        if (!candidates.length) return false;
+
+        let goal = null;
+        if (ELEMENTS.every(el => target.activated.includes(el))) {
+            goal = s.tiles.find(t => t.isPlayerTile && t.playerIndex === tf.targetPlayerIndex);
+        } else {
+            const hidden = s.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            goal = hidden.length ? hidden.reduce((a, b) => (!a || dist(target, b) < dist(target, a)) ? b : a, null) : null;
+        }
+        const dest = goal
+            ? candidates.reduce((a, b) => (!a || dist(goal, b) < dist(goal, a)) ? b : a, null)
+            : candidates[0];
+
+        if (tf.targetPlayerIndex === activePlayerIndex) {
+            placePlayer(dest.x, dest.y);
+        } else if (typeof movePlayerVisually === 'function') {
+            movePlayerVisually(tf.targetPlayerIndex, dest.x, dest.y, 0);
+        }
+        tf.onComplete(dest.x, dest.y);
+        return true;
+    }
+
+    // ----------------------------------------------------------------
+    // Telekinesis (VOID_SCROLL_4) — drag-only with no handleXClick()/
+    // onComplete() API like everything else here; the real move logic
+    // lives inline in game-ui.js's mouseup handler, coupled to raw
+    // drag-state module variables (draggedTileId/Rotation/Flipped/
+    // ShrineType/OriginalPos, ghostTile, isDraggingTile) instead of one
+    // callable function. Mirrors that exact sequence instead of
+    // reimplementing it: startTileDrag() (pickup — removes the tile from
+    // placedTiles + DOM, same as a human's mousedown) then placeTile()
+    // with the SAME tile id (drop — re-adds it at the new position via
+    // findNearestSnapPoint(), which already enforces Telekinesis's
+    // "must touch 1 other tile" rule internally whenever
+    // window.telekinesisState.active is true — see game-core.js), plus
+    // the move-counter/broadcast bookkeeping the real mouseup handler
+    // does inline since there's no separate function for it.
+    // No clear strategic value model for WHICH tile to move or where —
+    // same reasoning driveTileSwap already uses for Shifting Sands — so
+    // v1 picks the least-disruptive relocation: an eligible tile (not
+    // stoned, not occupied by a player, not a bridge — the same
+    // eligibility the real drag-start handler enforces) moved to an empty
+    // slot immediately adjacent to its OWN current position. An interior
+    // tile deep in the cluster never HAS a free adjacent slot (that's
+    // what makes it interior) — dry-run the destination check for every
+    // eligible tile first (findNearestSnapPoint is side-effect-free, safe
+    // to call before committing to a real pickup) and only start the
+    // actual drag once a tile+destination pair is found; the first
+    // eligible tile alone is not a safe assumption in a compact cluster.
+    // MAX_MOVES is always 1 today, but this reads movesLeft generically
+    // (like the real handler) rather than assuming that.
+    // ----------------------------------------------------------------
+    function driveTelekinesis(se, sm) {
+        if (!window.telekinesisState?.active) return false;
+
+        const eligible = (se.getEligibleTilesForSwap() || []).filter(t =>
+            !tileHasStones(t.id) && !tileHasPlayersById(t.id) && !tileIsBridge(t.id));
+        if (!eligible.length) { window.finishTelekinesis?.(); return true; }
+
+        const largeHexSize = TILE_SIZE * 4;
+        const offsets = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+        let tile = null, destination = null;
+        for (const t of eligible) {
+            const hex = pixelToHex(t.x, t.y, largeHexSize);
+            for (const [dq, dr] of offsets) {
+                const p = hexToPixel(hex.q + dq, hex.r + dr, largeHexSize);
+                const snapResult = findNearestSnapPoint(p.x, p.y, false);
+                if (snapResult.snapped) { tile = t; destination = { x: snapResult.x, y: snapResult.y }; break; }
+            }
+            if (destination) break;
+        }
+        if (!destination) return false; // every eligible tile is boxed in — genuinely nothing to do
+
+        startTileDrag(tile.id, { clientX: 0, clientY: 0 });
+        const originalPos = draggedTileOriginalPos; // capture before it's nulled below
+        placeTile(destination.x, destination.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
+
+        if (ghostTile) { ghostTile.remove(); ghostTile = null; }
+        isDraggingTile = false;
+        draggedTileId = null;
+        draggedTileOriginalPos = null;
+
+        if (window.telekinesisState) {
+            window.telekinesisState.movesLeft--;
+            window.telekinesisState.movedTiles.push(tile.id);
+            const doneBtn = document.getElementById('telekinesis-done-btn');
+            if (doneBtn) {
+                const movesDone = window.telekinesisState.maxMoves - window.telekinesisState.movesLeft;
+                doneBtn.textContent = `Done (${movesDone}/${window.telekinesisState.maxMoves})`;
+            }
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                broadcastGameAction('telekinesis-move', {
+                    tileId: tile.id, newPos: destination, oldPos: originalPos, movedPlayers: []
+                });
+            }
+            if (window.telekinesisState.movesLeft <= 0) window.finishTelekinesis?.();
+        }
+        return true;
+    }
+
+    // ----------------------------------------------------------------
     // Public entry point (selection modes / Create / Scholar's Insight).
     // Inspects whatever selection UI is CURRENTLY open and drives exactly
     // one step of it; the caller (bot.js waitForQuiescence) polls, so a
@@ -633,8 +842,9 @@
             case 'tile-swap':          acted = driveTileSwap(se, sm); kind = 'tile-swap'; break;
             case 'tile-element-change': acted = driveWanderingRiver(se, sm); kind = 'wandering-river'; break;
             case 'water-transform':    acted = driveWaterTransform(se, sm); kind = 'water-transform'; break;
-            // telekinesis / take-flight-drag: drag-based, not driven yet.
-            // excavate-teleport: click-based but not yet implemented.
+            case 'excavate-teleport':  acted = driveExcavateTeleport(se, sm); kind = 'excavate-teleport'; break;
+            case 'take-flight-drag':   acted = driveTakeFlightDrag(); kind = 'take-flight'; break;
+            case 'telekinesis':        acted = driveTelekinesis(se, sm); kind = 'telekinesis'; break;
             default: break;
         }
         if (!acted && document.getElementById('create-stone-modal')) {
@@ -664,11 +874,17 @@
         if (!acted && document.getElementById('plunder-player-modal')) {
             acted = drivePlunderPlayerModal(); kind = 'plunder-player';
         }
+        if (!acted && document.getElementById('excavate-teleport-modal')) {
+            acted = driveExcavateTeleportModal(); kind = 'excavate-prompt';
+        }
+        if (!acted && document.getElementById('take-flight-player-modal')) {
+            acted = driveTakeFlightPlayerModal(); kind = 'take-flight-player';
+        }
 
         if (acted) log(`Drove a ${kind} choice`);
         return acted;
     }
 
     window.BotEffects = { driveSelection, rankedElements, driveTransmute, decideResponse };
-    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder, Control the Current, Transmute, response scrolls)');
+    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder, Control the Current, Excavate, Take Flight, Telekinesis, Transmute, response scrolls)');
 })();
