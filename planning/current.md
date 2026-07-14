@@ -15,6 +15,63 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT STAGE 2.5: drive 3 more scroll effects (Wandering River, Arson,
+  Plunder)** — `js/bot-effects.js`, `docs/bot-roadmap.md`. Continuation of
+  the Stage 2.5 remainder after fixing the two stale doc entries below
+  (which had wrongly reported this stage's status). Wandering River
+  (WATER_SCROLL_4): picks the eligible tile closest to the bot, then the
+  most-needed element via the existing `clickBestElement()` helper. Needed
+  a guard against re-clicking the tile every polling tick, since
+  `selectionMode.type` stays `'tile-element-change'` through BOTH the
+  tile-pick and element-pick steps (only clears once the element modal
+  resolves), and the dispatcher's `switch(sm?.type)` always runs before
+  the modal-check chain — without the guard the switch would keep firing
+  first, destroying and recreating a fresh `element-select-modal` forever
+  instead of the modal driver ever getting a turn. Arson (FIRE_SCROLL_5)
+  and Plunder (CATACOMB_SCROLL_8) share a new `rankedOpponents(filterFn)`
+  helper: "hit the biggest threat" — most activated elements, tie-broken
+  by total pool size, never self (a plain voluntary discard already covers
+  what self-targeted Plunder would do). Arson destroys the target's
+  largest stockpiled available element; Plunder takes their highest-level
+  active scroll — the inverse of `pickWeakestButton`'s existing "give up
+  MY OWN weakest" logic already used for Sacrificial Pyre/Inspiring
+  Draught. Plunder's scroll-pick step shares `scroll-select-modal` with
+  those two, routed by heading text via the existing dispatcher. Verified
+  against a real running game (direct `enterX` invocation, same style
+  used for the earlier 3 effects): all three complete both steps and
+  produce the expected board/state changes (buff applied, stone
+  destroyed, scroll moved to common area). 10-game arena regression shows
+  no errors. **Deliberately NOT included: Control the Current**
+  (WATER_SCROLL_5) — architecturally different from every effect driven so
+  far: a persistent whole-turn ability with no "Done" button, meant to
+  coexist with the rest of the bot's turn (opportunistically transform an
+  adjacent water stone while moving) rather than a one-shot pick.
+  `waitForQuiescence()` cancels any selectionMode `driveSelection()` can't
+  act on — for this persistent mode that would prematurely end the
+  effect's whole-turn duration the instant no water stone happens to be
+  adjacent yet. Needs a `waitForQuiescence()` change (treat it as
+  non-blocking), not just a driver function — scoped precisely in
+  `bot-roadmap.md` rather than rushed in alongside the other 3.
+- **DOC CLEANUP: corrected two stale bot-response entries + the "elemental
+  lockout" bug's root-cause diagnosis** — `docs/bot-roadmap.md`,
+  `js/scrolls/response-window.js`, `planning/current.md`. Found while
+  answering "what other bot work needs progressing": `bot-roadmap.md`'s
+  STAGE STATUS table and `response-window.js`'s own header comment both
+  still claimed response scrolls were unstarted / bots couldn't respond,
+  though that shipped in an earlier session
+  (`BotEffects.decideResponse()`, wired into both the arena and
+  `bot-driver.js`'s `respondForBots()`). While correcting the "elemental
+  lockout" task-list entry (which cited bot response support as the fix),
+  traced the actual mechanic in `game-core.js`'s
+  `handleScrollDisposition()`/`discardToCommonArea()`: casting a
+  common-area scroll never clears its slot for anyone, bot or human — only
+  a LATER discard of another scroll of that same element does, which
+  always unconditionally overwrites regardless of what's currently there.
+  So bot response support, already shipped, never touched this gap at
+  all; the real cause is ordinary draw variance in how often a
+  matching-element scroll gets discarded again, not a fixable exclusion
+  bug. Corrected the entry's diagnosis accordingly rather than leaving a
+  stale "not started" fix plan pointing at something already done.
 - **BOT STAGE 5: catacomb/Freedom teleport action** — `js/bot-state.js`,
   `js/bot-sim.js`, `js/bot.js`, `docs/bot-roadmap.md`. User question: why
   can't bots use catacomb tiles to teleport? Answer: they weren't in the
@@ -577,15 +634,17 @@ exist in code but are untested end-to-end. Docs system fully in place.
 2. **IN PROGRESS: Stage 2.5 — scroll-effect usage.** Step 1 (inventory) is
    **DONE** — full table of all 17 selection-mode/response scrolls in
    bot-roadmap.md § STAGE 2.5. Step 2 (`js/bot-effects.js`) is
-   **STARTED**: 8 of 12 selection effects driven (tile-flip,
+   **STARTED**: 11 of 12 selection effects driven (tile-flip,
    scorched-earth, tile-swap, Create, Scholar's Insight, Quick Reflexes,
-   Sacrificial Pyre, Inspiring Draught), A/B-measured in the arena (fewer
-   draws, no regressions vs. baseline on identical seeds). Step 3
-   (response scrolls) is **DONE** — arena AND real multiplayer, via
-   `bot-driver.js`'s `respondForBots()`. NEXT: the remaining 4
-   click/modal-based scrolls (Wandering River, Control the Current, Arson,
-   Plunder), then decide an approach for the 2 drag-based ones
-   (Telekinesis, Take Flight). Full plan: bot-roadmap § STAGE 2.5.
+   Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder),
+   A/B-measured in the arena (fewer draws, no regressions vs. baseline on
+   identical seeds). Step 3 (response scrolls) is **DONE** — arena AND
+   real multiplayer, via `bot-driver.js`'s `respondForBots()`. NEXT: only
+   Control the Current left (needs a `waitForQuiescence()` architecture
+   change, not just a driver — it's a persistent whole-turn ability, not a
+   one-shot pick, see bot-roadmap.md § STAGE 2.5 for the precise scope),
+   then decide an approach for the 2 drag-based scrolls (Telekinesis, Take
+   Flight). Full plan: bot-roadmap § STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
 4. **Opponent-awareness — Track A DONE (evaluator term), Tracks B/C not
@@ -706,4 +765,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (corrected the "elemental lockout" bug's stale diagnosis — bot response support, already shipped, doesn't actually clear a stuck common-area scroll since casting never touches slot residency, only a same-element discard does; corrected bot-roadmap.md's STAGE STATUS table and response-window.js's own header comment, both still claiming bots can't respond; bots can now use catacomb/Freedom shrine teleports — a new free-repositioning action added across bot-state.js/bot-sim.js/bot.js, closing the long-flagged Track C gap; void pool stones now valued for their standing AP bonus via 3 new weights — evalVoidHeld, shrineVoidBonus, placeVoidSpendPenalty — and earth-blocking/fire-interference tactics scoped as a follow-up in bot-roadmap.md § STAGE 4; evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-14 (bots now drive 3 more scroll effects — Wandering River, Arson, Plunder — via a new rankedOpponents() "hit the biggest threat" targeting helper shared by the latter two; Control the Current deliberately deferred as its own follow-up, a persistent whole-turn ability that needs a waitForQuiescence() architecture change rather than a one-shot driver; corrected the "elemental lockout" bug's stale diagnosis — bot response support, already shipped, doesn't actually clear a stuck common-area scroll since casting never touches slot residency, only a same-element discard does; corrected bot-roadmap.md's STAGE STATUS table and response-window.js's own header comment, both still claiming bots can't respond; bots can now use catacomb/Freedom shrine teleports — a new free-repositioning action added across bot-state.js/bot-sim.js/bot.js, closing the long-flagged Track C gap; void pool stones now valued for their standing AP bonus via 3 new weights — evalVoidHeld, shrineVoidBonus, placeVoidSpendPenalty — and earth-blocking/fire-interference tactics scoped as a follow-up in bot-roadmap.md § STAGE 4; evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
