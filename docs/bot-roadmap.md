@@ -32,7 +32,7 @@ different concerns and neither blocks the other:
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
 | 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5; cheat-panel "🧬 Train Weights" button runs a modest preset without the console) | `js/bot-arena.js`, `js/game-ui.js` cheat panel |
-| 2.5 | Scroll-effect usage: selection targets + response scrolls | IN PROGRESS (11/12 selection effects driven; response scrolls **DONE**, arena + real multiplayer; only Control the Current left, needs a waitForQuiescence() change) | `js/bot-effects.js` + bot-sim whitelist |
+| 2.5 | Scroll-effect usage: selection targets + response scrolls | IN PROGRESS (12/12 selection effects driven — response scrolls **DONE** too, arena + real multiplayer; only the 2 drag-based scrolls (Telekinesis, Take Flight) + Excavate's deferred teleport remain, need a programmatic drag hook) | `js/bot-effects.js` + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
 
@@ -726,22 +726,44 @@ Build order (each step independently commit-able and arena-measurable):
    plunder, targets the one with an active scroll, and moves it to the
    common area. 10-game arena regression shows no errors.
 
-   **Not yet driven** (falls through to cancel): Control the Current,
-   Excavate's deferred teleport. Control the Current is a different SHAPE
-   of problem from every other effect here — see the "architecturally
-   different" note in bot-effects.js's own header comment: it's a
-   persistent whole-turn ability with no "Done" button
+   **Control the Current (WATER_SCROLL_5) — DONE, but needed a
+   `waitForQuiescence()` change, not just a driver.** A genuinely different
+   SHAPE of problem from every other effect here — see the
+   "architecturally different" note in `bot-effects.js`'s own header
+   comment: it's a persistent whole-turn ability with no "Done" button
    (`selectionMode.type: 'water-transform'`), meant to coexist with the
    rest of the bot's turn (opportunistically transform an adjacent water
-   stone while moving), not a one-shot pick. `waitForQuiescence()` cancels
-   any selectionMode `driveSelection()` can't act on — for a persistent
-   mode that would prematurely end the effect's whole-turn duration the
-   instant no water stone happens to be adjacent yet. Needs a
-   `waitForQuiescence()` change (treat this mode as non-blocking — act if a
-   stone is adjacent, else let the turn continue without cancelling), not
-   just a driver function, so it's deferred as its own follow-up rather
-   than rushed alongside the other 3. Telekinesis and Take Flight's
-   destination step are drag-based (no click handler to call) and need a
+   stone while moving), not a one-shot pick. `waitForQuiescence()`
+   previously cancelled ANY selectionMode `driveSelection()` couldn't act
+   on — for this persistent mode that would have prematurely ended the
+   effect's whole-turn duration the instant no water stone happened to be
+   adjacent yet, discarding any benefit from moving toward one later.
+   Fixed with a targeted exception in `bot.js`'s `waitForQuiescence()`:
+   when `driveSelection()` returns false AND `selectionMode.type ===
+   'water-transform'`, treat it as quiescent (just `return`) instead of
+   calling `cancelSelectionMode()` — every other undriven selection still
+   gets cancelled exactly as before. `driveWaterTransform()` itself
+   recomputes eligible stones FRESH via `se.getAdjacentWaterStones()` on
+   every call rather than trusting `selectionMode.highlightedStones` —
+   that cache is only refreshed by `placePlayer()`'s move branch
+   (game-core.js), which `bot-state.js`'s `move` action bypasses (it
+   mutates position directly instead), so trusting the cached list would
+   have silently missed stones that became adjacent after a bot move.
+   Actual cleanup when the effect's duration ends is unchanged — the
+   existing `clearTurnBuffs()` (`scroll-effects.js`, called on End Turn)
+   already tears down the selectionMode, this fix just stops something
+   ELSE from doing it prematurely.
+   Verified against a real running game: casting it with no water stone
+   adjacent — `waitForQuiescence()` returns in ~1ms (not the 25s timeout,
+   not a cancel) and the selectionMode survives; placing a water stone
+   adjacent afterward — the NEXT `waitForQuiescence()` call correctly
+   drives the transform and the selectionMode stays active for further
+   opportunistic use; simulating End Turn's `clearTurnBuffs()` correctly
+   clears it. 10-game arena regression shows no errors.
+
+   **Not yet driven** (falls through to cancel): Excavate's deferred
+   teleport. Telekinesis and Take Flight's destination step are drag-based
+   (no click handler to call) and need a
    decision on approach before starting.
 
    **Bug found via arena testing (fixed):** the dispatcher originally

@@ -17,7 +17,20 @@
 //   - driveSelection(): tile-flip (Heavy Stomp / Call to Adventure),
 //     scorched-earth (Combust), tile-swap (Shifting Sands), Create,
 //     Scholar's Insight, Quick Reflexes, Sacrificial Pyre, Inspiring
-//     Draught, Wandering River, Arson, Plunder.
+//     Draught, Wandering River, Arson, Plunder, Control the Current.
+//     Control the Current is architecturally different from everything
+//     else here: a persistent "this turn, no Done button" mode
+//     (selectionMode.type 'water-transform') meant to coexist with the
+//     rest of the bot's turn (transform an adjacent water stone
+//     opportunistically while moving), not a one-shot pick-then-done
+//     choice. driveWaterTransform() only acts when a stone is adjacent
+//     RIGHT NOW (recomputed fresh, never trusting the selectionMode's own
+//     cached highlight list — see its own comment for why); bot.js's
+//     waitForQuiescence() treats a false return from THIS mode specifically
+//     as "quiescent, not stuck" instead of cancelling like every other
+//     undriven selection would be, so the effect survives for the bot's
+//     whole turn instead of getting force-cancelled the instant no water
+//     stone happens to be adjacent yet.
 //   - driveTransmute(): the only scroll with an open-ended discard-for-AP
 //     modal and NO selectionMode object (detected via DOM id directly,
 //     same as scroll-effects.js's EFFECT_MODAL_IDS safety net).
@@ -25,22 +38,9 @@
 //     (gated on window.BotArena.isRunning(), called from bot.js) and real
 //     multiplayer (js/bot-driver.js's respondForBots(), ticking alongside
 //     its turn watcher).
-// NOT yet driven:
-//   - Control the Current (WATER_SCROLL_5) — architecturally different
-//     from everything else here: a persistent "this turn, no Done button"
-//     mode (selectionMode.type 'water-transform') meant to coexist with
-//     the rest of the bot's turn (transform an adjacent water stone
-//     opportunistically while moving), not a one-shot pick-then-done
-//     choice. waitForQuiescence() cancels any selectionMode driveSelection()
-//     can't act on — for a persistent mode that would prematurely END the
-//     effect's whole-turn duration the instant no water stone happens to
-//     be adjacent yet, denying any benefit from moving toward one later.
-//     Needs a bot.js waitForQuiescence() change (treat this mode as
-//     non-blocking: act if a stone is adjacent, else let the normal turn
-//     loop continue without cancelling), not just a driver function here.
-//   - Excavate's deferred teleport, Telekinesis, and Take Flight's
-//     destination step are drag-based (no click handler to call) and are
-//     out of scope until a programmatic hook exists.
+// NOT yet driven: Excavate's deferred teleport, Telekinesis, and Take
+// Flight's destination step are drag-based (no click handler to call) and
+// are out of scope until a programmatic hook exists.
 //
 // LOAD ORDER: after bot-sim.js, before bot.js (bot.js calls into this) —
 // but this file must not reach into bot.js's closure; it reads game state
@@ -188,6 +188,30 @@
             const nearest = tiles.reduce((a, b) => (!a || dist(first, b) < dist(first, a)) ? b : a, null);
             sm.handleTileClick(nearest);
         }
+        return true;
+    }
+
+    // ----------------------------------------------------------------
+    // Control the Current (WATER_SCROLL_5) — persistent whole-turn mode,
+    // NOT a one-shot pick (no "Done" button — see the file header's
+    // "architecturally different" note). Only acts when a water stone is
+    // adjacent RIGHT NOW: recomputed fresh via se.getAdjacentWaterStones(),
+    // never via sm.highlightedStones — that cache is only refreshed by
+    // placePlayer()'s move branch (game-core.js), which bot-state.js's
+    // 'move' action bypasses (it mutates position directly), so trusting
+    // it here would silently miss stones that became adjacent after a bot
+    // move. Returning false when nothing is adjacent is expected and
+    // normal, not "stuck" — see bot.js's waitForQuiescence() for the
+    // matching non-blocking treatment this mode needs.
+    // ----------------------------------------------------------------
+    function driveWaterTransform(se, sm) {
+        const pos = (typeof playerPositions !== 'undefined') ? playerPositions[sm.casterIndex] : null;
+        if (!pos) return false;
+        const stones = se.getAdjacentWaterStones(pos, sm.casterIndex);
+        if (!stones.length) return false;
+        sm.handleStoneClick(stones[0]); // opens water-transform-modal synchronously
+        const modal = document.getElementById('water-transform-modal');
+        if (modal) clickBestElement(modal, rankedElements()); // 'water' itself just won't match — falls through
         return true;
     }
 
@@ -608,9 +632,8 @@
             case 'scorched-earth':     acted = driveScorchedEarth(se, sm); kind = 'scorched-earth'; break;
             case 'tile-swap':          acted = driveTileSwap(se, sm); kind = 'tile-swap'; break;
             case 'tile-element-change': acted = driveWanderingRiver(se, sm); kind = 'wandering-river'; break;
+            case 'water-transform':    acted = driveWaterTransform(se, sm); kind = 'water-transform'; break;
             // telekinesis / take-flight-drag: drag-based, not driven yet.
-            // water-transform: persistent whole-turn mode, needs a
-            // waitForQuiescence() change — see file header. Not driven here.
             // excavate-teleport: click-based but not yet implemented.
             default: break;
         }
@@ -647,5 +670,5 @@
     }
 
     window.BotEffects = { driveSelection, rankedElements, driveTransmute, decideResponse };
-    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder, Transmute, response scrolls)');
+    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder, Control the Current, Transmute, response scrolls)');
 })();

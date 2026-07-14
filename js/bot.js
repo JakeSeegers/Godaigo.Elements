@@ -1448,7 +1448,8 @@
             // Selection modes (Sacrificial Pyre, Telekinesis, Take Flight, …)
             // need input — Stage 2.5's BotEffects drives the ones it knows
             // (see js/bot-effects.js); anything else is cancelled so the turn
-            // never wedges. Modal-based effects (Scholar's Insight, Create,
+            // never wedges (Control the Current is the one exception — see
+            // below). Modal-based effects (Scholar's Insight, Create,
             // Arson…) don't always register a selectionMode, so ALSO detect
             // their overlay elements directly — otherwise the modal lingers
             // on screen for the rest of the game, blocking the board view.
@@ -1458,6 +1459,22 @@
                 if (window.BotEffects?.driveSelection()) {
                     await tick(250);
                     continue;
+                }
+                // Control the Current (water-transform) is a persistent
+                // whole-turn mode with no "Done" button — driveSelection()
+                // returning false here just means no water stone is
+                // adjacent RIGHT NOW, not that the bot is stuck. Cancelling
+                // it like every other undriven selection would prematurely
+                // end the effect's whole-turn duration the instant that's
+                // true, denying any benefit from moving toward a water
+                // stone later in the same turn. Treat it as quiescent
+                // instead — botTurn()'s loop calls waitForQuiescence()
+                // again after the bot's next real action (typically a
+                // move), re-checking for a newly-adjacent stone then. The
+                // scroll's own clearTurnBuffs() (game-core.js, called on
+                // End Turn) is what actually ends this mode.
+                if (se?.selectionMode?.type === 'water-transform') {
+                    return;
                 }
                 log(`Cancelling a selection the bot cannot drive${openModal ? ` (${openModal})` : ''}`);
                 se?.cancelSelectionMode?.();
