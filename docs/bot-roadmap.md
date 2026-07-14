@@ -181,8 +181,9 @@ when it's worth an earth stone's 5 AP, same as everything else in the table.
 Not yet mirrored in `bot-sim.js`, so hybrid-brain lookahead search can't plan
 around it yet — only the greedy scoreAction() path considers it.
 
-Not yet enumerated (Stage 2+ work): catacomb teleports, scroll-effect
-sub-choices (target selection inside effects), hand→common moves.
+Not yet enumerated (Stage 2+ work): scroll-effect sub-choices (target
+selection inside effects), hand→common moves. Catacomb/Freedom teleports
+were added later — see STAGE 5.
 
 **FIXED bug — placement phase was dead code outside real multiplayer (found
 via a fresh user report of the bot "immediately stuck" — traced with a
@@ -1160,6 +1161,68 @@ pool grants standing bonus AP — `voidAP = pool.void` each turn,
   would need the cached set threaded through `simulate()`'s call chain) or
   stay a root-only heuristic (simpler, tie-breaks the immediate choice
   without pretending to model how the opponent reroutes around it).
+
+## STAGE 5 — Catacomb/Freedom teleport action (DONE)
+
+Prompted by a user question: why can't bots use catacomb tiles to teleport?
+Answer at the time: they simply weren't in the bot's action vocabulary —
+`legalActions()` never enumerated them, so no amount of scoring could make
+a bot choose one. Root mechanic (`game-ui.js`, `updateCatacombIndicators()`
++ its click handler, ~line 3560-3720): standing on a revealed catacomb
+shrine — or ANY revealed elemental shrine while the Freedom (Wind III)
+buff is active — lets a player jump to any OTHER revealed catacomb-like
+shrine centre with no stone/player on it, for free (0 AP), via
+`placePlayer(x, y)` (which also fires `checkWinCondition()` as a side
+effect, same as any other repositioning).
+
+Added across the Stage-0/2 seam, same pattern as every other action:
+- **`bot-state.js`** — new `{type:'teleport', x, y, shrineType}` in the
+  canonical vocabulary. `legalActions()` mirrors
+  `catacombEligibility()`/`updateCatacombIndicators()`'s exact rule
+  (origin must be catacomb-like; destination must be a different, revealed,
+  unoccupied catacomb-like shrine) — checks `t.flipped` before ever
+  touching `t.shrineType`, per the DO-NOT-LIST rule, even though the
+  real-game filter this mirrors doesn't bother with that ordering (harmless
+  there since a human never sees the intermediate boolean). `applyAction()`
+  re-validates the destination fresh and calls `placePlayer()` directly —
+  never reimplements the teleport itself, same discipline as `breakStone`
+  reusing `attemptBreakStone()`.
+- **`bot-sim.js`** — new `simTeleport()` (pure position update, no AP cost,
+  no reveal side effect since the destination is always already revealed)
+  wired into `simulate()`'s switch. This is what makes the ROOT decision
+  ("should I teleport right now") correctly valued under Hybrid-brain
+  search: `searchPick()`'s root candidate list always comes from
+  `BotState.legalActions()` (real DOM state, sees teleport including the
+  Freedom case), and now `simulate()` knows how to apply one. **Known
+  limitation, same category as `breakStone`:** `bot-sim.js`'s OWN pure
+  `legalActions(snap)` — used for DEEPER search plies (2+), since those
+  can't call the real `BotState.legalActions()` on a hypothetical snapshot
+  — does NOT generate teleport candidates. Partly because the Freedom-buff
+  state that gates elemental-shrine eligibility isn't carried in the
+  snapshot schema at all. A multi-step plan that hops through a catacomb
+  mid-sequence won't be discovered by lookahead; deciding whether to
+  teleport as the immediate next action is unaffected.
+- **`bot.js`** — two new weights: `teleportBase` (small flat nudge — it's
+  free, so there's rarely a reason to decline one) and
+  `teleportShrineValue` (× `shrineValue(snap, destination)` when the
+  destination is elemental — the Freedom case only; plain catacomb
+  destinations have no resource value, just repositioning value, so they
+  score `teleportBase` alone). No path-cost division like
+  `moveShrineValue` gets, since the hop is free — full value applies.
+
+Verified headless against a real running game (not synthetic snapshots
+alone): staged two injected catacomb tiles, confirmed `legalActions()`
+offers exactly the one valid destination (not the origin shrine itself),
+`scoreAction()`'s flat score matches `teleportBase` exactly for a plain
+catacomb destination, `applyAction()` moves the pawn with zero AP spent,
+and `BotSim.simulate()` mirrors the same position change. Negative control:
+standing on a plain non-shrine hex yields zero teleport candidates even
+with revealed catacombs elsewhere on the board. Freedom case: zero
+candidates from an elemental shrine without the buff, one candidate with
+it stubbed active, destination scored `teleportBase + teleportShrineValue
+× shrineValue` exactly (not just the flat base — confirms the bonus term
+actually fires). 10-game self-play regression (`BotArena.run`) shows no
+errors and a normal win/draw mix with the new action type live.
 
 ---
 

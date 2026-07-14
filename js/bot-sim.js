@@ -315,6 +315,14 @@
         }
     }
 
+    // Catacomb/Freedom shrine hop — free (no AP), destination is always
+    // already-revealed (see bot-state.js's legalActions() candidate filter),
+    // so unlike simMove() there's no tile-reveal side effect to model.
+    function simTeleport(snap, a) {
+        const p = activePlayer(snap);
+        p.x = a.x; p.y = a.y;
+    }
+
     function simEndTurn(snap) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
@@ -450,6 +458,7 @@
         const next = clone(snap);
         switch (action?.type) {
             case 'move':          simMove(next, action); break;
+            case 'teleport':      simTeleport(next, action); break;
             case 'endTurn':       simEndTurn(next); break;
             case 'placeStone':    simPlaceStone(next, action); break;
             case 'cast':          simCast(next, action); break;

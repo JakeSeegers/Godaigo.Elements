@@ -15,6 +15,48 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT STAGE 5: catacomb/Freedom teleport action** — `js/bot-state.js`,
+  `js/bot-sim.js`, `js/bot.js`, `docs/bot-roadmap.md`. User question: why
+  can't bots use catacomb tiles to teleport? Answer: they weren't in the
+  bot's action vocabulary at all — `legalActions()` never enumerated them
+  (explicitly flagged as a gap in the file's own comment), so no scoring
+  could ever make a bot choose one. This is the Track C item flagged
+  unscoped/unbuilt in the opponent-awareness entry below. Added
+  `{type:'teleport', x, y, shrineType}`: `bot-state.js`'s `legalActions()`
+  mirrors `game-ui.js`'s `catacombEligibility()`/`updateCatacombIndicators()`
+  exactly (origin must be a revealed catacomb shrine, or ANY revealed
+  elemental shrine while Freedom is active; destination must be a
+  different revealed, unoccupied catacomb-like shrine) — checks
+  `t.flipped` before ever touching `t.shrineType`, per the DO-NOT-LIST
+  rule. `applyAction()` re-validates fresh and calls `placePlayer()`
+  directly, never reimplementing the teleport (same discipline as
+  `breakStone` reusing `attemptBreakStone()`) — this also means a
+  home-adjacent teleport can register a win via `placePlayer()`'s own
+  `checkWinCondition()` call, same as walking there would.
+  `bot-sim.js` gained `simTeleport()` (pure position update, free, wired
+  into `simulate()`'s switch) so Hybrid-brain search correctly values
+  teleporting as the immediate root decision — root's candidate list
+  always comes from the real `BotState.legalActions()`, which does see
+  teleport. Known limitation, same category as `breakStone`: `bot-sim.js`'s
+  own pure `legalActions(snap)` — used for deeper search plies, since
+  those can't call the real DOM-reading function on a hypothetical
+  snapshot — doesn't generate teleport candidates yet, partly because the
+  Freedom-buff state isn't carried in the snapshot schema at all. A
+  multi-step plan that hops through a catacomb mid-sequence won't be
+  discovered by lookahead; the immediate "should I teleport now" decision
+  is unaffected. `bot.js` gained `teleportBase` (small flat nudge — it's
+  free, rarely worth declining) and `teleportShrineValue` (× shrineValue of
+  the destination, Freedom-elemental case only — plain catacomb
+  destinations have no resource value). Verified against a real running
+  game: staged two injected catacomb tiles — `legalActions()` offers
+  exactly the one valid destination, `scoreAction()`'s score matches
+  `teleportBase` exactly for a plain destination, `applyAction()` moves
+  the pawn with zero AP spent, `BotSim.simulate()` mirrors the same
+  position change. Negative control: zero candidates from a plain non-shrine
+  hex even with catacombs revealed elsewhere. Freedom case: zero candidates
+  from an elemental shrine without the buff, one with it stubbed active,
+  score correctly includes the shrineValue bonus (not just the flat base).
+  10-game self-play regression shows no errors, normal win/draw mix.
 - **BOT WEIGHTS: value held void stones for their standing AP bonus; scoped
   earth/fire tactics as follow-up** — `js/bot.js`, `docs/bot-roadmap.md`.
   User question: should place/break weights differ per stone type, since
@@ -568,9 +610,9 @@ exist in code but are untested end-to-end. Docs system fully in place.
    13-12-5, avg turns 69.3 vs. 70.2 — statistically identical, **no
    regression**. Not yet reachable from hybrid search's non-search branch
    (greedy `scoreAction()` has no opponent awareness) — flagged, not closed.
-   Tracks B (generalize `playGame()`/`run()`/`evolve()` past 2 players) and C
-   (catacomb/Freedom teleport action) remain unscoped/unbuilt as originally
-   planned.
+   Track B (generalize `playGame()`/`run()`/`evolve()` past 2 players)
+   remains unscoped/unbuilt as originally planned. Track C (catacomb/Freedom
+   teleport action) is **DONE** — see the BOT STAGE 5 entry above.
 5. **KNOWN ISSUE, not yet fixed: response-only (level-1) scrolls can
    permanently clog a common-area element slot ("elemental lockout").**
    Neither bot can ever cast OR respond with a level-1 scroll (main-phase
@@ -655,4 +697,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-13 (void pool stones now valued for their standing AP bonus via 3 new weights — evalVoidHeld, shrineVoidBonus, placeVoidSpendPenalty — and earth-blocking/fire-interference tactics scoped as a follow-up in bot-roadmap.md § STAGE 4; evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*
+*Last updated: 2026-07-14 (bots can now use catacomb/Freedom shrine teleports — a new free-repositioning action added across bot-state.js/bot-sim.js/bot.js, closing the long-flagged Track C gap; void pool stones now valued for their standing AP bonus via 3 new weights — evalVoidHeld, shrineVoidBonus, placeVoidSpendPenalty — and earth-blocking/fire-interference tactics scoped as a follow-up in bot-roadmap.md § STAGE 4; evolve()'s population members now carry a stable id + parentIds so elites keep their identity across generations and bred children record their lineage, exposed via a new 4th onGeneration argument; the player-facing Bot Training panel is now a full-screen modal with a clickable Population roster, a Generations log, and a click-through per-member weight-diagram detail view, plus explainer tooltips on the Players/Repeat controls; fixed bots rendering with the wrong color/position on non-host clients — a stale activePlayerIndex read after placeTile() had already advanced it; fixed a real-multiplayer placement-phase freeze — tilePlayerIndex missed a race correction playerPositions/ownTile.playerIndex already had, surfaced by the new multi-bot lobby feature; bots now drive Sacrificial Pyre/Inspiring Draught/Quick Reflexes instead of cancelling them; Joytone is silenced for the full duration of Train Weights/Evolve/Breed runs, and its power button is now unified with the Settings "Adaptive Music" toggle; real multiplayer lobbies can now hold more than one bot player, up to the 5-player cap, all sharing the current champion weights; Start Training persists champions to a new Supabase table and auto-applies the best community one on load, closing the "training only helps one browser" gap; file-based champion breeding via the Bot Training panel stays local/manual by design; fixed the out-of-AP modal appearing during Watchable/visual bot runs, not just stale leftovers; evolve() crossover between elites; fixed Stop being ignored during Train Weights' confirmation phase)*

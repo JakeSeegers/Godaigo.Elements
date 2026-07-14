@@ -169,10 +169,22 @@
     //   {type:'breakStone', stoneId, x, y, stoneType, cost}
     //   {type:'discardScroll', scroll, from:'hand'|'active'}
     //   {type:'endTurn'}
-    // NOT yet enumerated (Stage 2+): catacomb teleports, scroll-effect
-    // sub-choices. breakStone is also not yet mirrored in bot-sim.js, so
-    // hybrid-brain lookahead search cannot plan around it — only the greedy
-    // scoreAction() path considers it today.
+    //   {type:'teleport', x, y, shrineType}   // catacomb/Freedom shrine hop, free (0 AP)
+    // NOT yet enumerated (Stage 2+): scroll-effect sub-choices (those go
+    // through BotEffects, a separate driver — see bot-effects.js).
+    // breakStone is also not yet mirrored in bot-sim.js's OWN legalActions(),
+    // so hybrid-brain search cannot PLAN a sequence around it beyond the
+    // immediate root choice — only the greedy scoreAction() path fully
+    // considers it. teleport is in the same position: bot-sim.js's
+    // simulate() knows how to APPLY one (so search correctly values
+    // teleporting as the immediate/root decision, since the root's own
+    // candidate list always comes from THIS function, not the pure
+    // mirror), but bot-sim.js's legalActions() doesn't yet GENERATE
+    // teleport candidates for deeper simulated plies — partly because the
+    // Freedom-buff state that gates elemental-shrine hops isn't carried in
+    // the snapshot schema at all yet. A multi-step plan that hops through a
+    // catacomb mid-sequence won't be discovered by lookahead; a bot
+    // deciding whether to teleport RIGHT NOW is unaffected.
     // ----------------------------------------------------------------
 
     // Same rank→AP-cost table `attemptBreakStone()` uses in game-core.js
@@ -340,6 +352,32 @@
                 if (!mv.canMove) continue;
                 const cost = mv.cost ?? 1;
                 if (cost <= ap) actions.push({ type: 'move', x: h.x, y: h.y, cost });
+            }
+        }
+
+        // ── teleport: standing on a revealed catacomb shrine (or ANY
+        // elemental shrine while Freedom is active) lets the player jump to
+        // any OTHER revealed catacomb-like shrine centre, free (0 AP).
+        // Mirrors game-ui.js's catacombEligibility()/updateCatacombIndicators()
+        // exactly — same eligibility rule, same destination filter — just
+        // enumerated as a candidate list instead of clickable DOM circles.
+        if (!onStone) {
+            const currentShrine = placedTiles.find(t =>
+                t.shrineType !== 'player' && Math.hypot(t.x - player.x, t.y - player.y) < HEX_NEAR);
+            const freedomActive = !!(window.spellSystem?.scrollEffects?.hasFreedomActive?.(activePlayerIndex));
+            const elementalTypes = ['earth', 'water', 'fire', 'wind', 'void'];
+            // Never read shrineType of an unrevealed tile — check t.flipped
+            // FIRST, same DO-NOT-LIST rule move/placeStone candidates follow.
+            const isCatacombLike = (t) => !!t && !t.flipped &&
+                (t.shrineType === 'catacomb' || (freedomActive && elementalTypes.includes(t.shrineType)));
+            if (currentShrine && isCatacombLike(currentShrine)) {
+                for (const t of placedTiles) {
+                    if (!isCatacombLike(t)) continue;
+                    if (Math.hypot(t.x - currentShrine.x, t.y - currentShrine.y) < HEX_NEAR) continue; // same shrine
+                    if (placedStones.some(s => Math.hypot(s.x - t.x, s.y - t.y) < HEX_NEAR)) continue; // stone blocks it
+                    if (playerPositions.some(p => p && Math.hypot(p.x - t.x, p.y - t.y) < HEX_NEAR)) continue; // occupied
+                    actions.push({ type: 'teleport', x: t.x, y: t.y, shrineType: t.shrineType });
+                }
             }
         }
 
@@ -512,6 +550,34 @@
                 if (typeof handlePlayerLanding === 'function') handlePlayerLanding(a.x, a.y);
                 if (typeof broadcastPlayerMovement === 'function') {
                     broadcastPlayerMovement(activePlayerIndex, a.x, a.y, a.cost);
+                }
+                return { ok: true };
+            }
+            case 'teleport': {
+                const teleportPlayer = playerPositions[activePlayerIndex];
+                if (!teleportPlayer) return { ok: false, reason: 'pawn not found' };
+                // Re-validate the destination fresh — the board may have
+                // changed since legalActions() was computed. Mirrors the UI
+                // click handler's own re-validation in game-ui.js.
+                if (placedStones.some(s => Math.hypot(s.x - a.x, s.y - a.y) < HEX_NEAR)) {
+                    return { ok: false, reason: 'destination blocked by stone' };
+                }
+                if (playerPositions.some(p => p && Math.hypot(p.x - a.x, p.y - a.y) < HEX_NEAR)) {
+                    return { ok: false, reason: 'destination occupied' };
+                }
+                const teleportingIndex = activePlayerIndex; // same capture-before-call
+                                                              // discipline as placeTile above
+                // placePlayer() is the exact function the UI's teleport-indicator
+                // click handler calls — never reimplement the teleport itself
+                // (it also fires checkWinCondition() as a side effect, letting
+                // a home-adjacent teleport register a win the same way walking
+                // there would).
+                placePlayer(a.x, a.y);
+                if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
+                    typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('catacomb-teleport', {
+                        playerIndex: teleportingIndex, x: a.x, y: a.y
+                    });
                 }
                 return { ok: true };
             }

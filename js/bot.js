@@ -102,6 +102,17 @@
                                  // scripted override): a genuinely better action found by the
                                  // same scoring pass — a cast, a richer shrine — can still win.
 
+        // catacomb/Freedom teleport — free (0 AP) hop between revealed
+        // catacomb-like shrine centres (see bot-state.js's legalActions()).
+        teleportBase:        5,  // small flat nudge so an otherwise-neutral hop still
+                                 // gets picked over doing nothing when nothing else applies —
+                                 // it's free, so there's rarely a reason to decline one
+        teleportShrineValue: 1.0, // × shrineValue(destination) when the destination is an
+                                 // ELEMENTAL shrine (Freedom-only case — plain catacomb
+                                 // destinations have no shrineValue). No path-cost division
+                                 // like moveShrineValue gets — the hop is free, so the full
+                                 // value applies, not a discounted one
+
         // breaking a stone (attemptBreakStone) — costs AP by stone rank
         // (void 1 .. earth 5). Mostly matters for clearing a path an earth
         // stone would otherwise block outright (canPlayerMoveToHex treats
@@ -457,6 +468,14 @@
                 const revisit = revisitPenalty(ctx.recentPositions || [], a, WEIGHTS.moveRevisitPenalty);
                 return WEIGHTS.moveBase + WEIGHTS.moveShrineValue * best
                      + WEIGHTS.moveApPenalty * a.cost + explore + revisit + home + fixation;
+            }
+
+            case 'teleport': {
+                let s = WEIGHTS.teleportBase;
+                if (ELEMENTS.includes(a.shrineType)) {
+                    s += WEIGHTS.teleportShrineValue * shrineValue(snap, a.shrineType);
+                }
+                return s;
             }
 
             case 'breakStone': {
