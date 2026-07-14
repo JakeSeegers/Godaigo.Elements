@@ -847,15 +847,19 @@ class ResponseWindowSystem {
             console.log(`  Broadcasted response`);
         }
 
-        // Close the current modal and show "waiting" screen while others decide
-        this.closeResponseModal();
+        // Only tear down THIS screen's modal when the human at this screen is
+        // the one who responded. When the host's client submits on behalf of a
+        // BOT (BotEffects.decideResponse via bot-driver's respondForBots), the
+        // host's own response window must stay open — they haven't decided yet.
+        const isLocalHuman = myIndex === this.localResponderIndex();
+        if (isLocalHuman) this.closeResponseModal();
 
         const isCasterClient = this.isArbitratorClient();
         if (isCasterClient) {
             // Wait for all other eligible players before arbitrating
             console.log(`  Response submitted (caster client) — waiting for all players`);
             this.checkAllPlayersResponded();
-        } else {
+        } else if (isLocalHuman) {
             // Non-caster: sent our response, wait for caster to arbitrate and broadcast result
             console.log(`  Response sent, waiting for caster to resolve`);
             this.clearResponseTimeout();
@@ -878,9 +882,12 @@ class ResponseWindowSystem {
         if (isCasterClient) {
             // Caster's client: check if all non-casters have submitted
             this.checkAllPlayersResponded();
-        } else {
-            // Non-caster's client: just close the modal and wait for
-            // the caster to resolve and broadcast 'response-resolved'
+        } else if (playerIndex === this.localResponderIndex()) {
+            // Non-caster's client, and it's the human at this screen who
+            // passed: close the modal and wait for the caster to resolve and
+            // broadcast 'response-resolved'. A pass submitted on behalf of a
+            // BOT (host's respondForBots watcher) must NOT tear down the
+            // host's own still-open response window or its countdown.
             this.closeResponseModal();
             this.clearResponseTimeout();
         }
@@ -1561,8 +1568,12 @@ class ResponseWindowSystem {
         if (this.respondingPlayers.size >= requiredResponders) {
             // All players have submitted — arbitrate by element rank
             this._arbitrateAndResolve();
-        } else {
-            // Still waiting — show the waiting screen if we're not already
+        } else if (this.respondingPlayers.has(this.localResponderIndex())) {
+            // Still waiting — show the waiting screen, but ONLY once the human
+            // at this screen has submitted. On a host arbitrating for a bot
+            // caster, other players' passes/responses land here while the
+            // host's own response window is still open — swapping in the
+            // waiting spinner would wipe their response options mid-decision.
             this.showWaitingForOthers();
         }
     }
