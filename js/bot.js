@@ -802,6 +802,15 @@
         const holding = (self.hand || []).includes(plan.scroll) || self.active.includes(plan.scroll) ||
                         (snap.commonArea || []).includes(plan.scroll); // common-area scrolls are castable too
         if (!holding) return false;
+        // Cells were on the board when the plan was MADE (viablePatternAt
+        // checks the grid) — but Telekinesis / Shifting Sands can move the
+        // tile out from under an in-flight plan, leaving its cells floating
+        // over empty space. Re-check every turn so the plan dies and the bot
+        // replans, instead of trying to build a pattern in the void.
+        const grid = window.BotState.hexGrid();
+        for (const c of plan.cells) {
+            if (!grid.some(h => Math.hypot(h.x - c.x, h.y - c.y) < 5)) return false;
+        }
         for (const c of plan.cells) {
             const s = placedStones.find(st => Math.hypot(st.x - c.x, st.y - c.y) < 5);
             if (s && s.type !== c.type) return false;                       // cell corrupted

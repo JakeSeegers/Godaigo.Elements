@@ -525,6 +525,20 @@
                 if (playerPositions.some(p => p && Math.hypot(p.x - a.x, p.y - a.y) < HEX_NEAR)) {
                     return { ok: false, reason: 'a pawn occupies that hex' };
                 }
+                // Must be a real board hex. The human drag-drop path gets this
+                // implicitly (findValidStonePosition snaps to the hex grid),
+                // but bot callers pass raw coordinates — and a PLAN's cells
+                // are only validated against the board when the plan is MADE.
+                // If Telekinesis/Shifting Sands moves the tile out from under
+                // an in-flight plan, nothing else here would stop the bot
+                // placing stones onto the empty space where the tile used to
+                // be (isInPlacementRange is pure distance/buffs, and
+                // isPositionOnFlippedTile returns false when there's no hex
+                // at all). Observed on a real board as stones floating on the
+                // black gap left behind by a telekinesis'd tile.
+                if (!hexGrid().some(h => Math.hypot(h.x - a.x, h.y - a.y) < HEX_NEAR)) {
+                    return { ok: false, reason: 'not on the board (tile moved away?)' };
+                }
                 if (typeof isPositionOnFlippedTile === 'function' &&
                     isPositionOnFlippedTile(a.x, a.y, hexGrid())) {
                     return { ok: false, reason: 'cannot place a stone on a face-down tile' };
