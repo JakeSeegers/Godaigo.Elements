@@ -15,6 +15,62 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT TRAINING UI: persistent progress popup + "End Early" control** —
+  `js/bot-arena.js`, `js/game-ui.js`, `js/INDEX.md`. User request: the
+  "🧬 Bot Training" panel should show info about the current run and stay
+  visible like a popup (comparing it to the always-visible Hand panel),
+  plus let the user end training early and force the confirmation match
+  against the starting weights rather than just aborting. Clarified via
+  AskUserQuestion: the popup should appear automatically whenever ANY
+  training/breeding run is active (not just while the big modal happens
+  to be open), and "End Early" should live in the popup itself.
+  `bot-arena.js` gained a SEPARATE soft-stop flag, `endEarly()`/
+  `_endEarlyRequested`, checked in `evolve()`'s generation and per-game
+  loops alongside the existing `_stopRequested`. Deliberately distinct
+  from `stop()`: the existing Stop button is a hard abort that
+  `runWeightTraining()` treats as "discard everything, revert to the
+  starting weights" — End Early needs the opposite semantics, cutting the
+  generation loop short while still returning a genuinely usable
+  champion (`evolve()` only advances `champion` after a generation
+  finishes ranking, so an early exit never returns a half-computed
+  result), so the caller's normal confirm-or-download flow runs on
+  whatever was reached so far.
+  `game-ui.js` gained a new persistent corner popup
+  (`ensureTrainingPopup()`/`showTrainingPopup()`/`hideTrainingPopup()`),
+  deliberately defined at the OUTER scope (same level as
+  `runWeightTraining()`/`stopAnyRunningBotJob()`, not inside
+  `openBotTrainingPanel()`) so it survives the main modal being closed
+  and reopened — everything inside the modal itself (including its own
+  progress text) is rebuilt fresh every time it opens, so a
+  closed-and-reopened modal can't show a run that's already in flight;
+  this popup is attached directly to `document.body` and referenced by a
+  stable outer variable instead, so the SAME onProgress callback a
+  running job captured at start time keeps reaching it regardless.
+  Shows: training vs. breeding, player count, population size,
+  generation/confirming phase, games done, elapsed time, and best
+  fitness so far. "End Early → Test Now" hides itself once the confirming
+  phase starts (nothing left to skip ahead to); for breeding, which has
+  no confirmation phase at all, it just means "stop generating more
+  generations and download the current best now." An "⤢" button
+  reopens the full modal via a small `window._openBotTrainingPanel`
+  bridge. Deliberately NOT done: hoisting the modal's own roster/
+  generation-log state to the same outer-scope persistence — reopening
+  the modal mid-run still shows an empty roster until the next
+  generation tick populates it fresh; scoped as a pre-existing, secondary
+  rough edge rather than risking a bigger refactor of the lineage-tracking
+  display built earlier this session.
+  Verified against the real running game: a fast breeding run
+  (population 2) confirms the popup shows correct scenario/progress
+  info, survives the modal being closed, End Early genuinely cuts the
+  run short (1 of 20 requested generations completed) without breaking
+  the file download, and the popup hides on completion. A direct
+  `runWeightTraining()` call with a small preset (population 2, to avoid
+  the sandbox's slow per-generation cost at the UI's hardcoded
+  population-6 preset) confirms the training-path mechanism specifically:
+  End Early stops the generation loop early (1 of 10 requested) AND
+  correctly transitions into the confirming phase, producing a real
+  confirmation record (`"0-2"`) rather than a discarded `"stopped"`
+  result. 10-game arena regression shows no errors.
 - **BOT STAGE 2.5 FULLY COMPLETE: drive Excavate, Take Flight, and
   Telekinesis — the entire choice-space inventory is now covered** —
   `js/bot-effects.js`, `docs/bot-roadmap.md`, `js/INDEX.md`. User request:
@@ -864,4 +920,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-07-14 (the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
