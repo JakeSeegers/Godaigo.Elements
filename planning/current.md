@@ -15,6 +15,32 @@ the `ensureLocalMode()` fix below (it predates that branch's fork point) —
 restored during the merge, see bot-arena.js.)
 
 ## Last Committed Work
+- **BOT ARENA: trap-loop stall restart** — `js/bot-arena.js`, `js/INDEX.md`.
+  User request: arena/evolution games where bots wedge into a stable camp
+  (each parked on an elemental tile, neither moving) previously ground on to
+  the full 200-turn cap before registering as a draw. `playMatch()` is now a
+  wrapper around `_playMatchOnce()`: after each player's turn, a per-player
+  streak counter tracks consecutive own turns ended on the SAME revealed
+  elemental tile (closest-center-within-`TILE_SIZE*5.5` rule mirroring
+  game-core's unexported `findTileAtPosition()`, filtered to
+  revealed + earth/water/fire/wind/void — never reads `shrineType` off a
+  face-down tile). When ≥2 players' streaks hit 7 (`STALL_TURNS`/
+  `STALL_MIN_BOTS`), the round aborts (`result.stalled:true`) and playMatch
+  restarts it from scratch with a DERIVED seed (`baseSeed + attempt*1000003`
+  — replaying the identical seed would deterministically walk back into the
+  same trap). `opts.maxStallRestarts` (default 3) caps retries so a
+  pathological weight table can't spin forever; a round still stalled after
+  the budget is returned as-is (winner null → draw, `result.restarts` =
+  restarts consumed). Discarded attempts never reach
+  run()/evolve()/spectate() stats, so nothing double-counts. Applies to ALL
+  playMatch callers (run/evolve/spectate/playGame) uniformly. Verified
+  headless (Playwright, stubbed Supabase CDN): stubbed bot turns parking
+  both bots on two different elemental tiles trigger the abort exactly on
+  turn 14 (7 own turns each) and consume the full restart budget
+  (`stalled:true, restarts:1` with `maxStallRestarts:1`, 2 abort logs +
+  1 restart log); negative control with only ONE bot parked runs to its
+  turnCap untouched (`stalled:false, restarts:0`); a real 2-game
+  `BotArena.run()` batch completes clean with zero page errors.
 - **BOT TRAINING UI: persistent progress popup + "End Early" control** —
   `js/bot-arena.js`, `js/game-ui.js`, `js/INDEX.md`. User request: the
   "🧬 Bot Training" panel should show info about the current run and stay
@@ -920,4 +946,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-07-14 (latest: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
