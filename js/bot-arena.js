@@ -286,8 +286,25 @@
 
     // Shared "should we stop early" flag — set by stop(), checked by every
     // loop in run()/evolve()/spectate() so one Stop button covers all three.
+    // This is a HARD abort: callers (runWeightTraining()) treat it as
+    // "discard everything, revert to whatever was live before this run."
     let _stopRequested = false;
     function stop() { _stopRequested = true; }
+
+    // Separate SOFT-stop flag, evolve()-only: cuts the generation loop
+    // short but still returns a genuinely usable champion (the last FULLY
+    // completed generation's winner — evolve() only advances `champion`
+    // after a generation finishes ranking, so an early exit mid-generation
+    // never returns a half-computed result). Deliberately distinct from
+    // stop()/_stopRequested: callers that gate on "did the user hard-abort"
+    // (e.g. runWeightTraining()'s discard-and-revert branch) must NOT treat
+    // an early-end the same way, since the whole point is to still run the
+    // confirmation match (or, for breeding, still download the file) with
+    // whatever evolve() reached — the training itself is cut short, the
+    // RESULT is not discarded.
+    let _endEarlyRequested = false;
+    function endEarly() { _endEarlyRequested = true; }
+    function endEarlyRequested() { return _endEarlyRequested; }
 
     // ----------------------------------------------------------------
     // SHARED CORE: one full game for weightsPerPlayer.length players (2–5).
@@ -556,6 +573,7 @@
 
         _evolving = true;
         _stopRequested = false; // same stop() flag spectate() uses — shared "cancel a local bot job" signal
+        _endEarlyRequested = false; // soft-stop for THIS run only — see its own comment above
         const restore = visual ? null : muteEnvironment();
         const unsuppressJoytone = suppressJoytone();
         window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
@@ -593,12 +611,24 @@
         let champion = population[0].w;
 
         try {
-            for (let gen = 0; gen < generations && !_stopRequested; gen++) {
+            // NOTE on _endEarlyRequested granularity: like _stopRequested,
+            // this is checked inside the CURRENT generation's game loops too
+            // — clicking "End Early" mid-generation still finishes ranking
+            // that (now partial) generation and returns its winner, same as
+            // a hard stop() does today. Population slots 0/1 are always the
+            // previous generation's elites (carried over unchanged), so
+            // even an early interruption has real fitness signal for the
+            // two strongest known tables — but other slots may show 0
+            // (untested) fitness if their matchups never ran. In practice
+            // this mostly matters if end-early is clicked mid-generation
+            // rather than between them; not worth the extra complexity of
+            // discarding a partial generation outright for a v1.
+            for (let gen = 0; gen < generations && !_stopRequested && !_endEarlyRequested; gen++) {
                 const fitness = new Array(population.length).fill(0);
 
                 if (nPlayers === 2) {
-                    for (let i = 0; i < population.length && !_stopRequested; i++) {
-                        for (let j = i + 1; j < population.length && !_stopRequested; j++) {
+                    for (let i = 0; i < population.length && !_stopRequested && !_endEarlyRequested; i++) {
+                        for (let j = i + 1; j < population.length && !_stopRequested && !_endEarlyRequested; j++) {
                             if (visual && typeof updateStatus === 'function') {
                                 updateStatus(`🧬 Evolve gen ${gen + 1}/${generations}: pop#${i} vs pop#${j}`);
                             }
@@ -609,7 +639,7 @@
                     }
                 } else {
                     const gamesPerGen = opts.gamesPerGen ?? popSize * 3;
-                    for (let g = 0; g < gamesPerGen && !_stopRequested; g++) {
+                    for (let g = 0; g < gamesPerGen && !_stopRequested && !_endEarlyRequested; g++) {
                         const idxs = sampleDistinct(population.length, nPlayers, rng);
                         const weightsPerPlayer = idxs.map(i => population[i].w);
                         const gameSeed = seed * 100000 + gen * 1000 + g;
@@ -743,8 +773,10 @@
 
     window.BotArena = {
         run, evolve, playGame, playMatch, spectate, stop,
+        endEarly, // soft-stop: cuts evolve()'s generation loop short but keeps its result usable
         isSpectating, isEvolving, isRunning,
         stopRequested: () => _stopRequested, // was stop() called for the run in progress (or the one that just ended)?
+        endEarlyRequested,
         applyWeights: setWeights, // apply an {…} weight table to the LIVE WEIGHTS object in place
     };
     log('Loaded — window.BotArena ready (run / evolve / spectate)');

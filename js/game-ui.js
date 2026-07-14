@@ -4060,6 +4060,7 @@ document.getElementById('undo-move').onclick = function() {
             const report = (phase) => onProgress({
                 phase, gamesDone, totalGames, startedAt,
                 gen: lastGen, generations, fitness: lastFitness,
+                nPlayers, popSize, mode: 'training',
             });
 
             const champion = await window.BotArena.evolve(generations, {
@@ -4121,6 +4122,94 @@ document.getElementById('undo-move').onclick = function() {
                 } catch (e) {}
             }
             return { improved, record };
+        }
+
+        // ─── Persistent training-status popup ───────────────────────────────
+        // Small fixed-corner popup showing live progress for whichever
+        // Start Training / Start Breeding run is active — visible the moment
+        // a run starts, independent of whether the full "🧬 Bot Training"
+        // modal is open, same spirit as the always-visible floating Hand/
+        // Active/Common scroll panels (.fsp-* in css/styles.css) rather than
+        // requiring a full-screen overlay to stay open just to see progress.
+        // Deliberately defined at THIS outer scope (not inside
+        // openBotTrainingPanel()) so it survives the modal being closed and
+        // reopened: everything inside openBotTrainingPanel() — including its
+        // own renderProgress()/progressText — is recreated fresh every time
+        // the modal opens, but the onProgress/onGeneration callbacks a
+        // running job is actually invoking were captured at whichever
+        // moment it started, so a closed-and-reopened modal's fresh (empty)
+        // UI never hears from an in-flight run. This popup is attached
+        // directly to document.body and referenced by a stable outer
+        // variable, so it keeps receiving updates regardless.
+        let trainingPopupEl = null;
+        function fmtPopupTime(s) { return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`; }
+
+        function ensureTrainingPopup() {
+            if (trainingPopupEl) return trainingPopupEl;
+            const el = document.createElement('div');
+            el.id = 'bot-training-status-popup';
+            el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9998;'
+                + 'background:#1a1a2e;border:1px solid #5a5;border-radius:8px;'
+                + 'box-shadow:0 4px 16px rgba(0,0,0,0.6);padding:10px 12px;'
+                + 'min-width:230px;max-width:290px;font-size:11px;color:#ccc;display:none;';
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-size:12px;font-weight:bold;color:#eee;">🧬 Bot Training</span>
+                    <button id="bt-popup-expand" title="Open full panel" style="background:none;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:11px;padding:1px 6px;">⤢</button>
+                </div>
+                <div id="bt-popup-body" style="white-space:pre-line;color:#aaa;margin-bottom:8px;line-height:1.4;"></div>
+                <div style="display:flex;gap:6px;">
+                    <button id="bt-popup-end-early" style="flex:1;padding:4px 6px;background:#2d3a4a;color:#eee;border:1px solid #578;border-radius:4px;cursor:pointer;font-size:11px;">End Early → Test Now</button>
+                    <button id="bt-popup-stop" style="padding:4px 8px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:4px;cursor:pointer;font-size:11px;">Stop</button>
+                </div>
+            `;
+            document.body.appendChild(el);
+            el.querySelector('#bt-popup-expand').onclick = () => {
+                if (typeof window._openBotTrainingPanel === 'function') window._openBotTrainingPanel();
+            };
+            el.querySelector('#bt-popup-end-early').onclick = () => {
+                if (window.BotArena?.isRunning()) {
+                    window.BotArena.endEarly();
+                    updateStatus('Ending training early — running the confirmation match against the starting weights with the best result so far…');
+                }
+            };
+            el.querySelector('#bt-popup-stop').onclick = () => {
+                if (window.BotArena?.isRunning()) {
+                    window.BotArena.stop();
+                    updateStatus('Stopping — this run\'s result will be discarded, keeping the previous weights.');
+                }
+            };
+            trainingPopupEl = el;
+            return el;
+        }
+
+        // p: {phase, gamesDone, totalGames, startedAt, gen, generations,
+        //     fitness, nPlayers, popSize, mode:'training'|'breeding'}
+        function showTrainingPopup(p) {
+            const el = ensureTrainingPopup();
+            el.style.display = 'block';
+            const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
+            const elapsedS = (Date.now() - p.startedAt) / 1000;
+            const scenarioLine = `${p.mode === 'breeding' ? 'Breeding' : 'Training'} — ${p.nPlayers || 2} players, population ${p.popSize || '?'}`;
+            const genLine = p.phase === 'confirming'
+                ? 'Confirming: new champion vs. starting weights'
+                : `Generation ${p.gen}/${p.generations}`;
+            const bestFitness = Array.isArray(p.fitness) && p.fitness.length ? Math.max(...p.fitness) : null;
+            const fitnessLine = bestFitness !== null ? `Best fitness so far: ${bestFitness.toFixed(1)}` : '';
+            const progressLine = `Games: ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtPopupTime(elapsedS)} elapsed`;
+            el.querySelector('#bt-popup-body').textContent =
+                [scenarioLine, genLine, progressLine, fitnessLine].filter(Boolean).join('\n');
+            // Nothing left to "skip ahead to" once already confirming —
+            // and breeding has no confirmation phase to jump to at all, so
+            // End Early there just means "stop generating more generations
+            // and download the current best now" (still meaningful, keep
+            // the button, only the confirming-phase case hides it).
+            const endEarlyBtn = el.querySelector('#bt-popup-end-early');
+            if (endEarlyBtn) endEarlyBtn.style.display = p.phase === 'confirming' ? 'none' : 'block';
+        }
+
+        function hideTrainingPopup() {
+            if (trainingPopupEl) trainingPopupEl.style.display = 'none';
         }
 
         // ─── Hidden cheat panel ──────────────────────────────────────────────
@@ -4978,7 +5067,7 @@ document.getElementById('undo-move').onclick = function() {
                 modal.appendChild(body);
 
                 const desc = document.createElement('div');
-                desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match at the end.';
+                desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match at the end. A small progress popup stays visible in the corner even after you close this panel — use it to check in or end the run early.';
                 desc.style.cssText = 'font-size:11px;color:#999;';
                 body.appendChild(desc);
 
@@ -5059,6 +5148,10 @@ document.getElementById('undo-move').onclick = function() {
                     const elapsedS = (Date.now() - p.startedAt) / 1000;
                     const genLine = p.phase === 'confirming' ? 'Confirming result' : `gen ${p.gen}/${p.generations}`;
                     progressText.textContent = `${genLine} — games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtTime(elapsedS)}`;
+                    // Also update the persistent corner popup — see its own
+                    // comment for why it's a separate, outer-scope function
+                    // rather than just this progressText element.
+                    showTrainingPopup(p);
                 }
 
                 const actionRow = document.createElement('div');
@@ -5303,6 +5396,7 @@ document.getElementById('undo-move').onclick = function() {
                         startBtn.disabled = false;
                         if (breedBtn) breedBtn.disabled = false;
                         startBtn.textContent = 'Start Training';
+                        hideTrainingPopup();
                     }
                 };
 
@@ -5399,6 +5493,7 @@ document.getElementById('undo-move').onclick = function() {
                         const report = () => renderProgress({
                             phase: 'training', gamesDone, totalGames, startedAt,
                             gen: lastGen, generations: state.generations, fitness: lastFitness,
+                            nPlayers: state.n, popSize, mode: 'breeding',
                         });
 
                         const champion = await window.BotArena.evolve(state.generations, {
@@ -5445,6 +5540,7 @@ document.getElementById('undo-move').onclick = function() {
                         startBtn.disabled = false;
                         breedBtn.disabled = false;
                         breedBtn.textContent = 'Start Breeding';
+                        hideTrainingPopup();
                     }
                 };
                 body.appendChild(breedBtn);
@@ -5464,5 +5560,10 @@ document.getElementById('undo-move').onclick = function() {
                     clickTimer = setTimeout(() => { clickCount = 0; }, 3000);
                 }
             });
+
+            // Bridge so the outer-scope training popup's "expand" button can
+            // open the full modal without needing its own copy of the
+            // 5x-click trigger — see showTrainingPopup()/ensureTrainingPopup().
+            window._openBotTrainingPanel = openBotTrainingPanel;
         })();
 
