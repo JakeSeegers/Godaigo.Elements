@@ -1029,6 +1029,32 @@ origin (last write wins) and there's no cross-tab result comparison, so this
 is a DIY console workaround, not something worth building UI around. Real
 concurrent self-play at scale is Stage R5's job.
 
+**Headless parallel runner (`tools/arena-headless.mjs`) — R5-lite, built.**
+Runs the REAL game (full fidelity, zero game-code changes) in headless
+Chromium via Playwright — no open tab, no background-tab timer throttling
+(browsers clamp `setTimeout` to ≥1s in non-visible tabs, so foreground-only
+was a real constraint). Three modes:
+- `node tools/arena-headless.mjs --games 4 --seed 1` — smoke: one
+  `BotArena.run()` series, prints results + s/game.
+- `--evolve --shards 4 --generations 3 --pop 6 --games-per-pair 1` — N
+  parallel storage-isolated pages each run an independent `evolve()` with a
+  well-separated seed (solves the localStorage last-write-wins problem
+  above); all shard champions land in one `tools/.cache/evolve-*.json`.
+  Throughput scales ≈ linearly with shards up to core count.
+- `--confirm [file]` — round-robin playoff among the shard champions, then a
+  confirmation series vs the page's live baseline WEIGHTS (same gate as the
+  Train Weights button); only endorses the champion if its fitness beats the
+  baseline's. Baseline is captured EXPLICITLY because `playMatch` treats an
+  undefined table as "leave WEIGHTS alone" — mixing an explicit table with
+  undefined leaks one side's weights into the other's turns.
+Needs `playwright` (local or global npm install) + Chromium. supabase-js is
+served from a `tools/.cache/` copy when unpkg is unreachable (auto-cached on
+first run with network). Measured while building it: same seed at different
+`speedScale` values produces DIFFERENT game outcomes (timing races affect
+decisions — noise, not corruption), and below ~0.05 the sleeps stop
+dominating anyway (5× lower scale bought only ~1.5×) — so leave speed at
+0.1 and get throughput from `--shards` instead.
+
 **Confirmation gate (added after a v1 of this button silently made bots
 worse):** a single game per `evolve()` pairing is noisy — the per-generation
 winner can win by luck, not by being a better strategy — so v1 of the button

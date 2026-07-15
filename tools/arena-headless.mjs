@@ -9,6 +9,15 @@
 // and isolated storage, and all shard champions are written to one results file.
 //   node tools/arena-headless.mjs --evolve --shards 4 --generations 3 --pop 6 --games-per-pair 1
 //
+// Confirm mode (phase 3): pick the best shard champion and prove it. Runs a
+// round-robin playoff among the shard champions from an evolve results file,
+// then a confirmation series of playoff-winner vs the CURRENT baseline weights
+// (whatever the page loads: bot.js defaults, or the Supabase-served champion
+// when reachable). Only endorses the champion if it beats the baseline —
+// the same confirmation gate the cheat panel's Train Weights button applies.
+//   node tools/arena-headless.mjs --confirm                     # newest evolve-*.json
+//   node tools/arena-headless.mjs --confirm path/to/results.json
+//
 // Options (both modes unless noted):
 //   --seed N            base RNG seed (default 1)
 //   --players N         players per game, 2-5 (default 2)
@@ -21,7 +30,9 @@
 //   --generations N     evolve mode: generations per shard (default 3)
 //   --pop N             evolve mode: population size per shard (default 6)
 //   --games-per-pair N  evolve mode: games per round-robin pairing (default 1)
-//   --out FILE          evolve mode: results JSON path (default tools/.cache/evolve-<ts>.json)
+//   --out FILE          evolve/confirm mode: results JSON path (default tools/.cache/<mode>-<ts>.json)
+//   --playoff-games N   confirm mode: games per champion pairing (default 2)
+//   --confirm-games N   confirm mode: games in the final vs-baseline series (default 10)
 //
 // The game page needs supabase-js from unpkg; when that CDN is unreachable
 // (offline, locked-down proxy) the script serves a cached copy from
@@ -31,7 +42,7 @@
 //     package/dist/umd/supabase.js && mv package/dist/umd/supabase.js tools/.cache/supabase.js
 
 import http from 'node:http';
-import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { join, extname, normalize, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,6 +62,9 @@ function arg(name, fallback) {
 }
 const OPTS = {
     evolve: !!arg('evolve', false),
+    confirm: arg('confirm', false), // false | true (newest results) | path
+    playoffGames: +arg('playoff-games', 2),
+    confirmGames: +arg('confirm-games', 10),
     games: +arg('games', 4),
     seed: +arg('seed', 1),
     players: +arg('players', 2),
@@ -241,6 +255,112 @@ async function runEvolve(browser, url) {
     console.log('[runner] next: pick/confirm a champion against the baseline (phase 3) before trusting any of these.');
 }
 
+// ---------------------------------------------------------------- confirm mode
+// Run a list of A-vs-B series tasks across a pool of pages, in parallel.
+async function runSeriesPool(browser, url, tasks) {
+    const poolSize = Math.min(OPTS.shards, tasks.length);
+    const queue = tasks.map((t, i) => ({ ...t, index: i }));
+    const results = new Array(tasks.length);
+    await Promise.all(Array.from({ length: poolSize }, async (_, w) => {
+        const page = await bootGamePage(browser, url, `worker ${w}`);
+        let task;
+        while ((task = queue.shift())) {
+            console.log(`[runner] ${task.label} (${task.games} games) starting on worker ${w}`);
+            const r = await page.evaluate(async ({ a, b, games, seed, speed }) => {
+                const res = await window.BotArena.run(a, b, games, seed, { speed });
+                return {
+                    aWins: res.aWins, bWins: res.bWins, draws: res.draws,
+                    avgTurns: res.avgTurns, aFitness: res.aFitness, bFitness: res.bFitness,
+                };
+            }, { a: task.a, b: task.b, games: task.games, seed: task.seed, speed: OPTS.speed });
+            console.log(`[runner] ${task.label}: A ${r.aWins} — B ${r.bWins} (draws ${r.draws}, fitness ${r.aFitness.toFixed(2)} vs ${r.bFitness.toFixed(2)})`);
+            results[task.index] = { label: task.label, ...r };
+        }
+        await page.context().close();
+    }));
+    return results;
+}
+
+function newestEvolveResults() {
+    const files = readdirSync(CACHE_DIR).filter(f => /^evolve-.*\.json$/.test(f)).sort();
+    if (!files.length) throw new Error(`no evolve-*.json results in ${CACHE_DIR} — run --evolve first`);
+    return join(CACHE_DIR, files[files.length - 1]);
+}
+
+async function runConfirm(browser, url) {
+    const resultsPath = typeof OPTS.confirm === 'string' ? OPTS.confirm : newestEvolveResults();
+    const evolveResults = JSON.parse(readFileSync(resultsPath, 'utf8'));
+    const champions = evolveResults.shards.map(s => ({ shard: s.shard, w: s.champion }));
+    console.log(`[runner] confirm: ${champions.length} shard champion(s) from ${resultsPath}`);
+
+    // Baseline = whatever WEIGHTS the page actually plays with today. Captured
+    // explicitly because playMatch treats an undefined table as "leave WEIGHTS
+    // alone" — mixing an explicit champion with undefined would leak the
+    // champion's weights into the baseline's turns. The short settle wait gives
+    // bot.js's async Supabase champion-load a chance to apply first (no-op offline).
+    const basePage = await bootGamePage(browser, url, 'baseline');
+    const baseline = await basePage.evaluate(async () => {
+        await new Promise(r => setTimeout(r, 1500));
+        return { ...window.BotSystem.WEIGHTS };
+    });
+    await basePage.context().close();
+
+    // Playoff: round-robin among shard champions, evolve-style summed fitness.
+    let playoff = null;
+    let winner = champions[0];
+    if (champions.length > 1) {
+        const tasks = [];
+        for (let i = 0; i < champions.length; i++) {
+            for (let j = i + 1; j < champions.length; j++) {
+                tasks.push({
+                    label: `playoff: shard ${champions[i].shard} vs shard ${champions[j].shard}`,
+                    a: champions[i].w, b: champions[j].w, i, j,
+                    games: OPTS.playoffGames, seed: OPTS.seed + 500_000 + tasks.length * 101,
+                });
+            }
+        }
+        const results = await runSeriesPool(browser, url, tasks);
+        const fitness = new Array(champions.length).fill(0);
+        results.forEach((r, k) => { fitness[tasks[k].i] += r.aFitness; fitness[tasks[k].j] += r.bFitness; });
+        const ranked = champions.map((c, i) => ({ ...c, fitness: +fitness[i].toFixed(2) })).sort((a, b) => b.fitness - a.fitness);
+        console.log(`[runner] playoff ranking: ${ranked.map(r => `shard ${r.shard} (${r.fitness})`).join(' > ')}`);
+        winner = ranked[0];
+        playoff = { games: results, ranking: ranked.map(r => ({ shard: r.shard, fitness: r.fitness })) };
+    }
+
+    // Confirmation gate: playoff winner vs baseline.
+    const [conf] = await runSeriesPool(browser, url, [{
+        label: `confirmation: shard ${winner.shard} champion vs baseline`,
+        a: winner.w, b: baseline, games: OPTS.confirmGames, seed: OPTS.seed + 900_000,
+    }]);
+    const confirmed = conf.aFitness > conf.bFitness;
+
+    const outPath = OPTS.out || join(CACHE_DIR, `champion-${Date.now()}.json`);
+    writeFileSync(outPath, JSON.stringify({
+        when: new Date().toISOString(),
+        source: resultsPath,
+        playoff,
+        confirmation: conf,
+        confirmed,
+        championShard: winner.shard,
+        champion: winner.w,
+    }, null, 2));
+
+    console.log('[runner] --- confirm verdict ---');
+    if (confirmed) {
+        console.log(`[runner] CONFIRMED: shard ${winner.shard}'s champion beat the baseline ` +
+            `(${conf.aWins}-${conf.bWins}, ${conf.draws} draws; fitness ${conf.aFitness.toFixed(2)} vs ${conf.bFitness.toFixed(2)}).`);
+        console.log(`[runner] full table written to ${outPath}`);
+        console.log('[runner] apply it in the game (browser console):');
+        console.log(`         localStorage.setItem('godaigo_bot_weights', JSON.stringify(<champion from ${outPath}>))`);
+        console.log('         then reload — bot.js picks it up on load. Or paste into DEFAULT_WEIGHTS in js/bot.js.');
+    } else {
+        console.log(`[runner] NOT confirmed: baseline held (${conf.aWins}-${conf.bWins}, ${conf.draws} draws; ` +
+            `fitness ${conf.aFitness.toFixed(2)} vs ${conf.bFitness.toFixed(2)}). Keep the current weights.`);
+        console.log(`[runner] details written to ${outPath}`);
+    }
+}
+
 // ---------------------------------------------------------------- main
 async function main() {
     const { chromium } = await loadPlaywright();
@@ -256,7 +376,8 @@ async function main() {
     }, OPTS.timeoutMs);
 
     try {
-        if (OPTS.evolve) await runEvolve(browser, url);
+        if (OPTS.confirm) await runConfirm(browser, url);
+        else if (OPTS.evolve) await runEvolve(browser, url);
         else await runSmoke(browser, url);
     } finally {
         clearTimeout(watchdog);
