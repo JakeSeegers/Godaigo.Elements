@@ -512,6 +512,18 @@ function _gami_toggleJoytoneMute(btn) {
     btn.className   = `gami-toggle ${newMuted ? 'off' : 'on'}`;
 }
 
+// Called by joytone-bridge.js when the Joytone popup's OWN ⏻ power button
+// changes state, so this toggle reflects it even though the click didn't
+// come from here. No-op if the Settings tab (or a different tab within it)
+// isn't currently open — there's nothing to repaint.
+window._gami_refreshJoytoneToggle = function () {
+    const btn = document.querySelector('#gami-panel [onclick^="_gami_toggleJoytoneMute"]');
+    if (!btn) return;
+    const m = window.JoytoneBridge?.isMuted();
+    btn.textContent = m ? 'OFF' : 'ON';
+    btn.className   = `gami-toggle ${m ? 'off' : 'on'}`;
+};
+
 function _gami_joytoneVolume(input) {
     window.JoytoneBridge?.setVolume((+input.value || 0) / 100);
 }

@@ -1260,13 +1260,19 @@
                 }
 
                 // Host-only bot controls — visible even when the host is alone
-                // (adding a bot is how a solo host reaches the 2-player minimum)
-                const botControls = document.getElementById('bot-controls');
-                const addBotBtn   = document.getElementById('add-bot-button');
-                if (botControls && addBotBtn) {
+                // (adding a bot is how a solo host reaches the 2-player minimum).
+                // Any number of bots up to the room's 5-player cap; Add/Remove
+                // are separate buttons (not a 0/1 toggle) so the host can stack
+                // multiple bots into one room.
+                const botControls   = document.getElementById('bot-controls');
+                const addBotBtn     = document.getElementById('add-bot-button');
+                const removeBotBtn  = document.getElementById('remove-bot-button');
+                if (botControls && addBotBtn && removeBotBtn) {
                     const botCount = players.filter(p => window.isBotUsername?.(p.username)).length;
                     botControls.style.display = (isHost && (botCount > 0 || totalCount < 5)) ? 'block' : 'none';
-                    addBotBtn.textContent = botCount > 0 ? '🤖 Remove Bot' : '🤖 Add Bot';
+                    addBotBtn.style.display = totalCount < 5 ? 'inline-block' : 'none';
+                    removeBotBtn.style.display = botCount > 0 ? 'inline-block' : 'none';
+                    addBotBtn.textContent = botCount > 0 ? `🤖 Add Bot (${botCount})` : '🤖 Add Bot';
                 }
 
                 // Update status
@@ -1297,8 +1303,38 @@
         // It has no client of its own: the HOST's browser drives its
         // placement and turns (see js/bot-driver.js). From the lobby's
         // perspective it counts as a player for everything — player count,
-        // colors, turn order, start conditions.
-        async function toggleBotPlayer() {
+        // colors, turn order, start conditions. bot-driver.js's watcher
+        // already drives WHICHEVER bot is active off a live-queried set of
+        // bot indices, so any number of bots (up to the room's 5-player
+        // cap) works with no changes there — every bot shares whatever
+        // champion weights window.BotSystem.WEIGHTS currently holds (see
+        // js/bot.js's community-champion fetch), same as a single bot did.
+        async function addBotPlayer() {
+            if (!isHost || !currentGameId) return;
+            try {
+                const { data: players, error } = await supabase
+                    .from('players')
+                    .select('id, username')
+                    .eq('game_id', currentGameId);
+                if (error) throw error;
+
+                if ((players || []).length >= 5) { alert('Room is full!'); return; }
+                const botCount = (players || []).filter(p => window.isBotUsername?.(p.username)).length;
+                await supabase.from('players').insert([{
+                    username: `${window.BOT_USERNAME_PREFIX || '🤖'} Bot ${botCount + 1}`,
+                    is_ready: true, // bots are always ready
+                    game_id: currentGameId
+                }]);
+                console.log('🤖 Bot added to lobby');
+                updatePlayerList();
+            } catch (e) {
+                console.error('Add bot failed:', e);
+                alert('Could not add bot: ' + e.message);
+            }
+        }
+        window.addBotPlayer = addBotPlayer;
+
+        async function removeBotPlayer() {
             if (!isHost || !currentGameId) return;
             try {
                 const { data: players, error } = await supabase
@@ -1308,26 +1344,17 @@
                 if (error) throw error;
 
                 const bots = (players || []).filter(p => window.isBotUsername?.(p.username));
-                if (bots.length > 0) {
-                    // Remove the most recently added bot (direct DELETE is blocked by RLS)
-                    await supabase.rpc('remove_player', { p_player_id: bots[bots.length - 1].id });
-                    console.log('🤖 Bot removed from lobby');
-                } else {
-                    if ((players || []).length >= 5) { alert('Room is full!'); return; }
-                    await supabase.from('players').insert([{
-                        username: (window.BOT_USERNAME_PREFIX || '🤖') + ' Bot',
-                        is_ready: true, // bots are always ready
-                        game_id: currentGameId
-                    }]);
-                    console.log('🤖 Bot added to lobby');
-                }
+                if (!bots.length) return;
+                // Remove the most recently added bot (direct DELETE is blocked by RLS)
+                await supabase.rpc('remove_player', { p_player_id: bots[bots.length - 1].id });
+                console.log('🤖 Bot removed from lobby');
                 updatePlayerList();
             } catch (e) {
-                console.error('Bot toggle failed:', e);
-                alert('Could not add/remove bot: ' + e.message);
+                console.error('Remove bot failed:', e);
+                alert('Could not remove bot: ' + e.message);
             }
         }
-        window.toggleBotPlayer = toggleBotPlayer;
+        window.removeBotPlayer = removeBotPlayer;
 
         // Host starts the game manually
         async function hostStartGame() {
@@ -2148,13 +2175,11 @@
                 const activatedStr = activatedElements ? activatedElements.join(', ') : element;
                 updateStatus(`${playerName} used ${effectName}! Activated: ${activatedStr}`);
 
-                // Check win condition — all 5 elements activated
-                if (spellSystem.playerScrolls[playerIndex].activated.size === 5) {
+                // Check win condition — all 5 elements activated + returned to own shrine.
+                // checkWinCondition handles observer clients too: handleGameOver →
+                // showGameOverToAll shows the win screen, and both are double-fire safe.
+                if (typeof checkWinCondition === 'function' && checkWinCondition(playerIndex)) {
                     console.log(`🏆 Win condition met for player ${playerIndex} (detected via scroll-effect broadcast)`);
-                    // For the winner's own echo: showLevelComplete already ran locally and
-                    // showGameOverToAll is guarded by #game-over-notification. Safe to call again.
-                    // For observers: handleGameOver → showGameOverToAll shows the win screen.
-                    handleGameOver(playerIndex);
                 }
             });
 
@@ -2225,11 +2250,8 @@
                     const displayName = scrollName ? (scrollName.replace(/_/g, ' ').toLowerCase()) : 'scroll';
                     updateStatus(`🪞 ${playerName}'s Reflect triggered: activated ${displayName} (counts as water only).`);
 
-                    if (activated.size === 5 && playerIndex === myPlayerIndex) {
-                        spellSystem.showLevelComplete(playerIndex);
-                        if (typeof handleGameOver === 'function') {
-                            handleGameOver(playerIndex);
-                        }
+                    if (playerIndex === myPlayerIndex && typeof checkWinCondition === 'function') {
+                        checkWinCondition(playerIndex, { announce: true });
                     }
 
                     // For non-interactive scrolls, advance the queue immediately
@@ -2308,11 +2330,8 @@
                     const displayName = scrollName ? (scrollName.replace(/_/g, ' ').toLowerCase()) : 'scroll';
                     updateStatus(`🔮 ${playerName}'s Psychic triggered: activated ${displayName} (counts as void only).`);
 
-                    if (activated.size === 5 && playerIndex === myPlayerIndex) {
-                        spellSystem.showLevelComplete(playerIndex);
-                        if (typeof handleGameOver === 'function') {
-                            handleGameOver(playerIndex);
-                        }
+                    if (playerIndex === myPlayerIndex && typeof checkWinCondition === 'function') {
+                        checkWinCondition(playerIndex, { announce: true });
                     }
 
                     // For non-interactive scrolls, advance the queue immediately
@@ -2707,6 +2726,12 @@
                                     });
                                     if (typeof updatePlayerElementSymbols === 'function') {
                                         updatePlayerElementSymbols(result.casterIndex);
+                                    }
+
+                                    // Response scroll can be this player's 5th element — and this
+                                    // client never receives its own scroll-effect broadcast
+                                    if (typeof checkWinCondition === 'function') {
+                                        checkWinCondition(result.casterIndex, { announce: true });
                                     }
 
                                     // Broadcast activation so the caster's client (and any others)
@@ -3263,6 +3288,10 @@
         // this function as a named hook so it is safe to define it once here.
         function broadcastPlayerMovement(playerIndex, x, y, apSpent) {
             broadcastGameAction('player-move', { playerIndex, x, y, apSpent });
+            // Shrine-return win check for the movement paths that funnel through
+            // here (bot moves, path-based movement). Drag/tap moves are covered
+            // by the same check inside placePlayer().
+            if (typeof checkWinCondition === 'function') checkWinCondition(playerIndex);
         }
 
         // Called by game-core.js executeMovement() after landing on a hex.

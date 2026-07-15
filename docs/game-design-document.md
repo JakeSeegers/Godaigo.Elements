@@ -37,8 +37,8 @@ Scrolls can exist in three locations:
 ### Scroll Visibility
 
 #### In Hand
-- Only visible to the owning player
-- Full scroll information shown (name, element, description, pattern requirements)
+- **Owner sees:** Full scroll information (name, element, description, pattern requirements)
+- **Opponents see:** Each scroll's element only (shown as an icon) — name and pattern stay hidden
 
 #### In Active Area
 - **Owner sees:** Full scroll information including shape layout requirements
@@ -51,7 +51,7 @@ Scrolls can exist in three locations:
 - Player must be standing in a position where stones around them match the scroll's pattern
 - When activated, the scroll's effect triggers (grants elemental stones based on level)
 - The scroll **stays in player's control** after activation
-- Activating an element type contributes to the win condition (activate all 5 elements)
+- Activating an element type contributes to the win condition (activate all 5 elements, then return to your player shrine)
 
 ### Collecting Scrolls
 - Scrolls are collected when revealing shrine tiles
@@ -73,7 +73,20 @@ Scrolls can exist in three locations:
 
 ## Win Condition
 - Activate at least one scroll of each of the 5 main elements (Fire, Water, Earth, Wind, Void)
+- **AND** return your pawn to the centre of your own player tile (the **player shrine**)
+- The win triggers immediately when both are true — either by arriving home with all five
+  elements already activated, or by activating the fifth element while standing on the shrine
 - Catacomb scrolls can contribute to multiple elements at once
+
+---
+
+## Player Tiles
+- Stones can never be placed on a player tile, including its bridge hexes (the shared
+  boundary positions formed where a player tile's edge touches a neighbouring tile) —
+  this applies to every player's tile, including your own.
+- A player may not move their pawn onto the **centre** hex of another player's tile.
+  Your own tile's centre stays reachable (required to win). The rest of an opponent's
+  tile (its other hexes, its bridge hexes) is not restricted for movement — only its centre.
 
 ---
 

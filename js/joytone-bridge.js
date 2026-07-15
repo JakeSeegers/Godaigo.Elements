@@ -80,14 +80,25 @@
     }
 
     // ── Game lifecycle ───────────────────────────────────────────────────
+    // Suppressed = a bot job (Train Weights / Evolve / Breed) is running
+    // MANY short-lived simulated games back to back — each one still hides/
+    // shows #lobby-wrapper same as a real game, so without this the engine
+    // would boot + start playback from scratch every single simulated game,
+    // producing a stuttering mess instead of the coherent one-game
+    // soundtrack this is designed around. Real gameplay (including watching
+    // a single "Bot match" via spectate()) is never suppressed.
+    let suppressed = false;
+
     async function startForGame() {
         if (gameActive) return;
         gameActive = true;
         handledTiles.clear();
+        if (suppressed) return;
         const a = api();
         if (!a) return;
         a.setMute(muted);
         a.setVolume(volume);
+        a.setPower?.(!muted);
         try { await a.boot(); } catch (e) { console.warn('Joytone boot failed:', e); }
     }
 
@@ -114,7 +125,7 @@
     // turn-change catch-up handlers in lobby.js (remote flips). Deduped by
     // tileId so double delivery is harmless.
     async function onTileRevealed(shrineType, tileId) {
-        if (!gameActive || tileId == null || !shrineType || shrineType === 'player') return;
+        if (!gameActive || suppressed || tileId == null || !shrineType || shrineType === 'player') return;
         if (handledTiles.has(tileId)) return;
         handledTiles.add(tileId);
         const a = api();
@@ -130,11 +141,46 @@
     }
 
     // ── Settings (per-player) ────────────────────────────────────────────
+    // Mute (Settings tab toggle) and Power (the Joytone popup's own ⏻
+    // button) are now the same signal: muting also powers the engine off
+    // (and back on), and the popup's own button reports back here so the
+    // Settings toggle stays correct no matter which control was used.
     function setMuted(m) {
         muted = !!m;
         localStorage.setItem('godaigo_joytone_muted', muted ? 'true' : 'false');
         api()?.setMute(muted);
+        if (!suppressed) api()?.setPower(!muted);
     }
+
+    // Called by the iframe itself (joytone/index.html) whenever ITS ⏻
+    // button changes power state, so the Settings toggle reflects it too.
+    // Ignored while suppressed: those power changes are OUR OWN
+    // setSuppressed()-driven calls, not real user intent, and must never
+    // overwrite the user's actual saved mute preference.
+    function _onChildPowerChanged(isPowerOn) {
+        if (suppressed) return;
+        const newMuted = !isPowerOn;
+        if (newMuted === muted) return;
+        muted = newMuted;
+        localStorage.setItem('godaigo_joytone_muted', muted ? 'true' : 'false');
+        try { window._gami_refreshJoytoneToggle?.(); } catch (e) {}
+    }
+
+    function setPower(p) { api()?.setPower(!!p); }
+
+    // Bot jobs (Train Weights / Evolve / Breed) play many short simulated
+    // games back to back — silence the engine for the whole job rather
+    // than letting it boot/restart on every individual simulated game (see
+    // startForGame()'s suppressed check above). Idempotent; safe to call
+    // with the same value repeatedly.
+    function setSuppressed(s) {
+        s = !!s;
+        if (s === suppressed) return;
+        suppressed = s;
+        if (!gameActive) return; // nothing currently playing to (un)suppress
+        api()?.setPower(suppressed ? false : !muted);
+    }
+    function isSuppressed() { return suppressed; }
 
     function setVolume(v) {
         volume = Math.max(0, Math.min(1, +v || 0));
@@ -186,9 +232,13 @@
         onTileRevealed,
         setMuted,
         setVolume,
+        setPower,
+        setSuppressed,
+        isSuppressed,
         isMuted: () => muted,
         getVolume: () => volume,
         togglePopup,
+        _onChildPowerChanged,
         _state: () => api()?.getState(),
     };
 })();

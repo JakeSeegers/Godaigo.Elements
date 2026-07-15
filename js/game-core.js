@@ -428,14 +428,9 @@
                     if (typeof updatePlayerElementSymbols === 'function') {
                         activatedChangedPlayers.forEach(playerIdx => {
                             updatePlayerElementSymbols(playerIdx);
-                            // Win condition: all 5 elements activated
-                            if (this.playerScrolls?.[playerIdx]?.activated?.size === 5) {
+                            // Win condition: all 5 elements activated + returned to own shrine
+                            if (checkWinCondition(playerIdx, { announce: true })) {
                                 console.log(`🏆 Win condition met for player ${playerIdx} (detected via state sync)`);
-                                this.showLevelComplete(playerIdx);
-                                if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
-                                    typeof handleGameOver === 'function') {
-                                    handleGameOver(playerIdx);
-                                }
                             }
                         });
                     }
@@ -1288,6 +1283,13 @@
             }
 
             castSpell() {
+                // A pawn mid-transit across a stone hasn't come to rest yet —
+                // must move off before casting (see isPlayerRestingOnStone).
+                if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
+                    window.SoundSystem?.play('error');
+                    updateStatus('Cannot cast while standing on a stone — move to an empty hex first.');
+                    return false;
+                }
                 // Scrolls in Active Area OR Common Area can be activated
                 const activeScrollsList = Array.from(this.getPlayerScrolls(false).active);
                 const commonAreaScrolls = this.getCommonAreaScrolls();
@@ -1475,7 +1477,8 @@
 
                 const scrollData = { name, spell, fromCommonArea, casterIndex: activePlayerIndex };
 
-                // Open response window when 2+ players so the react phase always runs (others can respond or pass)
+                // React phase: openResponseWindow itself skips (and resolves the cast
+                // immediately) unless an opponent could actually respond or bluff
                 const numPlayers = typeof playerPositions !== 'undefined' ? playerPositions.length : 0;
                 if (this.responseWindow && numPlayers > 1) {
                     console.log('Opening response window (react phase)');
@@ -1615,6 +1618,13 @@
                         }
                         updatePlayerElementSymbols(activePlayerIndex);
 
+                        // Win check BEFORE the requiresSelection early return —
+                        // the element is already activated above, and the player
+                        // may already be standing on their shrine. (Previously the
+                        // early return skipped the win check entirely if the
+                        // selection was never completed.)
+                        checkWinCondition(activePlayerIndex, { announce: true });
+
                         // If effect requires selection, don't continue with broadcast yet
                         if (result.requiresSelection) {
                             return; // Selection mode will call onSelectionEffectComplete when done
@@ -1636,13 +1646,8 @@
                             syncPlayerState();
                         }
 
-                        // Check win condition
-                        if (this.getPlayerScrolls(false).activated.size === 5) {
-                            this.showLevelComplete(activePlayerIndex);
-                            if (isMultiplayer) {
-                                handleGameOver(activePlayerIndex);
-                            }
-                        }
+                        // Win condition already checked above (before the
+                        // requiresSelection early return).
                         return;
                     } else {
                         console.warn(`📜 No effect defined for scroll "${name}" – using default (give stones). Add effect in scroll-effects.js for "${name}".`);
@@ -1727,15 +1732,8 @@
                     syncPlayerState();
                 }
 
-                // Check if THIS player has won (activated all 5 elements)
-                if (this.getPlayerScrolls(false).activated.size === 5) {
-                    this.showLevelComplete(activePlayerIndex);
-
-                    // In multiplayer, mark game as finished in database
-                    if (isMultiplayer) {
-                        handleGameOver(activePlayerIndex);
-                    }
-                }
+                // Check if THIS player has won (all 5 elements + returned to shrine)
+                checkWinCondition(activePlayerIndex, { announce: true });
             }
 
             // Called by scroll effects when a selection-based effect (e.g. Shifting Sands) is completed
@@ -1770,12 +1768,7 @@
                     });
                     if (typeof syncPlayerState === 'function') syncPlayerState();
                 }
-                if (this.getPlayerScrolls(false).activated.size === 5) {
-                    this.showLevelComplete(activePlayerIndex);
-                    if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof handleGameOver === 'function') {
-                        handleGameOver(activePlayerIndex);
-                    }
-                }
+                checkWinCondition(activePlayerIndex, { announce: true });
             }
 
             // Handle scroll disposition after casting
@@ -1878,7 +1871,7 @@
                 box.appendChild(playerName);
 
                 const msg = document.createElement('div');
-                msg.textContent = 'You have mastered all five elements!';
+                msg.textContent = 'All five elements mastered — and returned to the shrine!';
                 msg.className = 'game-over-msg';
                 box.appendChild(msg);
 
@@ -2603,6 +2596,13 @@
         }
 
         function attemptBreakStone(stoneId) {
+            // Mid-transit across a stone — must move off before acting (see
+            // isPlayerRestingOnStone).
+            if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
+                updateStatus('Cannot break a stone while standing on a stone — move to an empty hex first.');
+                window.SoundSystem?.play('error');
+                return;
+            }
             // In multiplayer, only the active player can break stones
             if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
                 typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null &&
@@ -3244,7 +3244,25 @@
             return matchingPos.tiles.some(tile => tile.flipped && !tile.isPlayerTile);
         }
 
-        function findValidStonePosition(x, y) {
+        // Rule: stones may never be placed on a player tile, including its
+        // bridge hexes (the shared boundary positions getAllHexagonPositions()
+        // synthesizes when ≥2 tiles' trapezoid corners coincide — a bridge hex's
+        // `tiles` list carries every tile that contributes to it, so a bridge
+        // hex touching a player tile is excluded the same way a normal hex on
+        // that tile is). Applies to every player's tile, including your own.
+        function isPositionOnPlayerTile(x, y, hexPositions) {
+            const matchingPos = hexPositions.find(pos => {
+                const dist = Math.sqrt(Math.pow(pos.x - x, 2) + Math.pow(pos.y - y, 2));
+                return dist < 5;
+            });
+
+            if (!matchingPos || !matchingPos.tiles) return false;
+
+            return matchingPos.tiles.some(tile => tile.isPlayerTile);
+        }
+
+        function findValidStonePosition(x, y, stoneTypeOverride) {
+            const stoneType = stoneTypeOverride !== undefined ? stoneTypeOverride : draggedStoneType;
             const hexPositions = getAllHexagonPositions();
             let nearest = null;
             let minDist = Infinity;
@@ -3281,7 +3299,9 @@
                 const onFlippedTile = isPositionOnFlippedTile(nearest.x, nearest.y, hexPositions);
 
                 // Check if position is valid for placement based on active buffs
-                const inPlacementRange = playerPosition && isInPlacementRange(nearest.x, nearest.y, draggedStoneType);
+                // (isInPlacementRange already refuses to place while the pawn
+                // itself is standing on a stone — see its stoneUnderPawn check)
+                const inPlacementRange = playerPosition && isInPlacementRange(nearest.x, nearest.y, stoneType);
 
                 if (!occupied && !anyPlayerHere && !onFlippedTile && inPlacementRange) {
                     return { x: nearest.x, y: nearest.y, valid: true };
@@ -3720,6 +3740,21 @@
         // Check if a position is within valid stone placement range (considering buffs)
         function isInPlacementRange(x, y, stoneType) {
             if (!playerPosition) return false;
+
+            // Rule: stones may only be placed while the pawn stands on an
+            // UNOCCUPIED hex. Standing on a stone (e.g. mid wind-chain)
+            // blocks all placement until the pawn steps off. Checked before
+            // the placement-range buffs so it applies even under Avalanche /
+            // Seed the Skies / Mason's Savvy.
+            const stoneUnderPawn = placedStones.some(s =>
+                Math.hypot(s.x - playerPosition.x, s.y - playerPosition.y) < 5);
+            if (stoneUnderPawn) return false;
+
+            // Rule: stones may never land on a player tile or its bridge hexes
+            // (any player's, including your own) — checked before the
+            // placement-range buffs so it applies even under Avalanche / Seed
+            // the Skies / Mason's Savvy, same as the stone-under-pawn rule above.
+            if (isPositionOnPlayerTile(x, y, getAllHexagonPositions())) return false;
 
             // Get current player index (use activePlayerIndex in single player, myPlayerIndex in multiplayer)
             const currentPlayerIdx = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null) ? myPlayerIndex : activePlayerIndex;
@@ -4211,6 +4246,29 @@
                         playerPositions[myPlayerIndex] = placed;
                         console.log(`🔧 Relocated local pawn to playerPositions[${myPlayerIndex}]`);
                     }
+                    // Same correction for the tile record: placeTile captured
+                    // playerPositions.length as the owner index, which is wrong
+                    // if a remote tile arrived first. The shrine-return win
+                    // condition looks tiles up by playerIndex, so fix it here.
+                    const ownTile = placedTiles[placedTiles.length - 1];
+                    if (ownTile && ownTile.isPlayerTile) {
+                        ownTile.playerIndex = myPlayerIndex;
+                    }
+                    // tilePlayerIndex itself was captured from the SAME stale
+                    // playerPositions.length snapshot, and is what actually
+                    // gets broadcast + tracked in playerTilesPlaced below —
+                    // the two corrections above didn't touch it. Left
+                    // uncorrected, a race (a remote placement broadcast
+                    // arriving between this client's own placePlayer() call
+                    // and this point) permanently attributes THIS placement
+                    // to the WRONG player index: playerTilesPlaced gets the
+                    // wrong index marked (never reaching totalPlayers with
+                    // the real index included), and every other client
+                    // advances activePlayerIndex/waits based on the wrong
+                    // color too — the true owner's placement phase never
+                    // completes, freezing the game waiting on a player who
+                    // in fact already placed.
+                    tilePlayerIndex = myPlayerIndex;
                 }
 
                 // In multiplayer, broadcast tile placement and track placement phase
@@ -5076,6 +5134,9 @@ function clearPlayerPath() {
                 if (spellSystem && spellSystem.scrollEffects && typeof spellSystem.scrollEffects.refreshWaterTransformHighlights === 'function') {
                     spellSystem.scrollEffects.refreshWaterTransformHighlights();
                 }
+
+                // Shrine-return win: arriving home with all five elements activated wins
+                checkWinCondition(activePlayerIndex);
             }
 
             // Update catacomb teleport indicators
@@ -5223,6 +5284,11 @@ function clearPlayerPath() {
             player.element = playerGroup;
 
             console.log(`📄 Moved player ${playerIndex} to (${x.toFixed(1)}, ${y.toFixed(1)}), spent ${apSpent} AP`);
+
+            // Shrine-return win: a remote player arriving home with all five
+            // elements activated wins (redundant with the winner's own client's
+            // game-over broadcast, but keeps observers correct if it's lost).
+            checkWinCondition(playerIndex);
         }
 
         // Visual-only stone break (called when receiving broadcast from other players)
@@ -5632,18 +5698,15 @@ function clearPlayerPath() {
 
         // Sync current player state (AP and resources) in multiplayer
         function syncPlayerState() {
-            if (!isMultiplayer) return;
-
-            // Record activity
-            recordActivity();
-
-            // Use global currentAP/voidAP only when we ARE the active player;
-            // otherwise fall back to last-known stored values for that player.
-            const isMyTurn = (myPlayerIndex === activePlayerIndex);
-            const apToSend = isMyTurn ? currentAP : (playerAPs[activePlayerIndex]?.currentAP ?? 5);
-            const voidApToSend = isMyTurn ? voidAP : (playerAPs[activePlayerIndex]?.voidAP ?? 0);
-
-            // Update local tracking
+            // Local per-player AP tracking runs regardless of multiplayer — it's
+            // what lets response-window.js's getPlayerAP()/spendPlayerAP() find a
+            // NON-active responder's real AP (needed for response scrolls cast by
+            // anyone but the active player: local hot-seat, arena bots, and real
+            // multiplayer bots that have no client of their own). In local/
+            // hot-seat/arena play there's only one client running every player's
+            // turn, so currentAP/voidAP genuinely belong to activePlayerIndex
+            // whenever this runs — same as the isMyTurn === true multiplayer case.
+            const isMyTurn = !isMultiplayer || (myPlayerIndex === activePlayerIndex);
             if (!playerAPs[activePlayerIndex]) {
                 playerAPs[activePlayerIndex] = { currentAP: 5, voidAP: 0 };
             }
@@ -5651,6 +5714,16 @@ function clearPlayerPath() {
                 playerAPs[activePlayerIndex].currentAP = currentAP;
                 playerAPs[activePlayerIndex].voidAP = voidAP;
             }
+
+            if (!isMultiplayer) return;
+
+            // Record activity
+            recordActivity();
+
+            // Use global currentAP/voidAP only when we ARE the active player;
+            // otherwise fall back to last-known stored values for that player.
+            const apToSend = isMyTurn ? currentAP : (playerAPs[activePlayerIndex]?.currentAP ?? 5);
+            const voidApToSend = isMyTurn ? voidAP : (playerAPs[activePlayerIndex]?.voidAP ?? 0);
 
             // Only broadcast resources when it's our own turn.
             // When it's not our turn, we must not broadcast the other player's
@@ -5668,6 +5741,157 @@ function clearPlayerPath() {
                 resources: activeResources
             });
         }
+
+        // ============================================================
+        // WIN CONDITION — activate all 5 elements AND return the pawn
+        // to the centre of your own player tile (the "player shrine").
+        // Every code path that can complete the win (scroll activation,
+        // movement, state sync, broadcasts) funnels through
+        // checkWinCondition() below.
+        // ============================================================
+
+        function getPlayerShrineTile(playerIndex) {
+            return placedTiles.find(t => t.isPlayerTile && t.playerIndex === playerIndex) || null;
+        }
+
+        function isPlayerAtOwnShrine(playerIndex) {
+            const pos = playerPositions[playerIndex];
+            const tile = getPlayerShrineTile(playerIndex);
+            if (!pos || !tile) return false;
+            return Math.hypot(pos.x - tile.x, pos.y - tile.y) < 5;
+        }
+
+        // Rule: a player may not MOVE ONTO the centre hex of another player's
+        // tile (their OWN tile's centre is required for the win condition —
+        // see isPlayerAtOwnShrine above — so that one stays reachable).
+        // Deliberately narrower than "the whole player tile": a player tile's
+        // other hexes and bridge hexes are unaffected, only its single centre
+        // point (same point isPlayerAtOwnShrine/getPlayerShrineTile checks).
+        function isOpponentTileCenter(x, y, forPlayerIndex) {
+            return placedTiles.some(t =>
+                t.isPlayerTile && t.playerIndex !== null && t.playerIndex !== forPlayerIndex &&
+                Math.hypot(t.x - x, t.y - y) < 5);
+        }
+
+        // Rule: a hex with a stone on it is transit-only, never a resting
+        // place. canPlayerMoveToHex() still lets a pawn move ONTO a
+        // stone-occupied hex (with the stone's usual AP cost/blocking rules)
+        // so it can be crossed — but once there, only another 'move' is
+        // legal. Every position-dependent action (cast, place a stone, break
+        // a stone, end turn) checks this and refuses until the pawn moves
+        // off onto an empty hex — see castSpell(), attemptBreakStone(),
+        // isInPlacementRange() (game-core.js), the end-turn click handler
+        // (game-ui.js), and legalActions()/applyAction() (bot-state.js).
+        function isPlayerRestingOnStone(playerIndex) {
+            const pos = playerPositions[playerIndex];
+            if (!pos) return false;
+            return placedStones.some(s => Math.hypot(s.x - pos.x, s.y - pos.y) < 5);
+        }
+
+        // Stranded = resting on a stone with no legal move to escape it (0 AP
+        // with nothing free/affordable adjacent). isPlayerRestingOnStone's ban
+        // on ending the turn there would otherwise hard-deadlock the game —
+        // no move, no cast/place/break (also banned while resting), no end
+        // turn. endTurn alone gets this escape hatch; every other
+        // position-dependent action stays banned regardless of AP, since
+        // being stranded doesn't make casting/placing/breaking legitimate.
+        function isPlayerStrandedOnStone(playerIndex) {
+            if (!isPlayerRestingOnStone(playerIndex)) return false;
+            const pos = playerPositions[playerIndex];
+            const ap = (playerIndex === activePlayerIndex && typeof getTotalAP === 'function') ? getTotalAP() : 0;
+            // Mirrors legalActions()'s own move enumeration (bot-state.js),
+            // which gates the WHOLE move block on ap > 0 — even a free (0
+            // cost) wind-stone move isn't offered at exactly 0 AP. Matching
+            // that here means this never reports "has an escape" when the
+            // actual action list would offer none.
+            const hexes = ap > 0 ? getAllHexagonPositions() : [];
+            const hasEscape = hexes.some(h => {
+                const d = Math.hypot(h.x - pos.x, h.y - pos.y);
+                if (d <= 5 || d >= 40) return false;
+                const mv = canPlayerMoveToHex(h.x, h.y, false);
+                return mv.canMove && mv.cost <= ap;
+            });
+            return !hasEscape;
+        }
+
+        // Single win-condition gate. Returns true when the win fired.
+        // Safe to call repeatedly from any path: showLevelComplete and
+        // handleGameOver both guard against double-fire.
+        // opts.announce — when the elements are complete but the pawn is
+        // not home yet, prompt the local player to return to their shrine
+        // (used by activation-time callers; movement callers stay quiet).
+        function checkWinCondition(playerIndex, opts = {}) {
+            if (playerIndex === null || playerIndex === undefined) return false;
+            const scrolls = (typeof spellSystem !== 'undefined' && spellSystem)
+                ? spellSystem.playerScrolls?.[playerIndex] : null;
+            if (!scrolls || !scrolls.activated || scrolls.activated.size < 5) return false;
+
+            if (!isPlayerAtOwnShrine(playerIndex)) {
+                // Elements complete, pawn not home — beacon the shrine (public
+                // info, like the element pips) and nudge the local player.
+                updateShrineReturnBeacon(playerIndex, true);
+                if (opts.announce) notifyReturnToShrine(playerIndex);
+                return false;
+            }
+
+            updateShrineReturnBeacon(playerIndex, false);
+            const isLocalWinner = !isMultiplayer ||
+                (typeof myPlayerIndex !== 'undefined' && playerIndex === myPlayerIndex);
+            if (isLocalWinner) {
+                spellSystem.showLevelComplete(playerIndex);
+            }
+            if (isMultiplayer && typeof handleGameOver === 'function') {
+                handleGameOver(playerIndex);
+            }
+            return true;
+        }
+
+        function notifyReturnToShrine(playerIndex) {
+            const isLocal = !isMultiplayer ||
+                (typeof myPlayerIndex !== 'undefined' && playerIndex === myPlayerIndex);
+            if (!isLocal) return;
+            updateStatus('🏠 All five elements activated! Return to the centre of your player shrine to win!');
+        }
+
+        // Pulsing ring on the player's shrine centre while they still need
+        // to walk home to claim the win. Removed once the win fires.
+        function updateShrineReturnBeacon(playerIndex, show) {
+            const tile = getPlayerShrineTile(playerIndex);
+            if (!tile || !tile.element) return;
+            const existing = tile.element.querySelector('.shrine-return-beacon');
+            if (!show) {
+                if (existing) existing.remove();
+                return;
+            }
+            if (existing) return;
+            const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            ring.setAttribute('class', 'shrine-return-beacon');
+            ring.setAttribute('cx', 0);
+            ring.setAttribute('cy', 0);
+            ring.setAttribute('r', TILE_SIZE);
+            ring.setAttribute('fill', 'none');
+            ring.setAttribute('stroke', playerPositions[playerIndex]?.color || '#f0c040');
+            ring.setAttribute('stroke-width', '3');
+            ring.style.pointerEvents = 'none';
+            const animR = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+            animR.setAttribute('attributeName', 'r');
+            animR.setAttribute('values', `${TILE_SIZE * 0.6};${TILE_SIZE * 1.4};${TILE_SIZE * 0.6}`);
+            animR.setAttribute('dur', '1.6s');
+            animR.setAttribute('repeatCount', 'indefinite');
+            ring.appendChild(animR);
+            const animO = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+            animO.setAttribute('attributeName', 'stroke-opacity');
+            animO.setAttribute('values', '0.9;0.3;0.9');
+            animO.setAttribute('dur', '1.6s');
+            animO.setAttribute('repeatCount', 'indefinite');
+            ring.appendChild(animO);
+            tile.element.appendChild(ring);
+        }
+
+        // Expose for modules outside the shared lexical scope (bot files, handlers)
+        window.checkWinCondition = checkWinCondition;
+        window.isPlayerAtOwnShrine = isPlayerAtOwnShrine;
+        window.getPlayerShrineTile = getPlayerShrineTile;
 
         // Show tooltip with player's AP and resources
         function updatePlayerElementSymbols(playerIndex = null) {
@@ -7071,6 +7295,13 @@ function clearPlayerPath() {
             // Block movement onto hexes occupied by other players (prevents moving "through" players as pathing is step-wise)
             if (isHexOccupiedByOtherPlayer(x, y)) {
                 if (logBlocked) console.log(`❌ Cannot move to (${x.toFixed(1)}, ${y.toFixed(1)}): occupied by another player`);
+                return { canMove: false, cost: Infinity };
+            }
+
+            // Block entering the centre hex of ANOTHER player's tile (your
+            // own stays reachable — required for the win condition).
+            if (isOpponentTileCenter(x, y, activePlayerIndex)) {
+                if (logBlocked) console.log(`❌ Cannot move to (${x.toFixed(1)}, ${y.toFixed(1)}): another player's tile centre`);
                 return { canMove: false, cost: Infinity };
             }
 

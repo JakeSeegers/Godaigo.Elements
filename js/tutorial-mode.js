@@ -71,7 +71,7 @@ const TutorialMode = (function () {
                 <span style="color:#9458f4;">⬡ Void</span>
             </div>
             <div style="margin-top:10px; color:#bbb; font-size:17px;">
-                Be the first player to activate all five to win — and escape the mystical island!
+                Be the first player to activate all five and return to your player shrine to win — and escape the mystical island!
             </div>`,
             action: 'read',
             nextLabel: "Let's Go!",
@@ -184,7 +184,7 @@ const TutorialMode = (function () {
         {
             id: 'how-to-win',
             title: 'How to Win',
-            content: `To win, <strong>activate a scroll of each element</strong> (Earth, Water, Fire, Wind, Void).
+            content: `To win, <strong>activate a scroll of each element</strong> (Earth, Water, Fire, Wind, Void), then <strong>return to the center of your player shrine</strong> (your starting tile).
             <div style="margin-top:10px;">
                 To cast a scroll you need to:
                 <ol style="margin:8px 0; padding-left:18px; line-height:1.6;">
@@ -343,7 +343,7 @@ const TutorialMode = (function () {
             title: "You're Ready!",
             content: `That's the basics of Godaigo!
             <div style="margin-top:12px;">
-                Keep exploring — flip hidden tiles, collect scrolls, build stone patterns, and activate one scroll of each element to win.
+                Keep exploring — flip hidden tiles, collect scrolls, build stone patterns, activate one scroll of each element, then return to your player shrine to win.
             </div>
             <div style="margin-top:10px; color:#bbb; font-size:17px;">
                 Good luck, adventurer. The mystical island awaits.

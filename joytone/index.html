@@ -5534,8 +5534,24 @@ async function togglePower() {
     btn.classList.remove('off');
     setStatus('⏻ Power ON');
   }
+  // Notify the embedding page (js/joytone-bridge.js) so its own state —
+  // and the Settings tab's "Adaptive Music" toggle — stays in sync
+  // whenever power changes from THIS button, not just from setPower()
+  // calls the parent initiates itself. Same-origin iframe, so a direct
+  // reference works; no-ops harmlessly when run standalone (no parent) or
+  // mid-programmatic setPower() call (parent already knows).
+  try { if (window.parent !== window) window.parent.JoytoneBridge?._onChildPowerChanged?.(powerOn); } catch (e) {}
 }
 document.getElementById('btn-power').addEventListener('click', togglePower);
+
+// Programmatic power control (used by the parent page, e.g. to silence the
+// engine during rapid-fire bot training games) — bypasses the click
+// listener's multiplayer-desync confirm() dialog below, since that's only
+// registered on real clicks against the button element.
+async function setPower(p) {
+  if (!!p === powerOn) return;
+  await togglePower();
+}
 
 document.getElementById('btn-play').addEventListener('click', async () => {
   await ensureAudio();
@@ -5791,7 +5807,7 @@ init();
     }
   }, true);
 
-  window.JoytoneAPI = { boot, addTileTheme, setVolume, setMute, stop: stopAll, unlock, onShown, getState };
+  window.JoytoneAPI = { boot, addTileTheme, setVolume, setMute, setPower, stop: stopAll, unlock, onShown, getState };
 })();
 </script>
 

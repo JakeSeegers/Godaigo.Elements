@@ -79,6 +79,19 @@ const ScrollEffects = {
     },
 
     // Cancel any active selection mode
+    // Every modal overlay an effect can open. cancelSelectionMode sweeps
+    // these away; the bot's quiescence loop also checks the list directly,
+    // because modal-based effects don't always register a selectionMode.
+    // (Deliberately NOT listed: response-window-modal — own timer/lifecycle —
+    // and scroll-inventory-popup — the general inventory UI.)
+    EFFECT_MODAL_IDS: [
+        'scholars-insight-modal', 'create-stone-modal', 'quick-reflexes-modal',
+        'water-transform-modal', 'take-flight-player-modal', 'arson-element-modal',
+        'scroll-select-modal', 'deck-select-modal', 'element-select-modal',
+        'opponent-select-modal', 'plunder-player-modal', 'excavate-teleport-modal',
+        'transmute-modal',
+    ],
+
     cancelSelectionMode() {
         if (this.selectionMode) window.SoundSystem?.play('zipclick');
         if (this.selectionMode) {
@@ -96,6 +109,12 @@ const ScrollEffects = {
         if (cancelEl && cancelEl.parentNode) cancelEl.parentNode.removeChild(cancelEl);
         const doneEl = document.getElementById('telekinesis-done-btn');
         if (doneEl && doneEl.parentNode) doneEl.parentNode.removeChild(doneEl);
+        // Safety: remove any orphaned effect modals (bot cancels and end-turn
+        // cleanup both land here; a modal left behind blocks the board view)
+        for (const id of this.EFFECT_MODAL_IDS) {
+            const el = document.getElementById(id);
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
         // Safety: clear telekinesis state in case turn auto-advanced without cleanup
         if (window.telekinesisState) { window.telekinesisState = null; window.tileMoveMode = false; }
         if (window.finishTelekinesis) { window.finishTelekinesis = null; }

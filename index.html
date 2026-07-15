@@ -222,13 +222,22 @@
                     </button>
                 </div>
 
-                <!-- Host-only: add a bot player (driven by the host's browser in-game) -->
+                <!-- Host-only: add bot players (driven by the host's browser in-game).
+                     Up to 5 total players per room; each bot uses whatever
+                     champion weights are currently loaded (see js/bot.js). -->
                 <div id="bot-controls" style="display: none; margin-top: 10px;">
-                    <button id="add-bot-button" onclick="toggleBotPlayer()"
-                            title="Adds a computer player to the room. It counts as a normal player; your browser plays its turns."
-                            style="padding: 8px 20px; font-size: 15px; background: #607D8B; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
-                        🤖 Add Bot
-                    </button>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="add-bot-button" onclick="addBotPlayer()"
+                                title="Adds a computer player to the room. It counts as a normal player; your browser plays its turns using the current champion weights."
+                                style="flex: 1; padding: 8px 12px; font-size: 15px; background: #607D8B; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            🤖 Add Bot
+                        </button>
+                        <button id="remove-bot-button" onclick="removeBotPlayer()"
+                                title="Removes the most recently added bot."
+                                style="flex: 1; padding: 8px 12px; font-size: 15px; background: #455A64; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            ➖ Remove Bot
+                        </button>
+                    </div>
                 </div>
 
                 <p id="lobby-instruction" style="color: #999; margin-top: 8px; font-size: 14px;">
@@ -609,8 +618,11 @@
     <script src="js/emoji-system.js" charset="UTF-8"></script>
     <script src="js/cosmetics-system.js" charset="UTF-8"></script>
     <script src="js/bot-state.js" charset="UTF-8"></script>
+    <script src="js/bot-sim.js" charset="UTF-8"></script>
+    <script src="js/bot-effects.js" charset="UTF-8"></script>
     <script src="js/bot.js" charset="UTF-8"></script>
     <script src="js/bot-driver.js" charset="UTF-8"></script>
+    <script src="js/bot-arena.js" charset="UTF-8"></script>
     <script src="js/action-log.js" charset="UTF-8"></script>
     <script>
     (function() {

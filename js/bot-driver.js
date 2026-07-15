@@ -3,7 +3,10 @@
 // ============================================================
 // A "bot player" is an ordinary `players` table row whose username starts
 // with BOT_USERNAME_PREFIX (added from the lobby via the host-only
-// "🤖 Add Bot" button — see toggleBotPlayer() in lobby.js). It counts as a
+// "🤖 Add Bot" button — see addBotPlayer()/removeBotPlayer() in lobby.js).
+// Any number of bots up to the room cap works unmodified: the watcher below
+// drives whichever bot is active off a live-queried set of bot indices,
+// not a single hardcoded one. Each counts as a
 // player everywhere: player count, color/index assignment, turn order.
 //
 // Since the bot has no client, the host's browser acts as its client:
@@ -16,8 +19,15 @@
 // KNOWN v1 LIMITS (fine to ship, documented for future agents):
 //   - If the bot's hand overflows at end of turn, the resolve modal appears
 //     on the host's screen — the host resolves it on the bot's behalf.
-//   - The bot never plays response (level 1) scrolls.
 //   - While the bot is acting, the host's HUD temporarily reflects the bot.
+//
+// Response scrolls (Stage 2.5): a bot can now respond to a scroll cast by
+// anyone (human or another bot) — respondForBots() below ticks alongside
+// the turn watcher and calls window.BotEffects.decideResponse() on the
+// bot's behalf whenever a response window is open. This does NOT require
+// impersonation (no asBot()): response AP is spent via response-window.js's
+// spendPlayerAP(), which for a bot writes directly to its tracked
+// playerAPs[] entry instead of the shared currentAP global.
 //
 // LOAD ORDER: after bot.js (last game script).
 // ============================================================
@@ -182,6 +192,29 @@
     }
 
     // ----------------------------------------------------------------
+    // Response scrolls: unlike a bot's own turn, a response window can open
+    // while ANY player is active (including another bot or a human other
+    // than the host). This runs independently of the turn-driving branch
+    // below — it's fast, and BotEffects.decideResponse() is idempotent per
+    // player (guarded by responseWindow.respondingPlayers), so ticking it
+    // every 700ms alongside the turn watcher is safe.
+    // ----------------------------------------------------------------
+    function respondForBots() {
+        if (!iAmDriver() || !gameActive()) return;
+        const rw = window.spellSystem?.responseWindow;
+        if (!rw || !rw.isResponseWindowOpen) return;
+        if (typeof window.BotEffects?.decideResponse !== 'function') return;
+
+        const bots = botIndexSet();
+        const casterIdx = rw.currentCaster;
+        for (const botIndex of bots) {
+            if (botIndex === casterIdx) continue;
+            if (rw.respondingPlayers?.has(botIndex)) continue;
+            window.BotEffects.decideResponse(botIndex, casterIdx);
+        }
+    }
+
+    // ----------------------------------------------------------------
     // Watcher: fires the right driver action whenever a bot is the
     // active player on the host's client.
     // ----------------------------------------------------------------
@@ -189,6 +222,7 @@
     const handledPlacement = new Set();
 
     setInterval(() => {
+        respondForBots();
         if (busy) return;
         if (!gameActive()) { handledPlacement.clear(); lastDrivenTurnKey = null; return; }
         if (!iAmDriver()) return;

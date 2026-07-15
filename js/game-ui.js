@@ -834,14 +834,33 @@
                 card.appendChild(stonesDiv);
 
 
-                // Scrolls summary (hand count only - hand contents are private)
+                // Scrolls summary: hand count + each scroll's ELEMENT only (name/
+                // pattern stay private — element type is visible, same as a
+                // face-down card showing its suit but not its rank).
                 const handSize = scrollData.hand ? scrollData.hand.size : 0;
                 const activeSize = scrollData.active ? scrollData.active.size : 0;
 
                 const scrollsSummary = document.createElement('div');
                 scrollsSummary.className = 'opponent-scrolls-summary';
-                scrollsSummary.textContent = `Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''} (hidden)`;
+                scrollsSummary.textContent = `Hand: ${handSize} scroll${handSize !== 1 ? 's' : ''}`;
                 card.appendChild(scrollsSummary);
+
+                if (handSize > 0 && scrollData.hand) {
+                    const handElementsDiv = document.createElement('div');
+                    handElementsDiv.className = 'opponent-hand-elements';
+                    scrollData.hand.forEach(scrollName => {
+                        const element = spellSystem.getScrollElement(scrollName);
+                        const elementIcon = document.createElement('img');
+                        elementIcon.src = element === 'catacomb'
+                            ? 'images/Catacomb.png' + IMG_V
+                            : (STONE_TYPES[element]?.img || '');
+                        elementIcon.className = 'element-icon-sm';
+                        elementIcon.alt = element || 'unknown';
+                        elementIcon.title = element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown';
+                        handElementsDiv.appendChild(elementIcon);
+                    });
+                    card.appendChild(handElementsDiv);
+                }
 
                 // Active scrolls (visible to opponents)
                 if (activeSize > 0) {
@@ -1254,7 +1273,7 @@
                 draggedStoneType = null;
                 draggedStoneOriginalPos = null;
 
-                const stonePos = findValidStonePosition(world.x, world.y);
+                const stonePos = findValidStonePosition(world.x, world.y, capturedStoneType);
                 if (stonePos.valid) {
                     if (capturedStoneId === null) {
                         window._pendingFireDestroys = [];
@@ -1931,7 +1950,7 @@
                     draggedStoneId = null;
                     draggedStoneType = null;
 
-                    const stonePos = findValidStonePosition(world.x, world.y);
+                    const stonePos = findValidStonePosition(world.x, world.y, capturedStoneType);
                     if (stonePos.valid) {
                         placeStone(stonePos.x, stonePos.y, capturedStoneType);
                         window.SoundSystem?.play(capturedStoneType === 'earth' ? 'placeearthstone' : 'placestone');
@@ -3057,6 +3076,17 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 return;
             }
 
+            // Mid-transit across a stone — must move off before resting the
+            // turn there (see isPlayerRestingOnStone). Exempt when stranded
+            // (no legal move to escape it) — that's the one case where
+            // ending the turn HAS to stay legal, or the game hard-deadlocks.
+            if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(turnPlayerIdx) &&
+                !(typeof isPlayerStrandedOnStone === 'function' && isPlayerStrandedOnStone(turnPlayerIdx))) {
+                updateStatus('Cannot end your turn while standing on a stone — move to an empty hex first.');
+                window.SoundSystem?.play('error');
+                return;
+            }
+
             // R2 (docs/bot-roadmap.md, Runtime Track): shadow-mode backend validator.
             // Asks the server (which only knows the LAST persisted turn owner — see
             // persistCurrentTurnIndex below) whether it agrees this player currently
@@ -3532,18 +3562,20 @@ document.getElementById('undo-move').onclick = function() {
 
         let activeTeleportIndicators = [];
 
-        function updateCatacombIndicators() {
-            // Remove existing indicators
-            activeTeleportIndicators.forEach(ind => ind.remove());
-            activeTeleportIndicators = [];
-
-            // Only allow teleport indicators on the active player's turn
-            if (typeof canTakeAction === 'function' && !canTakeAction()) return;
-
-            // Check if player is on a catacomb shrine
-            if (!playerPosition) return;
-
-            const currentShrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
+        // Freedom ("only applies to you") is scoped by playerIndex in
+        // activeBuffs.freedom, but the teleport indicators built from it are
+        // DOM elements that persist until the next recompute — with no
+        // recompute wired to the turn boundary, an indicator drawn during
+        // the caster's turn (correctly, per hasFreedomActive at that moment)
+        // stays on the board and clickable into whoever's turn comes next.
+        // Its click handler only re-checked canTakeAction()/occupancy, never
+        // eligibility, so any later player could click through it and
+        // teleport for free even though Freedom was never active for them.
+        // Both call sites below recompute fresh off CURRENT myPlayerIndex so
+        // a stale indicator can't be exploited after control passes on.
+        function catacombEligibility() {
+            if (!playerPosition) return { shrine: null, isCatacombLike: () => false };
+            const shrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
             const freedomActive = spellSystem && spellSystem.scrollEffects
                 && typeof spellSystem.scrollEffects.hasFreedomActive === 'function'
                 && spellSystem.scrollEffects.hasFreedomActive(myPlayerIndex);
@@ -3554,7 +3586,18 @@ document.getElementById('undo-move').onclick = function() {
                 if (freedomActive && elementalTypes.includes(tile.shrineType)) return true;
                 return false;
             };
+            return { shrine, isCatacombLike };
+        }
 
+        function updateCatacombIndicators() {
+            // Remove existing indicators
+            activeTeleportIndicators.forEach(ind => ind.remove());
+            activeTeleportIndicators = [];
+
+            // Only allow teleport indicators on the active player's turn
+            if (typeof canTakeAction === 'function' && !canTakeAction()) return;
+
+            const { shrine: currentShrine, isCatacombLike } = catacombEligibility();
             if (!currentShrine || !isCatacombLike(currentShrine)) return;
 
             // Find all other REVEALED catacomb shrines (not flipped) WITHOUT stones on them
@@ -3607,6 +3650,20 @@ document.getElementById('undo-move').onclick = function() {
                     e.preventDefault();
                     if (typeof canTakeAction === 'function' && !canTakeAction()) {
                         updateStatus('Not your turn.');
+                        return;
+                    }
+
+                    // Re-validate departure eligibility fresh — see
+                    // catacombEligibility()'s comment. This indicator's own
+                    // closure captured currentShrine/isCatacombLike from
+                    // whenever it was drawn (e.g. during another player's
+                    // Freedom-active turn), so trusting that snapshot here
+                    // would let a leftover indicator be exploited after
+                    // control passes to whoever's turn it is now.
+                    const fresh = catacombEligibility();
+                    if (!fresh.shrine || !fresh.isCatacombLike(fresh.shrine)) {
+                        updateStatus('Cannot teleport — no catacomb/Freedom access from here anymore.');
+                        updateCatacombIndicators();
                         return;
                     }
 
@@ -3939,6 +3996,222 @@ document.getElementById('undo-move').onclick = function() {
             return positions;
         }
 
+        // Stop any currently-running local bot job (spectate/run/evolve) and
+        // wait for it to actually finish — BotArena.isRunning() covers all
+        // three, checked between turns/generations, which can take a few
+        // seconds. Returns false (with a status message already shown) if it
+        // couldn't be stopped in time. Shared by the dev cheat panel and the
+        // Profile-header bot training panel below — hoisted out of either
+        // panel's own IIFE so both call the same instance instead of two
+        // independently-maintained copies of correctness-sensitive cleanup.
+        async function stopAnyRunningBotJob() {
+            if (!window.BotArena.isRunning()) return true;
+            updateStatus('Stopping the current bot job…');
+            for (let i = 0; i < 100 && window.BotArena.isRunning(); i++) {
+                window.BotArena.stop();
+                await new Promise(r => setTimeout(r, 300));
+            }
+            if (window.BotArena.isRunning()) {
+                updateStatus('Could not stop the running bot job');
+                return false;
+            }
+            return true;
+        }
+
+        // Leave the current online room if we're in one — bot jobs
+        // (spectate/run/evolve) run local hot-seat games and would otherwise
+        // collide with a live multiplayer session. Shared, see note above.
+        async function leaveOnlineGameIfAny() {
+            if (!isMultiplayer) return;
+            updateStatus('Leaving the online game…');
+            if (isHost && currentGameId) {
+                try {
+                    const { data: players } = await supabase.from('players')
+                        .select('id, username').eq('game_id', currentGameId);
+                    for (const p of (players || []).filter(p => window.isBotUsername?.(p.username))) {
+                        await supabase.rpc('remove_player', { p_player_id: p.id });
+                    }
+                } catch (e) { console.warn('bot-row cleanup failed (continuing):', e); }
+            }
+            if (typeof _doLeaveGame === 'function') await _doLeaveGame();
+        }
+
+        // Run one weight-training cycle: evolve() a population, then CONFIRM
+        // the champion actually beats the pre-training weights in a real
+        // series before keeping it (reverting to the exact prior
+        // localStorage value otherwise) — see the "Confirmation gate" note
+        // at this function's cheat-panel call site for why. opts.nPlayers
+        // (default 2) and opts.visual (default false, i.e. muted/fast) let
+        // a caller choose training-game size and pacing without changing
+        // the function's own default behavior for existing callers.
+        async function runWeightTraining(preset, onProgress, opts = {}) {
+            const { generations, gamesPerPair, popSize, confirmGames } = preset;
+            const nPlayers = opts.nPlayers ?? 2;
+            const visual = !!opts.visual;
+            const baselineWeights = { ...window.BotSystem.WEIGHTS };
+            let baselineStored = null;
+            try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
+            await leaveOnlineGameIfAny();
+
+            const pairs = popSize * (popSize - 1) / 2;
+            const totalGames = (nPlayers > 2 ? (opts.gamesPerGen ?? popSize * 2) * generations : pairs * gamesPerPair * generations) + confirmGames;
+            const startedAt = Date.now();
+            let gamesDone = 0, lastGen = 0, lastFitness = null;
+            const report = (phase) => onProgress({
+                phase, gamesDone, totalGames, startedAt,
+                gen: lastGen, generations, fitness: lastFitness,
+                nPlayers, popSize, mode: 'training',
+            });
+
+            const champion = await window.BotArena.evolve(generations, {
+                gamesPerPair, popSize, nPlayers, visual,
+                gamesPerGen: nPlayers > 2 ? (opts.gamesPerGen ?? popSize * 2) : undefined,
+                onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report('training'); },
+                onGame: () => { gamesDone++; report('training'); },
+            });
+
+            // stop() during the evolve phase only cuts THAT phase short —
+            // run() resets the same shared _stopRequested flag the instant
+            // it starts, so without this check a cancelled evolve() would
+            // silently still run the full (un-stoppable) confirmation
+            // series behind it. Treat an early stop like "did not improve":
+            // discard whatever evolve() got to and revert to the exact
+            // pre-training weights.
+            if (window.BotArena.stopRequested()) {
+                window.BotArena.applyWeights(baselineWeights);
+                try {
+                    if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                    else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                } catch (e) {}
+                return { improved: false, record: 'stopped' };
+            }
+
+            report('confirming');
+            const confirm = await window.BotArena.run(
+                champion, baselineWeights, confirmGames, Date.now() % 100000,
+                { visual, onGame: () => { gamesDone++; report('confirming'); } });
+            const improved = confirm.aFitness > confirm.bFitness;
+            const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
+
+            if (improved) {
+                window.BotArena.applyWeights(champion);
+                // Best-effort share to the community champion table — only
+                // when logged in (bot_champion_weights requires
+                // auth.uid() = created_by, same pattern as game_room/
+                // players). Never blocks or fails the local training result
+                // on account of this; a network hiccup or being logged out
+                // just means this run's improvement stays local, same as
+                // before this existed.
+                try {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.user?.id) {
+                        await supabase.from('bot_champion_weights').insert({
+                            weights: champion,
+                            confirm_wins: confirm.aWins,
+                            confirm_losses: confirm.bWins,
+                            confirm_draws: confirm.draws,
+                            created_by: session.user.id,
+                        });
+                    }
+                } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
+            } else {
+                window.BotArena.applyWeights(baselineWeights);
+                try {
+                    if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                    else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                } catch (e) {}
+            }
+            return { improved, record };
+        }
+
+        // ─── Persistent training-status popup ───────────────────────────────
+        // Small fixed-corner popup showing live progress for whichever
+        // Start Training / Start Breeding run is active — visible the moment
+        // a run starts, independent of whether the full "🧬 Bot Training"
+        // modal is open, same spirit as the always-visible floating Hand/
+        // Active/Common scroll panels (.fsp-* in css/styles.css) rather than
+        // requiring a full-screen overlay to stay open just to see progress.
+        // Deliberately defined at THIS outer scope (not inside
+        // openBotTrainingPanel()) so it survives the modal being closed and
+        // reopened: everything inside openBotTrainingPanel() — including its
+        // own renderProgress()/progressText — is recreated fresh every time
+        // the modal opens, but the onProgress/onGeneration callbacks a
+        // running job is actually invoking were captured at whichever
+        // moment it started, so a closed-and-reopened modal's fresh (empty)
+        // UI never hears from an in-flight run. This popup is attached
+        // directly to document.body and referenced by a stable outer
+        // variable, so it keeps receiving updates regardless.
+        let trainingPopupEl = null;
+        function fmtPopupTime(s) { return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`; }
+
+        function ensureTrainingPopup() {
+            if (trainingPopupEl) return trainingPopupEl;
+            const el = document.createElement('div');
+            el.id = 'bot-training-status-popup';
+            el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9998;'
+                + 'background:#1a1a2e;border:1px solid #5a5;border-radius:8px;'
+                + 'box-shadow:0 4px 16px rgba(0,0,0,0.6);padding:10px 12px;'
+                + 'min-width:230px;max-width:290px;font-size:11px;color:#ccc;display:none;';
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-size:12px;font-weight:bold;color:#eee;">🧬 Bot Training</span>
+                    <button id="bt-popup-expand" title="Open full panel" style="background:none;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:11px;padding:1px 6px;">⤢</button>
+                </div>
+                <div id="bt-popup-body" style="white-space:pre-line;color:#aaa;margin-bottom:8px;line-height:1.4;"></div>
+                <div style="display:flex;gap:6px;">
+                    <button id="bt-popup-end-early" style="flex:1;padding:4px 6px;background:#2d3a4a;color:#eee;border:1px solid #578;border-radius:4px;cursor:pointer;font-size:11px;">End Early → Test Now</button>
+                    <button id="bt-popup-stop" style="padding:4px 8px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:4px;cursor:pointer;font-size:11px;">Stop</button>
+                </div>
+            `;
+            document.body.appendChild(el);
+            el.querySelector('#bt-popup-expand').onclick = () => {
+                if (typeof window._openBotTrainingPanel === 'function') window._openBotTrainingPanel();
+            };
+            el.querySelector('#bt-popup-end-early').onclick = () => {
+                if (window.BotArena?.isRunning()) {
+                    window.BotArena.endEarly();
+                    updateStatus('Ending training early — running the confirmation match against the starting weights with the best result so far…');
+                }
+            };
+            el.querySelector('#bt-popup-stop').onclick = () => {
+                if (window.BotArena?.isRunning()) {
+                    window.BotArena.stop();
+                    updateStatus('Stopping — this run\'s result will be discarded, keeping the previous weights.');
+                }
+            };
+            trainingPopupEl = el;
+            return el;
+        }
+
+        // p: {phase, gamesDone, totalGames, startedAt, gen, generations,
+        //     fitness, nPlayers, popSize, mode:'training'|'breeding'}
+        function showTrainingPopup(p) {
+            const el = ensureTrainingPopup();
+            el.style.display = 'block';
+            const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
+            const elapsedS = (Date.now() - p.startedAt) / 1000;
+            const scenarioLine = `${p.mode === 'breeding' ? 'Breeding' : 'Training'} — ${p.nPlayers || 2} players, population ${p.popSize || '?'}`;
+            const genLine = p.phase === 'confirming'
+                ? 'Confirming: new champion vs. starting weights'
+                : `Generation ${p.gen}/${p.generations}`;
+            const bestFitness = Array.isArray(p.fitness) && p.fitness.length ? Math.max(...p.fitness) : null;
+            const fitnessLine = bestFitness !== null ? `Best fitness so far: ${bestFitness.toFixed(1)}` : '';
+            const progressLine = `Games: ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtPopupTime(elapsedS)} elapsed`;
+            el.querySelector('#bt-popup-body').textContent =
+                [scenarioLine, genLine, progressLine, fitnessLine].filter(Boolean).join('\n');
+            // Nothing left to "skip ahead to" once already confirming —
+            // and breeding has no confirmation phase to jump to at all, so
+            // End Early there just means "stop generating more generations
+            // and download the current best now" (still meaningful, keep
+            // the button, only the confirming-phase case hides it).
+            const endEarlyBtn = el.querySelector('#bt-popup-end-early');
+            if (endEarlyBtn) endEarlyBtn.style.display = p.phase === 'confirming' ? 'none' : 'block';
+        }
+
+        function hideTrainingPopup() {
+            if (trainingPopupEl) trainingPopupEl.style.display = 'none';
+        }
+
         // ─── Hidden cheat panel ──────────────────────────────────────────────
         // Activate: click the "AP" label in the HUD 5 times within 3 seconds
         (function initCheatPanel() {
@@ -4025,6 +4298,266 @@ document.getElementById('undo-move').onclick = function() {
                     }
                 });
                 panel.appendChild(placeAnywhereBtn);
+
+                // Bot Brain toggle — cycles Dumb → Smart → Hybrid.
+                //   Dumb   = Stage-1 greedy scoring (default)
+                //   Smart  = Stage-2 lookahead search (3 plies) on every action
+                //   Hybrid = lookahead only when a cast/stone placement is on
+                //            the table; plain movement stays greedy (cheap)
+                // Persisted to localStorage; bot.js applies it at load, and we
+                // also apply it live so no reload is needed.
+                const BRAIN_ORDER = ['dumb', 'smart', 'hybrid'];
+                const BRAIN_UI = {
+                    dumb:   { label: '🤖 Bot Brain: Dumb (greedy)',    color: '#eee' },
+                    smart:  { label: '🧠 Bot Brain: Smart (lookahead)', color: '#6ef' },
+                    hybrid: { label: '🧠 Bot Brain: Hybrid',            color: '#fc6' },
+                };
+                function currentBrain() {
+                    // default matches DEFAULT_WEIGHTS (hybrid, per arena evidence)
+                    try { return localStorage.getItem('godaigo_bot_brain') || 'hybrid'; }
+                    catch (e) { return 'hybrid'; }
+                }
+                function applyBrain(mode) {
+                    const W = window.BotSystem?.WEIGHTS;
+                    if (W) {
+                        W.searchDepth = (mode === 'dumb') ? 0 : 3;
+                        W.searchHybrid = (mode === 'hybrid') ? 1 : 0;
+                    }
+                    try { localStorage.setItem('godaigo_bot_brain', mode); } catch (e) {}
+                }
+                const brainBtn = makeBtn('', () => {
+                    const next = BRAIN_ORDER[(BRAIN_ORDER.indexOf(currentBrain()) + 1) % BRAIN_ORDER.length];
+                    applyBrain(next);
+                    brainBtn.textContent = BRAIN_UI[next].label;
+                    brainBtn.style.color = BRAIN_UI[next].color;
+                    updateStatus(
+                        next === 'dumb'  ? 'Bot brain: DUMB — one-step greedy scoring'
+                      : next === 'smart' ? 'Bot brain: SMART — 3-ply lookahead on every action'
+                      : 'Bot brain: HYBRID — lookahead for casts/stone placements, greedy movement');
+                });
+                brainBtn.textContent = BRAIN_UI[currentBrain()].label;
+                brainBtn.style.color = BRAIN_UI[currentBrain()].color;
+                panel.appendChild(brainBtn);
+
+                // Shared prep for restartAsBots/restartAsEvolve, from ANY game
+                // context: stop whatever bot session is already running, then
+                // leave the online room if we're in one. Returns false (with a
+                // status message) if prep failed, so the caller can bail before
+                // starting its own bot session.
+                async function stopAnyMatchAndLeaveMultiplayer() {
+                    if (!window.BotArena) { updateStatus('BotArena not loaded'); return false; }
+                    panel.remove(); // clear the panel; reopen any time via the AP label
+                    if (!await stopAnyRunningBotJob()) return false;
+                    await leaveOnlineGameIfAny();
+                    return true;
+                }
+
+                // Start an all-bot spectator match with a CHOSEN player count.
+                // The action log auto-downloads when the match ends.
+                async function restartAsBots(n) {
+                    if (!(await stopAnyMatchAndLeaveMultiplayer())) return;
+                    try {
+                        await window.BotArena.spectate(n);
+                    } catch (err) {
+                        console.error('Bot match failed:', err);
+                        updateStatus('Bot match failed — see console');
+                    }
+                }
+
+                // Start a VISUALIZED weight-evolution run with n players per
+                // training game (2 = original pairwise round-robin; >2 samples
+                // random N-player groupings each generation — see bot-arena.js).
+                // Small defaults so a full run finishes in a few minutes, not
+                // hours — tune further from the console with BotArena.evolve().
+                async function restartAsEvolve(n) {
+                    if (!(await stopAnyMatchAndLeaveMultiplayer())) return;
+                    try {
+                        const generations = 3;
+                        const popSize = 6;
+                        await window.BotArena.evolve(generations, {
+                            nPlayers: n,
+                            visual: true,
+                            popSize,
+                            gamesPerPair: 1,
+                            gamesPerGen: n > 2 ? popSize * 2 : undefined,
+                        });
+                    } catch (err) {
+                        console.error('Evolve run failed:', err);
+                        updateStatus('Evolve run failed — see console');
+                    }
+                }
+
+                const matchRow = document.createElement('div');
+                matchRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                const matchLabel = document.createElement('span');
+                matchLabel.textContent = '🤖 Bot match:';
+                matchLabel.style.cssText = 'font-size:12px;color:#aaa;';
+                matchRow.appendChild(matchLabel);
+                [2, 3, 4, 5].forEach(n => {
+                    const b = document.createElement('button');
+                    b.textContent = String(n);
+                    b.title = `Restart as a ${n}-bot spectator match (leaves the online game if needed)`;
+                    b.style.cssText = 'padding:4px 9px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:13px;';
+                    b.onclick = () => restartAsBots(n);
+                    matchRow.appendChild(b);
+                });
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = '⏹';
+                stopBtn.title = 'Stop the running bot session (match or evolve — action log still downloads for a match)';
+                stopBtn.style.cssText = 'padding:4px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:13px;';
+                stopBtn.onclick = () => {
+                    if (window.BotArena?.isRunning()) { window.BotArena.stop(); updateStatus('Stopping bot session…'); }
+                    else updateStatus('No bot session running');
+                };
+                matchRow.appendChild(stopBtn);
+                panel.appendChild(matchRow);
+
+                // 🧬 Evolve: same visualized-match core as Bot match above, but
+                // plays a small weight-evolution run (3 generations, pop 6)
+                // instead of a single game — watch the population improve live.
+                // Champion weights are saved to localStorage['godaigo_bot_weights']
+                // after every generation and picked up automatically on reload.
+                const evolveRow = document.createElement('div');
+                evolveRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                const evolveLabel = document.createElement('span');
+                evolveLabel.textContent = '🧬 Evolve:';
+                evolveLabel.title = 'Watch a small weight-evolution run (3 generations, pop 6). Tune further from the console: BotArena.evolve(generations, {nPlayers, visual, popSize, gamesPerPair, gamesPerGen})';
+                evolveLabel.style.cssText = 'font-size:12px;color:#aaa;';
+                evolveRow.appendChild(evolveLabel);
+                [2, 3, 4, 5].forEach(n => {
+                    const b = document.createElement('button');
+                    b.textContent = String(n);
+                    b.title = `Evolve with ${n}-player training games (leaves the online game if needed)`;
+                    b.style.cssText = 'padding:4px 9px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:13px;';
+                    b.onclick = () => restartAsEvolve(n);
+                    evolveRow.appendChild(b);
+                });
+                panel.appendChild(evolveRow);
+
+                // Same-size convenience: your seat handed to a bot, table
+                // size kept. Use the numbered buttons above to pick a count.
+                panel.appendChild(makeBtn('🔁 Restart bot game without player (same size)', () =>
+                    restartAsBots(Math.max(2, Math.min(5, (playerPositions || []).filter(Boolean).length || 2)))));
+
+                // Weight evolution (BotArena.evolve — roadmap Stage 3a): runs a
+                // MUTED self-play arena in the background, then a CONFIRMATION
+                // match against the weights in place before training started,
+                // only applying/keeping the result if it actually won that
+                // match. This mirrors the roadmap's own Stage 3a acceptance bar
+                // ("champion beats the hand-tuned defaults...") — a single
+                // game per evolve() pairing (the "quick" preset) is noisy
+                // enough that its per-generation pick can win by luck, not by
+                // being better, so nothing here should be trusted without
+                // being checked against a real baseline first (see
+                // docs/bot-roadmap.md's "Confirmation gate" note — v1 of this
+                // button applied evolve()'s result unconditionally and could
+                // silently make bots worse). evolve() itself still
+                // auto-persists to localStorage every generation
+                // (pre-existing, intentional design so a console-run evolve()
+                // takes effect on reload) — this only decides whether to KEEP
+                // what got written, reverting it if the result didn't hold up.
+                // Leaves any online game first, same reasoning as the
+                // bot-match buttons above: this plays local hot-seat games
+                // under the hood. (runWeightTraining itself is hoisted above
+                // initCheatPanel — shared with the bot training panel.)
+
+                // Shared progress meter for whichever training preset is running.
+                const progressWrap = document.createElement('div');
+                progressWrap.style.cssText = 'display:none;flex-direction:column;gap:4px;';
+                const progressBarOuter = document.createElement('div');
+                progressBarOuter.style.cssText = 'background:#111;border:1px solid #444;border-radius:4px;height:8px;overflow:hidden;';
+                const progressBarInner = document.createElement('div');
+                progressBarInner.style.cssText = 'background:#6ef;height:100%;width:0%;';
+                progressBarOuter.appendChild(progressBarInner);
+                const progressText = document.createElement('div');
+                progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;';
+                progressWrap.appendChild(progressBarOuter);
+                progressWrap.appendChild(progressText);
+
+                function fmtTime(s) { return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`; }
+                function renderProgress(p) {
+                    progressWrap.style.display = 'flex';
+                    const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
+                    progressBarInner.style.width = pct.toFixed(1) + '%';
+                    const elapsedS = (Date.now() - p.startedAt) / 1000;
+                    const rate = p.gamesDone > 0 ? elapsedS / p.gamesDone : null;
+                    const etaS = rate ? Math.max(0, (p.totalGames - p.gamesDone) * rate) : null;
+                    const genLine = p.fitness
+                        ? `gen ${p.gen}/${p.generations} · fitness ${p.fitness.map(f => f.toFixed(1)).join(', ')}`
+                        : `gen ${p.gen}/${p.generations}`;
+                    progressText.textContent =
+                        `${p.phase === 'confirming' ? 'Confirming result' : 'Training'} — ${genLine}\n` +
+                        `games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · elapsed ${fmtTime(elapsedS)}` +
+                        (etaS != null ? ` · ETA ~${fmtTime(etaS)}` : '');
+                }
+                function hideProgress() { progressWrap.style.display = 'none'; }
+
+                // Two presets: "quick" is the fast sample (few minutes, noisy —
+                // may often correctly report no improvement); "thorough" is a
+                // real training run (~700 games, likely 1-2+ hours) closer to
+                // the roadmap's own spec. Both share the confirmation gate
+                // above, so neither can silently apply a worse result.
+                const TRAIN_PRESETS = {
+                    quick:    { label: '🧬 Train Weights (quick, ~55 games)',
+                                generations: 3, gamesPerPair: 1, popSize: 6, confirmGames: 10 },
+                    thorough: { label: '🧬 Train Weights (thorough, ~700 games, 1-2+ hrs)',
+                                generations: 8, gamesPerPair: 3, popSize: 8, confirmGames: 20 },
+                };
+                let quickBtn, thoroughBtn;
+                function makeTrainButton(key) {
+                    const preset = TRAIN_PRESETS[key];
+                    const btn = makeBtn(preset.label, async () => {
+                        if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+                        if (window.BotArena.isEvolving()) { updateStatus('Already training — use ⏹ to stop it'); return; }
+                        if (!await stopAnyRunningBotJob()) return;
+                        quickBtn.disabled = true;
+                        thoroughBtn.disabled = true;
+                        btn.textContent = `${preset.label} — starting…`;
+                        try {
+                            const { improved, record } = await runWeightTraining(preset, (p) => {
+                                renderProgress(p);
+                                btn.textContent = p.phase === 'confirming'
+                                    ? `${preset.label} — confirming…`
+                                    : `${preset.label} — gen ${p.gen}/${preset.generations}`;
+                            });
+                            hideProgress();
+                            updateStatus(improved
+                                ? `Training complete — champion beat the starting weights ${record} in the confirmation ` +
+                                  `match. New weights applied live and saved. (Board shows the last game — start a new ` +
+                                  `game to keep playing.)`
+                                : `Training finished but did not beat the starting weights (${record}) in the ` +
+                                  `confirmation match — kept the previous weights. (Board shows the last game — start ` +
+                                  `a new game to keep playing.)`);
+                        } catch (err) {
+                            console.error('Weight training failed:', err);
+                            hideProgress();
+                            updateStatus('Weight training failed — see console');
+                        } finally {
+                            quickBtn.disabled = false;
+                            thoroughBtn.disabled = false;
+                            btn.textContent = preset.label;
+                        }
+                    });
+                    return btn;
+                }
+                quickBtn = makeTrainButton('quick');
+                thoroughBtn = makeTrainButton('thorough');
+
+                panel.appendChild(quickBtn);
+                const thoroughRow = document.createElement('div');
+                thoroughRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                thoroughRow.appendChild(thoroughBtn);
+                const trainStopBtn = document.createElement('button');
+                trainStopBtn.textContent = '⏹';
+                trainStopBtn.title = 'Stop training after the current generation finishes';
+                trainStopBtn.style.cssText = 'padding:4px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:13px;';
+                trainStopBtn.onclick = () => {
+                    if (window.BotArena?.isEvolving()) { window.BotArena.stop(); updateStatus('Stopping after this generation…'); }
+                    else updateStatus('No training run in progress');
+                };
+                thoroughRow.appendChild(trainStopBtn);
+                panel.appendChild(thoroughRow);
+                panel.appendChild(progressWrap);
 
                 // ── Overlay Editor ───────────────────────────────────────────
                 const overlaySection = document.createElement('div');
@@ -4446,5 +4979,591 @@ document.getElementById('undo-move').onclick = function() {
                     clickTimer = setTimeout(() => { clickCount = 0; }, 3000);
                 }
             });
+        })();
+
+        // ─── Bot Training window ────────────────────────────────────────────
+        // A lighter, player-facing sibling of the dev cheat panel's Train
+        // Weights buttons: pick a player count and a speed, press Start —
+        // plus a live roster of the current population, a generation-by-
+        // generation log, and a click-through weight diagram per bot, so
+        // the "what is actually happening" question has a real answer
+        // on-screen instead of just a progress bar.
+        // Activate: click the Profile modal's header ("Profile" —
+        // <h2 class="gami-title">, always that exact text regardless of
+        // which tab is active, see gamification-ui.js) 5 times within 3
+        // seconds — same debounce pattern as the AP-label trigger above.
+        (function initBotTrainingPanel() {
+            let clickCount = 0;
+            let clickTimer = null;
+            const state = { n: 2, watchable: true, generations: 5 };
+
+            // Weight groupings mirror the section comments in bot.js's
+            // DEFAULT_WEIGHTS — used purely for the drill-down diagram, so
+            // a 50-number table reads as "these are about movement" instead
+            // of one long undifferentiated list.
+            const WEIGHT_CATEGORIES = [
+                { name: 'Casting', keys: ['castBase', 'castUnactivated', 'castDeadElement', 'castAlreadyWon', 'castNoCredit', 'castLevel'] },
+                { name: 'Stone placement', keys: ['placeBase', 'placeProgress', 'placeUnactivated', 'placeNoCredit', 'placeDoomed', 'planDeficitPenalty'] },
+                { name: 'Movement', keys: ['moveBase', 'moveShrineValue', 'moveApPenalty', 'moveExplore', 'moveExploreGradient', 'moveExplorePath', 'moveRevisitPenalty', 'moveFixation'] },
+                { name: 'Breaking a stone', keys: ['breakStoneBase', 'breakStoneApPenalty'] },
+                { name: 'Returning home', keys: ['moveReturnHome'] },
+                { name: 'Ending the turn', keys: ['endTurnBase', 'endTurnOnShrine', 'endTurnLowAp'] },
+                { name: 'Discarding', keys: ['discardBase', 'discardActivated', 'discardDeadElement', 'discardLevel', 'discardVoluntary', 'discardResponseOnly'] },
+                { name: 'Transmute', keys: ['transmuteTargetAP'] },
+                { name: 'Placement phase', keys: ['placeTileBase', 'placeTileCentroidPenalty'] },
+                { name: 'Shrine valuation', keys: ['shrineNeed', 'shrineUnactivated', 'shrineDeadSource'] },
+                { name: 'Lookahead search (set by Bot Brain, not trained)', keys: ['searchDepth', 'searchBreadth', 'searchHybrid'] },
+                { name: 'State evaluation (used only when search is active)', keys: ['evalWin', 'evalActivated', 'evalStoneNeeded', 'evalStone', 'evalScrollHeld', 'evalAp', 'evalUnsimCast', 'evalHiddenDist', 'evalHomeDist'] },
+                { name: 'Opponent awareness', keys: ['evalOpponentThreat', 'evalCommonThreat'] },
+            ];
+
+            // Small inline "(?)" tooltip — native title attribute, no extra
+            // wiring. Used next to jargon (Population, Generation, Fitness, ...).
+            function infoIcon(text) {
+                const s = document.createElement('span');
+                s.textContent = ' ⓘ';
+                s.title = text;
+                s.style.cssText = 'color:#6ef;cursor:help;font-size:11px;';
+                return s;
+            }
+
+            function openBotTrainingPanel() {
+                const existing = document.getElementById('bot-training-overlay');
+                if (existing) { existing.remove(); return; }
+                if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+
+                // ── Shell: full-screen overlay + centered modal box ──────────
+                const overlay = document.createElement('div');
+                overlay.id = 'bot-training-overlay';
+                Object.assign(overlay.style, {
+                    position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.6)',
+                    zIndex: '9999', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                });
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+                const modal = document.createElement('div');
+                Object.assign(modal.style, {
+                    background: '#1a1a2e', border: '1px solid #444', borderRadius: '10px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.7)', width: 'min(920px, 94vw)',
+                    maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                });
+                overlay.appendChild(modal);
+
+                const header = document.createElement('div');
+                header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #333;flex-shrink:0;';
+                const title = document.createElement('div');
+                title.textContent = '🧬 Bot Training';
+                title.style.cssText = 'font-size:15px;font-weight:bold;color:#eee;';
+                header.appendChild(title);
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = '✕';
+                closeBtn.style.cssText = 'background:none;border:1px solid #555;border-radius:5px;color:#ccc;cursor:pointer;padding:3px 10px;font-size:13px;';
+                closeBtn.onclick = () => overlay.remove();
+                header.appendChild(closeBtn);
+                modal.appendChild(header);
+
+                const body = document.createElement('div');
+                body.style.cssText = 'padding:14px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;';
+                modal.appendChild(body);
+
+                const desc = document.createElement('div');
+                desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match at the end. A small progress popup stays visible in the corner even after you close this panel — use it to check in or end the run early.';
+                desc.style.cssText = 'font-size:11px;color:#999;';
+                body.appendChild(desc);
+
+                // ── Controls: Players / Speed / Repeat ───────────────────────
+                const controls = document.createElement('div');
+                controls.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+                body.appendChild(controls);
+
+                function makeChoiceRow(label, options, getValue, setValue, help) {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+                    const lbl = document.createElement('span');
+                    lbl.textContent = label;
+                    lbl.style.cssText = 'font-size:12px;color:#aaa;min-width:52px;';
+                    row.appendChild(lbl);
+                    if (help) row.appendChild(infoIcon(help));
+                    const buttons = options.map(opt => {
+                        const b = document.createElement('button');
+                        b.textContent = opt.text;
+                        if (opt.title) b.title = opt.title;
+                        row.appendChild(b);
+                        return { b, value: opt.value };
+                    });
+                    function repaint() {
+                        for (const { b, value } of buttons) {
+                            const on = value === getValue();
+                            b.style.cssText = `padding:4px 9px;border-radius:5px;cursor:pointer;font-size:12px;` +
+                                `border:1px solid ${on ? '#6ef' : '#555'};background:${on ? '#2d4a4a' : '#2d2d44'};color:#eee;`;
+                        }
+                    }
+                    for (const { b, value } of buttons) {
+                        b.onclick = () => {
+                            if (startBtnRef.disabled) return; // locked while a run is active
+                            setValue(value);
+                            repaint();
+                        };
+                    }
+                    repaint();
+                    controls.appendChild(row);
+                }
+
+                // startBtnRef is read inside makeChoiceRow's onclick above, so it
+                // needs to exist (even if reassigned below) before the rows are built.
+                const startBtnRef = { disabled: false };
+                // breedBtn is declared before it's built (below) so
+                // startBtn's onclick can cross-disable it — only one of
+                // Start Training / Start Breeding can run at a time.
+                let breedBtn;
+
+                makeChoiceRow('Players:',
+                    [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })),
+                    () => state.n, (v) => { state.n = v; },
+                    'How many bots play each training game. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game.');
+
+                makeChoiceRow('Speed:', [
+                    { value: true, text: 'Watchable', title: 'Normal pacing — watch the board play out' },
+                    { value: false, text: 'Extreme', title: 'Muted, minimal delay — much faster, nothing to watch (a true no-UI "headless" mode isn\'t possible in the browser tab the live game runs in)' },
+                ], () => state.watchable, (v) => { state.watchable = v; });
+
+                // Shared by both Start Training and Start Breeding below —
+                // controls evolve()'s generation count for whichever one
+                // runs. More generations = proportionally more games =
+                // proportionally longer (the progress readout under either
+                // button shows live games-done/total once running).
+                makeChoiceRow('Repeat:',
+                    [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
+                    () => state.generations, (v) => { state.generations = v; },
+                    'Number of GENERATIONS to run, not total games — each generation plays many games on its own (a population of 6 plays ~18 games per generation by default), so Repeat=20 is roughly 20x that many games, not 20 games.');
+
+                const progressText = document.createElement('div');
+                progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
+                body.appendChild(progressText);
+
+                function fmtTime(s) { return s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`; }
+                function renderProgress(p) {
+                    progressText.style.display = 'block';
+                    const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
+                    const elapsedS = (Date.now() - p.startedAt) / 1000;
+                    const genLine = p.phase === 'confirming' ? 'Confirming result' : `gen ${p.gen}/${p.generations}`;
+                    progressText.textContent = `${genLine} — games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtTime(elapsedS)}`;
+                    // Also update the persistent corner popup — see its own
+                    // comment for why it's a separate, outer-scope function
+                    // rather than just this progressText element.
+                    showTrainingPopup(p);
+                }
+
+                const actionRow = document.createElement('div');
+                actionRow.style.cssText = 'display:flex;gap:8px;';
+                body.appendChild(actionRow);
+
+                const startBtn = document.createElement('button');
+                startBtn.textContent = 'Start Training';
+                startBtn.style.cssText = 'padding:6px 10px;background:#2d4a2d;color:#eee;border:1px solid #5a5;border-radius:5px;cursor:pointer;font-size:12px;';
+                actionRow.appendChild(startBtn);
+
+                const stopBtn = document.createElement('button');
+                stopBtn.textContent = 'Stop';
+                stopBtn.style.cssText = 'padding:5px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:12px;';
+                stopBtn.onclick = () => {
+                    if (window.BotArena?.isRunning()) { window.BotArena.stop(); updateStatus('Stopping after the current generation…'); }
+                    else updateStatus('No training run in progress');
+                };
+                actionRow.appendChild(stopBtn);
+
+                // ── Live roster + generation log + weight-diagram drill-down ──
+                // Shared by BOTH Start Training and Start Breeding below —
+                // whichever one is running (or most recently ran) populates
+                // this. Population membership persists id/lineage across
+                // generations (see bot-arena.js's newMember()/elites), so the
+                // roster can show "same bot survived" vs "freshly bred" from
+                // one generation to the next instead of just bare numbers.
+                const insightRow = document.createElement('div');
+                insightRow.style.cssText = 'display:flex;gap:14px;flex-wrap:wrap;';
+                body.appendChild(insightRow);
+
+                const rosterCol = document.createElement('div');
+                rosterCol.style.cssText = 'flex:1 1 260px;min-width:240px;display:flex;flex-direction:column;gap:6px;';
+                insightRow.appendChild(rosterCol);
+
+                const rosterHeader = document.createElement('div');
+                rosterHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                rosterHeader.textContent = 'Population';
+                rosterHeader.appendChild(infoIcon('The pool of weight-tables currently competing. The top 2 by fitness survive unchanged into the next generation ("elite"); the rest are bred (crossover of the top 3, then mutated) and get a new #id. Click a row to see its weights.'));
+                rosterCol.appendChild(rosterHeader);
+
+                const rosterList = document.createElement('div');
+                rosterList.style.cssText = 'display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto;';
+                rosterCol.appendChild(rosterList);
+
+                const genCol = document.createElement('div');
+                genCol.style.cssText = 'flex:1 1 220px;min-width:200px;display:flex;flex-direction:column;gap:6px;';
+                insightRow.appendChild(genCol);
+
+                const genHeader = document.createElement('div');
+                genHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                genHeader.textContent = 'Generations';
+                genHeader.appendChild(infoIcon('One line per generation completed so far in the current run: which #id came out on top and its fitness. Fitness is win(±1) plus small bonuses for win-progress and avoiding stalls — not a plain score, so small differences are normal.'));
+                genCol.appendChild(genHeader);
+
+                const genLogEl = document.createElement('div');
+                genLogEl.style.cssText = 'display:flex;flex-direction:column-reverse;gap:2px;max-height:220px;overflow-y:auto;font-size:11px;color:#aaa;font-family:monospace;';
+                genCol.appendChild(genLogEl);
+
+                const detailCol = document.createElement('div');
+                detailCol.style.cssText = 'flex:1 1 320px;min-width:280px;display:none;flex-direction:column;gap:6px;';
+                insightRow.appendChild(detailCol);
+
+                const detailHeader = document.createElement('div');
+                detailHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;display:flex;align-items:center;justify-content:space-between;';
+                detailCol.appendChild(detailHeader);
+
+                const detailBody = document.createElement('div');
+                detailBody.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;font-size:11px;';
+                detailCol.appendChild(detailBody);
+
+                // ── Roster/generation state for the CURRENT run ──────────────
+                let currentRoster = [];   // latest members array (id, fitness, parentIds, w), best-first
+                let genLog = [];          // [{gen, total, bestId, bestFitness}]
+                let seenIds = new Set();  // ids ever shown this run — lets the roster mark "new this gen"
+                let selectedMemberId = null;
+
+                function resetInsights() {
+                    currentRoster = [];
+                    genLog = [];
+                    seenIds = new Set();
+                    selectedMemberId = null;
+                    rosterList.innerHTML = '';
+                    genLogEl.innerHTML = '';
+                    detailCol.style.display = 'none';
+                }
+
+                function renderRoster() {
+                    rosterList.innerHTML = '';
+                    if (!currentRoster.length) {
+                        const empty = document.createElement('div');
+                        empty.textContent = 'No run in progress — start training or breeding to see the population here.';
+                        empty.style.cssText = 'font-size:11px;color:#777;font-style:italic;';
+                        rosterList.appendChild(empty);
+                        return;
+                    }
+                    const maxFitness = Math.max(...currentRoster.map(m => m.fitness), 1);
+                    for (const m of currentRoster) {
+                        const row = document.createElement('div');
+                        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;cursor:pointer;` +
+                            `background:${m.id === selectedMemberId ? '#2d4a4a' : '#22223a'};border:1px solid ${m.id === selectedMemberId ? '#6ef' : '#333'};`;
+                        row.onclick = () => { selectedMemberId = m.id; renderRoster(); renderDetail(); };
+
+                        const idEl = document.createElement('div');
+                        idEl.textContent = `#${m.id}`;
+                        idEl.style.cssText = 'font-size:11px;color:#eee;font-weight:bold;min-width:28px;';
+                        row.appendChild(idEl);
+
+                        const barWrap = document.createElement('div');
+                        barWrap.style.cssText = 'flex:1;background:#111;border-radius:3px;height:10px;overflow:hidden;position:relative;';
+                        const bar = document.createElement('div');
+                        const barPct = maxFitness !== 0 ? Math.max(0, Math.min(100, (m.fitness / maxFitness) * 100)) : 0;
+                        bar.style.cssText = `height:100%;width:${barPct}%;background:${m.fitness >= 0 ? '#4a8' : '#a44'};`;
+                        barWrap.appendChild(bar);
+                        row.appendChild(barWrap);
+
+                        const fitEl = document.createElement('div');
+                        fitEl.textContent = m.fitness.toFixed(1);
+                        fitEl.style.cssText = 'font-size:11px;color:#ccc;min-width:34px;text-align:right;';
+                        row.appendChild(fitEl);
+
+                        // Check "already seen" FIRST — an elite that was
+                        // originally bred several generations ago must show
+                        // as "surviving," not re-show its birth lineage every
+                        // generation as if it had just been bred again.
+                        const lineageEl = document.createElement('div');
+                        lineageEl.style.cssText = 'font-size:10px;color:#888;min-width:64px;text-align:right;';
+                        lineageEl.textContent = seenIds.has(m.id) ? 'elite (surviving)'
+                            : (m.parentIds && m.parentIds.length === 2) ? `bred #${m.parentIds[0]}×#${m.parentIds[1]}`
+                            : (m.parentIds && m.parentIds.length === 1) ? `mutated #${m.parentIds[0]}`
+                            : 'seed';
+                        row.appendChild(lineageEl);
+
+                        rosterList.appendChild(row);
+                        seenIds.add(m.id);
+                    }
+                }
+
+                function renderGenLog() {
+                    genLogEl.innerHTML = '';
+                    for (const g of genLog) {
+                        const line = document.createElement('div');
+                        line.textContent = `gen ${g.gen}/${g.total} — best: #${g.bestId} (${g.bestFitness.toFixed(1)})`;
+                        genLogEl.appendChild(line);
+                    }
+                }
+
+                function weightBar(key, value, baseline) {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                    const keyEl = document.createElement('div');
+                    keyEl.textContent = key;
+                    keyEl.style.cssText = 'width:150px;flex-shrink:0;color:#aaa;font-family:monospace;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+                    row.appendChild(keyEl);
+
+                    const diffPct = baseline !== 0 ? ((value - baseline) / Math.abs(baseline)) * 100 : (value === 0 ? 0 : 100);
+                    const barWrap = document.createElement('div');
+                    barWrap.style.cssText = 'flex:1;background:#111;border-radius:3px;height:9px;overflow:hidden;';
+                    const bar = document.createElement('div');
+                    const width = Math.min(100, Math.abs(diffPct));
+                    const color = diffPct > 0.5 ? '#4a8' : diffPct < -0.5 ? '#a44' : '#555';
+                    bar.style.cssText = `height:100%;width:${width}%;background:${color};`;
+                    barWrap.appendChild(bar);
+                    row.appendChild(barWrap);
+
+                    const valEl = document.createElement('div');
+                    valEl.textContent = `${value} (base ${baseline}, ${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(0)}%)`;
+                    valEl.style.cssText = 'width:130px;flex-shrink:0;color:#ccc;font-family:monospace;font-size:10px;text-align:right;';
+                    row.appendChild(valEl);
+                    return row;
+                }
+
+                function renderDetail() {
+                    const member = currentRoster.find(m => m.id === selectedMemberId);
+                    if (!member) { detailCol.style.display = 'none'; return; }
+                    detailCol.style.display = 'flex';
+                    detailHeader.innerHTML = '';
+                    const label = document.createElement('span');
+                    label.textContent = `#${member.id} weights (vs. hand-tuned default)`;
+                    detailHeader.appendChild(label);
+                    const closeDetail = document.createElement('button');
+                    closeDetail.textContent = '✕';
+                    closeDetail.style.cssText = 'background:none;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;padding:1px 7px;font-size:11px;';
+                    closeDetail.onclick = () => { selectedMemberId = null; renderRoster(); renderDetail(); };
+                    detailHeader.appendChild(closeDetail);
+
+                    detailBody.innerHTML = '';
+                    const defaults = window.BotSystem.DEFAULT_WEIGHTS;
+                    for (const cat of WEIGHT_CATEGORIES) {
+                        const keysPresent = cat.keys.filter(k => member.w[k] !== undefined);
+                        if (!keysPresent.length) continue;
+                        const catHeader = document.createElement('div');
+                        catHeader.textContent = cat.name;
+                        catHeader.style.cssText = 'font-size:10px;color:#789;text-transform:uppercase;letter-spacing:0.03em;margin-top:4px;';
+                        detailBody.appendChild(catHeader);
+                        for (const k of keysPresent) {
+                            detailBody.appendChild(weightBar(k, member.w[k], defaults[k]));
+                        }
+                    }
+                }
+
+                // Wired into evolve()'s onGeneration (4th arg — richer roster
+                // data, see bot-arena.js) by both Start Training and Start
+                // Breeding below, so either flow feeds the same live views.
+                function handleGeneration(gen, total, fitnessArr, members) {
+                    currentRoster = members;
+                    genLog.push({ gen, total, bestId: members[0].id, bestFitness: members[0].fitness });
+                    renderRoster();
+                    renderGenLog();
+                    if (selectedMemberId != null) renderDetail(); // keep the open diagram live
+                }
+
+                const breedSep = document.createElement('div');
+                breedSep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
+                body.appendChild(breedSep);
+
+                startBtn.onclick = async () => {
+                    if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
+                    if (!await stopAnyRunningBotJob()) return;
+                    startBtnRef.disabled = true;
+                    startBtn.disabled = true;
+                    if (breedBtn) breedBtn.disabled = true;
+                    startBtn.textContent = 'Training…';
+                    resetInsights();
+                    renderRoster();
+                    try {
+                        const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10 };
+                        const { improved, record } = await runWeightTraining(preset, renderProgress, {
+                            nPlayers: state.n, visual: state.watchable,
+                            onGeneration: handleGeneration,
+                        });
+                        progressText.style.display = 'none';
+                        updateStatus(improved
+                            ? `Training complete — champion beat the starting weights ${record} in the confirmation match. New weights applied and saved.`
+                            : `Training finished but did not beat the starting weights (${record}) — kept the previous weights.`);
+                    } catch (err) {
+                        console.error('Bot training failed:', err);
+                        progressText.style.display = 'none';
+                        updateStatus('Bot training failed — see console');
+                    } finally {
+                        startBtnRef.disabled = false;
+                        startBtn.disabled = false;
+                        if (breedBtn) breedBtn.disabled = false;
+                        startBtn.textContent = 'Start Training';
+                        hideTrainingPopup();
+                    }
+                };
+
+                // ── Breed from champion files ────────────────────────────────
+                // Separate flow from Start Training above: no confirm-vs-
+                // baseline gate, no effect on this browser's live bot
+                // weights — it exists purely to produce a downloadable
+                // champion file, e.g. to carry a lineage between browsers/
+                // devices (there's no server backend this game could persist
+                // trained weights to — see the "why not Supabase" discussion).
+                // Population size = the Players count selected above (so a
+                // 5-player run breeds a population of 5): up to 2 uploaded
+                // files seed it directly, any remaining slots are crossover-
+                // bred from those seeds (or mutated from current WEIGHTS if
+                // nothing was uploaded).
+                const breedTitle = document.createElement('div');
+                breedTitle.textContent = 'Breed from champion files';
+                breedTitle.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                body.appendChild(breedTitle);
+
+                const breedDesc = document.createElement('div');
+                breedDesc.textContent = 'Upload up to 2 champion .json files as parents (population = Players above). Produces a downloaded champion file at the end — does NOT change your current live bot weights.';
+                breedDesc.style.cssText = 'font-size:11px;color:#999;';
+                body.appendChild(breedDesc);
+
+                const seedFiles = []; // {name, weights}
+                const fileListText = document.createElement('div');
+                fileListText.style.cssText = 'font-size:11px;color:#9c9;white-space:pre-line;';
+                function renderFileList() {
+                    fileListText.textContent = seedFiles.length ? seedFiles.map(f => `✓ ${f.name}`).join('\n') : '';
+                }
+
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = 'application/json';
+                fileInput.multiple = true;
+                fileInput.style.cssText = 'font-size:11px;color:#ccc;max-width:100%;';
+                fileInput.onchange = async () => {
+                    const files = Array.from(fileInput.files || []);
+                    for (const file of files) {
+                        if (seedFiles.length >= 2) { updateStatus('Only 2 seed champions are used — extra files ignored'); break; }
+                        try {
+                            const parsed = JSON.parse(await file.text());
+                            const numericKeys = (parsed && typeof parsed === 'object')
+                                ? Object.values(parsed).filter(v => typeof v === 'number').length : 0;
+                            if (numericKeys < 20) {
+                                updateStatus(`"${file.name}" doesn't look like a champion weights file — skipped`);
+                                continue;
+                            }
+                            seedFiles.push({ name: file.name, weights: parsed });
+                        } catch (e) {
+                            updateStatus(`Could not read "${file.name}" — skipped`);
+                        }
+                    }
+                    fileInput.value = '';
+                    renderFileList();
+                };
+                body.appendChild(fileInput);
+                body.appendChild(fileListText);
+
+                const clearSeedsBtn = document.createElement('button');
+                clearSeedsBtn.textContent = 'Clear uploaded';
+                clearSeedsBtn.style.cssText = 'padding:3px 8px;background:#2d2d44;color:#ccc;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:11px;align-self:flex-start;';
+                clearSeedsBtn.onclick = () => { seedFiles.length = 0; renderFileList(); };
+                body.appendChild(clearSeedsBtn);
+                // Repeat count is the shared row built above (with Players/Speed) —
+                // both Start Training and Start Breeding read state.generations.
+
+                breedBtn = document.createElement('button');
+                breedBtn.textContent = 'Start Breeding';
+                breedBtn.style.cssText = 'padding:6px 10px;background:#2d3a4a;color:#eee;border:1px solid #58a;border-radius:5px;cursor:pointer;font-size:12px;';
+                breedBtn.onclick = async () => {
+                    if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
+                    if (!await stopAnyRunningBotJob()) return;
+                    startBtnRef.disabled = true;
+                    startBtn.disabled = true;
+                    breedBtn.disabled = true;
+                    breedBtn.textContent = 'Breeding…';
+                    resetInsights();
+                    renderRoster();
+                    try {
+                        await leaveOnlineGameIfAny();
+                        const baselineWeights = { ...window.BotSystem.WEIGHTS };
+                        let baselineStored = null;
+                        try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
+
+                        const popSize = state.n;
+                        const gamesPerPair = 2; // evolve()'s own default, kept explicit for the totalGames estimate below
+                        const gamesPerGen = popSize * 3; // ditto
+                        const pairs = popSize * (popSize - 1) / 2;
+                        const totalGames = (state.n > 2 ? gamesPerGen : pairs * gamesPerPair) * state.generations;
+                        const startedAt = Date.now();
+                        let gamesDone = 0, lastGen = 0, lastFitness = null;
+                        const report = () => renderProgress({
+                            phase: 'training', gamesDone, totalGames, startedAt,
+                            gen: lastGen, generations: state.generations, fitness: lastFitness,
+                            nPlayers: state.n, popSize, mode: 'breeding',
+                        });
+
+                        const champion = await window.BotArena.evolve(state.generations, {
+                            nPlayers: state.n, popSize, visual: state.watchable,
+                            seedWeights: seedFiles.map(f => f.weights),
+                            onGeneration: (gen, total, fitness, members) => {
+                                lastGen = gen; lastFitness = fitness; report();
+                                handleGeneration(gen, total, fitness, members);
+                            },
+                            onGame: () => { gamesDone++; report(); },
+                        });
+
+                        // Restore the browser's LIVE weights — breeding
+                        // produces a file artifact, it should never silently
+                        // change which weights this browser's own bots use
+                        // next time (unlike Start Training above, which has
+                        // its own confirm-vs-baseline gate for exactly that;
+                        // evolve() itself unconditionally writes to
+                        // localStorage every generation regardless of caller).
+                        window.BotArena.applyWeights(baselineWeights);
+                        try {
+                            if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                            else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                        } catch (e) {}
+
+                        const blob = new Blob([JSON.stringify(champion, null, 1)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `godaigo-champion-${Date.now()}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(url);
+
+                        progressText.style.display = 'none';
+                        updateStatus(`Breeding complete (${state.generations} generation${state.generations > 1 ? 's' : ''}) — champion downloaded. Your live bot weights were left unchanged.`);
+                    } catch (err) {
+                        console.error('Bot breeding failed:', err);
+                        progressText.style.display = 'none';
+                        updateStatus('Bot breeding failed — see console');
+                    } finally {
+                        startBtnRef.disabled = false;
+                        startBtn.disabled = false;
+                        breedBtn.disabled = false;
+                        breedBtn.textContent = 'Start Breeding';
+                        hideTrainingPopup();
+                    }
+                };
+                body.appendChild(breedBtn);
+
+                renderRoster();
+                document.body.appendChild(overlay);
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!e.target || !e.target.classList.contains('gami-title')) return;
+                clickCount++;
+                clearTimeout(clickTimer);
+                if (clickCount >= 5) {
+                    clickCount = 0;
+                    openBotTrainingPanel();
+                } else {
+                    clickTimer = setTimeout(() => { clickCount = 0; }, 3000);
+                }
+            });
+
+            // Bridge so the outer-scope training popup's "expand" button can
+            // open the full modal without needing its own copy of the
+            // 5x-click trigger — see showTrainingPopup()/ensureTrainingPopup().
+            window._openBotTrainingPanel = openBotTrainingPanel;
         })();
 
