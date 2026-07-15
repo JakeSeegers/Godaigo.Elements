@@ -348,12 +348,19 @@ async function runConfirm(browser, url) {
 
     console.log('[runner] --- confirm verdict ---');
     if (confirmed) {
+        // A ready-to-paste browser-console line, so applying the champion is
+        // copy file → paste in console → reload, nothing to hand-assemble.
+        const applyPath = join(CACHE_DIR, 'apply-champion.txt');
+        writeFileSync(applyPath,
+            `// Paste this whole line into the game's browser console, then reload the page:\n` +
+            `localStorage.setItem('godaigo_bot_weights', ${JSON.stringify(JSON.stringify(winner.w))});\n`);
         console.log(`[runner] CONFIRMED: shard ${winner.shard}'s champion beat the baseline ` +
             `(${conf.aWins}-${conf.bWins}, ${conf.draws} draws; fitness ${conf.aFitness.toFixed(2)} vs ${conf.bFitness.toFixed(2)}).`);
-        console.log(`[runner] full table written to ${outPath}`);
-        console.log('[runner] apply it in the game (browser console):');
-        console.log(`         localStorage.setItem('godaigo_bot_weights', JSON.stringify(<champion from ${outPath}>))`);
-        console.log('         then reload — bot.js picks it up on load. Or paste into DEFAULT_WEIGHTS in js/bot.js.');
+        console.log(`[runner] full details written to ${outPath}`);
+        console.log('[runner] TO APPLY IT:');
+        console.log(`[runner]   1. open ${applyPath}`);
+        console.log('[runner]   2. copy the localStorage line, paste it into the game\'s browser console (F12), press Enter');
+        console.log('[runner]   3. reload the game — bot.js loads the new weights automatically');
     } else {
         console.log(`[runner] NOT confirmed: baseline held (${conf.aWins}-${conf.bWins}, ${conf.draws} draws; ` +
             `fitness ${conf.aFitness.toFixed(2)} vs ${conf.bFitness.toFixed(2)}). Keep the current weights.`);
