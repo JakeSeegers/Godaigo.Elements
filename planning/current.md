@@ -125,6 +125,23 @@ restored during the merge, see bot-arena.js.)
   1 restart log); negative control with only ONE bot parked runs to its
   turnCap untouched (`stalled:false, restarts:0`); a real 2-game
   `BotArena.run()` batch completes clean with zero page errors.
+- **DOC CLEANUP: Track B was already done, just never marked as such** —
+  `planning/current.md`. User asked "what's next" in the bot plan; while
+  answering, re-checked the stale "Track B (generalize
+  playGame()/run()/evolve() past 2 players) remains unscoped/unbuilt" note
+  against the actual code rather than trusting the doc. Confirmed directly
+  in `bot-arena.js`: `playMatch(weightsPerPlayer, opts)` is genuinely
+  N-player (2-5) generic (derives player count from
+  `weightsPerPlayer.length`); `evolve()` takes `opts.nPlayers` and samples
+  N-player groupings when >2; `playGame()` is now just a thin 2-player
+  backward-compat wrapper around `playMatch()`. `run()` intentionally
+  stays 2-player-only — not a gap, since the confirmation gate is always a
+  pairwise champion-vs-baseline comparison regardless of training player
+  count. This work happened earlier (the N-player `playMatch()`
+  unification, already in "Last Committed Work" further below) — the
+  Track B note just never got updated to reflect it. Corrected both the
+  detailed note and the item's own stale "Track A DONE, Tracks B/C not
+  started" summary line.
 - **BOT TRAINING UI: persistent progress popup + "End Early" control** —
   `js/bot-arena.js`, `js/game-ui.js`, `js/INDEX.md`. User request: the
   "🧬 Bot Training" panel should show info about the current run and stay
@@ -912,8 +929,8 @@ exist in code but are untested end-to-end. Docs system fully in place.
    plan + writeups: bot-roadmap § STAGE 2.5.
 3. Later: rerun hybrid-vs-greedy at 100 games + run BotArena.evolve()
    at scale (wants R5 server-side execution to be practical).
-4. **Opponent-awareness — Track A DONE (evaluator term), Tracks B/C not
-   started.** Track A: `evaluateSnapshot()` now scores opponent threat —
+4. **Opponent-awareness — Tracks A, B, and C all DONE.** Track A:
+   `evaluateSnapshot()` now scores opponent threat —
    `opponentProgress(snap, oppIndex)` mirrors the bot's own
    activated+home-distance terms for every opponent (MAX across opponents,
    not sum, so it doesn't dilute in 3-5p); `commonAreaThreat(snap, forIndex)`
@@ -934,9 +951,19 @@ exist in code but are untested end-to-end. Docs system fully in place.
    13-12-5, avg turns 69.3 vs. 70.2 — statistically identical, **no
    regression**. Not yet reachable from hybrid search's non-search branch
    (greedy `scoreAction()` has no opponent awareness) — flagged, not closed.
-   Track B (generalize `playGame()`/`run()`/`evolve()` past 2 players)
-   remains unscoped/unbuilt as originally planned. Track C (catacomb/Freedom
-   teleport action) is **DONE** — see the BOT STAGE 5 entry above.
+   Track B (generalize `playGame()`/`run()`/`evolve()` past 2 players) is
+   **DONE** — this note just never got updated when it happened. Confirmed
+   directly in `bot-arena.js`: `playMatch(weightsPerPlayer, opts)` derives
+   player count from `weightsPerPlayer.length` and is genuinely N-player
+   (2-5) generic; `evolve()` takes `opts.nPlayers` and samples N-player
+   groupings when >2; `playGame()` is now just a thin 2-player backward-
+   compat wrapper around `playMatch()` (kept for console/roadmap scripts
+   that reference its old signature directly). `run()` deliberately stays
+   2-player-only — not a gap, a design choice, since the confirmation gate
+   (champion vs. baseline) is always a pairwise comparison regardless of
+   how many players a training run itself uses. Track C (catacomb/Freedom
+   teleport action) is **DONE** — see the BOT STAGE 5 entry above. Neither
+   track has open work remaining.
 5. **KNOWN ISSUE, still open, DIAGNOSIS CORRECTED: response-only (level-1)
    scrolls can sit stuck in a common-area element slot for a long stretch
    ("elemental lockout").** Original theory (now stale): the fix was "give
@@ -1030,4 +1057,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (latest: bots can no longer place stones on the empty space left by a Telekinesis/Shifting-Sands-moved tile — applyAction('placeStone') now requires a real board hex and planValid() re-checks plan cells against the live grid; before that: catacomb teleport ping-pong is now penalized in the weights (teleportRevisitPenalty — return hops score -55, fresh hops keep +5) and the arena gained a second stall detector — 15 rounds with no one casting anything restarts the round, catching the free-teleport loops the elemental-tile camping detector can't see; before that: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-07-14 (latest: bots can no longer place stones on the empty space left by a Telekinesis/Shifting-Sands-moved tile — applyAction('placeStone') now requires a real board hex and planValid() re-checks plan cells against the live grid; before that: catacomb teleport ping-pong is now penalized in the weights (teleportRevisitPenalty — return hops score -55, fresh hops keep +5) and the arena gained a second stall detector — 15 rounds with no one casting anything restarts the round, catching the free-teleport loops the elemental-tile camping detector can't see; before that: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; corrected a stale planning note — opponent-awareness Track B, generalizing playGame()/run()/evolve() past 2 players, was actually already done via the earlier N-player playMatch() unification, just never marked as such; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
