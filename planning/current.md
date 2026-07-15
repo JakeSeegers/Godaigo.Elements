@@ -6,15 +6,55 @@
 ---
 
 ## Active Branch
-`claude/merge-bot-branches-safe-3p` → remote: `JakeSeegers/Godaigo.Elements`
-(merges `claude/bot-crash-three-player-2wcy9j` (base: `4.10.progresscheck`) with
-`claude/masons-savvy-range-bug-ep7hjm`, which had independently diverged from
-the same lineage and gone further on Stage 2.5. The two branches' bot-arena.js
-rewrites conflicted directly: masons-savvy's `playMatch()` unification dropped
-the `ensureLocalMode()` fix below (it predates that branch's fork point) —
-restored during the merge, see bot-arena.js.)
+`claude/earth-blocking-fire-tactics-bpinp3` → remote: `JakeSeegers/Godaigo.Elements`
+(continues from `claude/merge-bot-branches-safe-3p`, which merged
+`claude/bot-crash-three-player-2wcy9j` (base: `4.10.progresscheck`) with
+`claude/masons-savvy-range-bug-ep7hjm` — see that branch's note in git
+history for the bot-arena.js conflict resolution.)
 
 ## Last Committed Work
+- **BOT STAGE 4 COMPLETE: earth-blocking / fire-interference tactics +
+  wind-for-movement placement** — `js/bot-state.js`, `js/bot.js`,
+  `docs/bot-roadmap.md`, `js/INDEX.md`. User request: build the roadmap's
+  § STAGE 4 scoped design, plus "placing wind stones for movement is an
+  important strategy." The roadmap's premise that placement is dictated by
+  the bot's own pattern turned out to be a Stage-0 VOCABULARY gap, not a
+  game rule — humans can drag any held stone onto any valid in-range hex —
+  so `legalActions()` now also enumerates TACTICAL placeStone candidates
+  (`scroll:null, tactical:true`: held earth/wind/fire onto empty hexes
+  adjacent to the pawn; ≤ ~18 candidates, range buffs deliberately not
+  exploited). `bot.js`: `tacticalContext(snap)` built once per real
+  decision, root-only per the scoped design (never per search leaf) —
+  opponents' cheapest-path hex sets toward their next objective (nearest
+  needed shrine / home when complete; `pathToOrNear()` falls back to a hex
+  adjacent to targets our `canPlayerMoveToHex` can't enter), the bot's own
+  objective-path hexes, and "loaded gun" threat stones (stones inside a
+  currently-satisfied pattern an opponent could cast NOW — common area +
+  their PUBLIC active area only, hand names stay hidden). Fed through
+  `tacticalPlaceBonus()` into BOTH brains at the root: greedy
+  `scoreAction()` via `ctx.tac`, and `searchPick()` root scores (same
+  pattern as revisitPenalty). New weights: `placeTacticalBase` (−4),
+  `placeEarthBlock` (+45/opponent blocked), `placeSelfBlockPenalty` (−40),
+  `placeWindPath` (+12), `placeFireThreatBreak` (+70/threat stone,
+  mirrors the fire-burn void-guard rule), `placeTacticalStarvesPlan`
+  (−500). Guards shipped with it: hybrid's search trigger and botTurn's
+  `productive` bookkeeping both ignore tactical candidates (near-always
+  legal — would degenerate hybrid into always-on search / mask stalls).
+  **Wedge found via arena regression and fixed before committing:** wind
+  paving initially turned ~30% of arena games into bogus draws — the own
+  path's DESTINATION (target shrine centre) got paved, and the collect leg
+  looped "step on (free) → endTurn rejected (resting on a stone is
+  transit-only) → step off → replan" until the 30-action cap expired with
+  the pawn on the stone, where the arena's forced endTurn is also
+  rejected. Fixed: `collectibleShrines()` excludes stone-occupied centres
+  (collection = resting there), `ownPathHexes` excludes revealed
+  tile-centre hexes (wind pays on corridors, never on hexes the bot must
+  rest on), and `botTurn()` steps off a stone before finishing when a
+  stone-free hex is affordable. Verified headless with exact weighted
+  deltas + negative controls (wind 8 vs −4 on/off path; earth 41 vs −4,
+  back to −4 with the opponent gone; fire 66 vs −4 once the opponent's
+  scroll is removed); arena regression 10 + 8 games ALL decisive (5-5-0,
+  4-4-0), zero stalls/stuck/page errors, ~10 terrain placements per game.
 - **BOT FIX: stones placed on the void left behind by a moved tile
   (Telekinesis / Shifting Sands)** — `js/bot-state.js`, `js/bot.js`,
   `js/INDEX.md`. User screenshot: a tile was Telekinesis'd away and bots

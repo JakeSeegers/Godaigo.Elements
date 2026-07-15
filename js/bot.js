@@ -65,6 +65,44 @@
                                  // scoring the resulting simulated snapshot lower (see
                                  // evaluateSnapshot() below), so this is a redundant but
                                  // harmless mirror for the non-search fallback path.
+        // ── Stage 4: elemental stone tactics (terrain control) ──
+        // bot-state.js also enumerates TACTICAL (scroll:null) placeStone
+        // candidates — earth/wind/fire on empty hexes adjacent to the pawn,
+        // the same freedom a human's drag-drop has. They score
+        // placeTacticalBase (slightly negative: never attractive on their
+        // own) plus whichever terms below fire; the same terms ALSO apply
+        // to pattern-dictated placements (the roadmap's "tie-break between
+        // options already on the table"). All membership checks hit sets
+        // cached ONCE per decision in tacticalContext() — never per search
+        // leaf (the roadmap's scoped design: root-only heuristic).
+        placeTacticalBase:   -4,
+        placeEarthBlock:     45, // × opponents whose cached cheapest path to their
+                                 // next objective (needed shrine, or home when all
+                                 // 5 are activated) crosses this hex — earth blocks
+                                 // movement outright (canPlayerMoveToHex)
+        placeSelfBlockPenalty: -40, // earth on the bot's OWN objective path — don't
+                                 // wall yourself in while building or blocking
+        placeWindPath:       12, // wind on the bot's OWN objective path — moving
+                                 // over wind is free (cost 0), so a corridor stone
+                                 // dropped ahead pays back AP on every traversal;
+                                 // low enough that a directly useful move/cast
+                                 // still wins, high enough to beat a do-nothing
+                                 // endTurn with leftover stones (the "pave the
+                                 // road before ending the turn" behavior)
+        placeFireThreatBreak: 70, // × opponent-threat stones this fire placement
+                                 // destroys on landing (threat = a stone inside a
+                                 // currently-satisfied pattern an opponent could
+                                 // cast RIGHT NOW: common-area scrolls or their
+                                 // public active area, anchored at their standing
+                                 // position). Complements evalCommonThreat: that
+                                 // term only sees common-area scrolls and only
+                                 // under search — this one also covers opponents'
+                                 // active scrolls and the greedy/Dumb brain.
+        placeTacticalStarvesPlan: -500, // hard veto (same magnitude as placeNoCredit):
+                                 // a tactical spend that would leave the pool short
+                                 // of what the active build plan still needs of
+                                 // that stone type
+
         planDeficitPenalty:  -3, // × total stones still missing from pool when makePlan()/
                                  // findFixationTarget() pick a COLLECT-THEN-BUILD plan (one
                                  // whose pattern isn't fully in-pool yet, but every missing
@@ -314,12 +352,20 @@
         return Math.max(0, v);
     }
 
-    // Collectible shrine tiles: revealed, elemental, and worth something
+    // Collectible shrine tiles: revealed, elemental, worth something — and
+    // with a stone-free centre hex. Collection = ENDING the turn on the
+    // centre, and resting on a stone is banned (isPlayerRestingOnStone), so
+    // a paved centre cannot be collected from at all until the stone is
+    // broken. Without this exclusion a plan's collect leg walks onto the
+    // stone (transit is legal) and then retries the banned endTurn forever
+    // — observed wedging arena games once Stage-4 wind paving made
+    // stones-on-centres common.
     function collectibleShrines(snap) {
         return snap.tiles.filter(t =>
             t.revealed && !t.isPlayerTile &&
             ELEMENTS.includes(t.shrineType) &&
-            shrineValue(snap, t.shrineType) > 0);
+            shrineValue(snap, t.shrineType) > 0 &&
+            !snap.stones.some(s => Math.hypot(s.x - t.x, s.y - t.y) < 5));
     }
 
     function shrineUnderfoot(snap) {
@@ -382,6 +428,210 @@
     }
 
     // ----------------------------------------------------------------
+    // Stage 4 — elemental stone tactics (terrain control).
+    // tacticalContext() is built ONCE per real decision (rankActions /
+    // searchPick root) and NEVER per search leaf — the roadmap's scoped
+    // design: leaf call volume can't afford per-opponent Dijkstra, and a
+    // root tie-break doesn't pretend to model how an opponent reroutes
+    // around a wall afterwards. Returns:
+    //   oppPathCount: Map<hexKey, n> — how many opponents' cheapest paths
+    //     to their next objective cross this hex (earth-block targeting)
+    //   ownPathHexes: Set<hexKey> — the bot's own objective paths (wind
+    //     corridor value; earth self-block penalty)
+    //   threatStones: Set<hexKey> — stones inside a currently-satisfied
+    //     pattern an opponent could cast right now (fire-interference).
+    //     Only PUBLIC information: common-area scrolls + opponents' active
+    //     areas — hand scroll names are hidden by design and stay that way.
+    // Documented approximation: findPath's step costs come from
+    // canPlayerMoveToHex, which evaluates blocking (opponent tile centres,
+    // pawn occupancy) from the ACTIVE player's perspective — an opponent's
+    // modelled path can differ slightly from the one they'd really take.
+    // ----------------------------------------------------------------
+    const hexKey = (x, y) => `${x.toFixed(1)},${y.toFixed(1)}`;
+
+    // Cheapest path to (tx,ty), or — when the target hex itself is
+    // unreachable for the active player (an opponent's home centre is
+    // blocked by isOpponentTileCenter) — to the cheapest reachable hex
+    // adjacent to it. For blocking purposes the approach corridor is what
+    // matters, and stones can't land on a player tile anyway.
+    function pathToOrNear(sx, sy, tx, ty) {
+        const direct = window.BotState.findPath(sx, sy, tx, ty);
+        if (direct && direct.length) return direct;
+        let best = null;
+        for (const h of window.BotState.hexGrid()) {
+            const d = Math.hypot(h.x - tx, h.y - ty);
+            if (d <= 5 || d >= 40) continue;
+            const p = window.BotState.findPath(sx, sy, h.x, h.y);
+            if (!p || !p.length) continue;
+            const cost = p.reduce((c, s) => c + s.cost, 0);
+            if (!best || cost < best.cost) best = { p, cost };
+        }
+        return best ? best.p : null;
+    }
+
+    function tacticalContext(snap) {
+        const ai = snap.turn.activePlayerIndex;
+        const self = me(snap);
+        if (!self) return null;
+
+        // Each opponent's cheapest path to their next objective: the
+        // nearest shrine of an element they still need (unactivated, live
+        // source, room in their pool — all public), or their home tile once
+        // all 5 are activated (mirrors opponentProgress()'s model).
+        const oppPathCount = new Map();
+        for (const opp of snap.players) {
+            if (!opp || opp.index === ai) continue;
+            let target = null;
+            if (ELEMENTS.every(el => opp.activated.includes(el))) {
+                target = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === opp.index) || null;
+            } else {
+                let best = null;
+                for (const t of snap.tiles) {
+                    if (!t.revealed || t.isPlayerTile) continue;
+                    if (!ELEMENTS.includes(t.shrineType)) continue;         // masked/catacomb — skip
+                    if (opp.activated.includes(t.shrineType)) continue;
+                    if ((snap.sourcePool[t.shrineType] || 0) <= 0) continue;
+                    if ((opp.pool[t.shrineType] || 0) >= POOL_CAP) continue;
+                    const d = Math.hypot(t.x - opp.x, t.y - opp.y);
+                    if (!best || d < best.d) best = { t, d };
+                }
+                target = best ? best.t : null;
+            }
+            if (!target) continue;
+            const path = pathToOrNear(opp.x, opp.y, target.x, target.y);
+            if (!path) continue;
+            const seenHexes = new Set();
+            for (const step of path) {
+                const k = hexKey(step.x, step.y);
+                if (seenHexes.has(k)) continue;
+                seenHexes.add(k);
+                oppPathCount.set(k, (oppPathCount.get(k) || 0) + 1);
+            }
+        }
+
+        // The bot's OWN objective paths: home once all 5 are activated;
+        // otherwise the best-value collectible shrine (same worth-÷-cost
+        // shape move scoring uses) plus the nearest hidden-tile route.
+        const ownPathHexes = new Set();
+        // Never include a revealed TILE CENTRE hex: those are hexes the bot
+        // must eventually REST on (shrine collection, catacomb teleports,
+        // the home win condition) and resting on a stone is banned — paving
+        // one sabotages the very objective the path leads to (observed: a
+        // wind stone on the target shrine's centre wedged the collect loop).
+        // Corridor hexes are where wind pays; destinations never are.
+        const isTileCentre = (x, y) => snap.tiles.some(t =>
+            t.revealed && Math.hypot(t.x - x, t.y - y) < 5);
+        const addPath = (path) => {
+            if (!path) return;
+            for (const s of path) {
+                if (isTileCentre(s.x, s.y)) continue;
+                ownPathHexes.add(hexKey(s.x, s.y));
+            }
+        };
+        if (ELEMENTS.every(el => self.activated.includes(el))) {
+            const home = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === ai);
+            if (home) addPath(pathToOrNear(self.x, self.y, home.x, home.y));
+        } else {
+            let best = null;
+            for (const t of collectibleShrines(snap)) {
+                const path = window.BotState.findPath(self.x, self.y, t.x, t.y);
+                if (!path || !path.length) continue;
+                const cost = path.reduce((c, s) => c + s.cost, 0);
+                const v = shrineValue(snap, t.shrineType) / (1 + cost);
+                if (!best || v > best.v) best = { v, path };
+            }
+            if (best) addPath(best.path);
+            // Nearest hidden-tile ring hex (their outer rings are walkable —
+            // same targeting rankActions' explorePath uses)
+            const rings = window.BotState.hexGrid()
+                .filter(h => h.tiles?.some(t => t.flipped && !t.isPlayerTile))
+                .sort((a, b) => Math.hypot(a.x - self.x, a.y - self.y) - Math.hypot(b.x - self.x, b.y - self.y));
+            for (const h of rings.slice(0, 3)) {
+                const path = window.BotState.findPath(self.x, self.y, h.x, h.y);
+                if (path && path.length) { addPath(path); break; }
+            }
+        }
+
+        // Opponent "loaded guns": every stone participating in a pattern
+        // variant an opponent could cast right now, anchored at their
+        // current position (patterns are relative to the caster's hex).
+        // Mirrors BotSim.checkPattern()'s math, but keeps the matched cells
+        // instead of collapsing to a boolean.
+        const threatStones = new Set();
+        for (const opp of snap.players) {
+            if (!opp || opp.index === ai) continue;
+            const castable = new Set([...(opp.active || []), ...(snap.commonArea || [])]);
+            for (const name of castable) {
+                const def = window.SCROLL_DEFINITIONS?.[name];
+                if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
+                for (const variant of def.patterns) {
+                    const matched = [];
+                    let ok = true;
+                    for (const req of variant) {
+                        const off = hexToPixel(req.q, req.r, TILE_SIZE);
+                        const s = snap.stones.find(st =>
+                            st.type === req.type &&
+                            Math.hypot(st.x - (opp.x + off.x), st.y - (opp.y + off.y)) < 5);
+                        if (!s) { ok = false; break; }
+                        matched.push(s);
+                    }
+                    if (ok) for (const s of matched) threatStones.add(hexKey(s.x, s.y));
+                }
+            }
+        }
+
+        return { oppPathCount, ownPathHexes, threatStones };
+    }
+
+    // Tactical value of a placeStone — pattern-dictated OR tactical
+    // (scroll:null) alike. Root-only, both brains: greedy scoreAction()
+    // reads it via ctx.tac; searchPick() adds it to its root scores the
+    // same way it folds in revisitPenalty.
+    function tacticalPlaceBonus(a, snap, tac) {
+        if (!tac || a.type !== 'placeStone') return 0;
+        let b = 0;
+        const k = hexKey(a.x, a.y);
+        if (a.stoneType === 'earth') {
+            const blocked = tac.oppPathCount.get(k) || 0;
+            if (blocked) b += WEIGHTS.placeEarthBlock * blocked;
+            if (tac.ownPathHexes.has(k)) b += WEIGHTS.placeSelfBlockPenalty;
+        } else if (a.stoneType === 'wind') {
+            if (tac.ownPathHexes.has(k)) b += WEIGHTS.placeWindPath;
+        } else if (a.stoneType === 'fire') {
+            // Mirrors BotSim's applyFireInteractions(): a placed fire only
+            // burns when IT has no adjacent void; victims are adjacent
+            // non-fire/non-void stones (5..50px stone-neighbor window).
+            const guarded = snap.stones.some(s => {
+                if (s.type !== 'void') return false;
+                const d = Math.hypot(s.x - a.x, s.y - a.y);
+                return d > 5 && d < 50;
+            });
+            if (!guarded) {
+                for (const s of snap.stones) {
+                    if (s.type === 'fire' || s.type === 'void') continue;
+                    const d = Math.hypot(s.x - a.x, s.y - a.y);
+                    if (d <= 5 || d >= 50) continue;
+                    if (tac.threatStones.has(hexKey(s.x, s.y))) b += WEIGHTS.placeFireThreatBreak;
+                }
+            }
+        }
+        // Never spend a stone the active build plan still needs of this
+        // type — a wall/corridor isn't worth stalling the win-credit plan.
+        if (a.tactical) {
+            const plan = mem(snap.turn.activePlayerIndex).plan;
+            const self = me(snap);
+            if (plan && self) {
+                const stillNeeded = plan.cells.filter(c => c.type === a.stoneType &&
+                    !snap.stones.some(st => st.type === c.type && Math.hypot(st.x - c.x, st.y - c.y) < 5)).length;
+                if (stillNeeded > 0 && ((self.pool[a.stoneType] || 0) - 1) < stillNeeded) {
+                    b += WEIGHTS.placeTacticalStarvesPlan;
+                }
+            }
+        }
+        return b;
+    }
+
+    // ----------------------------------------------------------------
     // scoreAction — the Stage-1 utility function. Tune WEIGHTS, not this.
     // ----------------------------------------------------------------
     function scoreAction(a, snap, ctx) {
@@ -408,13 +658,22 @@
             }
 
             case 'placeStone': {
-                let s = WEIGHTS.placeBase + WEIGHTS.placeProgress * (a.progress || 0);
-                s += hasWinCredit(snap, a.scroll) ? WEIGHTS.placeUnactivated : WEIGHTS.placeNoCredit;
+                let s;
+                if (a.scroll) {
+                    s = WEIGHTS.placeBase + WEIGHTS.placeProgress * (a.progress || 0);
+                    s += hasWinCredit(snap, a.scroll) ? WEIGHTS.placeUnactivated : WEIGHTS.placeNoCredit;
+                } else {
+                    // Tactical placement (Stage 4, scroll:null — see
+                    // bot-state.js): no pattern value at all; only worth
+                    // taking when a tacticalPlaceBonus() term fires.
+                    s = WEIGHTS.placeTacticalBase;
+                }
                 // The bot KNOWS the fire rule — don't pay stones to relearn it
                 if (window.BotSim && !window.BotSim.stoneWouldSurvive(snap, a.x, a.y, a.stoneType)) {
                     s += WEIGHTS.placeDoomed;
                 }
                 if (a.stoneType === 'void') s += WEIGHTS.placeVoidSpendPenalty;
+                s += tacticalPlaceBonus(a, snap, ctx.tac);
                 return s;
             }
 
@@ -1138,6 +1397,11 @@
         const depth = Math.max(1, WEIGHTS.searchDepth | 0);
         const breadth = Math.max(2, WEIGHTS.searchBreadth | 0);
         _exploreField = buildExploreField(snap0); // path-aware leaf evaluation
+        // Stage 4 terrain-control sets — root-only by design (see
+        // tacticalContext): evaluateSnapshot() never sees them, so leaves
+        // stay cheap; the bonus is folded into the root scores below the
+        // same way revisitPenalty already is.
+        const tac = legal.some(a => a.type === 'placeStone') ? tacticalContext(snap0) : null;
 
         function value(snap, d) {
             // Leaf: depth exhausted, game over, or the turn passed (endTurn)
@@ -1170,6 +1434,12 @@
             let v = value(c.s1, depth - 1);
             if (c.a.type === 'move') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
             if (c.a.type === 'teleport') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.teleportRevisitPenalty);
+            if (c.a.type === 'placeStone') {
+                v += tacticalPlaceBonus(c.a, snap0, tac);
+                // Tactical placements have no pattern value the eval could
+                // see — keep the same idle-drop bias greedy scoring has.
+                if (!c.a.scroll) v += WEIGHTS.placeTacticalBase;
+            }
             if (!best || v > best.score) best = { action: c.a, score: v };
         }
         _exploreField = null; // valid only for this decision's root snapshot
@@ -1240,6 +1510,9 @@
             const path = window.BotState.findPath(self.x, self.y, fixationTarget.x, fixationTarget.y);
             if (path && path.length) ctx.fixationPath = path;
         }
+        // Stage 4 terrain-control sets — only worth building when a stone
+        // placement is actually on the table this decision.
+        ctx.tac = legal.some(a => a.type === 'placeStone') ? tacticalContext(snap) : null;
 
         return legal
             .map(a => ({ action: a, score: scoreAction(a, snap, ctx) }))
@@ -1390,7 +1663,13 @@
             let useSearch = true;
             if (WEIGHTS.searchHybrid) {
                 const legal = window.BotState.legalActions();
-                useSearch = legal.some(a => a.type === 'cast' || a.type === 'placeStone');
+                // Tactical (scroll:null) placements are near-ALWAYS legal —
+                // any held earth/wind/fire next to an empty hex — so they
+                // must not count as a "tactical decision point" here, or
+                // hybrid degenerates into always-on search, whose movement
+                // choices are known to fight the plan/path logic (see the
+                // Stage-2 acceptance measurements: FULL search lost 1-3).
+                useSearch = legal.some(a => a.type === 'cast' || (a.type === 'placeStone' && a.scroll));
             }
             if (useSearch) {
                 choice = searchPick();
@@ -1424,7 +1703,9 @@
         const { action, score } = choice;
         const label = action.type === 'placeTile'      ? `place player tile at (${action.x.toFixed(0)},${action.y.toFixed(0)})`
                     : action.type === 'cast'           ? `cast ${action.scroll}`
-                    : action.type === 'placeStone'     ? `place ${action.stoneType} for ${action.scroll} (${Math.round((action.progress||0)*100)}%)`
+                    : action.type === 'placeStone'     ? (action.scroll
+                        ? `place ${action.stoneType} for ${action.scroll} (${Math.round((action.progress||0)*100)}%)`
+                        : `place ${action.stoneType} for terrain control`)
                     : action.type === 'move'           ? `move to (${action.x.toFixed(0)},${action.y.toFixed(0)}) cost ${action.cost}`
                     : action.type === 'discardScroll'  ? `discard ${action.scroll} (from ${action.from})`
                     : 'end turn';
@@ -1559,6 +1840,7 @@
         const wasForced = m.turnRepeatStreak >= 1; // circuit breaker armed for this turn
         const turnMoves = [];
         let productive = false; // cast or placeStone applied this turn — see unproductiveStreak below
+        let endedTurn = false;
         try {
             for (let i = 0; i < 30; i++) {                    // safety cap
                 if (activePlayerIndex !== startingPlayer) break; // turn passed
@@ -1567,9 +1849,30 @@
                 const applied = botAct();
                 if (!applied) break;
                 if (applied.type === 'move') turnMoves.push(`${applied.x.toFixed(1)},${applied.y.toFixed(1)}`);
-                if (applied.type === 'cast' || applied.type === 'placeStone') productive = true;
-                if (applied.type === 'endTurn') break;
+                // Tactical (scroll:null) drops are terrain control, not
+                // progress toward the win — they must not mask a stall or
+                // unproductiveStreak's circuit breaker never fires.
+                if (applied.type === 'cast' || (applied.type === 'placeStone' && applied.scroll)) productive = true;
+                if (applied.type === 'endTurn') { endedTurn = true; break; }
                 await tick(350);
+            }
+            // Never leave autopilot RESTING ON A STONE when stepping onto a
+            // stone-free hex is affordable: endTurn is banned there
+            // (transit-only rule) unless genuinely stranded, so both the
+            // arena's and bot-driver's forced end-turn safety nets would be
+            // rejected and the whole game wedges. One escape step is enough
+            // — the pawn is then on an empty hex where endTurn is legal.
+            if (!endedTurn && activePlayerIndex === startingPlayer &&
+                typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(startingPlayer)) {
+                const esc = window.BotState.legalActions()
+                    .filter(a => a.type === 'move' &&
+                        !placedStones.some(s => Math.hypot(s.x - a.x, s.y - a.y) < 5))
+                    .sort((a, b) => a.cost - b.cost)[0];
+                if (esc) {
+                    log(`Autopilot ended on a stone — stepping off to (${esc.x.toFixed(0)},${esc.y.toFixed(0)}) so the turn can end`);
+                    const r = window.BotState.applyAction(esc);
+                    if (r.ok) recordVisited(startingPlayer, esc.x, esc.y);
+                }
             }
         } finally {
             _turnRunning = false;

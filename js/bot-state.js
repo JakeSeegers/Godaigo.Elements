@@ -341,6 +341,46 @@
                     }
                 }
             }
+
+            // ── tactical placeStone (Stage 4): non-pattern placements ──
+            // A human can drag ANY held stone onto ANY valid in-range hex —
+            // the pattern-cell enumeration above is a pragmatic narrowing of
+            // the candidate space, not a game rule. Terrain-control tactics
+            // (earth walls off an opponent's path, wind paves the bot's own
+            // route with free movement, fire burns a stone an opponent's
+            // satisfied pattern needs) require exactly the placements that
+            // narrowing excludes, so enumerate them too — but only for the
+            // three types bot.js has a tactical scoring term for, and only
+            // on hexes ADJACENT to the pawn (the default placement range;
+            // range buffs like Avalanche / Mason's Savvy are deliberately
+            // not exploited here to keep the candidate count bounded).
+            // scroll:null + tactical:true mark them — bot.js scores these
+            // purely on tactical value (placeTacticalBase is slightly
+            // negative, so absent a live tactical term they are never
+            // taken). NOT mirrored in bot-sim.js's own legalActions(), so
+            // lookahead can't PLAN multi-step tactical sequences — same
+            // accepted root-only gap as breakStone/teleport.
+            for (const stoneType of ['earth', 'wind', 'fire']) {
+                if ((pool[stoneType] || 0) <= 0) continue;
+                for (const h of grid) {
+                    const d = Math.hypot(h.x - player.x, h.y - player.y);
+                    if (d <= HEX_NEAR || d >= HEX_STEP) continue;
+                    const key = `${h.x.toFixed(1)},${h.y.toFixed(1)},${stoneType}`;
+                    if (seen.has(key)) continue;
+                    if (placedStones.some(s => Math.hypot(s.x - h.x, s.y - h.y) < HEX_NEAR)) continue;
+                    if (playerPositions.some(p => p && Math.hypot(p.x - h.x, p.y - h.y) < HEX_NEAR)) continue;
+                    // Same validity chain the pattern candidates above use
+                    if (typeof isInPlacementRange === 'function' &&
+                        !isInPlacementRange(h.x, h.y, stoneType)) continue;
+                    if (typeof isPositionOnFlippedTile === 'function' &&
+                        isPositionOnFlippedTile(h.x, h.y, grid)) continue;
+                    seen.add(key);
+                    actions.push({
+                        type: 'placeStone', x: h.x, y: h.y, stoneType,
+                        scroll: null, progress: 0, tactical: true,
+                    });
+                }
+            }
         }
 
         // ── move: each affordable adjacent hex ──

@@ -1194,7 +1194,7 @@ PPO or DQN via tensorflow.js, reward = win ±1 with small per-turn penalty.
 If Stage 2 MCTS exists, prefer AlphaZero-style (policy prior + value net) over
 model-free RL. Do not attempt without the arena (3a) as the evaluation gate.
 
-## STAGE 4 — Elemental stone tactics (terrain control)
+## STAGE 4 — Elemental stone tactics (terrain control) (DONE)
 
 Prompted by a user question: do stone-placement/breaking weights need to
 differ per element, given each has a distinct ability (earth blocks
@@ -1203,10 +1203,18 @@ non-fire/non-void stones on placement, wind is free movement, void held in
 pool grants standing bonus AP — `voidAP = pool.void` each turn,
 `game-core.js`)? Investigated case by case:
 
-- **Wind** — already correctly priced for free: its movement-cost effect
+- **Wind (traversal DONE earlier; placement DONE with earth/fire below)** —
+  traversal was already correctly priced for free: its movement-cost effect
   feeds directly into `a.cost` in the `move` case of `scoreAction()`, so a
   single generic `moveApPenalty` already produces wind-preferring behavior
-  with no new weight needed.
+  with no new weight needed. What that did NOT cover (user request, added
+  alongside the earth/fire work below): PLACING wind stones to build a free
+  corridor along the bot's own route — `placeWindPath` rewards a wind stone
+  dropped on a hex of the bot's own cached objective path (see
+  `tacticalContext()` below). Emergent timing observed in verification: a
+  useful move/cast still outscores the drop (+12 < typical move values), so
+  the bot paves the road ahead mostly when AP is spent, right before ending
+  the turn — exactly when it costs nothing.
 - **Water** — its value is entirely borrowed from whatever it's chained to
   (mimics earth or wind depending on the adjacent stone via
   `getChainedAbility()`), so a static per-element weight can't represent it
@@ -1239,7 +1247,83 @@ pool grants standing bonus AP — `voidAP = pool.void` each turn,
   a void vs. water shrine at equal need — all matched expected math
   exactly. 10-game self-play regression (`BotArena.run`, same weights both
   sides) confirms no errors/crashes with the new terms live.
-- **Earth (blocking) / Fire (interference) — TODO, scoped but not built.**
+- **Earth (blocking) / Fire (interference) — DONE (plus wind placement,
+  above).** Built exactly on the scoped design below, with one deliberate
+  extension: the "placement position is dictated by the bot's own pattern"
+  constraint (point 1 below) turned out to be a Stage-0 VOCABULARY gap, not
+  a game rule — a human can drag any held stone onto any valid in-range
+  hex, bots just never had that action. `bot-state.js`'s `legalActions()`
+  now also enumerates TACTICAL placeStone candidates (`scroll:null,
+  tactical:true`): earth/wind/fire from the pool onto empty hexes ADJACENT
+  to the pawn (default placement range; range buffs deliberately not
+  exploited, keeps it ≤ ~18 candidates). So earth-blocking is a real
+  placement choice now, not only a tie-break between pattern cells — though
+  the tactical terms apply to pattern-dictated placements too.
+
+  Implementation (`js/bot.js`): `tacticalContext(snap)` built ONCE per real
+  decision (never per search leaf, per the design below) —
+  `oppPathCount` (per-hex count of opponents whose cheapest path to their
+  next objective crosses it; objective mirrors `opponentProgress()`:
+  nearest needed shrine, or home once all 5 activated; `pathToOrNear()`
+  falls back to the cheapest hex ADJACENT to a target our own
+  `canPlayerMoveToHex` can't enter, e.g. an opponent's home centre),
+  `ownPathHexes` (bot's own best shrine path + nearest hidden-tile route,
+  or home path once complete), and `threatStones` (every stone inside a
+  currently-satisfied pattern variant an opponent could cast RIGHT NOW —
+  common-area + their PUBLIC active area, anchored at their standing hex;
+  hand names stay hidden by design). `tacticalPlaceBonus()` folds these
+  into BOTH brains at the root only: greedy `scoreAction()`'s placeStone
+  case via `ctx.tac`, and `searchPick()`'s root scores the same way
+  revisitPenalty is folded in (the "root-only heuristic" option below —
+  evaluateSnapshot() never sees the sets, so leaves stay cheap). Weights:
+  `placeTacticalBase` (−4: a tactical drop is never attractive on its own),
+  `placeEarthBlock` (+45 × opponents blocked), `placeSelfBlockPenalty`
+  (−40, earth on the bot's OWN path — don't wall yourself in),
+  `placeWindPath` (+12), `placeFireThreatBreak` (+70 per threat stone an
+  unguarded fire placement would destroy — mirrors
+  `applyFireInteractions()`: no burn if the placed fire has an adjacent
+  void), `placeTacticalStarvesPlan` (−500 veto when the spend would leave
+  the pool short of what the active plan still needs of that type).
+
+  **Guards that had to ship with it (all three observed, not theoretical):**
+  - Hybrid's search trigger now ignores tactical candidates
+    (`placeStone && a.scroll`) — they're near-always legal, so counting
+    them would have made hybrid degenerate into always-on search, the
+    configuration that LOST its acceptance series (Stage 2 measurements).
+  - `botTurn()`'s `productive` bookkeeping likewise only counts pattern
+    placements, or terrain drops would mask a stall from
+    `unproductiveStreak`'s circuit breaker forever.
+  - **Wind paving initially wedged ~30% of arena games as draws** (repro:
+    seeds 17000/17006/17009): `ownPathHexes` included the path's
+    DESTINATION — the target shrine's centre hex — so the bot paved the
+    centre with wind, and its collect leg then looped forever: step onto
+    the shrine (free), "end turn to collect" rejected (resting on a stone
+    is transit-only), step off, replan, step back on… until the 30-action
+    cap expired mid-loop standing on the stone, where the arena's forced
+    endTurn is ALSO rejected → game aborted as a no-stall draw. Fixed
+    three ways: `collectibleShrines()` excludes shrines whose centre holds
+    a stone (collection = RESTING there, which a stone bans — this also
+    fixes plan targeting and shrine-pull scoring against opponent-paved
+    centres); `ownPathHexes` excludes revealed tile-centre hexes (wind
+    pays on corridors, never on hexes the bot must eventually rest on);
+    and `botTurn()` gained a safety net — never leave autopilot resting
+    on a stone when an affordable step onto a stone-free hex exists.
+
+  Verified headless (real game, exact weighted deltas): wind on-path 8 vs
+  −4 off-path (= placeWindPath); earth on an opponent's modelled path 41
+  vs −4 off it, and back to −4 with the opponent removed (= placeEarthBlock,
+  negative control); fire adjacent to a staged loaded-gun stone 66 vs −4
+  after the opponent's scroll is removed (= placeFireThreatBreak, negative
+  control); searchPick() runs clean with tactical candidates present.
+  Arena regression after the wedge fixes: 10 + 8 games, ALL decisive
+  (5-5-0, 4-4-0), zero stalls/stuck games/page errors, ~10 terrain
+  placements per game across both bots. Known limits: `bot-sim.js`'s pure
+  `legalActions(snap)` doesn't generate tactical candidates for deeper
+  plies (same accepted root-only gap as breakStone/teleport), and opponent
+  paths are computed from the active player's movement perspective (slight
+  approximation, documented in the code).
+
+  Original scoping notes, kept for context:
   Both are real opponent-facing tactics (earth walls off a path, fire
   destroys a stone an opponent needs) that the bot doesn't currently
   reason about at all — `placeStone` scoring is 100% about the bot's OWN
