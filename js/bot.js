@@ -1663,13 +1663,26 @@
             let useSearch = true;
             if (WEIGHTS.searchHybrid) {
                 const legal = window.BotState.legalActions();
-                // Tactical (scroll:null) placements are near-ALWAYS legal —
-                // any held earth/wind/fire next to an empty hex — so they
-                // must not count as a "tactical decision point" here, or
-                // hybrid degenerates into always-on search, whose movement
+                // Only engage search when a GENUINE tactical decision exists —
+                // a legal cast, or a placement that actually bears win credit.
+                // Two classes of placement must NOT count as a decision point,
+                // or hybrid degenerates into always-on search whose movement
                 // choices are known to fight the plan/path logic (see the
-                // Stage-2 acceptance measurements: FULL search lost 1-3).
-                useSearch = legal.some(a => a.type === 'cast' || (a.type === 'placeStone' && a.scroll));
+                // Stage-2 acceptance measurements: FULL search lost 1-3):
+                //   1. Tactical (scroll:null) placements — near-ALWAYS legal
+                //      (any held earth/wind/fire next to an empty hex).
+                //   2. No-win-credit scroll placements — legalActions()
+                //      enumerates a placeStone for every missing cell of every
+                //      pattern variant with no credit awareness, so a pattern
+                //      for an already-activated element (or one whose source
+                //      pool is empty) stays "legal" forever. creditFilter()
+                //      already drops these INSIDE the search, so triggering on
+                //      one just leaves search doing move-only lookahead — the
+                //      exact wandering this gate exists to prevent. Reuse the
+                //      same hasWinCredit() the filter/scorer already use so the
+                //      trigger and the search agree on what counts.
+                useSearch = legal.some(a => a.type === 'cast' ||
+                    (a.type === 'placeStone' && a.scroll && hasWinCredit(snap, a.scroll)));
             }
             if (useSearch) {
                 choice = searchPick();

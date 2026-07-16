@@ -338,16 +338,32 @@ Feature summary (see `scoreAction()` in bot.js for the authoritative list):
   is gone across two fresh 15-game arena batches (0 occurrences), and the
   circuit breaker itself fired 7 times in one batch, correctly picking
   `placeStone`/`breakStone`/`cast`/`endTurn` over continuing to wander.
-  **Not yet fixed, flagged for follow-up:** a related but distinct
-  *within-turn* oscillation surfaced in the same batches — hybrid search
-  stays engaged for an entire turn whenever ANY `placeStone` candidate is
-  technically legal (even a hopeless one, per `legal.some(a => a.type ===
-  'cast' || a.type === 'placeStone')`), and `searchPick()`'s movement
-  choices don't share the plan/path discipline that keeps greedy
-  exploration coherent — matches the roadmap's own prior finding ("FULL
-  search LOST its series 1-3-4 — always-on lookahead's movement choices
-  fight the plan/path logic") resurfacing via hybrid mode being triggered
-  more broadly than intended.
+  **FIXED — the within-turn oscillation was a hybrid over-trigger.** A
+  related but distinct *within-turn* oscillation surfaced in the same
+  batches: hybrid search stayed engaged for an entire turn whenever ANY
+  `placeStone` candidate was technically legal, and `searchPick()`'s
+  movement choices don't share the plan/path discipline that keeps greedy
+  exploration coherent — the same "FULL search LOST its series 1-3-4 —
+  always-on lookahead's movement choices fight the plan/path logic" finding
+  resurfacing via hybrid firing more broadly than intended. The trigger had
+  already been narrowed once (excluding `scroll:null` tactical placements),
+  but still fired on NO-WIN-CREDIT scroll placements — and `legalActions()`
+  enumerates a placeStone for every missing cell of every pattern variant
+  with no credit awareness, so a pattern for an already-activated element
+  (or one whose source pool is empty) stays "legal" forever. `creditFilter()`
+  already drops those INSIDE the search, so triggering on one just left
+  search doing move-only lookahead — precisely the wandering. Fixed by
+  gating the trigger's placeStone clause on the same `hasWinCredit(snap,
+  a.scroll)` the filter/scorer already use (`bot.js` botAct hybrid branch):
+  `useSearch = legal.some(a => a.type === 'cast' || (a.type === 'placeStone'
+  && a.scroll && hasWinCredit(snap, a.scroll)))`. Now a state whose only
+  "tactical" options are hopeless placements falls through to the disciplined
+  greedy plan/path movement instead of engaging search. Strict narrowing —
+  genuine cast/credit-bearing decisions still search exactly as before.
+  Verified headless: 2 full 2p games stay decisive (46/34 turns) with zero
+  page errors, and hybrid stays SELECTIVE — 17 search decisions vs 216 greedy
+  across the two games (search neither disabled nor always-on). Still worth a
+  larger A/B (search-narrowed vs prior) once R5 makes games cheap.
 
 All six found by literally running the bot (single-bot loops via
 `window.BotSystem.turn()`/`.step()`, bot-vs-bot batches via

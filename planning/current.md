@@ -10,6 +10,29 @@
 (continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
 ## Last Committed Work
+- **BOT: fixed the hybrid-search-vs-plan within-turn oscillation (over-trigger)**
+  — `js/bot.js`, `docs/bot-roadmap.md`. The roadmap's flagged-for-follow-up
+  within-turn oscillation: hybrid search engaged whenever ANY scroll
+  placeStone was legal, but `searchPick()`'s movement choices don't share the
+  greedy plan/path discipline, so on turns with nothing productive to build it
+  wandered (the "FULL search LOST 1-3 — lookahead movement fights plan/path"
+  finding, resurfacing via hybrid firing too broadly). The trigger already
+  excluded `scroll:null` tactical placements but still fired on NO-WIN-CREDIT
+  scroll placements — and `legalActions()` enumerates a placeStone for every
+  missing cell of every pattern variant with no credit awareness, so a pattern
+  for an already-activated / empty-source-pool element stays "legal" forever;
+  `creditFilter()` drops those inside the search, so triggering on one just
+  left search doing move-only lookahead. Fixed by gating the trigger's
+  placeStone clause on the same `hasWinCredit(snap, a.scroll)` the
+  filter/scorer already use (`botAct()` hybrid branch, line ~1672). Now a
+  hopeless-placement-only state falls through to disciplined greedy plan/path
+  movement; genuine cast / credit-bearing placement decisions still search
+  exactly as before (strict narrowing). Verified headless: 2 full 2p games
+  stay decisive (46/34 turns), zero page errors, hybrid stays SELECTIVE (17
+  search vs 216 greedy decisions — neither disabled nor always-on). Next
+  intelligence lever per the roadmap: run a large sharded evolution via
+  `tools/arena-headless.mjs` across the new mixed-size arena (needs R5 /
+  cheaper self-play to be fast at scale).
 - **BOT ARENA: "All sizes" generalist training + multi-size confirmation gate,
   and a bot win-condition halt fix** — `js/bot-arena.js`, `js/game-ui.js`,
   `js/bot.js`, `js/INDEX.md`. User report: the end-of-training confirmation
