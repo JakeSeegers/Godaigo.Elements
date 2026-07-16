@@ -1844,6 +1844,25 @@
         try {
             for (let i = 0; i < 30; i++) {                    // safety cap
                 if (activePlayerIndex !== startingPlayer) break; // turn passed
+                // Stop the instant the win condition is met (all 5 elements
+                // activated AND standing on the own-shrine centre). Taking
+                // another action would step the pawn off the shrine, and the
+                // arena / spectate winner check (BotSim.winner, in
+                // _playMatchOnce) only looks once the whole turn is over — so
+                // a win reached mid-turn and then walked away from is silently
+                // missed, forcing the bot to re-land on the centre a later
+                // turn. That is the "bots step onto the home shrine multiple
+                // times before the win registers" report. Leaving the pawn put
+                // lets the win register this turn. (Real games already fire
+                // checkWinCondition on the winning move itself; this also stops
+                // a won bot from pointlessly wandering afterward.)
+                try {
+                    if (window.BotSim && window.BotState &&
+                        window.BotSim.winner(window.BotState.snapshot()) === startingPlayer) {
+                        log('Win condition met — halting the turn so the pawn stays on its shrine');
+                        break;
+                    }
+                } catch (e) { /* snapshot/winner is never fatal to the turn loop */ }
                 await waitForQuiescence();
                 if (activePlayerIndex !== startingPlayer) break;
                 const applied = botAct();
