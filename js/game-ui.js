@@ -4047,6 +4047,12 @@ document.getElementById('undo-move').onclick = function() {
         async function runWeightTraining(preset, onProgress, opts = {}) {
             const { generations, gamesPerPair, popSize, confirmGames } = preset;
             const nPlayers = opts.nPlayers ?? 2;
+            // 'all' = generalist: evolve across mixed 2–5-player arenas, then
+            // confirm the champion across every size (confirmAcrossSizes),
+            // instead of the fixed-count evolve + 2-player run() gate.
+            const allSizes = nPlayers === 'all';
+            const confirmSizes = [2, 3, 4, 5];
+            const gamesPerSize = preset.gamesPerSize ?? 4;
             const visual = !!opts.visual;
             const baselineWeights = { ...window.BotSystem.WEIGHTS };
             let baselineStored = null;
@@ -4054,7 +4060,9 @@ document.getElementById('undo-move').onclick = function() {
             await leaveOnlineGameIfAny();
 
             const pairs = popSize * (popSize - 1) / 2;
-            const totalGames = (nPlayers > 2 ? (opts.gamesPerGen ?? popSize * 2) * generations : pairs * gamesPerPair * generations) + confirmGames;
+            const sampledPerGen = opts.gamesPerGen ?? popSize * 2;
+            const confirmTotal = allSizes ? confirmSizes.length * gamesPerSize : confirmGames;
+            const totalGames = ((allSizes || nPlayers > 2) ? sampledPerGen * generations : pairs * gamesPerPair * generations) + confirmTotal;
             const startedAt = Date.now();
             let gamesDone = 0, lastGen = 0, lastFitness = null;
             const report = (phase) => onProgress({
@@ -4065,7 +4073,7 @@ document.getElementById('undo-move').onclick = function() {
 
             const champion = await window.BotArena.evolve(generations, {
                 gamesPerPair, popSize, nPlayers, visual,
-                gamesPerGen: nPlayers > 2 ? (opts.gamesPerGen ?? popSize * 2) : undefined,
+                gamesPerGen: (allSizes || nPlayers > 2) ? sampledPerGen : undefined,
                 onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report('training'); },
                 onGame: () => { gamesDone++; report('training'); },
             });
@@ -4087,11 +4095,26 @@ document.getElementById('undo-move').onclick = function() {
             }
 
             report('confirming');
-            const confirm = await window.BotArena.run(
-                champion, baselineWeights, confirmGames, Date.now() % 100000,
-                { visual, onGame: () => { gamesDone++; report('confirming'); } });
-            const improved = confirm.aFitness > confirm.bFitness;
-            const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
+            let improved, record, confirmWins, confirmLosses, confirmDraws;
+            if (allSizes) {
+                // Generalist gate: champion vs a field of baselines at every
+                // size (2–5), rotating seats. Kept only if it's a better
+                // generalist overall, not just a better duelist.
+                const confirm = await window.BotArena.confirmAcrossSizes(
+                    champion, baselineWeights,
+                    { sizes: confirmSizes, gamesPerSize, visual, seed: Date.now() % 100000,
+                      onGame: () => { gamesDone++; report('confirming'); } });
+                improved = confirm.improved;
+                record = confirm.record;
+                confirmWins = confirm.champWins; confirmLosses = confirm.baseWins; confirmDraws = confirm.draws;
+            } else {
+                const confirm = await window.BotArena.run(
+                    champion, baselineWeights, confirmGames, Date.now() % 100000,
+                    { visual, onGame: () => { gamesDone++; report('confirming'); } });
+                improved = confirm.aFitness > confirm.bFitness;
+                record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
+                confirmWins = confirm.aWins; confirmLosses = confirm.bWins; confirmDraws = confirm.draws;
+            }
 
             if (improved) {
                 window.BotArena.applyWeights(champion);
@@ -4107,9 +4130,9 @@ document.getElementById('undo-move').onclick = function() {
                     if (session?.user?.id) {
                         await supabase.from('bot_champion_weights').insert({
                             weights: champion,
-                            confirm_wins: confirm.aWins,
-                            confirm_losses: confirm.bWins,
-                            confirm_draws: confirm.draws,
+                            confirm_wins: confirmWins,
+                            confirm_losses: confirmLosses,
+                            confirm_draws: confirmDraws,
                             created_by: session.user.id,
                         });
                     }
@@ -4190,9 +4213,12 @@ document.getElementById('undo-move').onclick = function() {
             el.style.display = 'block';
             const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
             const elapsedS = (Date.now() - p.startedAt) / 1000;
-            const scenarioLine = `${p.mode === 'breeding' ? 'Breeding' : 'Training'} — ${p.nPlayers || 2} players, population ${p.popSize || '?'}`;
+            const playersLabel = p.nPlayers === 'all' ? 'all sizes (2–5)' : `${p.nPlayers || 2} players`;
+            const scenarioLine = `${p.mode === 'breeding' ? 'Breeding' : 'Training'} — ${playersLabel}, population ${p.popSize || '?'}`;
             const genLine = p.phase === 'confirming'
-                ? 'Confirming: new champion vs. starting weights'
+                ? (p.nPlayers === 'all'
+                    ? 'Confirming: champion vs. baseline at every size'
+                    : 'Confirming: new champion vs. starting weights')
                 : `Generation ${p.gen}/${p.generations}`;
             const bestFitness = Array.isArray(p.fitness) && p.fitness.length ? Math.max(...p.fitness) : null;
             const fitnessLine = bestFitness !== null ? `Best fitness so far: ${bestFitness.toFixed(1)}` : '';
@@ -5118,9 +5144,11 @@ document.getElementById('undo-move').onclick = function() {
                 let breedBtn;
 
                 makeChoiceRow('Players:',
-                    [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })),
+                    [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })).concat([
+                        { value: 'all', text: 'All', title: 'Generalist: train across arenas of every size (2–5 players) and confirm the champion across every size too. Best for real lobbies, which can be 2–5 players. (Breeding needs a specific count.)' },
+                    ]),
                     () => state.n, (v) => { state.n = v; },
-                    'How many bots play each training game. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game.');
+                    'How many bots play each training game. "All" trains across mixed 2–5-player arenas and confirms the champion at every size. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game.');
 
                 makeChoiceRow('Speed:', [
                     { value: true, text: 'Watchable', title: 'Normal pacing — watch the board play out' },
@@ -5378,7 +5406,7 @@ document.getElementById('undo-move').onclick = function() {
                     resetInsights();
                     renderRoster();
                     try {
-                        const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10 };
+                        const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10, gamesPerSize: 4 };
                         const { improved, record } = await runWeightTraining(preset, renderProgress, {
                             nPlayers: state.n, visual: state.watchable,
                             onGeneration: handleGeneration,
@@ -5470,6 +5498,7 @@ document.getElementById('undo-move').onclick = function() {
                 breedBtn.style.cssText = 'padding:6px 10px;background:#2d3a4a;color:#eee;border:1px solid #58a;border-radius:5px;cursor:pointer;font-size:12px;';
                 breedBtn.onclick = async () => {
                     if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
+                    if (state.n === 'all') { updateStatus('Breeding needs a specific player count (2–5) — "All" is a training-only mode. Pick a number of Players first.'); return; }
                     if (!await stopAnyRunningBotJob()) return;
                     startBtnRef.disabled = true;
                     startBtn.disabled = true;

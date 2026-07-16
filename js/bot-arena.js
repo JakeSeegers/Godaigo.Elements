@@ -545,14 +545,20 @@
     // draw). Mirrors the "win ±1, small per-turn penalty" reward the
     // roadmap specifies for the eventual Stage 3c RL reward.
     // ----------------------------------------------------------------
-    function sideFitness(result, sideIsPlayer0, opts = {}) {
+    // seatFitness generalizes this to ANY seat index in a 2–5-player game
+    // (win ±1 vs everyone else, same progress reward / stuck penalty) — used
+    // by the N-player confirmAcrossSizes() gate below. sideFitness is the
+    // 2-player special case _playSeries()/run() still call by name.
+    function seatFitness(result, idx, opts = {}) {
         const progressWeight = opts.progressWeight ?? 0.3;
         const stuckPenalty = opts.stuckPenalty ?? 0.15;
-        const idx = sideIsPlayer0 ? 0 : 1;
         const win = result.winner === null ? 0 : (result.winner === idx ? 1 : -1);
         const progress = (result.activated?.[idx] ?? 0) / 5;
         const stuck = result.stuckTurns?.[idx] ?? 0;
         return win + progressWeight * progress - stuckPenalty * stuck;
+    }
+    function sideFitness(result, sideIsPlayer0, opts = {}) {
+        return seatFitness(result, sideIsPlayer0 ? 0 : 1, opts);
     }
 
     // ----------------------------------------------------------------
@@ -634,7 +640,7 @@
     // affect the browser's LIVE bot weights must save/restore around the
     // call themselves (see the Bot Training panel's "breed" flow).
     //
-    // opts.nPlayers (2–5, default 2):
+    // opts.nPlayers (2–5, 'all', default 2):
     //   2 → the ORIGINAL exhaustive pairwise round-robin (every population
     //   pair plays opts.gamesPerPair games, sideFitness-based — unchanged
     //   from before).
@@ -642,6 +648,10 @@
     //   generation instead samples opts.gamesPerGen (default popSize*3)
     //   random N-player groupings (seeded, reproducible) and credits the
     //   winner's population slot with +1 fitness.
+    //   'all' → GENERALIST training: same per-game sampling as the >2 path,
+    //   but each sampled game also draws a fresh player count 2..min(5,
+    //   popSize), so one run evolves weights across arenas of every size at
+    //   once. Pair with confirmAcrossSizes() for a matching multi-size gate.
     // opts.visual: play every training game with normal pacing/visuals via
     // playMatch() — same core spectate() uses — instead of muted/fast.
     // opts.onGeneration?(genNumber, totalGenerations, fitnessArray) —
@@ -694,7 +704,11 @@
         const gamesPerPair = opts.gamesPerPair ?? 2;
         const popSize = opts.popSize ?? 8;
         const seed = opts.seed ?? 1;
-        const nPlayers = Math.max(2, Math.min(5, opts.nPlayers ?? 2));
+        // opts.nPlayers === 'all' → GENERALIST mode: every sampled game picks a
+        // random player count 2..min(5,popSize), so one training run spans
+        // arenas of every size instead of a fixed one. Otherwise a fixed 2–5.
+        const allSizes = opts.nPlayers === 'all';
+        const nPlayers = allSizes ? null : Math.max(2, Math.min(5, opts.nPlayers ?? 2));
         const visual = !!opts.visual;
         const rng = mulberry32(seed);
 
@@ -753,7 +767,7 @@
             for (let gen = 0; gen < generations && !_stopRequested && !_endEarlyRequested; gen++) {
                 const fitness = new Array(population.length).fill(0);
 
-                if (nPlayers === 2) {
+                if (!allSizes && nPlayers === 2) {
                     for (let i = 0; i < population.length && !_stopRequested && !_endEarlyRequested; i++) {
                         for (let j = i + 1; j < population.length && !_stopRequested && !_endEarlyRequested; j++) {
                             if (visual && typeof updateStatus === 'function') {
@@ -766,16 +780,21 @@
                     }
                 } else {
                     const gamesPerGen = opts.gamesPerGen ?? popSize * 3;
+                    const maxN = Math.min(5, population.length);
                     for (let g = 0; g < gamesPerGen && !_stopRequested && !_endEarlyRequested; g++) {
-                        const idxs = sampleDistinct(population.length, nPlayers, rng);
+                        // Generalist mode picks a fresh player count per game so
+                        // one generation spans arenas of every size; a fixed
+                        // mode always uses the same nPlayers.
+                        const nP = allSizes ? (2 + Math.floor(rng() * (maxN - 1))) : nPlayers;
+                        const idxs = sampleDistinct(population.length, nP, rng);
                         const weightsPerPlayer = idxs.map(i => population[i].w);
                         const gameSeed = seed * 100000 + gen * 1000 + g;
                         if (visual && typeof updateStatus === 'function') {
-                            updateStatus(`🧬 Evolve gen ${gen + 1}/${generations}, game ${g + 1}/${gamesPerGen}: pop ${idxs.join(',')}`);
+                            updateStatus(`🧬 Evolve gen ${gen + 1}/${generations}, game ${g + 1}/${gamesPerGen}: ${nP}p pop ${idxs.join(',')}`);
                         }
                         const result = await playMatch(weightsPerPlayer, { ...opts, seed: gameSeed, visual });
                         if (result.winner !== null) fitness[idxs[result.winner]]++;
-                        log(`gen ${gen + 1} game ${g + 1}/${gamesPerGen} (pop ${idxs.join(',')}): ${result.winner === null ? 'draw' : 'pop#' + idxs[result.winner] + ' wins'} in ${result.turns} turns`);
+                        log(`gen ${gen + 1} game ${g + 1}/${gamesPerGen} (${nP}p pop ${idxs.join(',')}): ${result.winner === null ? 'draw' : 'pop#' + idxs[result.winner] + ' wins'} in ${result.turns} turns`);
                         if (typeof opts.onGame === 'function') {
                             try { opts.onGame(g + 1, gamesPerGen, result); } catch (e) { /* UI callback errors never abort training */ }
                         }
@@ -898,8 +917,89 @@
         return result;
     }
 
+    // ----------------------------------------------------------------
+    // Multi-size confirmation gate (roadmap Stage 3a). run() only ever
+    // compared a champion to a baseline in a 2-player duel — so a champion
+    // evolved in 4-/5-player arenas (bigger map, more resources, different
+    // tactics) was kept-or-discarded purely on 2-player play, biasing the
+    // whole pipeline (and the community champion table it feeds) toward
+    // 2-player-friendly weights. confirmAcrossSizes() instead pits the
+    // champion against a FIELD of baseline bots at every size in opts.sizes
+    // (default [2,3,4,5]): each size plays opts.gamesPerSize (default 4)
+    // games, rotating which seat the champion occupies for positional
+    // fairness (the other seats are all baseline). "Improved" = the
+    // champion's total seat-fitness across every size beats the mean
+    // baseline seat-fitness — i.e. it must be a better GENERALIST, not just
+    // a better duelist. Returns per-size records for transparency plus
+    // aggregate champWins/baseWins/draws (with aWins/bWins aliases so callers
+    // shaped for run()'s result still read). stop() aborts it (shared
+    // _stopRequested); opts.onGame(gameNo, totalGames, result) reports
+    // progress. Muting/pacing mirror run() exactly.
+    // ----------------------------------------------------------------
+    async function confirmAcrossSizes(champion, baseline, opts = {}) {
+        if (_running || _spectating || _evolving) throw new Error('BotArena already running');
+        if (!window.BotSim || !window.BotState || !window.BotSystem) {
+            throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
+        }
+        const sizes = (opts.sizes && opts.sizes.length) ? opts.sizes : [2, 3, 4, 5];
+        const gamesPerSize = Math.max(1, opts.gamesPerSize ?? 4);
+        const visual = !!opts.visual;
+        const baseSeed = opts.seed ?? (Date.now() % 100000);
+        const totalGames = sizes.length * gamesPerSize;
+
+        _running = true;
+        _stopRequested = false;
+        const restore = visual ? null : muteEnvironment();
+        const unsuppressJoytone = suppressJoytone();
+        window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
+
+        const perSize = [];
+        let champFitness = 0, baseFitness = 0, champWins = 0, baseWins = 0, draws = 0, gameNo = 0;
+        try {
+            for (const n of sizes) {
+                if (_stopRequested) break;
+                let sChampF = 0, sBaseF = 0, sChampW = 0, sBaseW = 0, sDraws = 0;
+                for (let g = 0; g < gamesPerSize && !_stopRequested; g++) {
+                    const champSeat = g % n; // rotate the champion's seat each game (positional fairness)
+                    const weightsPerPlayer = new Array(n).fill(baseline);
+                    weightsPerPlayer[champSeat] = champion;
+                    const seed = (baseSeed * 100003 + n * 1009 + g) >>> 0;
+                    const r = await playMatch(weightsPerPlayer, { ...opts, seed, visual });
+                    const cf = seatFitness(r, champSeat, opts);
+                    // Mean baseline-seat fitness this game (the n-1 non-champion
+                    // seats) — the champion must beat the AVERAGE baseline, so
+                    // one bot of each type is compared apples-to-apples.
+                    let bf = 0;
+                    for (let s = 0; s < n; s++) if (s !== champSeat) bf += seatFitness(r, s, opts);
+                    bf /= (n - 1);
+                    sChampF += cf; sBaseF += bf;
+                    champFitness += cf; baseFitness += bf;
+                    if (r.winner === null) { sDraws++; draws++; }
+                    else if (r.winner === champSeat) { sChampW++; champWins++; }
+                    else { sBaseW++; baseWins++; }
+                    gameNo++;
+                    if (typeof opts.onGame === 'function') {
+                        try { opts.onGame(gameNo, totalGames, r); } catch (e) { /* UI callback errors never abort */ }
+                    }
+                    log(`confirm ${n}p game ${g + 1}/${gamesPerSize}: ${r.winner === null ? 'draw' : (r.winner === champSeat ? 'champion' : 'baseline') + ' wins'} in ${r.turns} turns`);
+                    await sleep(0);
+                }
+                perSize.push({ n, champWins: sChampW, baseWins: sBaseW, draws: sDraws, champFitness: +sChampF.toFixed(2), baseFitness: +sBaseF.toFixed(2) });
+            }
+        } finally {
+            if (restore) restore();
+            unsuppressJoytone();
+            _running = false;
+        }
+        const improved = champFitness > baseFitness;
+        const record = perSize.map(p => `${p.n}p ${p.champWins}-${p.baseWins}${p.draws ? 'd' + p.draws : ''}`).join(', ');
+        log(`confirmAcrossSizes: champion ${improved ? 'BEAT' : 'did not beat'} baseline — champF ${champFitness.toFixed(2)} vs baseF ${baseFitness.toFixed(2)} (${record})`);
+        return { improved, record, perSize, champFitness, baseFitness, champWins, baseWins, draws, aWins: champWins, bWins: baseWins };
+    }
+
     window.BotArena = {
         run, evolve, playGame, playMatch, spectate, stop,
+        confirmAcrossSizes, // N-player champion-vs-field confirmation gate
         endEarly, // soft-stop: cuts evolve()'s generation loop short but keeps its result usable
         isSpectating, isEvolving, isRunning,
         stopRequested: () => _stopRequested, // was stop() called for the run in progress (or the one that just ended)?
