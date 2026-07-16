@@ -6,13 +6,44 @@
 ---
 
 ## Active Branch
-`claude/earth-blocking-fire-tactics-bpinp3` → remote: `JakeSeegers/Godaigo.Elements`
-(continues from `claude/merge-bot-branches-safe-3p`, which merged
-`claude/bot-crash-three-player-2wcy9j` (base: `4.10.progresscheck`) with
-`claude/masons-savvy-range-bug-ep7hjm` — see that branch's note in git
-history for the bot-arena.js conflict resolution.)
+`claude/game-testing-player-count-0oxsn6` → remote: `JakeSeegers/Godaigo.Elements`
+(continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
 ## Last Committed Work
+- **BOT ARENA: "All sizes" generalist training + multi-size confirmation gate,
+  and a bot win-condition halt fix** — `js/bot-arena.js`, `js/game-ui.js`,
+  `js/bot.js`, `js/INDEX.md`. User report: the end-of-training confirmation
+  was ALWAYS a 2-player duel regardless of the player count trained at, so a
+  champion evolved in 4-/5-player arenas (bigger map, more resources,
+  different tactics) was kept-or-discarded purely on 2-player play —
+  biasing training and the `bot_champion_weights` community table it feeds
+  (auto-applied to real 2-5-player lobbies) toward 2-player-friendly weights.
+  User chose: train in arenas of each size AND confirm across each size.
+  Built: `evolve(gen, {nPlayers:'all'})` (generalist — each sampled game also
+  draws a fresh player count 2..min(5,popSize), so one run spans every size);
+  `confirmAcrossSizes(champion, baseline, {sizes,gamesPerSize})` (champion vs
+  a FIELD of baselines at every size 2-5, rotating the champion's seat for
+  fairness; "improved" = champion total seat-fitness beats mean baseline
+  across ALL sizes — a better generalist, not just a better duelist);
+  `seatFitness()` generalizes the old 2-player-only `sideFitness()` to any
+  seat. game-ui: "All" option in the Bot Training Players selector routes
+  through the new mode + gate, records the multi-size record to Supabase;
+  fixed 2-5 counts keep the run() gate; breeding rejects "All". Verified
+  headless against the real game: confirmAcrossSizes correct per-size
+  records/shape across [2,3]; evolve('all') samples mixed sizes in one
+  generation (observed 5p + 3p games) and returns a full weight table;
+  2-player run() unregressed. Separately (user report same session): the
+  game "isn't recognizing when a bot has achieved the win condition every
+  time — bots step onto the home shrine centre multiple times before the win
+  registers." Root cause: `botTurn()` ran up to 30 actions and never stopped
+  on a met win condition; in arena/spectate the win is only detected at
+  end-of-turn via `BotSim.winner(snapshot())`, so a bot reaching home
+  mid-turn with leftover AP could take another action that steps it off the
+  shrine before the check ran, silently missing the win. Fixed: break the
+  action loop the instant `BotSim.winner()` reports the active player won,
+  leaving the pawn on its shrine (safe by construction — winner() only fires
+  on an actual win). Verified headless: full 2p games log "Win condition met
+  — halting the turn" and end with a clean detected win, zero page errors.
 - **BOT STAGE 4 COMPLETE: earth-blocking / fire-interference tactics +
   wind-for-movement placement** — `js/bot-state.js`, `js/bot.js`,
   `docs/bot-roadmap.md`, `js/INDEX.md`. User request: build the roadmap's
