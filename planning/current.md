@@ -10,6 +10,39 @@
 (continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
 ## Last Committed Work
+- **BOT ARENA: `hillClimb()` — champion-anchored monotonic trainer (Phase 1)**
+  — `js/bot-arena.js`, `js/INDEX.md`. Diagnosis (from a user training run that
+  produced a champion which LOST the confirmation 3-7 despite "6.5 fitness"):
+  `evolve()` scores population members by beating their near-identical mutated
+  SIBLINGS over just 1 game/pair, so the ranking is noise-dominated and there's
+  almost no selection pressure toward "better than the reigning champion" — a
+  random walk that drifts DOWNHILL from a well-tuned seed. The 6.5 was the
+  in-population ceiling (sweep your 5 cousins), not a win vs baseline; the only
+  baseline comparison is the leaky 10-game confirm. New `BotArena.hillClimb(opts)`
+  is the (1+λ) fix the user themselves reasoned toward: hold the champion FIXED,
+  spawn `lambda` (6) mutant challengers, play EACH vs the champion for
+  `gamesPerChallenge` (30) games via the existing `_playSeries` A/B machinery
+  (alternating sides), and promote the best ONLY if it clears `promoteWinRate`
+  (0.58) over the decided games (`minDecided` floor) — champion is MONOTONIC by
+  construction (only ever replaced by something that demonstrably beat it), and
+  N drowns the per-game tile/scroll-draw noise. Adaptive σ (`sigma0`/`sigmaGrowth`/
+  `sigmaCap` 0.2/1.5/0.8) widens the mutation step on a barren round, resets on
+  promotion (escapes plateaus without forcing a bad promotion). Reuses
+  `mutate`/`_playSeries`/`sideFitness`; `evolve()` untouched. Shares the
+  stop()/endEarly()/mute/suppress plumbing; guards + `isRunning()`/`isClimbing()`
+  updated so it can't overlap other arena jobs. Verified headless (tiny params
+  4×2×2 to exercise the mechanism): correct return shape, exactly 16 games,
+  full 64-key table with brain-shape keys (`searchDepth`/`searchHybrid`)
+  preserved, BOTH promote + hold branches hit, adaptive-σ invariants hold
+  (promoted round → σ=0.2; barren round → σ grew 0.20→0.30), not left running,
+  zero page errors. **Deliberately Phase 1 — follow-ups scoped, NOT built:**
+  Phase 2 = hall-of-fame gauntlet (evaluate challengers vs a pool of retired
+  champions, not just the latest, to guard non-transitive rock-paper-scissors
+  exploits — the margin alone only fixes noise, not generalization); Phase 3 =
+  parallel headless runner (fan λ challenger-trials across Chromium pages; one
+  browser page is single-threaded so the in-page core stays sequential and also
+  runs in the 🧬 panel). Not yet wired into the game-ui panel or
+  `arena-headless.mjs` CLI — next step is a `--hillclimb` flag / panel mode.
 - **BOT: fixed the hybrid-search-vs-plan within-turn oscillation (over-trigger)**
   — `js/bot.js`, `docs/bot-roadmap.md`. The roadmap's flagged-for-follow-up
   within-turn oscillation: hybrid search engaged whenever ANY scroll

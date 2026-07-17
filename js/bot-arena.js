@@ -604,7 +604,7 @@
     // ----------------------------------------------------------------
     let _running = false;
     async function run(weightsA, weightsB, nGames = 10, seed = 0, opts = {}) {
-        if (_running || _spectating || _evolving) throw new Error('BotArena already running');
+        if (_running || _spectating || _evolving || _climbing) throw new Error('BotArena already running');
         if (!window.BotSim || !window.BotState || !window.BotSystem) {
             throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
         }
@@ -697,7 +697,7 @@
     function isEvolving() { return _evolving; }
 
     async function evolve(generations = 5, opts = {}) {
-        if (_running || _spectating || _evolving) throw new Error('BotArena already running');
+        if (_running || _spectating || _evolving || _climbing) throw new Error('BotArena already running');
         if (!window.BotSim || !window.BotState || !window.BotSystem) {
             throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
         }
@@ -847,6 +847,152 @@
     }
 
     // ----------------------------------------------------------------
+    // hillClimb(opts) — champion-anchored (1+λ)-style climber. THE fix for
+    // evolve()'s co-evolution weakness: evolve() scores population members by
+    // beating EACH OTHER (their near-identical mutated siblings) over just 1
+    // game per pairing, so the ranking is noise-dominated and there is almost
+    // no selection pressure toward "better than the reigning champion" — a
+    // random walk that drifts DOWNHILL from a well-tuned seed (see
+    // docs/bot-roadmap.md). hillClimb() instead:
+    //   1. holds the champion FIXED as the reference opponent;
+    //   2. spawns opts.lambda mutant challengers of it;
+    //   3. plays EACH challenger head-to-head against the champion for
+    //      opts.gamesPerChallenge games (alternating sides, via _playSeries —
+    //      the exact same A/B machinery run() uses), so every game measures
+    //      the thing we actually care about;
+    //   4. promotes the best challenger to champion ONLY if it beats the
+    //      champion by a real MARGIN (opts.promoteWinRate over the decided
+    //      games, with a floor on how many were decisive) — luck alone can't
+    //      promote a fragile bot;
+    //   5. on a barren round (nothing clears the bar) widens the mutation step
+    //      (adaptive sigma, capped) so the search can escape a plateau; resets
+    //      it on any promotion.
+    // The champion is MONOTONIC by construction — only ever replaced by
+    // something that demonstrably beat it over gamesPerChallenge games — so it
+    // cannot drift downhill. gamesPerChallenge (default 30) is the dial that
+    // drowns out the per-game tile/scroll-draw noise that dominates a single
+    // game between near-identical bots.
+    //
+    // Phase-1 scope: the "gauntlet" is just the current champion. A later
+    // phase adds a hall-of-fame gauntlet (retired champions) to guard against
+    // non-transitive "rock-paper-scissors" exploits — a challenger that hard-
+    // counters THIS champion but is worse against the field. Parallelism lives
+    // in the headless runner (fan λ challenger-trials across pages), not here:
+    // one browser page is single-threaded, so this in-page core stays
+    // sequential and also runs inside the 🧬 Bot Training panel unchanged.
+    //
+    //   opts.champion            starting weights (default {...WEIGHTS})
+    //   opts.rounds        (30)  climbing rounds
+    //   opts.lambda        (6)   challengers spawned per round
+    //   opts.gamesPerChallenge (30) games each challenger plays vs the champion
+    //   opts.promoteWinRate (0.58) win rate over DECIDED games needed to promote
+    //   opts.minDecided    (ceil(gamesPerChallenge/2)) min decisive games for a
+    //                            promotion to count (guards a 1-0 + all-draws fluke)
+    //   opts.sigma0/sigmaGrowth/sigmaCap (0.2 / 1.5 / 0.8) adaptive mutation step
+    //   opts.seed (1), opts.visual (false), opts.speed
+    //   opts.onRound?(roundNumber, totalRounds, info) progress callback
+    //   opts.onGame? forwarded to every trial series (per-game progress)
+    // Returns { champion, promotions, rounds:[…], gamesPlayed }. stop() hard-
+    // aborts; endEarly() finishes the current round then returns the champion
+    // reached so far (always usable — it only advances on a real promotion).
+    // ----------------------------------------------------------------
+    let _climbing = false;
+    function isClimbing() { return _climbing; }
+
+    async function hillClimb(opts = {}) {
+        if (_running || _spectating || _evolving || _climbing) throw new Error('BotArena already running');
+        if (!window.BotSim || !window.BotState || !window.BotSystem) {
+            throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
+        }
+        const rounds = Math.max(1, opts.rounds ?? 30);
+        const lambda = Math.max(1, opts.lambda ?? 6);
+        const gamesPerChallenge = Math.max(2, opts.gamesPerChallenge ?? 30);
+        const promoteWinRate = opts.promoteWinRate ?? 0.58;
+        const minDecided = Math.max(2, opts.minDecided ?? Math.ceil(gamesPerChallenge / 2));
+        const sigma0 = opts.sigma0 ?? 0.2;
+        const sigmaGrowth = opts.sigmaGrowth ?? 1.5;
+        const sigmaCap = opts.sigmaCap ?? 0.8;
+        const seed = opts.seed ?? 1;
+        const visual = !!opts.visual;
+        const rng = mulberry32(seed);
+
+        _climbing = true;
+        _stopRequested = false;
+        _endEarlyRequested = false;
+        const restore = visual ? null : muteEnvironment();
+        const unsuppressJoytone = suppressJoytone();
+        window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
+
+        let champion = opts.champion ? { ...opts.champion } : { ...window.BotSystem.WEIGHTS };
+        let sigma = sigma0;
+        let promotions = 0, gamesPlayed = 0;
+        const roundLog = [];
+
+        try {
+            for (let round = 0; round < rounds && !_stopRequested && !_endEarlyRequested; round++) {
+                // Spawn λ mutant challengers of the (fixed) champion.
+                const challengers = [];
+                for (let c = 0; c < lambda; c++) challengers.push(mutate(champion, rng, sigma));
+
+                // Each challenger plays the champion head-to-head. Challenger is
+                // side A, champion side B; _playSeries alternates who is player 0
+                // so first-move advantage cancels. Rank by net wins, then the
+                // sideFitness margin (win + progress − stalls) as a tie-break.
+                let best = null;
+                for (let c = 0; c < challengers.length && !_stopRequested; c++) {
+                    const trialSeed = (seed * 1000003 + round * 1009 + c) >>> 0;
+                    const r = await _playSeries(challengers[c], champion, gamesPerChallenge, trialSeed, { ...opts, visual });
+                    gamesPlayed += r.aWins + r.bWins + r.draws;
+                    const decided = r.aWins + r.bWins;
+                    const winRate = decided > 0 ? r.aWins / decided : 0;
+                    const netWins = r.aWins - r.bWins;
+                    const fitMargin = r.aFitness - r.bFitness;
+                    const cand = { w: challengers[c], winRate, decided, netWins, fitMargin,
+                                   aWins: r.aWins, bWins: r.bWins, draws: r.draws };
+                    if (!best || netWins > best.netWins ||
+                        (netWins === best.netWins && fitMargin > best.fitMargin)) best = cand;
+                    log(`round ${round + 1} challenger ${c + 1}/${lambda}: ${r.aWins}-${r.bWins}` +
+                        `${r.draws ? ' (' + r.draws + 'd)' : ''} vs champion (winRate ${(winRate * 100).toFixed(0)}% of ${decided} decided)`);
+                }
+
+                // Promote ONLY on a real margin over enough decisive games.
+                const promoted = !!best && best.decided >= minDecided && best.winRate >= promoteWinRate;
+                if (promoted) {
+                    champion = best.w;
+                    promotions++;
+                    sigma = sigma0; // found a step up — reset the search radius
+                    try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(champion)); } catch (e) {}
+                    log(`round ${round + 1}: PROMOTED (${best.aWins}-${best.bWins}, ${(best.winRate * 100).toFixed(0)}% ` +
+                        `of ${best.decided} decided) — new champion. Total promotions: ${promotions}`);
+                    log('champion weights (paste into bot.js DEFAULT_WEIGHTS to make permanent):\n' + JSON.stringify(champion));
+                } else {
+                    const prevSigma = sigma;
+                    sigma = Math.min(sigmaCap, sigma * sigmaGrowth); // barren round — widen the search
+                    log(`round ${round + 1}: no challenger cleared ${(promoteWinRate * 100).toFixed(0)}% ` +
+                        `(best ${best ? best.aWins + '-' + best.bWins : 'n/a'}) — champion holds; sigma ${prevSigma.toFixed(2)} → ${sigma.toFixed(2)}`);
+                }
+
+                const info = { round: round + 1, promoted,
+                    bestWinRate: best ? +best.winRate.toFixed(3) : 0,
+                    bestNetWins: best ? best.netWins : 0,
+                    bestDecided: best ? best.decided : 0,
+                    sigma: +sigma.toFixed(3), promotions, gamesPlayed };
+                roundLog.push(info);
+                if (typeof opts.onRound === 'function') {
+                    try { opts.onRound(round + 1, rounds, info); } catch (e) { /* UI callback errors never abort a run */ }
+                }
+                await sleep(0);
+            }
+        } finally {
+            if (restore) restore();
+            unsuppressJoytone();
+            _climbing = false;
+        }
+        log(`hillClimb complete: ${promotions} promotion(s) over ${roundLog.length} round(s), ${gamesPlayed} games.`);
+        return { champion, promotions, rounds: roundLog, gamesPlayed };
+    }
+
+    // ----------------------------------------------------------------
     // Spectator mode: watch nPlayers (2–5) bots play a full LOCAL game with
     // all the normal visuals (win screen included), then auto-download the
     // action log. Unlike run(), nothing visual is muted and pacing is
@@ -862,10 +1008,10 @@
     // ----------------------------------------------------------------
     let _spectating = false;
     function isSpectating() { return _spectating; }
-    function isRunning() { return _running || _spectating || _evolving; }
+    function isRunning() { return _running || _spectating || _evolving || _climbing; }
 
     async function spectate(nPlayers = 2, opts = {}) {
-        if (_running || _spectating || _evolving) throw new Error('BotArena already running');
+        if (_running || _spectating || _evolving || _climbing) throw new Error('BotArena already running');
         nPlayers = Math.max(2, Math.min(5, nPlayers | 0)); // 5 player colors exist
         if (!window.BotSim || !window.BotState || !window.BotSystem) {
             throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
@@ -937,7 +1083,7 @@
     // progress. Muting/pacing mirror run() exactly.
     // ----------------------------------------------------------------
     async function confirmAcrossSizes(champion, baseline, opts = {}) {
-        if (_running || _spectating || _evolving) throw new Error('BotArena already running');
+        if (_running || _spectating || _evolving || _climbing) throw new Error('BotArena already running');
         if (!window.BotSim || !window.BotState || !window.BotSystem) {
             throw new Error('BotArena needs BotState/BotSim/BotSystem loaded');
         }
@@ -999,9 +1145,10 @@
 
     window.BotArena = {
         run, evolve, playGame, playMatch, spectate, stop,
+        hillClimb, // champion-anchored monotonic climber (the reliable trainer)
         confirmAcrossSizes, // N-player champion-vs-field confirmation gate
-        endEarly, // soft-stop: cuts evolve()'s generation loop short but keeps its result usable
-        isSpectating, isEvolving, isRunning,
+        endEarly, // soft-stop: cuts evolve()'s / hillClimb()'s loop short but keeps its result usable
+        isSpectating, isEvolving, isClimbing, isRunning,
         stopRequested: () => _stopRequested, // was stop() called for the run in progress (or the one that just ended)?
         endEarlyRequested,
         applyWeights: setWeights, // apply an {…} weight table to the LIVE WEIGHTS object in place
