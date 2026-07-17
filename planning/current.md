@@ -10,6 +10,30 @@
 (continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
 ## Last Committed Work
+- **hillclimb: anchor training to the ONLINE champion (was silently using defaults)**
+  — `tools/arena-headless.mjs`. User trained a 40-min champion that passed the
+  local gate 13-7 but lost online. Root cause: a fresh hillclimb session seeded
+  its baseline IMPLICITLY — boot the page, wait a fixed 1.5s for bot.js's
+  BACKGROUND Supabase fetch, read `WEIGHTS`. If that fetch was slow/blocked it
+  SILENTLY fell back to `DEFAULT_WEIGHTS` and still printed "seeding from the
+  page's current weights" — so the session trained a bot that beats defaults but
+  loses to the real online champion, with no indication it used the wrong
+  opponent. Fixed: a new (non-file, non-resumed) session now EXPLICITLY queries
+  `bot_champion_weights` (highest `win_rate`) via the page's own supabase client
+  and reports the baseline out loud — `baseline = ONLINE CHAMPION (win_rate X)`
+  vs a loud failure. It REFUSES to anchor to defaults by default: if the
+  champion can't be fetched it ABORTS with an explanation (no more silent wrong
+  opponent); `--hc-allow-defaults` is an explicit opt-in for offline runs. The
+  gauntlet (`hof`) is also seeded with the online champion (when `--hc-hof>0`)
+  so challengers must keep beating the real opponent across the session, not
+  just the latest session champion. Verified headless: with Supabase unreachable
+  (sandbox) and no override it aborts loudly ("Failed to fetch" → ABORT,
+  instant, no session written); with `--hc-allow-defaults` it proceeds and runs
+  games. The SUCCESS path (baseline = online champion) needs a machine that can
+  reach Supabase — verify on the user's box (it will print the win_rate).
+  OPERATIONAL NOTE: existing sessions (e.g. `day_run`) already froze
+  baseline=defaults at creation — a FRESH session name is required to pick up
+  the anchoring.
 - **BOT/RULE FIX: Take Flight could land a pawn on a face-down tile (illegal)** —
   `js/bot-effects.js`, `js/game-ui.js`. User report (real MP action log, game
   468): a lobby bot cast Take Flight (WIND_SCROLL_4) and teleported onto an

@@ -49,6 +49,13 @@
 //   --hc-hof-games N    games each challenger plays vs the hall of fame (default 20)
 //   --hc-hof-floor R    min win-rate vs the hall of fame to be promotable (default 0.5;
 //                       stops a challenger that hard-counters only the latest champion)
+//   --hc-allow-defaults  permit anchoring to DEFAULT weights when the online
+//                       champion can't be fetched from Supabase. OFF by default:
+//                       the runner ABORTS rather than silently train against the
+//                       wrong opponent (a champion that beats defaults but loses
+//                       online). A fresh (non-file, non-resumed) session always
+//                       anchors its baseline + gauntlet to the current online
+//                       champion (highest win_rate in bot_champion_weights).
 //   --hc-session NAME   RESUMABLE session: run the SAME command in 20-40 min chunks
 //                       and each one continues from where the last left off
 //                       (champion, hall of fame, sigma, round history all persist to
@@ -129,6 +136,7 @@ const OPTS = {
     hcHofGames: +arg('hc-hof-games', 20),       // games each challenger plays vs the hall of fame (split across it)
     hcHofFloor: +arg('hc-hof-floor', 0.5),      // min win rate vs the hall of fame to be promotable
     hcSession: arg('hc-session', null),         // named resumable session: same command each chunk continues it
+    hcAllowDefaults: !!arg('hc-allow-defaults', false), // permit anchoring to DEFAULTS when the online champion can't be fetched (off = abort loudly)
 };
 
 // ---------------------------------------------------------------- hillclimb helpers
@@ -482,12 +490,45 @@ async function runHillClimb(browser, url) {
             champion = j.champion || j; // champion-*.json has .champion; a bare weights file is itself
             console.log(`[runner] hillclimb: seeding champion from ${seedPath}`);
         } else {
+            // Anchor to the ACTUAL online opponent: explicitly query Supabase
+            // for the current community champion (highest win_rate), so the
+            // local gauntlet fights the bot people really face. The old path
+            // just waited 1.5s for bot.js's background fetch and read WEIGHTS —
+            // if that was slow/blocked it SILENTLY fell back to defaults, which
+            // trains a bot that beats defaults but loses online (the bug hit).
             const p = await bootGamePage(browser, url, 'baseline');
-            champion = await p.evaluate(async () => { await new Promise(r => setTimeout(r, 1500)); return { ...window.BotSystem.WEIGHTS }; });
+            const seedRes = await p.evaluate(async () => {
+                const defaults = { ...window.BotSystem.DEFAULT_WEIGHTS };
+                try {
+                    if (typeof supabase === 'undefined' || !supabase?.from)
+                        return { source: 'defaults', reason: 'no Supabase client on the page', weights: defaults };
+                    const { data, error } = await supabase.from('bot_champion_weights')
+                        .select('weights, win_rate').order('win_rate', { ascending: false }).limit(1);
+                    if (error) return { source: 'defaults', reason: 'Supabase error: ' + error.message, weights: defaults };
+                    if (!data || !data.length || !data[0].weights || typeof data[0].weights !== 'object')
+                        return { source: 'defaults', reason: 'no champion rows in bot_champion_weights', weights: defaults };
+                    return { source: 'supabase', winRate: data[0].win_rate, weights: data[0].weights };
+                } catch (e) { return { source: 'defaults', reason: String((e && e.message) || e), weights: defaults }; }
+            });
             await p.context().close();
-            console.log('[runner] hillclimb: seeding champion from the page\'s current weights');
+            if (seedRes.source === 'supabase') {
+                champion = seedRes.weights;
+                console.log(`[runner] hillclimb: baseline = ONLINE CHAMPION from Supabase (win_rate ${seedRes.winRate}) — training against the real opponent.`);
+            } else if (OPTS.hcAllowDefaults) {
+                champion = seedRes.weights;
+                console.log(`[runner] WARNING: could NOT load the online champion (${seedRes.reason}) — baseline is DEFAULTS (--hc-allow-defaults set).`);
+            } else {
+                console.log(`[runner] ABORT: could NOT load the online champion from Supabase (${seedRes.reason}).`);
+                console.log('[runner] Refusing to anchor to DEFAULTS — that produces a champion that beats defaults but loses online (the exact bug you hit).');
+                console.log('[runner] Fix the connection and retry, seed from a file (--hillclimb <champion.json>), or explicitly override with --hc-allow-defaults.');
+                return;
+            }
         }
-        baseline = { ...champion }; hof = []; sigma = OPTS.hcSigma;
+        baseline = { ...champion }; sigma = OPTS.hcSigma;
+        // Seed the gauntlet with the anchor champion (Supabase-seeded sessions
+        // only) so challengers must keep beating the REAL online opponent across
+        // the whole session, not just the latest session champion.
+        hof = (OPTS.hcHof > 0 && !seedPath) ? [{ ...champion }] : [];
         promotions = 0; gamesPlayed = 0; roundLog = [];
         if (sessionName) console.log(`[runner] hillclimb: new session "${sessionName}"`);
     }
