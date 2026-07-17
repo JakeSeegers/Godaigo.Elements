@@ -49,6 +49,12 @@
 //   --hc-hof-games N    games each challenger plays vs the hall of fame (default 20)
 //   --hc-hof-floor R    min win-rate vs the hall of fame to be promotable (default 0.5;
 //                       stops a challenger that hard-counters only the latest champion)
+//   --hc-session NAME   RESUMABLE session: run the SAME command in 20-40 min chunks
+//                       and each one continues from where the last left off
+//                       (champion, hall of fame, sigma, round history all persist to
+//                       tools/.cache/hc-session-NAME.json). Ctrl-C anytime is safe.
+//                       Each chunk writes apply-champion.txt (local-apply, pinned, +
+//                       an optional "share online" Supabase snippet).
 //   --seed N            base RNG seed (default 1)
 //   --players N         players per game, 2-5 (default 2)
 //   --speed X           BotSystem.speedScale (default 0.1, arena normal)
@@ -122,6 +128,7 @@ const OPTS = {
     hcHof: +arg('hc-hof', 4),                   // retired champions kept as extra opponents (0 = Phase-1 single-champion)
     hcHofGames: +arg('hc-hof-games', 20),       // games each challenger plays vs the hall of fame (split across it)
     hcHofFloor: +arg('hc-hof-floor', 0.5),      // min win rate vs the hall of fame to be promotable
+    hcSession: arg('hc-session', null),         // named resumable session: same command each chunk continues it
 };
 
 // ---------------------------------------------------------------- hillclimb helpers
@@ -448,63 +455,114 @@ async function runConfirm(browser, url) {
 // the per-page trial is just the existing BotArena.run(challenger, champion).
 async function runHillClimb(browser, url) {
     const N = OPTS.hcGames, lambda = OPTS.hcLambda, minDecided = Math.ceil(N / 2);
-    const seedPath = typeof OPTS.hillclimb === 'string' ? OPTS.hillclimb : null;
-
-    // Champion to improve on: a seed file if given, else whatever the page
-    // currently plays (deployed defaults + Supabase champion if reachable).
-    let champion;
-    if (seedPath) {
-        const j = JSON.parse(readFileSync(seedPath, 'utf8'));
-        champion = j.champion || j; // champion-*.json has .champion; a bare weights file is itself
-        console.log(`[runner] hillclimb: seeding champion from ${seedPath}`);
-    } else {
-        const p = await bootGamePage(browser, url, 'baseline');
-        champion = await p.evaluate(async () => { await new Promise(r => setTimeout(r, 1500)); return { ...window.BotSystem.WEIGHTS }; });
-        await p.context().close();
-        console.log('[runner] hillclimb: seeding champion from the page\'s current weights');
-    }
-    const baseline = { ...champion }; // round-0 reference for the final confirm
-
-    const rng = mulberry32(OPTS.seed);
-    let sigma = OPTS.hcSigma, promotions = 0, gamesPlayed = 0;
     const pool = Math.min(OPTS.shards, lambda);
-    console.log(`[runner] hillclimb: ${OPTS.hcRounds} rounds × ${lambda} challengers × ${N} games ` +
-        `(pool ${pool} page(s)), promote ≥ ${Math.round(OPTS.hcPromote * 100)}% of decided`);
-
-    const t0 = Date.now();
+    const seedPath = typeof OPTS.hillclimb === 'string' ? OPTS.hillclimb : null;
+    const sessionName = OPTS.hcSession;
     mkdirSync(CACHE_DIR, { recursive: true });
-    const outPath = OPTS.out || join(CACHE_DIR, `hillclimb-${Date.now()}.json`);
-    const roundLog = [];
-    // Checkpoint after every round so a watchdog timeout / crash / Ctrl-C never
-    // throws away hours of climbing — the current best champion is always on
-    // disk at `outPath`, recoverable even if the run never reaches its verdict.
-    function writeCheckpoint(status, extra = {}) {
-        writeFileSync(outPath, JSON.stringify({
-            when: new Date().toISOString(), status,
-            rounds: OPTS.hcRounds, roundsDone: roundLog.length, lambda, gamesPerChallenge: N,
-            promoteWinRate: OPTS.hcPromote, confirmGames: OPTS.hcConfirm, confirmMargin: OPTS.hcConfirmMargin,
-            promotions, gamesPlayed, minutes: +((Date.now() - t0) / 60000).toFixed(1),
-            roundLog, champion, ...extra,
+    // Resumable sessions write/read a STABLE file so the same command continues
+    // the run; a one-off run writes a timestamped file.
+    const statePath = sessionName ? join(CACHE_DIR, `hc-session-${sessionName}.json`)
+                                  : (OPTS.out || join(CACHE_DIR, `hillclimb-${Date.now()}.json`));
+    const applyPath = join(CACHE_DIR, 'apply-champion.txt');
+
+    // Full climbing state — loaded from the session file when resuming, so a
+    // 20-40 min chunk picks up exactly where the last one left off (champion,
+    // hall of fame, sigma, promotion count, round history, original baseline).
+    let champion, baseline, hof, sigma, promotions, gamesPlayed, roundLog;
+    if (sessionName && existsSync(statePath)) {
+        const s = JSON.parse(readFileSync(statePath, 'utf8'));
+        champion = s.champion; baseline = s.baseline || { ...s.champion };
+        hof = s.hof || []; sigma = s.sigma ?? OPTS.hcSigma;
+        promotions = s.promotions || 0; gamesPlayed = s.gamesPlayed || 0; roundLog = s.roundLog || [];
+        console.log(`[runner] hillclimb: RESUMING session "${sessionName}" — ${roundLog.length} rounds done, ` +
+            `${promotions} promotion(s), HoF ${hof.length}, sigma ${sigma.toFixed(2)}`);
+    } else {
+        if (seedPath) {
+            const j = JSON.parse(readFileSync(seedPath, 'utf8'));
+            champion = j.champion || j; // champion-*.json has .champion; a bare weights file is itself
+            console.log(`[runner] hillclimb: seeding champion from ${seedPath}`);
+        } else {
+            const p = await bootGamePage(browser, url, 'baseline');
+            champion = await p.evaluate(async () => { await new Promise(r => setTimeout(r, 1500)); return { ...window.BotSystem.WEIGHTS }; });
+            await p.context().close();
+            console.log('[runner] hillclimb: seeding champion from the page\'s current weights');
+        }
+        baseline = { ...champion }; hof = []; sigma = OPTS.hcSigma;
+        promotions = 0; gamesPlayed = 0; roundLog = [];
+        if (sessionName) console.log(`[runner] hillclimb: new session "${sessionName}"`);
+    }
+
+    // Advance the mutation stream past rounds already done so a resumed chunk
+    // doesn't just replay the same challengers.
+    const rng = mulberry32(OPTS.seed + roundLog.length * 100003);
+    const t0 = Date.now();
+    console.log(`[runner] hillclimb: +${OPTS.hcRounds} round(s) this chunk × ${lambda} challengers × ${N} games ` +
+        `(pool ${pool}), promote ≥ ${Math.round(OPTS.hcPromote * 100)}%${OPTS.hcHof > 0 ? `, gauntlet HoF≤${OPTS.hcHof}` : ''}`);
+
+    function writeState(status, extra = {}) {
+        writeFileSync(statePath, JSON.stringify({
+            when: new Date().toISOString(), status, session: sessionName || null,
+            roundsDone: roundLog.length, roundsThisChunk: OPTS.hcRounds,
+            lambda, gamesPerChallenge: N, promoteWinRate: OPTS.hcPromote,
+            confirmGames: OPTS.hcConfirm, confirmMargin: OPTS.hcConfirmMargin, hcHof: OPTS.hcHof,
+            promotions, gamesPlayed, sigma, minutesThisChunk: +((Date.now() - t0) / 60000).toFixed(1),
+            baseline, hof, roundLog, champion, ...extra,
         }, null, 2));
     }
-    const hof = []; // hall of fame: retired champions, kept as extra opponents (most-recent last)
-    for (let round = 0; round < OPTS.hcRounds; round++) {
+
+    // apply-champion.txt: local-apply lines (PINNED so the online community
+    // champion can't overwrite yours — the Supabase fetch in bot.js honors
+    // godaigo_bot_weights_pin) plus, once there's a confirm record, an optional
+    // "share online" snippet to submit it to the community champion table.
+    function writeApplyFile(conf) {
+        const w = JSON.stringify(champion);
+        let txt =
+            `// ==== Godaigo bot champion ====\n` +
+            `// (1) SEE IT LOCALLY — paste both lines into the game console (F12), then reload:\n` +
+            `localStorage.setItem('godaigo_bot_weights', ${JSON.stringify(w)});\n` +
+            `localStorage.setItem('godaigo_bot_weights_pin', '1'); // pin: keeps the online champion from overwriting yours\n` +
+            `// (revert to the community champion later: localStorage.removeItem('godaigo_bot_weights_pin'); then reload)\n`;
+        if (conf) {
+            txt +=
+                `\n// (2) REPLACE THE ONLINE CHAMPION (share with everyone) — while LOGGED IN to the live game, paste this:\n` +
+                `(async () => {\n` +
+                `  const { data: { session } } = await supabase.auth.getSession();\n` +
+                `  if (!session) return console.warn('Log in first, then re-run this.');\n` +
+                `  const { error } = await supabase.from('bot_champion_weights').insert({\n` +
+                `    weights: ${w}, confirm_wins: ${conf.aWins}, confirm_losses: ${conf.bWins}, confirm_draws: ${conf.draws}, created_by: session.user.id });\n` +
+                `  console.log(error ? 'Submit failed: ' + error.message : 'Submitted — it becomes THE bot once its win-rate ranks highest.');\n` +
+                `})();\n`;
+        }
+        writeFileSync(applyPath, txt);
+    }
+
+    // Ctrl-C: state is already checkpointed every round, so just write the
+    // apply file for the best champion so far and exit cleanly.
+    let cancelled = false;
+    function onCancel() {
+        if (cancelled) return; cancelled = true;
+        try { writeState('cancelled'); writeApplyFile(null); } catch (e) {}
+        console.log(`\n[runner] cancelled — progress saved to ${statePath}.`);
+        console.log(`[runner] apply the champion so far: open ${applyPath}. Resume anytime with the same command.`);
+        process.exit(0);
+    }
+    process.on('SIGINT', onCancel);
+
+    for (let i = 0; i < OPTS.hcRounds && !cancelled; i++) {
+        const gRound = roundLog.length; // cumulative index — round numbers continue across chunks
         const challengers = Array.from({ length: lambda }, () => mutate(champion, rng, sigma));
         // Each challenger plays the current champion (N games — the promotion
         // gate) plus, once a hall of fame exists, a smaller budget split across
-        // the retired champions (the generalization check: a challenger that
-        // only hard-counters the LATEST champion but loses to the field is not
-        // promotable — the rock-paper-scissors guard).
+        // the retired champions (the rock-paper-scissors generalization guard).
         const hofPer = hof.length ? Math.max(2, Math.round(OPTS.hcHofGames / hof.length)) : 0;
         const tasks = [];
-        challengers.forEach((w, i) => {
-            tasks.push({ label: `round ${round + 1}/${OPTS.hcRounds} ch ${i + 1} vs champion`,
-                a: w, b: champion, games: N, seed: (OPTS.seed * 1000003 + round * 1009 + i) >>> 0, ci: i, kind: 'champ' });
-            hof.forEach((hw, hi) => tasks.push({ label: `round ${round + 1}/${OPTS.hcRounds} ch ${i + 1} vs HoF#${hi + 1}`,
-                a: w, b: hw, games: hofPer, seed: (OPTS.seed * 7919 + round * 101 + i * 13 + hi) >>> 0, ci: i, kind: 'hof' }));
+        challengers.forEach((w, idx) => {
+            tasks.push({ label: `round ${gRound + 1} ch ${idx + 1} vs champion`,
+                a: w, b: champion, games: N, seed: (OPTS.seed * 1000003 + gRound * 1009 + idx) >>> 0, ci: idx, kind: 'champ' });
+            hof.forEach((hw, hi) => tasks.push({ label: `round ${gRound + 1} ch ${idx + 1} vs HoF#${hi + 1}`,
+                a: w, b: hw, games: hofPer, seed: (OPTS.seed * 7919 + gRound * 101 + idx * 13 + hi) >>> 0, ci: idx, kind: 'hof' }));
         });
         const results = await runSeriesPool(browser, url, tasks);
-        // Aggregate each challenger's champion trial and hall-of-fame results.
         const agg = challengers.map(() => ({ cA: 0, cB: 0, cFit: 0, hA: 0, hB: 0 }));
         results.forEach((r, k) => {
             const t = tasks[k];
@@ -512,10 +570,8 @@ async function runHillClimb(browser, url) {
             if (t.kind === 'champ') { agg[t.ci].cA = r.aWins; agg[t.ci].cB = r.bWins; agg[t.ci].cFit = r.aFitness - r.bFitness; }
             else { agg[t.ci].hA += r.aWins; agg[t.ci].hB += r.bWins; }
         });
-        // Promote the best challenger that beats the champion by the margin AND
-        // (if a hall of fame exists) holds a non-losing record vs the field.
         let best = null, bestChampOnly = null, blockedByField = 0;
-        agg.forEach((p, i) => {
+        agg.forEach((p, idx) => {
             const cd = p.cA + p.cB, cwr = cd ? p.cA / cd : 0;
             const hd = p.hA + p.hB, hwr = hd ? p.hA / hd : 1; // empty HoF ⇒ auto-pass
             const net = p.cA - p.cB;
@@ -524,7 +580,7 @@ async function runHillClimb(browser, url) {
             const holdsField = hof.length === 0 || (hd > 0 && hwr >= OPTS.hcHofFloor);
             if (beatsChamp && !holdsField) blockedByField++;
             if (beatsChamp && holdsField && (!best || net > best.net || (net === best.net && hwr > best.hwr))) {
-                best = { w: challengers[i], cA: p.cA, cB: p.cB, cwr, hA: p.hA, hB: p.hB, hwr, net };
+                best = { w: challengers[idx], cA: p.cA, cB: p.cB, cwr, hA: p.hA, hB: p.hB, hwr, net };
             }
         });
         let promoted = false;
@@ -533,59 +589,53 @@ async function runHillClimb(browser, url) {
             champion = best.w; promotions++; promoted = true; sigma = OPTS.hcSigma; // found a step up — reset the radius
             if (OPTS.hcHof > 0) { hof.push(old); while (hof.length > OPTS.hcHof) hof.shift(); }
             const fieldNote = (best.hA + best.hB) > 0 ? `, ${Math.round(best.hwr * 100)}% vs field` : '';
-            console.log(`[runner] round ${round + 1}: PROMOTED (${best.cA}-${best.cB} vs champion${fieldNote}) — new champion #${promotions} (HoF ${hof.length})`);
+            console.log(`[runner] round ${gRound + 1}: PROMOTED (${best.cA}-${best.cB} vs champion${fieldNote}) — new champion #${promotions} (HoF ${hof.length})`);
         } else {
             const prev = sigma; sigma = Math.min(0.8, sigma * 1.5); // barren — widen the search
             const note = blockedByField ? ` — ${blockedByField} beat the champion but lost to the field (gauntlet held)` : '';
-            console.log(`[runner] round ${round + 1}: held (best vs champion ${bestChampOnly.cA}-${bestChampOnly.cB})${note} — sigma ${prev.toFixed(2)}→${sigma.toFixed(2)}`);
+            console.log(`[runner] round ${gRound + 1}: held (best vs champion ${bestChampOnly.cA}-${bestChampOnly.cB})${note} — sigma ${prev.toFixed(2)}→${sigma.toFixed(2)}`);
         }
-        roundLog.push({ round: round + 1, promoted, promotions, hof: hof.length, blockedByField,
+        roundLog.push({ round: gRound + 1, promoted, promotions, hof: hof.length, blockedByField,
             bestVsChampion: `${bestChampOnly.cA}-${bestChampOnly.cB}`, sigma: +sigma.toFixed(3) });
-        writeCheckpoint('in-progress'); // hours of work survive a timeout/crash from here on
+        writeState('in-progress'); // every round is checkpointed — a timeout/crash/Ctrl-C never loses it
     }
+    if (cancelled) return;
     const minutes = ((Date.now() - t0) / 60000).toFixed(1);
 
-    // Honest final check vs the champion we started from. Require a real
-    // MARGIN — the climbed champion must win a supermajority of the DECIDED
-    // games (hcConfirmMargin), not merely edge out a higher fitness. A bare
-    // `aFitness > bFitness` stamps "IMPROVED" on a 5-5 / 2.64-vs-2.58 coin
-    // flip, which is exactly the leaky-gate problem hillClimb exists to avoid.
+    // Cumulative confirm: current champion vs the session's ORIGINAL baseline,
+    // with the same real-margin gate the one-off run uses (a 5-5 tie does not
+    // count as IMPROVED).
     let conf = null, improved = false, winRate = 0, decided = 0;
     if (promotions === 0) {
-        console.log('[runner] hillclimb: no challenger ever beat the champion — nothing changed.');
+        console.log('[runner] hillclimb: no promotion yet — champion unchanged from the session baseline.');
     } else {
-        console.log(`[runner] hillclimb: final confirmation vs the starting champion (${OPTS.hcConfirm} games)…`);
+        console.log(`[runner] hillclimb: confirmation vs the session's starting champion (${OPTS.hcConfirm} games)…`);
         [conf] = await runSeriesPool(browser, url, [{
-            label: 'final confirm vs starting champion', a: champion, b: baseline, games: OPTS.hcConfirm, seed: OPTS.seed + 900_001,
+            label: 'confirm vs session baseline', a: champion, b: baseline, games: OPTS.hcConfirm, seed: OPTS.seed + 900_001 + roundLog.length,
         }]);
         decided = conf.aWins + conf.bWins;
         winRate = decided ? conf.aWins / decided : 0;
         improved = decided >= Math.ceil(OPTS.hcConfirm / 2) && winRate >= OPTS.hcConfirmMargin;
     }
-
-    writeCheckpoint('complete', { finalConfirm: conf, finalWinRate: +winRate.toFixed(3), improved });
+    process.removeListener('SIGINT', onCancel);
+    writeState('idle', { finalConfirm: conf, finalWinRate: +winRate.toFixed(3), improved });
+    if (promotions > 0) writeApplyFile(conf); // always give an apply file once a champion exists
 
     const marginPct = Math.round(OPTS.hcConfirmMargin * 100);
-    console.log('[runner] --- hillclimb verdict ---');
-    console.log(`[runner] ${promotions} promotion(s) over ${OPTS.hcRounds} rounds, ${gamesPlayed} games, ${minutes} min.`);
-    if (improved) {
-        const applyPath = join(CACHE_DIR, 'apply-champion.txt');
-        writeFileSync(applyPath,
-            `// Paste this whole line into the game's browser console, then reload the page:\n` +
-            `localStorage.setItem('godaigo_bot_weights', ${JSON.stringify(JSON.stringify(champion))});\n`);
-        console.log(`[runner] IMPROVED: climbed champion beat the starting one ${conf.aWins}-${conf.bWins} ` +
-            `(${Math.round(winRate * 100)}% of ${decided} decided ≥ ${marginPct}% margin; fitness ${conf.aFitness.toFixed(2)} vs ${conf.bFitness.toFixed(2)}).`);
-        console.log(`[runner] champion written to ${outPath}`);
-        console.log('[runner] TO APPLY IT:');
-        console.log(`[runner]   1. open ${applyPath}`);
-        console.log('[runner]   2. paste the localStorage line into the game console (F12), press Enter');
-        console.log('[runner]   3. reload the game — bot.js loads the new weights automatically');
-    } else if (promotions > 0) {
-        console.log(`[runner] TOO CLOSE TO CALL: ${conf.aWins}-${conf.bWins} ` +
-            `(${Math.round(winRate * 100)}% of ${decided} decided, need ≥ ${marginPct}%). Within noise — do NOT ship this.`);
-        console.log(`[runner] Details in ${outPath}. Try more --hc-rounds / --hc-games, a larger --hc-confirm, or the Phase-2 gauntlet.`);
+    console.log('[runner] --- hillclimb chunk done ---');
+    console.log(`[runner] session total: ${roundLog.length} rounds, ${promotions} promotion(s). This chunk: ${gamesPlayed} games, ${minutes} min.`);
+    if (promotions === 0) {
+        console.log('[runner] nothing to apply yet — resume with the SAME command to keep climbing.');
+    } else if (improved) {
+        console.log(`[runner] IMPROVED over the session baseline: ${conf.aWins}-${conf.bWins} ` +
+            `(${Math.round(winRate * 100)}% of ${decided} ≥ ${marginPct}%). Apply/share: open ${applyPath}`);
     } else {
-        console.log(`[runner] no change — no challenger ever beat the champion. Details in ${outPath}.`);
+        console.log(`[runner] champion advanced but only ${conf.aWins}-${conf.bWins} ` +
+            `(${Math.round(winRate * 100)}%, want ≥ ${marginPct}%) vs the session baseline — keep going.`);
+        console.log(`[runner] (an apply file is still written at ${applyPath}, but the edge over baseline isn't confirmed yet.)`);
+    }
+    if (sessionName) {
+        console.log(`[runner] RESUME: node tools/arena-headless.mjs --hillclimb --hc-session ${sessionName} --hc-rounds ${OPTS.hcRounds} --shards ${OPTS.shards} --hc-games ${N}`);
     }
 }
 

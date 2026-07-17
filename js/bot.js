@@ -311,6 +311,13 @@
     // or errors the bot on account of a background fetch.
     (async function loadCommunityChampion() {
         try {
+            // Testing pin: when the player has pinned a local champion
+            // (localStorage 'godaigo_bot_weights_pin' === '1', e.g. from a
+            // hillclimb apply-champion.txt), do NOT let the community champion
+            // overwrite it — otherwise the pinned weights they want to watch
+            // get clobbered the moment this fetch resolves. Cleared by removing
+            // the flag; default (unset) behavior is unchanged.
+            try { if (localStorage.getItem('godaigo_bot_weights_pin') === '1') return; } catch (e) {}
             // The initialized client lives in the bare global `supabase`
             // (config.js: `const supabase = window.supabase.createClient(...)`)
             // — a top-level const does NOT attach itself to `window`, so

@@ -10,6 +10,34 @@
 (continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
 ## Last Committed Work
+- **BOT ARENA hillclimb: resumable chunked sessions + Ctrl-C safety + apply/pin/share**
+  — `tools/arena-headless.mjs`, `js/bot.js`. User needs to train in 20-40 min
+  chunks (shared computer) and actually watch the resulting bot. Added:
+  (1) `--hc-session NAME` — a RESUMABLE session persisted to
+  `tools/.cache/hc-session-NAME.json`; the SAME command each chunk continues
+  the run (champion, hall of fame, sigma, promotion count, and round history all
+  reload; round numbers stay contiguous across chunks; the mutation RNG advances
+  past completed rounds so a resumed chunk doesn't replay). Each chunk ends with
+  a cumulative confirm vs the session's ORIGINAL baseline and writes the apply
+  file. (2) A SIGINT (Ctrl-C) handler — state is already checkpointed every
+  round, so cancel just writes the apply file for the best champion so far and
+  exits 0; resume anytime. (3) `apply-champion.txt` rewritten: local-apply lines
+  now also set `godaigo_bot_weights_pin='1'`, PLUS (once a confirm record
+  exists) an optional "share online" snippet that inserts into
+  `bot_champion_weights` while logged into the live game. (4) `js/bot.js`
+  `loadCommunityChampion()` now early-returns when `godaigo_bot_weights_pin`
+  is set — otherwise the async Supabase community-champion fetch OVERWRITES a
+  locally-applied champion the moment it resolves (`Object.assign(WEIGHTS,…)`),
+  so a player could never reliably watch their own trained weights. Default
+  (unset) behavior unchanged. Verified headless: two 2-round chunks of one
+  session continue contiguously ([1,2,3,4], baseline/champion/HoF persisted,
+  status idle, apply file pinned) — RESUME PASS; a run SIGINT'd mid-round-2
+  exits 0, saves status `cancelled` with round 1 preserved, and writes the
+  pinned apply file — SIGINT PASS. bot.js pin guard is a one-line guarded
+  early-return (syntax-checked; the sandbox has no reachable Supabase to
+  exercise the override-skip end to end). Camping-attribution fitness penalty
+  still queued (deferred — changes the fitness yardstick, best landed before a
+  serious multi-chunk session; a session should use one code version).
 - **BOT ARENA: hillclimb Phase 2 — hall-of-fame gauntlet (CLI)** —
   `tools/arena-headless.mjs`. Guards against non-transitive rock-paper-scissors
   exploits: each challenger now also plays a budget vs recently-RETIRED
