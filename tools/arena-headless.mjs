@@ -42,7 +42,9 @@
 //   --seed N            base RNG seed (default 1)
 //   --players N         players per game, 2-5 (default 2)
 //   --speed X           BotSystem.speedScale (default 0.1, arena normal)
-//   --timeout M         watchdog: kill everything after M minutes (default 120)
+//   --timeout M         watchdog: kill everything after M minutes (default 360 = 6h).
+//                       hillclimb checkpoints every round to its output json, so a
+//                       timeout/crash/Ctrl-C never loses the champion reached so far.
 //   --headed            visible browser window(s) (debugging)
 //   --verbose           stream the page's [Bot]/[BotArena] console lines
 //   --games N           smoke mode: games in the series (default 4)
@@ -89,7 +91,7 @@ const OPTS = {
     seed: +arg('seed', 1),
     players: +arg('players', 2),
     speed: +arg('speed', 0.1),
-    timeoutMs: +arg('timeout', 120) * 60_000,
+    timeoutMs: +arg('timeout', 360) * 60_000, // watchdog cap in MINUTES (default 6h; hillclimb runs are multi-hour)
     headed: !!arg('headed', false),
     verbose: !!arg('verbose', false),
     shards: +arg('shards', 4),
@@ -456,6 +458,21 @@ async function runHillClimb(browser, url) {
         `(pool ${pool} page(s)), promote ≥ ${Math.round(OPTS.hcPromote * 100)}% of decided`);
 
     const t0 = Date.now();
+    mkdirSync(CACHE_DIR, { recursive: true });
+    const outPath = OPTS.out || join(CACHE_DIR, `hillclimb-${Date.now()}.json`);
+    const roundLog = [];
+    // Checkpoint after every round so a watchdog timeout / crash / Ctrl-C never
+    // throws away hours of climbing — the current best champion is always on
+    // disk at `outPath`, recoverable even if the run never reaches its verdict.
+    function writeCheckpoint(status, extra = {}) {
+        writeFileSync(outPath, JSON.stringify({
+            when: new Date().toISOString(), status,
+            rounds: OPTS.hcRounds, roundsDone: roundLog.length, lambda, gamesPerChallenge: N,
+            promoteWinRate: OPTS.hcPromote, confirmGames: OPTS.hcConfirm, confirmMargin: OPTS.hcConfirmMargin,
+            promotions, gamesPlayed, minutes: +((Date.now() - t0) / 60000).toFixed(1),
+            roundLog, champion, ...extra,
+        }, null, 2));
+    }
     for (let round = 0; round < OPTS.hcRounds; round++) {
         const challengers = Array.from({ length: lambda }, () => mutate(champion, rng, sigma));
         const tasks = challengers.map((w, i) => ({
@@ -472,17 +489,21 @@ async function runHillClimb(browser, url) {
                 best = { w: challengers[tasks[i].ci], aWins: r.aWins, bWins: r.bWins, draws: r.draws, net, fit };
             }
         });
-        const decided = best.aWins + best.bWins;
-        const winRate = decided ? best.aWins / decided : 0;
-        if (decided >= minDecided && winRate >= OPTS.hcPromote) {
-            champion = best.w; promotions++; sigma = OPTS.hcSigma; // found a step up — reset the radius
+        const rDecided = best.aWins + best.bWins;
+        const rWinRate = rDecided ? best.aWins / rDecided : 0;
+        let promoted = false;
+        if (rDecided >= minDecided && rWinRate >= OPTS.hcPromote) {
+            champion = best.w; promotions++; promoted = true; sigma = OPTS.hcSigma; // found a step up — reset the radius
             console.log(`[runner] round ${round + 1}: PROMOTED (${best.aWins}-${best.bWins}, ` +
-                `${Math.round(winRate * 100)}% of ${decided} decided) — new champion #${promotions}`);
+                `${Math.round(rWinRate * 100)}% of ${rDecided} decided) — new champion #${promotions}`);
         } else {
             const prev = sigma; sigma = Math.min(0.8, sigma * 1.5); // barren — widen the search
             console.log(`[runner] round ${round + 1}: held (best ${best.aWins}-${best.bWins}, ` +
-                `${Math.round(winRate * 100)}% of ${decided}) — sigma ${prev.toFixed(2)}→${sigma.toFixed(2)}`);
+                `${Math.round(rWinRate * 100)}% of ${rDecided}) — sigma ${prev.toFixed(2)}→${sigma.toFixed(2)}`);
         }
+        roundLog.push({ round: round + 1, promoted, best: `${best.aWins}-${best.bWins}`,
+            winRate: +rWinRate.toFixed(3), decided: rDecided, sigma: +sigma.toFixed(3), promotions });
+        writeCheckpoint('in-progress'); // hours of work survive a timeout/crash from here on
     }
     const minutes = ((Date.now() - t0) / 60000).toFixed(1);
 
@@ -504,15 +525,7 @@ async function runHillClimb(browser, url) {
         improved = decided >= Math.ceil(OPTS.hcConfirm / 2) && winRate >= OPTS.hcConfirmMargin;
     }
 
-    mkdirSync(CACHE_DIR, { recursive: true });
-    const outPath = OPTS.out || join(CACHE_DIR, `hillclimb-${Date.now()}.json`);
-    writeFileSync(outPath, JSON.stringify({
-        when: new Date().toISOString(),
-        rounds: OPTS.hcRounds, lambda, gamesPerChallenge: N, promoteWinRate: OPTS.hcPromote,
-        confirmGames: OPTS.hcConfirm, confirmMargin: OPTS.hcConfirmMargin,
-        promotions, gamesPlayed, minutes: +minutes,
-        finalConfirm: conf, finalWinRate: +winRate.toFixed(3), improved, champion,
-    }, null, 2));
+    writeCheckpoint('complete', { finalConfirm: conf, finalWinRate: +winRate.toFixed(3), improved });
 
     const marginPct = Math.round(OPTS.hcConfirmMargin * 100);
     console.log('[runner] --- hillclimb verdict ---');

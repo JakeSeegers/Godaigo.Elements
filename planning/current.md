@@ -61,7 +61,15 @@
   with a min-decided floor) — NOT a bare `aFitness > bFitness`, which would
   stamp "IMPROVED" on a 5-5 / 2.64-vs-2.58 coin flip (the same leaky-gate
   problem hillClimb exists to avoid; caught from a real user run that did
-  exactly that). "Too close to call" is reported distinctly from "no change". Rough cost on 6 cores: a real
+  exactly that). "Too close to call" is reported distinctly from "no change".
+  Robustness (from a real user run the 120-min watchdog killed at round 10/20,
+  losing all 9 completed rounds): the runner now CHECKPOINTS the current
+  champion + roundLog to its output json after EVERY round, so a
+  timeout/crash/Ctrl-C leaves a recoverable champion on disk (status
+  `in-progress` vs `complete`); the watchdog default was also raised 120→360
+  min (hillclimb runs are inherently multi-hour). Verified: a run killed by a
+  2-min watchdog left a checkpoint with 2 completed rounds + a full 64-key
+  champion. The `--timeout` flag (minutes) already existed — no `--watchdog`. Rough cost on 6 cores: a real
   `20×6×30 = 3600`-game run ≈ ~4h wall (vs ~25h single-threaded). Verified in
   the sandbox with tiny params (1 round × 2 challengers × 2 games across 2
   workers): parallel dispatch, Node mutation, promotion, and the final confirm
