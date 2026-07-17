@@ -710,10 +710,19 @@
             if (typeof placedStones !== 'undefined' && placedStones.some(st => dist(st, h) < 5)) return false;
             if (typeof playerPositions !== 'undefined' &&
                 playerPositions.some((p, idx) => p && idx !== tf.targetPlayerIndex && dist(p, h) < 5)) return false;
+            // A teleport may NEVER land on a face-down tile (it doesn't reveal
+            // it — landing there is illegal, same rule the human drop handler
+            // now enforces). isPositionOnFlippedTile also excludes shared bridge
+            // hexes that touch any unflipped tile.
+            if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(h.x, h.y, grid)) return false;
             return true;
         });
         if (!candidates.length) return false;
 
+        // When still exploring, aim TOWARD the nearest hidden tile — but the
+        // filtered candidates land on a legal (revealed/empty) hex ADJACENT to
+        // it, never on the face-down tile itself, so the pawn can walk on to
+        // reveal it next turn.
         let goal = null;
         if (ELEMENTS.every(el => target.activated.includes(el))) {
             goal = s.tiles.find(t => t.isPlayerTile && t.playerIndex === tf.targetPlayerIndex);

@@ -10,6 +10,29 @@
 (continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
 ## Last Committed Work
+- **BOT/RULE FIX: Take Flight could land a pawn on a face-down tile (illegal)** —
+  `js/bot-effects.js`, `js/game-ui.js`. User report (real MP action log, game
+  468): a lobby bot cast Take Flight (WIND_SCROLL_4) and teleported onto an
+  unflipped tile. Root cause: neither the bot driver nor the human drop handler
+  ever checked for face-down tiles. `driveTakeFlightDrag()`'s candidate filter
+  only excluded stones + other players, and when the bot still needed elements
+  it DELIBERATELY aimed for the hex nearest a HIDDEN tile — so it steered onto
+  face-down tiles; the human drop handler (`game-ui.js`, both the mouse and
+  touch paths) validated stone/player/valid-hex but never "is this a face-down
+  tile," and calls `placePlayer()` without revealing. Teleports don't reveal,
+  so ending on a face-down tile is illegal (user confirmed: forbid, not
+  reveal — matches Excavate's revealed-only rule; catacomb/Freedom teleport
+  already required a revealed destination, so this was Take-Flight-specific).
+  Fixed both layers with the existing `isPositionOnFlippedTile(x,y,grid)` helper
+  (same one `bot-state.js` uses to keep placeStone off flipped tiles; it also
+  catches shared bridge hexes touching any unflipped tile): the bot filters
+  those hexes out of Take Flight candidates (so `dest` is legal by
+  construction), and both human handlers reject an on-flipped destination with
+  "Take Flight: cannot teleport onto a face-down tile." Verified headless in a
+  real started 2-player game (12 hidden tiles): the driver moves the pawn to a
+  revealed/empty hex (onFlipped false), with a negative control proving the
+  pre-fix candidate logic WOULD have landed on a face-down tile (onFlipped
+  true), zero page errors.
 - **BOT ARENA hillclimb: resumable chunked sessions + Ctrl-C safety + apply/pin/share**
   — `tools/arena-headless.mjs`, `js/bot.js`. User needs to train in 20-40 min
   chunks (shared computer) and actually watch the resulting bot. Added:

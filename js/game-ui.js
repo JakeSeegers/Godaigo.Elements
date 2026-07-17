@@ -1348,10 +1348,15 @@
                         const dist = Math.sqrt(Math.pow(p.x - destPos.x, 2) + Math.pow(p.y - destPos.y, 2));
                         return dist < 5;
                     });
+                    // A teleport may not land on a face-down tile — it doesn't
+                    // reveal it, so ending there is illegal.
+                    const onFlipped = destPos && typeof isPositionOnFlippedTile === 'function' &&
+                        isPositionOnFlippedTile(destPos.x, destPos.y, getAllHexagonPositions());
 
-                    if (!destPos || hasStone || hasPlayer) {
+                    if (!destPos || hasStone || hasPlayer || onFlipped) {
                         if (hasStone) updateStatus('Take Flight: cannot teleport onto a stone.');
                         else if (hasPlayer) updateStatus('Take Flight: another player is in the way.');
+                        else if (onFlipped) updateStatus('Take Flight: cannot teleport onto a face-down tile.');
                         else updateStatus('Take Flight: invalid destination.');
 
                         if (origin) {
@@ -1987,10 +1992,15 @@
                             const dist = Math.sqrt(Math.pow(p.x - destPos.x, 2) + Math.pow(p.y - destPos.y, 2));
                             return dist < 5;
                         });
+                        // A teleport may not land on a face-down tile — it
+                        // doesn't reveal it, so ending there is illegal.
+                        const onFlipped = destPos && typeof isPositionOnFlippedTile === 'function' &&
+                            isPositionOnFlippedTile(destPos.x, destPos.y, getAllHexagonPositions());
 
-                        if (!destPos || hasStone || hasPlayer) {
+                        if (!destPos || hasStone || hasPlayer || onFlipped) {
                             if (hasStone) updateStatus('Take Flight: cannot teleport onto a stone.');
                             else if (hasPlayer) updateStatus('Take Flight: another player is in the way.');
+                            else if (onFlipped) updateStatus('Take Flight: cannot teleport onto a face-down tile.');
                             else updateStatus('Take Flight: invalid destination.');
 
                             if (origin) {
