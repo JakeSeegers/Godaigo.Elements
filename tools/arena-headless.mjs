@@ -36,6 +36,9 @@
 //   --hc-games N        games each challenger plays vs the champion (default 30)
 //   --hc-promote R      win-rate over decided games needed to promote (default 0.58)
 //   --hc-sigma X        base mutation step (default 0.2; auto-widens on barren rounds)
+//   --hc-confirm N      games in the final champion-vs-starting confirm (default 20)
+//   --hc-confirm-margin R  win-rate margin to call the run IMPROVED (default 0.55;
+//                       a 5-5 tie / fitness hair does NOT count — guards against noise)
 //   --seed N            base RNG seed (default 1)
 //   --players N         players per game, 2-5 (default 2)
 //   --speed X           BotSystem.speedScale (default 0.1, arena normal)
@@ -101,6 +104,8 @@ const OPTS = {
     hcGames: +arg('hc-games', 30),
     hcPromote: +arg('hc-promote', 0.58),
     hcSigma: +arg('hc-sigma', 0.2),
+    hcConfirm: +arg('hc-confirm', 20),          // games in the final champion-vs-starting confirm
+    hcConfirmMargin: +arg('hc-confirm-margin', 0.55), // win rate over decided games needed to call it IMPROVED
 };
 
 // ---------------------------------------------------------------- hillclimb helpers
@@ -481,16 +486,22 @@ async function runHillClimb(browser, url) {
     }
     const minutes = ((Date.now() - t0) / 60000).toFixed(1);
 
-    // Honest final check vs the champion we started from.
-    let conf = null, improved = false;
+    // Honest final check vs the champion we started from. Require a real
+    // MARGIN — the climbed champion must win a supermajority of the DECIDED
+    // games (hcConfirmMargin), not merely edge out a higher fitness. A bare
+    // `aFitness > bFitness` stamps "IMPROVED" on a 5-5 / 2.64-vs-2.58 coin
+    // flip, which is exactly the leaky-gate problem hillClimb exists to avoid.
+    let conf = null, improved = false, winRate = 0, decided = 0;
     if (promotions === 0) {
         console.log('[runner] hillclimb: no challenger ever beat the champion — nothing changed.');
     } else {
-        console.log('[runner] hillclimb: final confirmation vs the starting champion…');
+        console.log(`[runner] hillclimb: final confirmation vs the starting champion (${OPTS.hcConfirm} games)…`);
         [conf] = await runSeriesPool(browser, url, [{
-            label: 'final confirm vs starting champion', a: champion, b: baseline, games: OPTS.confirmGames, seed: OPTS.seed + 900_001,
+            label: 'final confirm vs starting champion', a: champion, b: baseline, games: OPTS.hcConfirm, seed: OPTS.seed + 900_001,
         }]);
-        improved = conf.aFitness > conf.bFitness;
+        decided = conf.aWins + conf.bWins;
+        winRate = decided ? conf.aWins / decided : 0;
+        improved = decided >= Math.ceil(OPTS.hcConfirm / 2) && winRate >= OPTS.hcConfirmMargin;
     }
 
     mkdirSync(CACHE_DIR, { recursive: true });
@@ -498,9 +509,12 @@ async function runHillClimb(browser, url) {
     writeFileSync(outPath, JSON.stringify({
         when: new Date().toISOString(),
         rounds: OPTS.hcRounds, lambda, gamesPerChallenge: N, promoteWinRate: OPTS.hcPromote,
-        promotions, gamesPlayed, minutes: +minutes, finalConfirm: conf, improved, champion,
+        confirmGames: OPTS.hcConfirm, confirmMargin: OPTS.hcConfirmMargin,
+        promotions, gamesPlayed, minutes: +minutes,
+        finalConfirm: conf, finalWinRate: +winRate.toFixed(3), improved, champion,
     }, null, 2));
 
+    const marginPct = Math.round(OPTS.hcConfirmMargin * 100);
     console.log('[runner] --- hillclimb verdict ---');
     console.log(`[runner] ${promotions} promotion(s) over ${OPTS.hcRounds} rounds, ${gamesPlayed} games, ${minutes} min.`);
     if (improved) {
@@ -508,16 +522,19 @@ async function runHillClimb(browser, url) {
         writeFileSync(applyPath,
             `// Paste this whole line into the game's browser console, then reload the page:\n` +
             `localStorage.setItem('godaigo_bot_weights', ${JSON.stringify(JSON.stringify(champion))});\n`);
-        console.log(`[runner] IMPROVED: final champion beat the one it started from ` +
-            `(${conf.aWins}-${conf.bWins}, ${conf.draws} draws; fitness ${conf.aFitness.toFixed(2)} vs ${conf.bFitness.toFixed(2)}).`);
+        console.log(`[runner] IMPROVED: climbed champion beat the starting one ${conf.aWins}-${conf.bWins} ` +
+            `(${Math.round(winRate * 100)}% of ${decided} decided ≥ ${marginPct}% margin; fitness ${conf.aFitness.toFixed(2)} vs ${conf.bFitness.toFixed(2)}).`);
         console.log(`[runner] champion written to ${outPath}`);
         console.log('[runner] TO APPLY IT:');
         console.log(`[runner]   1. open ${applyPath}`);
         console.log('[runner]   2. paste the localStorage line into the game console (F12), press Enter');
         console.log('[runner]   3. reload the game — bot.js loads the new weights automatically');
+    } else if (promotions > 0) {
+        console.log(`[runner] TOO CLOSE TO CALL: ${conf.aWins}-${conf.bWins} ` +
+            `(${Math.round(winRate * 100)}% of ${decided} decided, need ≥ ${marginPct}%). Within noise — do NOT ship this.`);
+        console.log(`[runner] Details in ${outPath}. Try more --hc-rounds / --hc-games, a larger --hc-confirm, or the Phase-2 gauntlet.`);
     } else {
-        console.log(`[runner] no net gain over the starting champion — details in ${outPath}.`);
-        console.log('[runner] (Try more --hc-rounds, or wait for the Phase-2 hall-of-fame gauntlet.)');
+        console.log(`[runner] no change — no challenger ever beat the champion. Details in ${outPath}.`);
     }
 }
 

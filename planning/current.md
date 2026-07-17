@@ -56,7 +56,12 @@
   `--hc-promote` (0.58), `--hc-sigma` (0.2); trials fan across `--shards`.
   Ends with an honest final confirm of the climbed champion vs the round-0
   starting champion and writes `hillclimb-<ts>.json` + `apply-champion.txt`
-  (only when it genuinely improved). Rough cost on 6 cores: a real
+  (only when it genuinely improved). The final verdict requires a real MARGIN
+  (`--hc-confirm-margin` 0.55 win-rate over `--hc-confirm` 20 decided games,
+  with a min-decided floor) — NOT a bare `aFitness > bFitness`, which would
+  stamp "IMPROVED" on a 5-5 / 2.64-vs-2.58 coin flip (the same leaky-gate
+  problem hillClimb exists to avoid; caught from a real user run that did
+  exactly that). "Too close to call" is reported distinctly from "no change". Rough cost on 6 cores: a real
   `20×6×30 = 3600`-game run ≈ ~4h wall (vs ~25h single-threaded). Verified in
   the sandbox with tiny params (1 round × 2 challengers × 2 games across 2
   workers): parallel dispatch, Node mutation, promotion, and the final confirm
