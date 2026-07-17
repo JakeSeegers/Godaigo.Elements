@@ -10,6 +10,28 @@
 (continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
 ## Last Committed Work
+- **BOT ARENA: hillclimb Phase 2 — hall-of-fame gauntlet (CLI)** —
+  `tools/arena-headless.mjs`. Guards against non-transitive rock-paper-scissors
+  exploits: each challenger now also plays a budget vs recently-RETIRED
+  champions (a bounded hall of fame), and can only be promoted if it beats the
+  current champion by the margin AND holds a non-losing record vs that field —
+  so a bot that hard-counters only the LATEST champion but is worse overall
+  can't sneak in. On promotion the old champion is pushed onto the HoF
+  (FIFO-capped at `--hc-hof` 4). New flags: `--hc-hof` (4; 0 = Phase-1
+  single-champion), `--hc-hof-games` (20, split across the HoF), `--hc-hof-floor`
+  (0.5 min win-rate vs the field). Held rounds log when a challenger beat the
+  champion but was blocked by the field ("gauntlet held"). In-page
+  `BotArena.hillClimb()` deliberately stays Phase-1 single-champion for now
+  (the gauntlet lives in the CLI runner where real training happens); unifying
+  waits until the in-app panel is wired. **Behavioral verification INTERRUPTED
+  (user was mid-run): syntax-checked + reuses the already-verified
+  `runSeriesPool`, but the "gauntlet engages once the HoF populates / blocks a
+  hard-counter" run did not complete — re-verify before relying on it.** Also
+  scoped, NOT built: a stall-attribution fitness penalty — currently the
+  arena's stall-restart DISCARDS camping/no-cast games and replays them, so a
+  bot's stall-causing tendency is invisible to `sideFitness` (the camping
+  detector knows which players parked, so a penalty could be folded into the
+  returned fitness). Deferred to avoid changing the fitness yardstick mid-run.
 - **BOT ARENA: `hillClimb()` — champion-anchored monotonic trainer (Phase 1)**
   — `js/bot-arena.js`, `js/INDEX.md`. Diagnosis (from a user training run that
   produced a champion which LOST the confirmation 3-7 despite "6.5 fitness"):

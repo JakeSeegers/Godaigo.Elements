@@ -25,7 +25,12 @@
 // challengers against it for N games each, promoting one ONLY if it clears a
 // real win-rate margin. The champion is monotonic — it can only go up. The λ
 // trials fan out across --shards pages, so this is where your cores earn their
-// keep. Writes hillclimb-<ts>.json + apply-champion.txt (if improved).
+// keep. Writes hillclimb-<ts>.json + apply-champion.txt (if improved), and
+// checkpoints every round so a timeout/crash never loses progress.
+// Phase 2 (hall-of-fame gauntlet, on by default): each challenger also plays a
+// budget vs recently-RETIRED champions, and can only be promoted if it holds a
+// non-losing record against that field — so a bot that hard-counters just the
+// latest champion but is worse overall can't sneak in (--hc-hof 0 disables it).
 //   node tools/arena-headless.mjs --hillclimb --shards 6 --hc-rounds 20
 //   node tools/arena-headless.mjs --hillclimb path/to/champion.json   # seed from a file
 //
@@ -39,6 +44,11 @@
 //   --hc-confirm N      games in the final champion-vs-starting confirm (default 20)
 //   --hc-confirm-margin R  win-rate margin to call the run IMPROVED (default 0.55;
 //                       a 5-5 tie / fitness hair does NOT count — guards against noise)
+//   --hc-hof N          hall-of-fame size: retired champions kept as extra opponents
+//                       (default 4; 0 = Phase-1 single-champion, no gauntlet)
+//   --hc-hof-games N    games each challenger plays vs the hall of fame (default 20)
+//   --hc-hof-floor R    min win-rate vs the hall of fame to be promotable (default 0.5;
+//                       stops a challenger that hard-counters only the latest champion)
 //   --seed N            base RNG seed (default 1)
 //   --players N         players per game, 2-5 (default 2)
 //   --speed X           BotSystem.speedScale (default 0.1, arena normal)
@@ -108,6 +118,10 @@ const OPTS = {
     hcSigma: +arg('hc-sigma', 0.2),
     hcConfirm: +arg('hc-confirm', 20),          // games in the final champion-vs-starting confirm
     hcConfirmMargin: +arg('hc-confirm-margin', 0.55), // win rate over decided games needed to call it IMPROVED
+    // Phase 2 — hall-of-fame gauntlet (guards against rock-paper-scissors exploits)
+    hcHof: +arg('hc-hof', 4),                   // retired champions kept as extra opponents (0 = Phase-1 single-champion)
+    hcHofGames: +arg('hc-hof-games', 20),       // games each challenger plays vs the hall of fame (split across it)
+    hcHofFloor: +arg('hc-hof-floor', 0.5),      // min win rate vs the hall of fame to be promotable
 };
 
 // ---------------------------------------------------------------- hillclimb helpers
@@ -473,36 +487,60 @@ async function runHillClimb(browser, url) {
             roundLog, champion, ...extra,
         }, null, 2));
     }
+    const hof = []; // hall of fame: retired champions, kept as extra opponents (most-recent last)
     for (let round = 0; round < OPTS.hcRounds; round++) {
         const challengers = Array.from({ length: lambda }, () => mutate(champion, rng, sigma));
-        const tasks = challengers.map((w, i) => ({
-            label: `round ${round + 1}/${OPTS.hcRounds} challenger ${i + 1}/${lambda}`,
-            a: w, b: champion, games: N, seed: (OPTS.seed * 1000003 + round * 1009 + i) >>> 0, ci: i,
-        }));
+        // Each challenger plays the current champion (N games — the promotion
+        // gate) plus, once a hall of fame exists, a smaller budget split across
+        // the retired champions (the generalization check: a challenger that
+        // only hard-counters the LATEST champion but loses to the field is not
+        // promotable — the rock-paper-scissors guard).
+        const hofPer = hof.length ? Math.max(2, Math.round(OPTS.hcHofGames / hof.length)) : 0;
+        const tasks = [];
+        challengers.forEach((w, i) => {
+            tasks.push({ label: `round ${round + 1}/${OPTS.hcRounds} ch ${i + 1} vs champion`,
+                a: w, b: champion, games: N, seed: (OPTS.seed * 1000003 + round * 1009 + i) >>> 0, ci: i, kind: 'champ' });
+            hof.forEach((hw, hi) => tasks.push({ label: `round ${round + 1}/${OPTS.hcRounds} ch ${i + 1} vs HoF#${hi + 1}`,
+                a: w, b: hw, games: hofPer, seed: (OPTS.seed * 7919 + round * 101 + i * 13 + hi) >>> 0, ci: i, kind: 'hof' }));
+        });
         const results = await runSeriesPool(browser, url, tasks);
-        // Best by net wins, tie-broken by sideFitness margin.
-        let best = null;
-        results.forEach((r, i) => {
+        // Aggregate each challenger's champion trial and hall-of-fame results.
+        const agg = challengers.map(() => ({ cA: 0, cB: 0, cFit: 0, hA: 0, hB: 0 }));
+        results.forEach((r, k) => {
+            const t = tasks[k];
             gamesPlayed += r.aWins + r.bWins + r.draws;
-            const net = r.aWins - r.bWins, fit = r.aFitness - r.bFitness;
-            if (!best || net > best.net || (net === best.net && fit > best.fit)) {
-                best = { w: challengers[tasks[i].ci], aWins: r.aWins, bWins: r.bWins, draws: r.draws, net, fit };
+            if (t.kind === 'champ') { agg[t.ci].cA = r.aWins; agg[t.ci].cB = r.bWins; agg[t.ci].cFit = r.aFitness - r.bFitness; }
+            else { agg[t.ci].hA += r.aWins; agg[t.ci].hB += r.bWins; }
+        });
+        // Promote the best challenger that beats the champion by the margin AND
+        // (if a hall of fame exists) holds a non-losing record vs the field.
+        let best = null, bestChampOnly = null, blockedByField = 0;
+        agg.forEach((p, i) => {
+            const cd = p.cA + p.cB, cwr = cd ? p.cA / cd : 0;
+            const hd = p.hA + p.hB, hwr = hd ? p.hA / hd : 1; // empty HoF ⇒ auto-pass
+            const net = p.cA - p.cB;
+            if (!bestChampOnly || net > bestChampOnly.net) bestChampOnly = { cA: p.cA, cB: p.cB, net };
+            const beatsChamp = cd >= minDecided && cwr >= OPTS.hcPromote;
+            const holdsField = hof.length === 0 || (hd > 0 && hwr >= OPTS.hcHofFloor);
+            if (beatsChamp && !holdsField) blockedByField++;
+            if (beatsChamp && holdsField && (!best || net > best.net || (net === best.net && hwr > best.hwr))) {
+                best = { w: challengers[i], cA: p.cA, cB: p.cB, cwr, hA: p.hA, hB: p.hB, hwr, net };
             }
         });
-        const rDecided = best.aWins + best.bWins;
-        const rWinRate = rDecided ? best.aWins / rDecided : 0;
         let promoted = false;
-        if (rDecided >= minDecided && rWinRate >= OPTS.hcPromote) {
+        if (best) {
+            const old = champion;
             champion = best.w; promotions++; promoted = true; sigma = OPTS.hcSigma; // found a step up — reset the radius
-            console.log(`[runner] round ${round + 1}: PROMOTED (${best.aWins}-${best.bWins}, ` +
-                `${Math.round(rWinRate * 100)}% of ${rDecided} decided) — new champion #${promotions}`);
+            if (OPTS.hcHof > 0) { hof.push(old); while (hof.length > OPTS.hcHof) hof.shift(); }
+            const fieldNote = (best.hA + best.hB) > 0 ? `, ${Math.round(best.hwr * 100)}% vs field` : '';
+            console.log(`[runner] round ${round + 1}: PROMOTED (${best.cA}-${best.cB} vs champion${fieldNote}) — new champion #${promotions} (HoF ${hof.length})`);
         } else {
             const prev = sigma; sigma = Math.min(0.8, sigma * 1.5); // barren — widen the search
-            console.log(`[runner] round ${round + 1}: held (best ${best.aWins}-${best.bWins}, ` +
-                `${Math.round(rWinRate * 100)}% of ${rDecided}) — sigma ${prev.toFixed(2)}→${sigma.toFixed(2)}`);
+            const note = blockedByField ? ` — ${blockedByField} beat the champion but lost to the field (gauntlet held)` : '';
+            console.log(`[runner] round ${round + 1}: held (best vs champion ${bestChampOnly.cA}-${bestChampOnly.cB})${note} — sigma ${prev.toFixed(2)}→${sigma.toFixed(2)}`);
         }
-        roundLog.push({ round: round + 1, promoted, best: `${best.aWins}-${best.bWins}`,
-            winRate: +rWinRate.toFixed(3), decided: rDecided, sigma: +sigma.toFixed(3), promotions });
+        roundLog.push({ round: round + 1, promoted, promotions, hof: hof.length, blockedByField,
+            bestVsChampion: `${bestChampOnly.cA}-${bestChampOnly.cB}`, sigma: +sigma.toFixed(3) });
         writeCheckpoint('in-progress'); // hours of work survive a timeout/crash from here on
     }
     const minutes = ((Date.now() - t0) / 60000).toFixed(1);
