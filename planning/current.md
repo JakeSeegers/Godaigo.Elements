@@ -38,11 +38,32 @@
   zero page errors. **Deliberately Phase 1 — follow-ups scoped, NOT built:**
   Phase 2 = hall-of-fame gauntlet (evaluate challengers vs a pool of retired
   champions, not just the latest, to guard non-transitive rock-paper-scissors
-  exploits — the margin alone only fixes noise, not generalization); Phase 3 =
-  parallel headless runner (fan λ challenger-trials across Chromium pages; one
-  browser page is single-threaded so the in-page core stays sequential and also
-  runs in the 🧬 panel). Not yet wired into the game-ui panel or
-  `arena-headless.mjs` CLI — next step is a `--hillclimb` flag / panel mode.
+  exploits — the margin alone only fixes noise, not generalization). Still NOT
+  wired into the game-ui 🧬 panel (console/CLI only for now).
+- **BOT ARENA: parallel `--hillclimb` headless runner (Phase 3)** —
+  `tools/arena-headless.mjs`. Makes hillClimb() practical at scale by fanning
+  the λ challenger-trials across Chromium pages (reusing the existing
+  `runSeriesPool` multi-page pool that `--shards` already uses) — one browser
+  page is single-threaded, so the parallelism lives in the Node runner, not the
+  in-page core. Node holds the champion, generates λ mutant challengers per
+  round via Node-side `mulberry32`/`mutate` mirrors (kept in exact sync with
+  bot-arena.js: same brain-shape exclusions, same per-weight Gaussian),
+  dispatches each challenger's N-game trial-vs-champion across the page pool,
+  then promotes the best only if it clears `--hc-promote` (0.58) over the
+  decided games — same monotonic rule as the in-page core. Flags:
+  `--hillclimb [seedfile]` (seed from a champion json or the page's current
+  weights), `--hc-rounds` (20), `--hc-lambda` (6), `--hc-games` (30),
+  `--hc-promote` (0.58), `--hc-sigma` (0.2); trials fan across `--shards`.
+  Ends with an honest final confirm of the climbed champion vs the round-0
+  starting champion and writes `hillclimb-<ts>.json` + `apply-champion.txt`
+  (only when it genuinely improved). Rough cost on 6 cores: a real
+  `20×6×30 = 3600`-game run ≈ ~4h wall (vs ~25h single-threaded). Verified in
+  the sandbox with tiny params (1 round × 2 challengers × 2 games across 2
+  workers): parallel dispatch, Node mutation, promotion, and the final confirm
+  all work; the run promoted a 2-0 challenger and then honestly reported "no
+  net gain" when it went 0-2 in the confirm — a live demonstration that N must
+  be large (the whole point of `--hc-games 30`). Next: Phase 2 gauntlet, and
+  wiring hillClimb into the in-app 🧬 panel.
 - **BOT: fixed the hybrid-search-vs-plan within-turn oscillation (over-trigger)**
   — `js/bot.js`, `docs/bot-roadmap.md`. The roadmap's flagged-for-follow-up
   within-turn oscillation: hybrid search engaged whenever ANY scroll

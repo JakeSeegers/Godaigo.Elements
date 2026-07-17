@@ -18,7 +18,24 @@
 //   node tools/arena-headless.mjs --confirm                     # newest evolve-*.json
 //   node tools/arena-headless.mjs --confirm path/to/results.json
 //
-// Options (both modes unless noted):
+// HillClimb mode (the RELIABLE trainer): a champion-anchored (1+λ) climber,
+// parallelized across the page pool. Unlike evolve (which scores bots by
+// beating their near-identical siblings over 1 noisy game — a downhill random
+// walk), this holds the champion FIXED and each round plays λ mutant
+// challengers against it for N games each, promoting one ONLY if it clears a
+// real win-rate margin. The champion is monotonic — it can only go up. The λ
+// trials fan out across --shards pages, so this is where your cores earn their
+// keep. Writes hillclimb-<ts>.json + apply-champion.txt (if improved).
+//   node tools/arena-headless.mjs --hillclimb --shards 6 --hc-rounds 20
+//   node tools/arena-headless.mjs --hillclimb path/to/champion.json   # seed from a file
+//
+// Options (all modes unless noted):
+//   --hillclimb [file]  hillclimb mode; optional seed-champion json (else page weights)
+//   --hc-rounds N       climbing rounds (default 20)
+//   --hc-lambda N       challengers per round (default 6; trials fan across --shards)
+//   --hc-games N        games each challenger plays vs the champion (default 30)
+//   --hc-promote R      win-rate over decided games needed to promote (default 0.58)
+//   --hc-sigma X        base mutation step (default 0.2; auto-widens on barren rounds)
 //   --seed N            base RNG seed (default 1)
 //   --players N         players per game, 2-5 (default 2)
 //   --speed X           BotSystem.speedScale (default 0.1, arena normal)
@@ -77,7 +94,40 @@ const OPTS = {
     pop: +arg('pop', 6),
     gamesPerPair: +arg('games-per-pair', 1),
     out: arg('out', null),
+    // hillClimb mode (champion-anchored monotonic climber, parallelized)
+    hillclimb: arg('hillclimb', false), // false | true (seed from page weights) | path to a seed champion json
+    hcRounds: +arg('hc-rounds', 20),
+    hcLambda: +arg('hc-lambda', 6),
+    hcGames: +arg('hc-games', 30),
+    hcPromote: +arg('hc-promote', 0.58),
+    hcSigma: +arg('hc-sigma', 0.2),
 };
+
+// ---------------------------------------------------------------- hillclimb helpers
+// Node-side mirrors of bot-arena.js's mulberry32 + mutate, so the parallel
+// runner can generate challengers in Node (each trial is then dispatched to a
+// page as a plain BotArena.run(challenger, champion) A/B series). Kept in exact
+// sync with bot-arena.js: same brain-shape exclusions, same per-weight Gaussian.
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+function mutate(table, rng, sigma = 0.2) {
+    const out = { ...table };
+    for (const k of Object.keys(out)) {
+        if (typeof out[k] !== 'number') continue;
+        if (k === 'searchDepth' || k === 'searchBreadth' || k === 'searchHybrid') continue; // brain shape, not tuning
+        const u1 = Math.max(rng(), 1e-9), u2 = rng();
+        const gauss = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        out[k] = +(out[k] + gauss * sigma * Math.max(1, Math.abs(out[k]))).toFixed(3);
+    }
+    return out;
+}
 
 // ---------------------------------------------------------------- playwright
 // Resolve the playwright package whether it's installed locally or globally.
@@ -368,6 +418,109 @@ async function runConfirm(browser, url) {
     }
 }
 
+// ---------------------------------------------------------------- hillclimb mode
+// Champion-anchored (1+λ) monotonic climber, parallelized across the page pool.
+// Node holds the champion; each round it spawns λ mutant challengers, dispatches
+// their N-game trials-vs-champion across pages (runSeriesPool), then promotes the
+// best ONLY if it clears the win-rate margin — so the champion can only go up.
+// This mirrors BotArena.hillClimb() (in-page) but fans the trials across cores;
+// the per-page trial is just the existing BotArena.run(challenger, champion).
+async function runHillClimb(browser, url) {
+    const N = OPTS.hcGames, lambda = OPTS.hcLambda, minDecided = Math.ceil(N / 2);
+    const seedPath = typeof OPTS.hillclimb === 'string' ? OPTS.hillclimb : null;
+
+    // Champion to improve on: a seed file if given, else whatever the page
+    // currently plays (deployed defaults + Supabase champion if reachable).
+    let champion;
+    if (seedPath) {
+        const j = JSON.parse(readFileSync(seedPath, 'utf8'));
+        champion = j.champion || j; // champion-*.json has .champion; a bare weights file is itself
+        console.log(`[runner] hillclimb: seeding champion from ${seedPath}`);
+    } else {
+        const p = await bootGamePage(browser, url, 'baseline');
+        champion = await p.evaluate(async () => { await new Promise(r => setTimeout(r, 1500)); return { ...window.BotSystem.WEIGHTS }; });
+        await p.context().close();
+        console.log('[runner] hillclimb: seeding champion from the page\'s current weights');
+    }
+    const baseline = { ...champion }; // round-0 reference for the final confirm
+
+    const rng = mulberry32(OPTS.seed);
+    let sigma = OPTS.hcSigma, promotions = 0, gamesPlayed = 0;
+    const pool = Math.min(OPTS.shards, lambda);
+    console.log(`[runner] hillclimb: ${OPTS.hcRounds} rounds × ${lambda} challengers × ${N} games ` +
+        `(pool ${pool} page(s)), promote ≥ ${Math.round(OPTS.hcPromote * 100)}% of decided`);
+
+    const t0 = Date.now();
+    for (let round = 0; round < OPTS.hcRounds; round++) {
+        const challengers = Array.from({ length: lambda }, () => mutate(champion, rng, sigma));
+        const tasks = challengers.map((w, i) => ({
+            label: `round ${round + 1}/${OPTS.hcRounds} challenger ${i + 1}/${lambda}`,
+            a: w, b: champion, games: N, seed: (OPTS.seed * 1000003 + round * 1009 + i) >>> 0, ci: i,
+        }));
+        const results = await runSeriesPool(browser, url, tasks);
+        // Best by net wins, tie-broken by sideFitness margin.
+        let best = null;
+        results.forEach((r, i) => {
+            gamesPlayed += r.aWins + r.bWins + r.draws;
+            const net = r.aWins - r.bWins, fit = r.aFitness - r.bFitness;
+            if (!best || net > best.net || (net === best.net && fit > best.fit)) {
+                best = { w: challengers[tasks[i].ci], aWins: r.aWins, bWins: r.bWins, draws: r.draws, net, fit };
+            }
+        });
+        const decided = best.aWins + best.bWins;
+        const winRate = decided ? best.aWins / decided : 0;
+        if (decided >= minDecided && winRate >= OPTS.hcPromote) {
+            champion = best.w; promotions++; sigma = OPTS.hcSigma; // found a step up — reset the radius
+            console.log(`[runner] round ${round + 1}: PROMOTED (${best.aWins}-${best.bWins}, ` +
+                `${Math.round(winRate * 100)}% of ${decided} decided) — new champion #${promotions}`);
+        } else {
+            const prev = sigma; sigma = Math.min(0.8, sigma * 1.5); // barren — widen the search
+            console.log(`[runner] round ${round + 1}: held (best ${best.aWins}-${best.bWins}, ` +
+                `${Math.round(winRate * 100)}% of ${decided}) — sigma ${prev.toFixed(2)}→${sigma.toFixed(2)}`);
+        }
+    }
+    const minutes = ((Date.now() - t0) / 60000).toFixed(1);
+
+    // Honest final check vs the champion we started from.
+    let conf = null, improved = false;
+    if (promotions === 0) {
+        console.log('[runner] hillclimb: no challenger ever beat the champion — nothing changed.');
+    } else {
+        console.log('[runner] hillclimb: final confirmation vs the starting champion…');
+        [conf] = await runSeriesPool(browser, url, [{
+            label: 'final confirm vs starting champion', a: champion, b: baseline, games: OPTS.confirmGames, seed: OPTS.seed + 900_001,
+        }]);
+        improved = conf.aFitness > conf.bFitness;
+    }
+
+    mkdirSync(CACHE_DIR, { recursive: true });
+    const outPath = OPTS.out || join(CACHE_DIR, `hillclimb-${Date.now()}.json`);
+    writeFileSync(outPath, JSON.stringify({
+        when: new Date().toISOString(),
+        rounds: OPTS.hcRounds, lambda, gamesPerChallenge: N, promoteWinRate: OPTS.hcPromote,
+        promotions, gamesPlayed, minutes: +minutes, finalConfirm: conf, improved, champion,
+    }, null, 2));
+
+    console.log('[runner] --- hillclimb verdict ---');
+    console.log(`[runner] ${promotions} promotion(s) over ${OPTS.hcRounds} rounds, ${gamesPlayed} games, ${minutes} min.`);
+    if (improved) {
+        const applyPath = join(CACHE_DIR, 'apply-champion.txt');
+        writeFileSync(applyPath,
+            `// Paste this whole line into the game's browser console, then reload the page:\n` +
+            `localStorage.setItem('godaigo_bot_weights', ${JSON.stringify(JSON.stringify(champion))});\n`);
+        console.log(`[runner] IMPROVED: final champion beat the one it started from ` +
+            `(${conf.aWins}-${conf.bWins}, ${conf.draws} draws; fitness ${conf.aFitness.toFixed(2)} vs ${conf.bFitness.toFixed(2)}).`);
+        console.log(`[runner] champion written to ${outPath}`);
+        console.log('[runner] TO APPLY IT:');
+        console.log(`[runner]   1. open ${applyPath}`);
+        console.log('[runner]   2. paste the localStorage line into the game console (F12), press Enter');
+        console.log('[runner]   3. reload the game — bot.js loads the new weights automatically');
+    } else {
+        console.log(`[runner] no net gain over the starting champion — details in ${outPath}.`);
+        console.log('[runner] (Try more --hc-rounds, or wait for the Phase-2 hall-of-fame gauntlet.)');
+    }
+}
+
 // ---------------------------------------------------------------- main
 async function main() {
     const { chromium } = await loadPlaywright();
@@ -383,7 +536,8 @@ async function main() {
     }, OPTS.timeoutMs);
 
     try {
-        if (OPTS.confirm) await runConfirm(browser, url);
+        if (OPTS.hillclimb) await runHillClimb(browser, url);
+        else if (OPTS.confirm) await runConfirm(browser, url);
         else if (OPTS.evolve) await runEvolve(browser, url);
         else await runSmoke(browser, url);
     } finally {
