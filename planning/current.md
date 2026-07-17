@@ -10,6 +10,51 @@
 (continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
 ## Last Committed Work
+- **BOT ARENA: stall-attribution fitness penalty (the deferred item from the
+  "hillclimb Phase 2" entry below, now built)** — `js/bot-arena.js`,
+  `js/INDEX.md`. User question, while reviewing the HANDOFF'd anchored-
+  hillclimb experiment: "sometimes the bots will get stuck in a loop running
+  around in circles... this doesn't affect the weights and discourage the
+  behavior — has this been accounted for?" Confirmed by reading the code: no
+  — `playMatch()`'s stall-restart discards a stalled attempt's game state
+  entirely and replays with a derived seed, so a weight table that wedges
+  games into repeated camping/no-cast stalls before finally producing a
+  normal game was scored purely on that last normal game, with the stalling
+  invisible to `sideFitness`/`seatFitness` (and, as a tie-break, to
+  `hillClimb()`'s challenger ranking and `confirmAcrossSizes()`'s
+  champion-vs-baseline gate — both already read fitness, not just win-rate).
+  Fixed by attributing blame per attempt instead of discarding it: each
+  `_playMatchOnce()` stall now records `result.stallers` — for a CAMPING
+  stall, exactly the player index(es) whose streak hit `STALL_TURNS` (mirrors
+  the existing `camped` count computation, just keeping the indices instead
+  of only the count); for a NO-CAST stall, every seat (nobody progressing is
+  a joint failure, unlike camping's per-tile streak, so there's no single
+  culprit to isolate). `playMatch()` sums `stallers` across EVERY attempt of
+  one call — including ones a restart discards — into `result.stallCounts`,
+  a per-player-index count of stalled attempts. `seatFitness()`/
+  `sideFitness()` gained a `stallPenalty` term (default 0.25, tunable via
+  `opts.stallPenalty`) subtracted per stall a seat caused; absent
+  `stallCounts` (e.g. a synthetic result with none) it's a no-op, so old
+  callers are unaffected. `seatFitness`/`sideFitness` also newly exported on
+  `window.BotArena` for direct scoring verification, matching how `bot.js`
+  already exposes its evaluator for the same reason.
+  Verified headless (Playwright, real page): direct `seatFitness()` calls
+  with synthetic results confirm the penalty term's exact weighted
+  contribution, and that a result with no `stallCounts` field scores
+  identically to the pre-fix formula (no regression). End-to-end via the
+  real `playMatch()`: stubbed `BotSystem.turn()` to end-turn without ever
+  casting, forcing a genuine no-cast stall — `maxStallRestarts:2` produced 3
+  total attempts (1 final + 2 discarded), each correctly attributing BOTH
+  seats, so `stallCounts` reads `{0:3, 1:3}` and `seatFitness()` for each
+  seat is exactly `0.3×progress − 0.15×stuck − 0.25×3` (matched to the
+  penny). Negative control: a normal 8-turn unstubbed game never stalls and
+  returns an empty `stallCounts`. The camping branch's attribution wasn't
+  separately exercised end-to-end (would need forcing a revealed elemental
+  tile + sustained position for `STALL_TURNS`=7 turns) — its `stallers`
+  computation is a one-line variant of the already-verified `camped` count
+  and feeds the same, already-verified `playMatch()`/`seatFitness()` path, so
+  confidence is high by inspection, but call this out if a camping-specific
+  regression ever shows up.
 - **hillclimb: anchor training to the ONLINE champion (was silently using defaults)**
   — `tools/arena-headless.mjs`. User trained a 40-min champion that passed the
   local gate 13-7 but lost online. Root cause: a fresh hillclimb session seeded
@@ -102,11 +147,11 @@
   (user was mid-run): syntax-checked + reuses the already-verified
   `runSeriesPool`, but the "gauntlet engages once the HoF populates / blocks a
   hard-counter" run did not complete — re-verify before relying on it.** Also
-  scoped, NOT built: a stall-attribution fitness penalty — currently the
-  arena's stall-restart DISCARDS camping/no-cast games and replays them, so a
-  bot's stall-causing tendency is invisible to `sideFitness` (the camping
-  detector knows which players parked, so a penalty could be folded into the
-  returned fitness). Deferred to avoid changing the fitness yardstick mid-run.
+  scoped, NOT built (at the time): a stall-attribution fitness penalty —
+  the arena's stall-restart DISCARDS camping/no-cast games and replays them,
+  so a bot's stall-causing tendency was invisible to `sideFitness`. Deferred
+  then to avoid changing the fitness yardstick mid-run. **Since built — see
+  the "stall-attribution fitness penalty" entry at the top of this file.**
 - **BOT ARENA: `hillClimb()` — champion-anchored monotonic trainer (Phase 1)**
   — `js/bot-arena.js`, `js/INDEX.md`. Diagnosis (from a user training run that
   produced a champion which LOST the confirmation 3-7 despite "6.5 fitness"):

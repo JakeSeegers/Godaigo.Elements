@@ -67,6 +67,14 @@
 // game still stalled after the last retry is returned as-is (winner null,
 // result.stalled true) so a pathological weight table can't loop forever.
 // result.restarts reports how many restarts the returned game consumed.
+// ATTRIBUTION: each attempt (including ones discarded by a restart) records
+// result.stallers — the player index(es) whose behavior caused THAT stall
+// (campers whose streak hit STALL_TURNS; every seat for a NO-CAST stall,
+// since nobody progressing is a joint failure). playMatch() sums these
+// across every attempt of one playMatch() call into result.stallCounts, so a
+// weight table that keeps wasting restart budget on stalls is still visible
+// to seatFitness()/sideFitness() even though only the FINAL attempt's game
+// state (winner/turns/activated) survives into the returned result.
 //
 // HOW A GAME RUNS (local hot-seat — no Supabase, no multiplayer):
 //   ensureLocalMode() + resetGameResources() + startGame(n) reset
@@ -365,17 +373,19 @@
     // turnCap default) — muting the environment and any status/log UI is
     // the caller's job.
     // Returns { winner: 0..n-1 | null, turns, activated: [n0..], stuckTurns:
-    // {0: n, 1: n, ...}, stalled }. `activated` = each player's
+    // {0: n, 1: n, ...}, stalled, stallers }. `activated` = each player's
     // elements-activated count at game end (win progress, 0-5) and
     // `stuckTurns` = how many times each player's turn had to be
     // force-ended because botTurn() never chose to end it itself (stuck/no
     // productive action). Both feed sideFitness() so a bot that stalls
     // scores worse than one that plays actively, even when neither wins
     // outright — see docs/bot-roadmap.md Stage 3a fitness note. `stalled` =
-    // the game was aborted by the two-bots-camped trap-loop detector (see
-    // STALL_TURNS above); playMatch() (the public wrapper below) restarts
-    // stalled rounds rather than returning them, so callers only ever see
-    // stalled:true when the restart budget ran out.
+    // the game was aborted by a trap-loop detector (see STALL_TURNS above);
+    // playMatch() (the public wrapper below) restarts stalled rounds rather
+    // than returning them, so callers only ever see stalled:true when the
+    // restart budget ran out. `stallers` = which player index(es) caused
+    // THIS attempt's stall (only meaningful when stalled is true) — see the
+    // ATTRIBUTION note at the top of the file.
     // ----------------------------------------------------------------
     async function _playMatchOnce(weightsPerPlayer, opts = {}) {
         const nPlayers = weightsPerPlayer.length;
@@ -430,7 +440,7 @@
         const savedShowEndTurnPrompt = window.showEndTurnPrompt;
         window.showEndTurnPrompt = () => {};
 
-        const result = { winner: null, turns: 0, activated: new Array(nPlayers).fill(0), stuckTurns, stalled: false };
+        const result = { winner: null, turns: 0, activated: new Array(nPlayers).fill(0), stuckTurns, stalled: false, stallers: [] };
         try {
             for (let turn = 0; turn < turnCap && !_stopRequested; turn++) {
                 if (visual) { try { currentTurnNumber = turn + 1; } catch (e) {} }
@@ -457,10 +467,11 @@
                     streak.tileId = campTile ? campTile.id : null;
                     streak.count = campTile ? 1 : 0;
                 }
-                const camped = Object.values(camp).filter(c => c.count >= STALL_TURNS).length;
-                if (camped >= STALL_MIN_BOTS) {
+                const campers = Object.keys(camp).filter(i => camp[i].count >= STALL_TURNS).map(Number);
+                if (campers.length >= STALL_MIN_BOTS) {
                     result.stalled = true;
-                    log(`match seed ${seed}: ${camped} bots each parked on an elemental tile for ${STALL_TURNS} straight turns — trap loop, aborting round on turn ${turn + 1}`);
+                    result.stallers = campers;
+                    log(`match seed ${seed}: ${campers.length} bots each parked on an elemental tile for ${STALL_TURNS} straight turns — trap loop, aborting round on turn ${turn + 1}`);
                     break;
                 }
 
@@ -471,6 +482,9 @@
                     if (c !== castsSeen) { castsSeen = c; lastCastTurn = turn; }
                     else if (turn - lastCastTurn >= noCastTurnCap) {
                         result.stalled = true;
+                        // Nobody cast — a joint failure, not one player's doing (unlike
+                        // camping's per-tile streak), so every seat shares attribution.
+                        result.stallers = Array.from({ length: nPlayers }, (_, i) => i);
                         log(`match seed ${seed}: no scroll cast by anyone for ${Math.round(noCastTurnCap / nPlayers)} straight rounds (${noCastTurnCap} turns) — stalled, aborting round on turn ${turn + 1}`);
                         break;
                     }
@@ -508,23 +522,33 @@
     // opts.maxStallRestarts (default 3): a round still stalled after the
     // last retry is returned as-is (winner null → counts as a draw) so a
     // pathological weight table can't spin restarts forever. Restarted
-    // attempts are discarded entirely — only the final attempt's result
-    // (with result.restarts = how many restarts it took) reaches the
-    // caller, so run()/evolve()/spectate() stats never double-count a
-    // restarted round.
+    // attempts' GAME STATE (turns/activated/winner) is discarded entirely —
+    // only the final attempt's reaches the caller (with result.restarts =
+    // how many restarts it took), so run()/evolve()/spectate() stats never
+    // double-count a restarted round. Their STALL ATTRIBUTION is NOT
+    // discarded — result.stallCounts sums every attempt's stallers so
+    // seatFitness() still notices a weight table that stalls repeatedly.
     // ----------------------------------------------------------------
     async function playMatch(weightsPerPlayer, opts = {}) {
         const baseSeed = opts.seed ?? Math.floor(Math.random() * 1e9);
         const maxStallRestarts = opts.maxStallRestarts ?? 3;
+        // Per-player count of stalled attempts (including ones discarded by a
+        // restart) this call consumed — see the ATTRIBUTION note near the top
+        // of the file. Accumulated across the whole retry loop so a weight
+        // table that keeps stalling doesn't get a free pass just because the
+        // FINAL attempt happened to resolve normally.
+        const stallCounts = {};
         let result;
         for (let attempt = 0; ; attempt++) {
             const seed = (baseSeed + attempt * 1000003) >>> 0; // deterministic per-restart reshuffle
             result = await _playMatchOnce(weightsPerPlayer, { ...opts, seed });
             result.restarts = attempt;
+            if (result.stalled) for (const idx of result.stallers) stallCounts[idx] = (stallCounts[idx] || 0) + 1;
             if (!result.stalled || _stopRequested || _endEarlyRequested || attempt >= maxStallRestarts) break;
             log(`restarting stalled round (restart ${attempt + 1}/${maxStallRestarts}, next seed ${(baseSeed + (attempt + 1) * 1000003) >>> 0})`);
         }
         if (result.stalled) log(`round still stalled after ${result.restarts} restart(s) — returning it as a draw`);
+        result.stallCounts = stallCounts;
         return result;
     }
 
@@ -536,26 +560,32 @@
 
     // ----------------------------------------------------------------
     // Per-side fitness for one game: +1 win / -1 loss / 0 draw, plus a small
-    // reward for win-condition progress (elements activated, 0-5) and a
-    // small penalty per turn the side got stuck with nothing productive to
-    // do. This is reward SHAPING, not a hand-authored rule about any
-    // specific trap — it makes evolution's selection pressure notice
-    // stalling/passivity at all, which pure win/loss fitness could not
-    // (a 200-turn stalled draw scored identically to a sharp, decisive
-    // draw). Mirrors the "win ±1, small per-turn penalty" reward the
-    // roadmap specifies for the eventual Stage 3c RL reward.
+    // reward for win-condition progress (elements activated, 0-5), a small
+    // penalty per turn the side got stuck with nothing productive to do,
+    // and a penalty per trap-loop stall the side caused (including ones
+    // playMatch() discarded via a restart — see result.stallCounts). This is
+    // reward SHAPING, not a hand-authored rule about any specific trap — it
+    // makes evolution's selection pressure notice stalling/passivity at all,
+    // which pure win/loss fitness could not (a 200-turn stalled draw scored
+    // identically to a sharp, decisive draw, and — before stallCounts
+    // existed — a weight table that stalled 3 times then happened to win
+    // the 4th attempt scored as a plain win, with the stalling invisible).
+    // Mirrors the "win ±1, small per-turn penalty" reward the roadmap
+    // specifies for the eventual Stage 3c RL reward.
     // ----------------------------------------------------------------
     // seatFitness generalizes this to ANY seat index in a 2–5-player game
-    // (win ±1 vs everyone else, same progress reward / stuck penalty) — used
-    // by the N-player confirmAcrossSizes() gate below. sideFitness is the
+    // (win ±1 vs everyone else, same progress/stuck/stall terms) — used by
+    // the N-player confirmAcrossSizes() gate below. sideFitness is the
     // 2-player special case _playSeries()/run() still call by name.
     function seatFitness(result, idx, opts = {}) {
         const progressWeight = opts.progressWeight ?? 0.3;
         const stuckPenalty = opts.stuckPenalty ?? 0.15;
+        const stallPenalty = opts.stallPenalty ?? 0.25;
         const win = result.winner === null ? 0 : (result.winner === idx ? 1 : -1);
         const progress = (result.activated?.[idx] ?? 0) / 5;
         const stuck = result.stuckTurns?.[idx] ?? 0;
-        return win + progressWeight * progress - stuckPenalty * stuck;
+        const stalls = result.stallCounts?.[idx] ?? 0;
+        return win + progressWeight * progress - stuckPenalty * stuck - stallPenalty * stalls;
     }
     function sideFitness(result, sideIsPlayer0, opts = {}) {
         return seatFitness(result, sideIsPlayer0 ? 0 : 1, opts);
@@ -1152,6 +1182,7 @@
         stopRequested: () => _stopRequested, // was stop() called for the run in progress (or the one that just ended)?
         endEarlyRequested,
         applyWeights: setWeights, // apply an {…} weight table to the LIVE WEIGHTS object in place
+        seatFitness, sideFitness, // exposed for direct scoring verification, same as bot.js's evaluator
     };
     log('Loaded — window.BotArena ready (run / evolve / spectate)');
 })();
