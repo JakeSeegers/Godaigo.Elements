@@ -93,6 +93,58 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT TRAINING UI: Hill Climb progress popup — live per-game updates +
+  explicit "who's playing as which color" — fixing a popup that looked
+  frozen and had never actually worked as asked before** — `js/bot-arena.js`,
+  `js/game-ui.js`. Follow-up to the Hill Climb panel entry just below: user
+  reported the panel "has no indicator for how it's doing and how long it
+  will take," then asked for an explicit live description of which bot
+  generation is playing as which color, noting they'd asked for this before
+  and it never worked. Root cause of the frozen-looking popup: `hillClimb()`
+  already supports a per-game `opts.onGame` callback (forwarded to every
+  challenger's trial series — same mechanism `run()`/`evolve()` already use),
+  but `runHillClimbTraining()` never passed one, only `onRound` — which
+  fires once per ROUND, and a round is `lambda × gamesPerChallenge` (180 by
+  default) games played SEQUENTIALLY in one tab (no `--shards` parallelism
+  like the CLI has), so the popup could sit showing identical numbers for
+  45–90+ minutes before ever updating — indistinguishable from broken.
+  Fixed by wiring `onGame` too. Then, for the "which color" ask: added a new
+  `opts.onChallenger(challengerNumber, lambda, roundNumber, totalRounds)`
+  callback to `hillClimb()` itself (fires once per challenger, before its
+  trial series starts) — `onGame`'s own game-number/total resets to 1/N for
+  every challenger, so it alone can't say WHICH of the λ challengers is
+  currently up; `onChallenger` is what makes that explicit. Colors: local
+  (arena) games assign player index 0/1 to Purple/Yellow via game-core.js's
+  `colorRankOrder`, and `_playSeries` alternates which side is player 0
+  each game (`i % 2 === 0`) — so `runHillClimbTraining()` recomputes
+  Purple-vs-Yellow FRESH from the current game number every progress report
+  (`sideColors()`), never a fixed assignment, correctly for both the
+  training rounds (Challenger vs. Champion) and the separate confirm phase
+  (Climbed Champion vs. Online Champion — same alternation, different
+  labels). Also restyled the popup's header to reuse the game's real HUD
+  panel classes (`.panel-header`/`.panel-title`/`.hud-toggle-btn` — the
+  SAME classes the opponent "Players" panel's header uses) instead of its
+  own one-off inline styles, per the user's own pasted reference markup —
+  same visual language as the rest of the HUD, not a bespoke popup look.
+  Verified headless (Playwright, real page, `hillClimb()`/`run()` stubbed to
+  fire `onChallenger`/`onGame` on a fast simulated schedule so this exercises
+  the actual update cadence without waiting for 180 real games): the popup
+  body updates on every single `onGame` tick (not just at round/challenger
+  boundaries); explicitly names the current challenger number and total
+  (`Challenger 1/6`, `Challenger 2/6`, ...) and resets its own game count to
+  1/N when a new challenger starts rather than continuing the previous
+  challenger's count; the two colors shown for consecutive games are
+  genuinely different (alternation confirmed, not a static label); the
+  confirm phase correctly switches to "Climbed champion"/"Online champion"
+  labels (not "Challenger"/"Champion") and its own game total independently
+  reflects the real `confirmGames` (20), not bleeding over from the training
+  phase's `gamesPerChallenge` (30); the popup header DOM genuinely contains
+  `.panel-header`/`.panel-title`/`.hud-toggle-btn`. Zero uncaught page
+  errors. (Caught and fixed two mistakes in the verification script itself
+  before trusting these results, not in the feature: an assertion checking
+  the popup's classes before the popup had ever been created — it's only
+  built lazily on first progress report — and a hardcoded expected total
+  that didn't match the real `confirmGames` preset value.)
 - **BOT TRAINING UI: Hill Climb added as a separate Method alongside Evolve
   (GA)** — `js/game-ui.js`. User wanted the reliable, champion-anchored
   hillclimb trainer (previously CLI-only, driving `tools/arena-headless.mjs

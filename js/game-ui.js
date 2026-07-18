@@ -4203,13 +4203,41 @@ document.getElementById('undo-move').onclick = function() {
             const totalGames = rounds * lambda * gamesPerChallenge + confirmGames;
             const startedAt = Date.now();
             let gamesDone = 0, lastRound = 0, lastInfo = null;
-            const report = (phase) => onProgress({
-                phase, gamesDone, totalGames, startedAt,
-                round: lastRound, rounds, info: lastInfo, mode: 'hillclimb',
-            });
+            let lastChallenger = 0, totalChallengers = lambda;
+            let lastGameNum = 0, lastGameTotal = gamesPerChallenge;
+            // Local-game color assignment (game-core.js's colorRankOrder):
+            // player index 0 = Purple, 1 = Yellow (only the first two matter —
+            // every trial here is 2-player). _playSeries alternates who's
+            // player 0 each game (i%2===0), so this is recomputed from the
+            // CURRENT game number every report, not a fixed assignment.
+            function sideColors() {
+                if (!lastGameNum) return { a: '—', b: '—' };
+                const aIsPlayer0 = (lastGameNum - 1) % 2 === 0;
+                return aIsPlayer0 ? { a: 'Purple', b: 'Yellow' } : { a: 'Yellow', b: 'Purple' };
+            }
+            const report = (phase) => {
+                const { a, b } = sideColors();
+                onProgress({
+                    phase, gamesDone, totalGames, startedAt, mode: 'hillclimb',
+                    round: lastRound, rounds, info: lastInfo,
+                    challenger: lastChallenger, totalChallengers,
+                    gameNum: lastGameNum, gameTotal: lastGameTotal,
+                    sideAColor: a, sideBColor: b,
+                });
+            };
 
             const result = await window.BotArena.hillClimb({
                 champion: baseline, rounds, lambda, gamesPerChallenge, visual,
+                // onRound alone only updates once per ROUND — a round is
+                // lambda*gamesPerChallenge games (180 by default) played
+                // sequentially in this one tab (no --shards parallelism like
+                // the CLI), so without onChallenger/onGame the popup would sit
+                // frozen for however long that takes, looking dead rather than
+                // slow, AND never say which of the lambda challengers is
+                // currently up (onGame's own game count resets to 1/N for
+                // every challenger, so it alone can't distinguish them).
+                onChallenger: (c, totalC, r, totalR) => { lastChallenger = c; totalChallengers = totalC; lastRound = r; lastGameNum = 0; report('training'); },
+                onGame: (gameNum, gameTotal) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; report('training'); },
                 onRound: (round, total, info) => { lastRound = round; lastInfo = info; gamesDone = info.gamesPlayed; report('training'); },
             });
 
@@ -4222,10 +4250,11 @@ document.getElementById('undo-move').onclick = function() {
                 return { improved: false, record: 'stopped', promotions: result.promotions };
             }
 
+            lastGameNum = 0; lastGameTotal = confirmGames;
             report('confirming');
             const confirm = await window.BotArena.run(
                 result.champion, baseline, confirmGames, Date.now() % 100000,
-                { visual, onGame: () => { gamesDone++; report('confirming'); } });
+                { visual, onGame: (gameNum, gameTotal) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; report('confirming'); } });
             const decided = confirm.aWins + confirm.bWins;
             const winRate = decided ? confirm.aWins / decided : 0;
             const improved = decided >= Math.ceil(confirmGames / 2) && winRate >= confirmMargin;
@@ -4279,19 +4308,25 @@ document.getElementById('undo-move').onclick = function() {
             if (trainingPopupEl) return trainingPopupEl;
             const el = document.createElement('div');
             el.id = 'bot-training-status-popup';
+            // Fixed-corner positioning is bespoke to this floating popup, but the
+            // header row reuses the SAME .panel-header/.panel-title/.hud-toggle-btn
+            // classes every other HUD panel (Hand/Active/opponent Players, etc.)
+            // uses — same visual language, not a one-off popup style.
             el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9998;'
                 + 'background:#1a1a2e;border:1px solid #5a5;border-radius:8px;'
-                + 'box-shadow:0 4px 16px rgba(0,0,0,0.6);padding:10px 12px;'
-                + 'min-width:230px;max-width:290px;font-size:11px;color:#ccc;display:none;';
+                + 'box-shadow:0 4px 16px rgba(0,0,0,0.6);overflow:hidden;'
+                + 'min-width:250px;max-width:320px;font-size:11px;color:#ccc;display:none;';
             el.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                    <span style="font-size:12px;font-weight:bold;color:#eee;">🧬 Bot Training</span>
-                    <button id="bt-popup-expand" title="Open full panel" style="background:none;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:11px;padding:1px 6px;">⤢</button>
+                <div class="panel-header" style="border-radius:7px 7px 0 0;">
+                    <span class="panel-title">🧬 Bot Training</span>
+                    <button id="bt-popup-expand" class="hud-toggle-btn" title="Open full panel">⤢</button>
                 </div>
-                <div id="bt-popup-body" style="white-space:pre-line;color:#aaa;margin-bottom:8px;line-height:1.4;"></div>
-                <div style="display:flex;gap:6px;">
-                    <button id="bt-popup-end-early" style="flex:1;padding:4px 6px;background:#2d3a4a;color:#eee;border:1px solid #578;border-radius:4px;cursor:pointer;font-size:11px;">End Early → Test Now</button>
-                    <button id="bt-popup-stop" style="padding:4px 8px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:4px;cursor:pointer;font-size:11px;">Stop</button>
+                <div style="padding:10px 12px;">
+                    <div id="bt-popup-body" style="white-space:pre-line;color:#aaa;margin-bottom:8px;line-height:1.4;"></div>
+                    <div style="display:flex;gap:6px;">
+                        <button id="bt-popup-end-early" style="flex:1;padding:4px 6px;background:#2d3a4a;color:#eee;border:1px solid #578;border-radius:4px;cursor:pointer;font-size:11px;">End Early → Test Now</button>
+                        <button id="bt-popup-stop" style="padding:4px 8px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:4px;cursor:pointer;font-size:11px;">Stop</button>
+                    </div>
                 </div>
             `;
             document.body.appendChild(el);
@@ -4321,12 +4356,26 @@ document.getElementById('undo-move').onclick = function() {
             el.style.display = 'block';
             const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
             const elapsedS = (Date.now() - p.startedAt) / 1000;
-            let scenarioLine, genLine, fitnessLine;
+            let scenarioLine, genLine, fitnessLine, matchupLine;
             if (p.mode === 'hillclimb') {
                 scenarioLine = 'Hill Climb — champion-anchored, 2 players';
                 genLine = p.phase === 'confirming'
                     ? 'Confirming: climbed champion vs. online baseline'
                     : `Round ${p.round}/${p.rounds}`;
+                // The explicit "what is literally happening right now" line —
+                // which challenger (or, once confirming, the climbed champion),
+                // which game in its series, and which real in-game color each
+                // side is playing as THIS game. Colors come pre-computed from
+                // the current game's parity (sideAColor/sideBColor — see
+                // runHillClimbTraining's sideColors()), not a fixed assignment.
+                if (p.gameNum) {
+                    matchupLine = p.phase === 'confirming'
+                        ? `Confirm game ${p.gameNum}/${p.gameTotal} — Climbed champion is ${p.sideAColor}, Online champion is ${p.sideBColor}`
+                        : `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion — game ${p.gameNum}/${p.gameTotal}\n`
+                            + `Challenger is ${p.sideAColor}, Champion is ${p.sideBColor}`;
+                } else if (p.challenger) {
+                    matchupLine = `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion — starting its series…`;
+                }
                 fitnessLine = p.info
                     ? `Promotions so far: ${p.info.promotions} · best challenger this round: ${Math.round(p.info.bestWinRate * 100)}%`
                     : '';
@@ -4343,7 +4392,7 @@ document.getElementById('undo-move').onclick = function() {
             }
             const progressLine = `Games: ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtPopupTime(elapsedS)} elapsed`;
             el.querySelector('#bt-popup-body').textContent =
-                [scenarioLine, genLine, progressLine, fitnessLine].filter(Boolean).join('\n');
+                [scenarioLine, genLine, matchupLine, progressLine, fitnessLine].filter(Boolean).join('\n');
             // Nothing left to "skip ahead to" once already confirming —
             // and breeding has no confirmation phase to jump to at all, so
             // End Early there just means "stop generating more generations
@@ -5315,9 +5364,17 @@ document.getElementById('undo-move').onclick = function() {
                     progressText.style.display = 'block';
                     const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
                     const elapsedS = (Date.now() - p.startedAt) / 1000;
-                    const genLine = p.mode === 'hillclimb'
-                        ? (p.phase === 'confirming' ? 'confirming vs. online baseline' : `round ${p.round}/${p.rounds}`)
-                        : (p.phase === 'confirming' ? 'Confirming result' : `gen ${p.gen}/${p.generations}`);
+                    let genLine;
+                    if (p.mode === 'hillclimb') {
+                        genLine = p.phase === 'confirming' ? 'confirming vs. online baseline' : `round ${p.round}/${p.rounds}`;
+                        if (p.gameNum) {
+                            genLine += p.phase === 'confirming'
+                                ? ` — climbed champ (${p.sideAColor}) vs. online champ (${p.sideBColor}), game ${p.gameNum}/${p.gameTotal}`
+                                : ` — challenger ${p.challenger}/${p.totalChallengers} (${p.sideAColor}) vs. champion (${p.sideBColor}), game ${p.gameNum}/${p.gameTotal}`;
+                        }
+                    } else {
+                        genLine = p.phase === 'confirming' ? 'Confirming result' : `gen ${p.gen}/${p.generations}`;
+                    }
                     progressText.textContent = `${genLine} — games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtTime(elapsedS)}`;
                     // Also update the persistent corner popup — see its own
                     // comment for why it's a separate, outer-scope function

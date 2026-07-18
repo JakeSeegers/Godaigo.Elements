@@ -921,6 +921,11 @@
     //   opts.sigma0/sigmaGrowth/sigmaCap (0.2 / 1.5 / 0.8) adaptive mutation step
     //   opts.seed (1), opts.visual (false), opts.speed
     //   opts.onRound?(roundNumber, totalRounds, info) progress callback
+    //   opts.onChallenger?(challengerNumber, lambda, roundNumber, totalRounds)
+    //                            fired once per challenger, before its trial
+    //                            series starts (distinguishes "which challenger"
+    //                            from onGame's per-series game count, which
+    //                            resets to 1/N for every challenger)
     //   opts.onGame? forwarded to every trial series (per-game progress)
     // Returns { champion, promotions, rounds:[…], gamesPlayed }. stop() hard-
     // aborts; endEarly() finishes the current round then returns the champion
@@ -970,6 +975,14 @@
                 // sideFitness margin (win + progress − stalls) as a tie-break.
                 let best = null;
                 for (let c = 0; c < challengers.length && !_stopRequested; c++) {
+                    // Fired once per challenger, BEFORE its trial series starts —
+                    // lets a UI progress display say WHICH challenger is currently
+                    // playing (onGame's own gameNumber/totalGames resets to 1/N for
+                    // every challenger, so it alone can't distinguish challenger 1
+                    // from challenger 4 of the same round).
+                    if (typeof opts.onChallenger === 'function') {
+                        try { opts.onChallenger(c + 1, lambda, round + 1, rounds); } catch (e) { /* UI callback errors never abort a run */ }
+                    }
                     const trialSeed = (seed * 1000003 + round * 1009 + c) >>> 0;
                     const r = await _playSeries(challengers[c], champion, gamesPerChallenge, trialSeed, { ...opts, visual });
                     gamesPlayed += r.aWins + r.bWins + r.draws;
