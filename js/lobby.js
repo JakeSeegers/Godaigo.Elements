@@ -819,6 +819,21 @@
         let _gameOverXpAwarded = false;
 
         // Handle game over - mark game as finished and show win screen
+        // Real winner check for XP crediting / win-screen "you won" framing —
+        // NOT just "does this player index match mine". Guards the
+        // host-impersonation edge case: while bot-driver.js's asBot()
+        // impersonates a bot, myPlayerIndex briefly equals that bot's OWN
+        // index, so a naive `winnerPlayerIndex === myPlayerIndex` check can be
+        // true on the HOST's client when their own bot wins — not them
+        // personally — which would wrongly credit them victory-tier XP and
+        // offer them a capture of a bot they didn't actually just beat.
+        function isGenuineLocalWinner(winnerPlayerIndex) {
+            const winnerRow = (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
+                ? allPlayersData.find(p => p.player_index === winnerPlayerIndex) : null;
+            if (window.isBotUsername?.(winnerRow?.username)) return false;
+            return winnerPlayerIndex === myPlayerIndex;
+        }
+
         async function handleGameOver(winnerPlayerIndex, winType = 'scrolls') {
             if (!isMultiplayer) return;
 
@@ -830,7 +845,7 @@
                 // completes before any page reload triggered by "Return to Lobby" can cancel it
                 if (!_gameOverXpAwarded) {
                     _gameOverXpAwarded = true;
-                    const isWinner = (winnerPlayerIndex === myPlayerIndex);
+                    const isWinner = isGenuineLocalWinner(winnerPlayerIndex);
                     console.log(`[XP] Attempting to award XP — isWinner=${isWinner}, userId=${window.gami?.userId}, totalPlayers=${totalPlayers}`);
                     if (window.gami?.userId) {
                         await window.gami.onGameComplete(isWinner, totalPlayers);
@@ -922,11 +937,29 @@
                 color: #f0c040; letter-spacing: 1px; margin: 8px 0 4px;
                 min-height: 16px;
             `;
-            const isWinner = (winnerPlayerIndex === myPlayerIndex);
+            const isWinner = isGenuineLocalWinner(winnerPlayerIndex);
             const n = Math.max(2, totalPlayers || 2);
             const xpAmt = isWinner ? 75 + (n - 1) * 25 : 20 + (n - 1) * 10;
             xpLine.textContent = isWinner ? `+${xpAmt} XP  —  VICTORY` : `+${xpAmt} XP  —  GAME COMPLETE`;
             box.appendChild(xpLine);
+
+            // docs/bot-tycoon-proposal.md build-order step 6: real bots now
+            // carry a genuine source (players.bot_source_id → deployed_bots),
+            // so the winner can pick WHICH bot to try capturing instead of a
+            // generic "wild" placeholder. This is THIS overlay, not
+            // game-core.js's showLevelComplete(), because this is the one
+            // that actually stays on screen for multiplayer (see the note at
+            // the top of showLevelComplete() for why). isGenuineLocalWinner()
+            // already excludes a bot's own win (host-impersonation edge case),
+            // so no separate winnerIsBot check is needed here.
+            if (isWinner) {
+                const capturableBots = (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
+                    ? allPlayersData.filter(p => window.isBotUsername?.(p.username) && p.bot_source_id != null)
+                    : [];
+                if (capturableBots.length && window.spellSystem?.buildCaptureSection) {
+                    box.appendChild(window.spellSystem.buildCaptureSection(capturableBots));
+                }
+            }
 
             const lobbyBtn = document.createElement('button');
             lobbyBtn.textContent = 'Return to Lobby';

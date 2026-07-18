@@ -93,6 +93,57 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BUGFIX: win-screen capture picker was flashing then getting covered** —
+  `js/game-core.js`, `js/lobby.js`. User report after the entry below
+  shipped: "It didn't prompt me to capture the bot after I won... I saw a
+  brief window right after." Root cause: multiplayer wins fire TWO
+  independent full-screen `.game-over-overlay`s from the SAME client one
+  after another — `checkWinCondition()` calls `spellSystem.showLevelComplete()`
+  (game-core.js, where the capture picker had been added) synchronously,
+  THEN unconditionally calls `handleGameOver()` → `showGameOverToAll()`
+  (lobby.js — a separate, pre-existing overlay with its own "GAME OVER"
+  title/XP line/Return-to-Lobby-with-room-cleanup button, broadcast to
+  every player). Both use `position:fixed;inset:0`, so whichever renders
+  SECOND (`showGameOverToAll`, after an `await` on the XP-award RPC) covers
+  the first completely — the capture UI was real and correctly built, just
+  visible for under a second before being buried. Also would have let a
+  fast click hit `showLevelComplete`'s multiplayer "Return to Lobby"
+  button, which only does `window.location.reload()` with NONE of
+  `showGameOverToAll`'s room cleanup (remove_players / game_room status
+  reset) — a separate latent bug fixed for free by this change.
+  Fix: `showLevelComplete()` now returns immediately (builds nothing) when
+  `isMultiplayer` — `showGameOverToAll()` is the one overlay that actually
+  persists for multiplayer, so it's now the sole authority; the capture
+  section (`buildCaptureSection()`, still defined on `spellSystem` so
+  lobby.js can call `window.spellSystem.buildCaptureSection(bots)`) moved
+  there, gated on the SAME `isWinner` flag `showGameOverToAll` already
+  computes, with the same winnerIsBot host-impersonation guard as before.
+  Single-player/arena `showLevelComplete()` behavior is unchanged (early
+  return only fires when `isMultiplayer`; bot-arena.js's muted-run
+  monkeypatch of this same function is unaffected either way).
+  Verified headless (7 assertions): `showLevelComplete()` now builds zero
+  DOM in multiplayer; `showGameOverToAll()`'s overlay carries the capture
+  UI with real per-bot names for a genuine human win; a bot's win via host
+  impersonation, a losing human's own client, and a bot-less game all
+  correctly show no capture UI.
+  **Adjacent bug found and fixed while in there, user opted to fix now
+  rather than defer:** `handleGameOver()`'s real XP-crediting call had the
+  EXACT SAME host-impersonation flaw as an unguarded `isWinner`, but for
+  real stakes — `onGameComplete(isWinner, totalPlayers)` decides how much
+  XP THIS account banks, and its `isWinner` was just
+  `winnerPlayerIndex === myPlayerIndex`, so a host whose own bot won could
+  get personally credited victory-tier XP for a game they didn't play.
+  Extracted the shared guard into one function,
+  `isGenuineLocalWinner(winnerPlayerIndex)` (returns false outright if the
+  winning row's username is a bot, only THEN checks the index match) —
+  used by both `handleGameOver`'s XP call and `showGameOverToAll`'s
+  `isWinner` (which now needs no separate winnerIsBot check for its own
+  capture-gating, since `isGenuineLocalWinner` already excludes bot wins).
+  Verified headless (5 assertions): direct unit checks on the three
+  `isGenuineLocalWinner` cases (genuine win / bot win via impersonation /
+  not-my-win), plus an end-to-end run of the real `handleGameOver()` with
+  `window.gami.onGameComplete` stubbed — confirms a bot's own win now
+  calls it with `isWinner: false`, called exactly once.
 - **BOT TYCOON step 6 (pulled forward) + win-screen capture + Shop/Stable
   tabs** — `js/lobby.js`, `js/bot-driver.js`, `js/game-core.js`,
   `js/game-ui.js`, `js/gamification-ui.js`, `index.html`, `css/styles.css`,

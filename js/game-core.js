@@ -1842,6 +1842,17 @@
             }
 
             showLevelComplete(playerIndex) {
+                // lobby.js's showGameOverToAll() is the authoritative multiplayer
+                // win screen (proper Return-to-Lobby room cleanup, shown to every
+                // player via broadcast, includes the Capture-a-Bot picker too —
+                // see buildCaptureSection() below, called from there instead).
+                // checkWinCondition() fires THIS function first and
+                // handleGameOver()/showGameOverToAll() a moment later on the same
+                // client, and both build a fixed, full-screen `.game-over-overlay`
+                // — without this early return the second one would render on top
+                // and completely cover the first after only a brief flash.
+                if (isMultiplayer) return;
+
                 // Guard: only one win overlay at a time
                 if (document.querySelector('.game-over-overlay')) return;
 
@@ -1887,53 +1898,14 @@
                 subtitle.className = 'game-over-subtitle';
                 box.appendChild(subtitle);
 
-                if (isMultiplayer) {
-                    const n = Math.max(2, (typeof playerPositions !== 'undefined' ? playerPositions.length : 2));
-                    const xpAmt = 75 + (n - 1) * 25;
-                    const xpLine = document.createElement('div');
-                    xpLine.style.cssText = `font-family: var(--font-pixel, monospace); font-size: 9px;
-                        color: #f0c040; letter-spacing: 1px; margin: 8px 0 4px;`;
-                    xpLine.textContent = `+${xpAmt} XP  —  VICTORY`;
-                    box.appendChild(xpLine);
-                }
-
-                // docs/bot-tycoon-proposal.md build-order step 6: real multiplayer
-                // bots now carry a genuine source (players.bot_source_id →
-                // deployed_bots), so the winner can pick WHICH bot to try
-                // capturing instead of a generic "wild" placeholder. winnerIsBot
-                // guards the host-impersonation edge case: while bot-driver.js's
-                // asBot() impersonates a bot, myPlayerIndex briefly equals that
-                // bot's index, so checkWinCondition's isLocalWinner check (and
-                // thus this call) can fire on the HOST's client for a BOT's win —
-                // that's not a human victory, so no capture offer.
-                if (isMultiplayer) {
-                    const winnerRow = (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
-                        ? allPlayersData.find(p => p.player_index === playerIndex) : null;
-                    const winnerIsBot = window.isBotUsername?.(winnerRow?.username);
-                    const capturableBots = (!winnerIsBot && typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
-                        ? allPlayersData.filter(p => window.isBotUsername?.(p.username) && p.bot_source_id != null)
-                        : [];
-                    if (capturableBots.length) {
-                        box.appendChild(this.buildCaptureSection(capturableBots));
-                    }
-                }
-
                 const btnRow = document.createElement('div');
                 btnRow.className = 'game-over-btns';
 
-                if (isMultiplayer) {
-                    const lobbyBtn = document.createElement('button');
-                    lobbyBtn.textContent = 'Return to Lobby';
-                    lobbyBtn.className = 'retro-dlg-btn ok';
-                    lobbyBtn.onclick = () => window.location.reload();
-                    btnRow.appendChild(lobbyBtn);
-                } else {
-                    const closeBtn = document.createElement('button');
-                    closeBtn.textContent = 'Continue Playing';
-                    closeBtn.className = 'retro-dlg-btn cancel';
-                    closeBtn.onclick = () => overlay.remove();
-                    btnRow.appendChild(closeBtn);
-                }
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = 'Continue Playing';
+                closeBtn.className = 'retro-dlg-btn cancel';
+                closeBtn.onclick = () => overlay.remove();
+                btnRow.appendChild(closeBtn);
 
                 box.appendChild(btnRow);
                 overlay.appendChild(box);
