@@ -5847,6 +5847,82 @@ document.getElementById('undo-move').onclick = function() {
                 };
                 body.appendChild(breedBtn);
 
+                // ── Deploy this bot ────────────────────────────────────────────
+                // Takes whatever is CURRENTLY in window.BotSystem.WEIGHTS
+                // (freshly trained/bred, or just whatever's loaded) and
+                // publishes it as an individually-owned, named row in the
+                // `deployed_bots` table — the foundation step the whole Bot
+                // Tycoon leaderboard/challenge economy depends on
+                // (docs/bot-tycoon-proposal.md § SUGGESTED BUILD ORDER step 1).
+                // Deliberately separate from Start Training/Start Breeding —
+                // an explicit publish action, not an automatic side effect of
+                // a good result. Always available regardless of run state;
+                // deploying doesn't touch BotArena at all.
+                const deploySep = document.createElement('div');
+                deploySep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
+                body.appendChild(deploySep);
+
+                const deployTitle = document.createElement('div');
+                deployTitle.textContent = 'Deploy this bot';
+                deployTitle.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                body.appendChild(deployTitle);
+
+                const deployDesc = document.createElement('div');
+                deployDesc.textContent = 'Publish your CURRENT live bot weights as a named bot other players can challenge on the leaderboard. Requires being logged in.';
+                deployDesc.style.cssText = 'font-size:11px;color:#999;';
+                body.appendChild(deployDesc);
+
+                const deployRow = document.createElement('div');
+                deployRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
+                body.appendChild(deployRow);
+
+                const nicknameInput = document.createElement('input');
+                nicknameInput.type = 'text';
+                nicknameInput.placeholder = 'Name your bot (max 24 characters)';
+                nicknameInput.maxLength = 24;
+                nicknameInput.style.cssText = 'flex:1;padding:5px 8px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;font-size:12px;';
+                deployRow.appendChild(nicknameInput);
+
+                const deployBtn = document.createElement('button');
+                deployBtn.textContent = 'Deploy';
+                deployBtn.style.cssText = 'padding:6px 12px;background:#3a2d4a;color:#eee;border:1px solid #85a;border-radius:5px;cursor:pointer;font-size:12px;';
+                deployRow.appendChild(deployBtn);
+
+                deployBtn.onclick = async () => {
+                    const nickname = nicknameInput.value.trim();
+                    if (!nickname) { updateStatus('Name your bot before deploying.'); return; }
+                    deployBtn.disabled = true;
+                    deployBtn.textContent = 'Deploying…';
+                    try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (!session?.user?.id) {
+                            updateStatus('Log in before deploying a bot — deployed bots are tied to your account.');
+                            return;
+                        }
+                        const { error } = await supabase.from('deployed_bots').insert({
+                            owner: session.user.id,
+                            nickname,
+                            weights: { ...window.BotSystem.WEIGHTS },
+                        });
+                        if (error) {
+                            // 23505 = unique_violation — this owner already has a
+                            // bot with this exact nickname (unique(owner, nickname)).
+                            updateStatus(error.code === '23505'
+                                ? `You already have a bot named "${nickname}" — pick a different name.`
+                                : `Could not deploy: ${error.message}`);
+                            return;
+                        }
+                        updateStatus(`"${nickname}" is deployed — other players can now challenge it.`);
+                        nicknameInput.value = '';
+                    } catch (e) {
+                        console.error('Deploy bot failed:', e);
+                        updateStatus('Could not deploy — see console.');
+                    } finally {
+                        deployBtn.disabled = false;
+                        deployBtn.textContent = 'Deploy';
+                    }
+                };
+
                 renderRoster();
                 document.body.appendChild(overlay);
             }

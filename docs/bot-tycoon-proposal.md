@@ -1,7 +1,9 @@
 # Bot Tycoon Proposal — player-facing bot ownership, breeding, and competition
 
-> Written for AI consumption. Status: PROPOSAL — not started, not scoped into
-> `bot-roadmap.md`'s stages yet. Read this top to bottom before touching any
+> Written for AI consumption. Status: IN PROGRESS — build-order step 1
+> (below) has landed: `deployed_bots` table live in Supabase, "Deploy this
+> bot" UI action in the Bot Training panel. Steps 2+ not started. Not
+> scoped into `bot-roadmap.md`'s stages. Read this top to bottom before touching any
 > part of it; several pieces below deliberately simplify or reject an earlier
 > version of the idea for concrete technical/trust reasons — don't re-propose
 > the rejected versions without re-reading § REJECTED ALTERNATIVES.
@@ -228,7 +230,11 @@ consensus.
 
 ## SUGGESTED BUILD ORDER
 
-1. `deployed_bots` table + naming + "deploy my current bot" UI action.
+1. **DONE.** `deployed_bots` table + naming + "deploy my current bot" UI
+   action. See `planning/current.md`'s "BOT TYCOON step 1" entry for the
+   exact schema/RLS and the one deliberately-deferred gap (recording a
+   challenge result needs a `SECURITY DEFINER` RPC, not a loosened UPDATE
+   policy — scoped for step 2, not built yet).
 2. Challenge flow (rank window, local match execution, reward write) — the
    whole loop is inert without this.
 3. Leaderboard UI: merge bots into the existing Leaderboard tab.

@@ -93,6 +93,51 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT TYCOON step 1: `deployed_bots` table (Supabase) + "Deploy this bot"
+  UI action** — new Supabase migration `create_deployed_bots_table`
+  (project `lovybwpypkaarstnvkbz`), `js/game-ui.js`. First concrete build
+  step from `docs/bot-tycoon-proposal.md`'s SUGGESTED BUILD ORDER — "the
+  whole loop is inert without this." Schema: `id, owner (→auth.users,
+  cascade), nickname (1-24 chars, checked), weights jsonb, wins, losses,
+  draws, win_rate (generated, SAME formula/shape as
+  bot_champion_weights.win_rate for consistent ranking later), is_active,
+  created_at, updated_at`, `unique(owner, nickname)`. RLS: public SELECT
+  (leaderboard/matchmaking will need to browse everyone's bots, same as
+  `bot_champion_weights` already allows), owner-only INSERT/UPDATE/DELETE.
+  **Deliberate, flagged gap, not solved yet:** recording a challenge result
+  (build-order step 2) needs to update the DEFENDING bot's win/loss
+  counters — someone else's row — which this owner-only UPDATE policy
+  would block. Scoped for a `SECURITY DEFINER` RPC (this project already
+  uses that pattern — `remove_player` etc.) scoped to just incrementing
+  those counters, NOT a loosened UPDATE policy; deliberately not built
+  until step 2 actually needs it, to avoid designing it speculatively.
+  Verified via `list_tables` (correct shape, RLS enabled, FK present) and
+  `get_advisors` (zero NEW warnings introduced — the flagged items are all
+  pre-existing and unrelated: old functions missing `search_path`,
+  `game_state`'s permissive policy, leaked-password-protection off).
+  UI: a "Deploy this bot" section at the bottom of the Bot Training modal
+  (below Breeding) — nickname input (maxlength 24, matching the DB check)
+  + Deploy button. Publishes whatever is CURRENTLY in
+  `window.BotSystem.WEIGHTS` (freshly trained/bred or just whatever's
+  loaded) under that nickname for the logged-in user. Deliberately
+  separate from Start Training/Start Breeding — an explicit publish step,
+  not an automatic side effect of a good result — and always available
+  regardless of run state (it never touches `BotArena`). Handles: empty/
+  whitespace-only nickname (client-side, no network call), not logged in
+  (clear prompt, no attempt to insert), and duplicate nickname
+  (`unique(owner, nickname)` → error code 23505 → friendly "you already
+  have a bot named X" instead of a raw DB error).
+  Verified headless (Playwright, real page): controls exist with the
+  right maxlength; empty/whitespace nickname never calls `supabase.from`
+  at all; the REAL (unstubbed, no test credentials in this sandbox)
+  not-logged-in path correctly refuses with the login prompt — an honest
+  end-to-end exercise of that branch, not a mock; with auth +
+  `deployed_bots.insert` stubbed (no real login available here), the
+  exact insert payload is verified — nickname trimmed, `owner` set to the
+  session's user id, `weights` is a real populated snapshot (>20 keys) of
+  current WEIGHTS, success message names the bot, input clears after
+  success; a stubbed 23505 response produces the friendly duplicate-name
+  message rather than a raw error. Zero uncaught page errors.
 - **BOT TRAINING UI: popup redesign — round-history chips, color swatches,
   a real progress bar, no emoji** — `js/game-ui.js`. Direct follow-up to
   the live-progress entry just below: user tried the functionally-correct
