@@ -1,0 +1,241 @@
+# Bot Tycoon Proposal — player-facing bot ownership, breeding, and competition
+
+> Written for AI consumption. Status: PROPOSAL — not started, not scoped into
+> `bot-roadmap.md`'s stages yet. Read this top to bottom before touching any
+> part of it; several pieces below deliberately simplify or reject an earlier
+> version of the idea for concrete technical/trust reasons — don't re-propose
+> the rejected versions without re-reading § REJECTED ALTERNATIVES.
+
+---
+
+## CONCEPT
+
+Players own, name, train, and deploy individual bots (weight tables) that
+compete on the existing XP leaderboard alongside human players. Bots can be
+"captured" (copied) from opponents encountered in play, bred from champion
+files (already possible), trained via self-play or a lightweight in-browser
+version of the hillclimb tool, and customized with elemental consumable
+items. Framed as "training Pokémon," but every mechanic maps onto systems
+that already exist in this codebase — see § WHAT ALREADY EXISTS below.
+
+## CORE LOOP
+
+1. Train/breed/capture a bot → deploy it with a nickname.
+2. Your deployed bot sits on the shared leaderboard as a challengeable entity.
+3. Other players challenge bots within a rank window of their own position.
+4. Challenger's own browser runs the match locally (see § CHALLENGE EXECUTION
+   — this is the piece that makes the whole thing tractable without new
+   backend infrastructure).
+5. Win → challenger gets XP, bot owner gets gold (win or lose, owner gets
+   something — small on a loss, more on a win). Reward scales with the
+   target's leaderboard rank (bounty-style: punching up pays more).
+6. Repeat — train harder, deploy higher, get challenged more, earn more.
+
+---
+
+## WHAT ALREADY EXISTS (reuse, don't rebuild)
+
+| Need | Existing piece |
+|------|-----------------|
+| Purchasable items with gold | `shop_items` table (schema exists, 0 rows, unused) + `emoji-system.js`/`cosmetics-system.js` purchase/equip pattern |
+| A place bot weight tables already live | `bot_champion_weights` (weights jsonb, win_rate generated column, confirm_wins/losses/draws, created_by) |
+| Local bot-vs-bot execution, no server involved | `BotArena.playMatch(weightsPerPlayer, opts)` — already runs a full game client-side |
+| Uploading someone else's trained bot as a breeding parent | `game-ui.js`'s "Breed from champion files" flow (`openBotTrainingPanel()`) — accepts up to 2 uploaded `.json` champion files |
+| Shared leaderboard UI | `gamification-ui.js` Profile modal, Leaderboard tab (currently human-only) |
+| XP/gold economy | `js/gamification.js` (`window.gami`), `user_profiles.total_xp/gold/stats` |
+| Reliable, champion-anchored bot trainer | `BotArena.hillClimb()` — being wired into the training panel as a separate mode from `evolve()` (see `planning/current.md`, tracked independently of this proposal) |
+
+---
+
+## SYSTEM: DEPLOYED BOTS (new)
+
+**Gap this fills:** today every bot in a lobby shares ONE global `WEIGHTS`
+table (`bot-driver.js`: "all bots share whatever champion weights WEIGHTS
+currently holds"). There is no concept of an individually-owned, individually
+ranked bot. This is the one genuinely new data-model piece everything else
+depends on.
+
+New table, e.g. `deployed_bots`:
+```
+id, owner (uuid → auth.users), nickname (text), weights (jsonb),
+elo_or_xp (int), wins (int), losses (int), deployed_at, updated_at
+```
+- Player names their bot (trivial text field, no design questions).
+- A player may deploy their currently-trained `WEIGHTS`, a bred champion
+  file, or a captured bot (see below) — same jsonb shape as
+  `bot_champion_weights.weights` throughout, so no conversion needed anywhere.
+- **Also fixes the "wild bot" identity problem for free:** lobby bots
+  (`🤖 Add Bot`) currently all share one weight table. Once `deployed_bots`
+  exists, each lobby bot slot could draw a DIFFERENT random deployed bot
+  (rarity-weighted by its ladder rank) instead of the single shared `WEIGHTS`
+  — makes multi-bot lobbies varied AND makes "which bot did I just fight"
+  meaningful, which the capture mechanic below needs to make sense.
+
+---
+
+## SYSTEM: CAPTURE STONES
+
+- A `shop_items` row, cost in gold, consumed on use.
+- Used after/during an encounter with a bot opponent (real lobby bot, or a
+  challenged leaderboard bot) to attempt a **copy** — not a removal. The
+  original owner keeps their bot; a successful capture just inserts a new
+  `deployed_bots`-shaped row (or an unranked "collection" variant) owned by
+  the capturer, containing a snapshot of the target's weights at that moment.
+- Capture chance should scale with performance against that bot (closer
+  game = better odds — Pokémon's low-HP-easier-catch, mapped onto e.g. win
+  margin or how many of the bot's 5 elements it activated) — ties into stats
+  already tracked (`user_profiles.stats.games_won`, `elements_activated`).
+- Rarity tiers plausible (regular stone = only catches "wild"/lobby bots;
+  rarer tier needed to copy an actual ranked leaderboard bot) — mirrors
+  `emoji-system.js`'s existing 6-tier structure.
+- Needs a growth cap per player (a `deployed_bots`-style personal collection
+  table, not an unbounded jsonb array) — this codebase is consistently
+  disciplined about bounding growth elsewhere (hall-of-fame FIFO cap in
+  `bot-arena.js`, `action-log.js`'s 3000-entry cap) — follow the same pattern.
+
+---
+
+## SYSTEM: CHALLENGE EXECUTION (the piece that makes "passive defense" tractable)
+
+**The trap to avoid:** a bot "defending the ladder while its owner is
+offline" sounds like it needs the bot to run somewhere without a browser
+open — i.e. the Runtime Track's R4/R5 (server-side bot execution), which
+`bot-roadmap.md` scopes as a real, currently-unstarted lift (no persisted
+game state server-side, would need real backend rule-porting — see that
+doc's R3 section for why that's expensive).
+
+**The actual answer: the challenger's browser runs the whole match.**
+`BotArena.playMatch([challengerWeights, targetWeights], opts)` already runs
+an entire game locally, client-side, using only two weight tables passed in
+— no server execution needed for either side. So:
+1. Challenger picks a target within their rank window.
+2. Challenger's client fetches the target's `deployed_bots.weights`.
+3. Challenger's client runs the match locally (against their own bot, or
+   plays it themselves as a normal single-player-vs-bot game).
+4. Challenger's client reports the result, crediting XP to themselves and
+   gold to the (possibly offline) target's `deployed_bots`/`user_profiles`
+   row via a normal DB write — no execution problem, it's just a write to a
+   different user's row, same as e.g. `bot_champion_weights` submission
+   already does today.
+
+The defending bot never executes anywhere while its owner is offline — the
+"defense" is simulated on demand, exactly once, inside whoever initiates the
+challenge. This is more efficient than true passive execution would be
+(zero cost when nobody's challenging) and needs zero new execution
+infrastructure — only the `deployed_bots` table and a challenge/reward UI
+flow.
+
+**Residual, honest, non-blocking trust note:** the challenger's client is
+self-reporting the outcome that credits both their own reward and the
+target's. This is the same trust level the rest of the game's economy
+already runs on (client-computed XP/gold awards, client-submitted
+`bot_champion_weights` confirm records) — not a new category of risk, just
+worth knowing it's there.
+
+---
+
+## SYSTEM: REWARD ECONOMY
+
+- Rank-window matchmaking: a bot/player may only challenge targets in
+  `[R_current, R_current + Δ]` — prevents farming far-below opponents.
+- XP scales down toward the bottom of the window (beating a near-peer pays
+  more than beating someone barely above the floor) — pushes toward
+  challenging upward.
+- Reward split: winner gets XP; the TARGET's owner gets gold regardless of
+  outcome (small on a loss, more on a win) — the "why deploy a bot at all"
+  incentive, since a deployed bot earns its owner something just by existing
+  on the ladder and getting challenged.
+- Reward magnitude scales with the target's rank (bounty-style) — matches
+  the existing badge/leaderboard framing of "higher rank = more prestigious."
+
+---
+
+## SYSTEM: ELEMENTAL WEIGHT-BUNDLE ITEMS
+
+One-time-use consumables (another `shop_items` type) that nudge a
+**pre-validated, correlated bundle** of weights toward a personality —
+never a single raw weight in isolation. This constraint is not aesthetic:
+we directly tested pushing a single correlated cluster (movement-efficiency
+weights) toward the online champion's values in isolation and it made the
+bot measurably WORSE (37% vs. plain-default's 47% against the same
+opponent, 30-game series — see `planning/current.md`'s "Hypothesis test —
+FALSIFIED" entry). These weights interact; bundles must move together.
+
+| Element | Theme | Candidate bundle (nudge up unless noted) |
+|---------|-------|-------------------------------------------|
+| Earth | Stable, confident, straightforward | `placeEarthBlock`, `placeSelfBlockPenalty` (careful terrain control); `moveFixation` up, `moveExploreGradient`/`moveExplore` down (commits to a direct path); steady `placeProgress`/`castBase` |
+| Water | Flexible, adapts to opponents | `evalOpponentThreat`, `evalCommonThreat` up; reactive `discardResponseOnly`. (This pair is the single largest real gap measured between `DEFAULT_WEIGHTS` and the actual online champion — +73%/+36% — so this bundle is pushing a *validated* real advantage, not a guess.) |
+| Fire | Aggressive | `placeFireThreatBreak` up; `evalActivated`/`endTurnOnShrine` down + `moveReturnHome` up — less hoarding, more urgency once win-eligible (also matches the real champion's actual tuning direction vs. defaults) |
+| Wind | Prosocial, movement efficiency | `placeWindPath` up; efficient `moveExplorePath`/`moveApPenalty`; `placeEarthBlock`/`placeFireThreatBreak` DOWN — races its own path, doesn't fight |
+| Void | Smart / creative | Mechanically distinct from the other four — bump `searchDepth`/`searchBreadth` (deeper lookahead) and/or `evalVoidHeld`/`shrineVoidBonus`, rather than a personality-weight nudge. Matches Void's in-game identity (Create, Scholar's Insight, Transmute — the utility/cleverness element) and gives Void a genuinely different lever instead of a fifth flavor of the same trick. |
+
+Bundle values themselves should be derived from real online-champion deltas
+(the diff methodology already used once — see `planning/current.md`'s
+weight-diff findings) or from targeted future hillclimb-style experiments,
+not hand-guessed numbers.
+
+---
+
+## TRAINING TOOL INTEGRATION
+
+- **Self-play against your own deployed bot** — already possible via
+  `BotArena.spectate()`/local arena; no new work.
+- **Breeding** — already possible via "Breed from champion files"; a
+  deployed/captured bot should be selectable as a parent directly (skip the
+  manual `.json` upload step) — small UI addition, no new mechanism.
+- **Lightweight in-browser hillclimb** — this is the separately-tracked
+  "Hill Climb as a training-panel option" work (see `planning/current.md`);
+  this proposal assumes it lands and deployed bots become a natural
+  source/destination for that flow (train → deploy → get challenged →
+  earn → train further).
+- **"Programmatic neural improvements"** — maps to `bot-roadmap.md` Stage
+  3c (Neural RL), explicitly scoped there as optional and LAST, gated on
+  self-play throughput this proposal doesn't change. Not assumed here.
+
+---
+
+## REJECTED ALTERNATIVES (don't re-propose without addressing these)
+
+**Server-side "always-on" passive bot defense.** Rejected because it
+re-imports the Runtime Track's R4/R5 problem (needs execution without a
+browser open — no persisted server-side game state, would need real
+backend rule-porting). Replaced by challenger-side on-demand execution
+(§ CHALLENGE EXECUTION above), which needs none of that.
+
+**"Decentralized verification" — other players' idle browser tabs silently
+cross-verify community champion submissions.** Rejected for two reasons:
+(1) browsers throttle/suspend JS in inactive/background tabs — there's no
+reliable way to run games in a tab the player isn't actively using; (2) it
+would make the mechanism that crowns the GLOBAL default bot (auto-applied
+to everyone's games) depend entirely on aggregated, unverified client
+self-reports — a real cheating surface, not just a cost. Champion promotion
+should stay an explicit, single confirmation run (as it already is today,
+and as the Hill Climb panel work already does), not a crowd-sourced
+consensus.
+
+---
+
+## OPEN QUESTIONS (not yet decided)
+
+- Exact capture-chance formula and rarity tiers for capture stones.
+- Exact XP/gold numbers for the rank-window falloff and win/loss split —
+  needs balancing against the existing XP economy (`gamification.js`).
+- Whether a captured/deployed bot's *nickname* and *lineage* (bred-from
+  history, à la the training panel's existing "bred #X×#Y" labels) should
+  be visible to other players, and whether that's cosmetic-only or affects
+  anything mechanically.
+- Cooldown / one-attempt-per-encounter to prevent capture-stone farming.
+
+## SUGGESTED BUILD ORDER
+
+1. `deployed_bots` table + naming + "deploy my current bot" UI action.
+2. Challenge flow (rank window, local match execution, reward write) — the
+   whole loop is inert without this.
+3. Leaderboard UI: merge bots into the existing Leaderboard tab.
+4. Capture stones (needs deployed_bots + a `shop_items` row + capture-chance
+   formula).
+5. Elemental weight-bundle items (needs validated bundle values, ideally
+   derived the same way the Water/Fire bundles above already were).
+6. Wild-lobby-bot variety (draw from `deployed_bots`/`bot_champion_weights`
+   instead of one shared `WEIGHTS`) — nice-to-have, not load-bearing for
+   the rest.

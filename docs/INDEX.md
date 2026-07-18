@@ -10,6 +10,7 @@
 |------|---------|
 | `game-design-document.md` | Canonical game rules: tile mechanics, shrine system, scroll patterns, win conditions, stone abilities, elemental hierarchy, balance notes |
 | `bot-roadmap.md` | Bot improvement pathway (Stages 0–3, written for AI executors). Stage status, API contracts for `BotState`/`BotSystem`, gotchas (globals not on window, pool aliases), and step-by-step specs for the forward model, self-play arena, and learning stages |
+| `bot-tycoon-proposal.md` | PROPOSAL, not started: player-owned/named/deployed bots on a shared leaderboard, challenge-and-earn economy, capture stones, elemental weight-bundle items. Explicitly rejects server-side "always-on" bot defense and decentralized client-verification in favor of on-demand challenger-side execution — read before re-proposing either |
 
 ---
 
