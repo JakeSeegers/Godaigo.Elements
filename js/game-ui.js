@@ -5923,6 +5923,142 @@ document.getElementById('undo-move').onclick = function() {
                     }
                 };
 
+                // ── Challenge other bots ────────────────────────────────────────
+                // Build-order step 2 (docs/bot-tycoon-proposal.md): the
+                // challenger's own browser runs the WHOLE match locally against
+                // a stored opponent weight table — no server execution needed
+                // for either side, same reasoning that made step 1 tractable.
+                // Two deliberate v1 simplifications (agreed with the user):
+                // this is bot-vs-bot (your current WEIGHTS auto-plays one local
+                // match against theirs), not an interactive human-vs-bot game;
+                // and the target list is "top 10 by win rate" rather than the
+                // proposal's full rank-window matchmaking, which needs the
+                // unified leaderboard (step 3, not built yet).
+                const challengeSep = document.createElement('div');
+                challengeSep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
+                body.appendChild(challengeSep);
+
+                const challengeTitle = document.createElement('div');
+                challengeTitle.textContent = 'Challenge other bots';
+                challengeTitle.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                body.appendChild(challengeTitle);
+
+                const challengeDesc = document.createElement('div');
+                challengeDesc.textContent = 'Your current live bot auto-plays one local match against another player\'s deployed bot. Win: you get XP, they get a little gold. Lose: they get more gold, you get none. Requires being logged in.';
+                challengeDesc.style.cssText = 'font-size:11px;color:#999;';
+                body.appendChild(challengeDesc);
+
+                const challengeListEl = document.createElement('div');
+                challengeListEl.style.cssText = 'display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;';
+                body.appendChild(challengeListEl);
+
+                const challengeRefreshBtn = document.createElement('button');
+                challengeRefreshBtn.textContent = 'Refresh list';
+                challengeRefreshBtn.style.cssText = 'padding:4px 8px;background:#2d2d44;color:#ccc;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:11px;align-self:flex-start;margin-top:4px;';
+                body.appendChild(challengeRefreshBtn);
+
+                async function renderChallengeList() {
+                    challengeListEl.innerHTML = '<div style="font-size:11px;color:#777;font-style:italic;">Loading…</div>';
+                    try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const myId = session?.user?.id || null;
+                        let query = supabase.from('deployed_bots')
+                            .select('id, owner, nickname, weights, wins, losses, draws, win_rate')
+                            .eq('is_active', true)
+                            .order('win_rate', { ascending: false })
+                            .limit(10);
+                        if (myId) query = query.neq('owner', myId);
+                        const { data, error } = await query;
+                        // Scoped to the list widget itself, never the global
+                        // status bar: this refresh also runs automatically
+                        // after a challenge completes, and a load error here
+                        // must never clobber that more important win/loss
+                        // status message (this is exactly what happened during
+                        // testing — a stubbed non-UUID test user id made this
+                        // query fail, silently overwriting a genuine success
+                        // message with a confusing "could not load" one).
+                        if (error) { challengeListEl.innerHTML = `<div style="font-size:11px;color:#c88;">Could not load challengeable bots: ${error.message}</div>`; return; }
+                        if (!data?.length) {
+                            challengeListEl.innerHTML = '<div style="font-size:11px;color:#777;font-style:italic;">No other deployed bots yet — be the first to deploy one above.</div>';
+                            return;
+                        }
+                        challengeListEl.innerHTML = '';
+                        for (const bot of data) {
+                            const row = document.createElement('div');
+                            row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 6px;background:#22223a;border-radius:4px;';
+                            const decided = bot.wins + bot.losses;
+                            const pct = decided ? Math.round((bot.wins / decided) * 100) : 0;
+                            const label = document.createElement('span');
+                            label.textContent = `${bot.nickname} — ${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%)`;
+                            label.style.cssText = 'flex:1;font-size:11px;color:#ddd;';
+                            row.appendChild(label);
+                            const btn = document.createElement('button');
+                            btn.textContent = 'Challenge';
+                            btn.style.cssText = 'padding:3px 8px;background:#3a2d4a;color:#eee;border:1px solid #85a;border-radius:4px;cursor:pointer;font-size:11px;';
+                            btn.onclick = () => runChallenge(bot, btn);
+                            row.appendChild(btn);
+                            challengeListEl.appendChild(row);
+                        }
+                    } catch (e) {
+                        console.error('Loading challengeable bots failed:', e);
+                        challengeListEl.innerHTML = '<div style="font-size:11px;color:#c88;">Could not load challengeable bots — see console.</div>';
+                    }
+                }
+                challengeRefreshBtn.onclick = renderChallengeList;
+
+                // Reward scale deliberately matches the EXISTING economy rather
+                // than inventing new numbers: 100 XP is exactly what any other
+                // 2-player game win already pays (gamification.js
+                // onGameComplete); 20 gold matches the daily-login baseline
+                // (the "successful defense" case — the biggest reward here);
+                // 8/10 gold are smaller fractions of that same baseline.
+                async function runChallenge(targetBot, btn) {
+                    if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (!session?.user?.id) { updateStatus('Log in before challenging a bot.'); return; }
+                    if (!await stopAnyRunningBotJob()) return;
+                    btn.disabled = true;
+                    btn.textContent = 'Fighting…';
+                    try {
+                        await leaveOnlineGameIfAny();
+                        const myWeights = { ...window.BotSystem.WEIGHTS };
+                        const result = await window.BotArena.playMatch([myWeights, targetBot.weights], { visual: state.watchable, turnCap: 300 });
+                        // winner: 0 = me (challenger), 1 = them (defending bot), null = draw.
+                        const iWon = result.winner === 0;
+                        const theyWon = result.winner === 1;
+                        const botResult = theyWon ? 'win' : iWon ? 'loss' : 'draw';
+                        const goldForOwner = theyWon ? 20 : iWon ? 8 : 10;
+
+                        await supabase.rpc('record_deployed_bot_result', { p_bot_id: targetBot.id, p_result: botResult });
+                        await supabase.rpc('award_gold', {
+                            p_user_id: targetBot.owner,
+                            p_gold_amount: goldForOwner,
+                            p_description: `"${targetBot.nickname}" ${theyWon ? 'defended successfully' : iWon ? 'was defeated' : 'drew'} in a challenge`,
+                        });
+                        if (iWon) {
+                            await supabase.rpc('update_user_xp', {
+                                p_user_id: session.user.id,
+                                p_xp_points: 100,
+                                p_description: `Defeated "${targetBot.nickname}" in a bot challenge`,
+                            });
+                        }
+
+                        updateStatus(iWon
+                            ? `You beat "${targetBot.nickname}"! +100 XP.`
+                            : theyWon
+                                ? `"${targetBot.nickname}" defeated your bot. No XP this time.`
+                                : `Your challenge against "${targetBot.nickname}" ended in a draw.`);
+                        renderChallengeList(); // refresh records shown
+                    } catch (e) {
+                        console.error('Challenge failed:', e);
+                        updateStatus('Challenge failed — see console.');
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = 'Challenge';
+                    }
+                }
+
+                renderChallengeList();
                 renderRoster();
                 document.body.appendChild(overlay);
             }

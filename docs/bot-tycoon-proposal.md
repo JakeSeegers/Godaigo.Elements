@@ -1,8 +1,10 @@
 # Bot Tycoon Proposal — player-facing bot ownership, breeding, and competition
 
-> Written for AI consumption. Status: IN PROGRESS — build-order step 1
-> (below) has landed: `deployed_bots` table live in Supabase, "Deploy this
-> bot" UI action in the Bot Training panel. Steps 2+ not started. Not
+> Written for AI consumption. Status: IN PROGRESS — build-order steps 1-2
+> (below) have landed: `deployed_bots` table + "Deploy this bot" UI, and
+> the challenge flow (`record_deployed_bot_result` RPC + "Challenge other
+> bots" UI, reward-crediting reusing the existing `award_gold`/
+> `update_user_xp` RPCs). Step 3+ not started. Not
 > scoped into `bot-roadmap.md`'s stages. Read this top to bottom before touching any
 > part of it; several pieces below deliberately simplify or reject an earlier
 > version of the idea for concrete technical/trust reasons — don't re-propose
@@ -235,8 +237,14 @@ consensus.
    exact schema/RLS and the one deliberately-deferred gap (recording a
    challenge result needs a `SECURITY DEFINER` RPC, not a loosened UPDATE
    policy — scoped for step 2, not built yet).
-2. Challenge flow (rank window, local match execution, reward write) — the
-   whole loop is inert without this.
+2. **DONE (simplified).** Challenge flow: local match execution + reward
+   write via `record_deployed_bot_result` +the existing `award_gold`/
+   `update_user_xp` RPCs. Simplified from the original spec: bot-vs-bot
+   (not interactive human-vs-bot), and target list is "top 10 by win
+   rate" rather than real rank-window matchmaking — that needs step 3's
+   unified leaderboard to mean anything. See `planning/current.md`'s "BOT
+   TYCOON step 2" entry for exact reward amounts and a status-clobbering
+   bug caught during verification.
 3. Leaderboard UI: merge bots into the existing Leaderboard tab.
 4. Capture stones (needs deployed_bots + a `shop_items` row + capture-chance
    formula).

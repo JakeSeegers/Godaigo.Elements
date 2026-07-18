@@ -93,6 +93,63 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT TYCOON step 2: challenge flow — `record_deployed_bot_result` RPC +
+  "Challenge other bots" UI, reward-crediting** — new Supabase migrations
+  `create_record_deployed_bot_result_rpc` +
+  `restrict_record_deployed_bot_result_to_authenticated` (project
+  `lovybwpypkaarstnvkbz`), `js/game-ui.js`. Second build-order step from
+  `docs/bot-tycoon-proposal.md` — "the whole loop is inert without this."
+  Two agreed v1 simplifications: the challenge is bot-vs-bot (your current
+  `WEIGHTS` auto-plays one local match against the target's stored
+  weights via the same `BotArena.playMatch()` every other feature already
+  uses — no interactive human-vs-bot game yet), and the target list is
+  "top 10 by win rate" rather than the proposal's full rank-window
+  matchmaking (needs the unified leaderboard, step 3, not built).
+  New RPC `record_deployed_bot_result(p_bot_id, p_result)`: `SECURITY
+  DEFINER`, increments the DEFENDING bot's wins/losses/draws — needed
+  because the CHALLENGER (not the bot's owner) reports the outcome, which
+  the owner-only UPDATE policy from step 1 would otherwise block (the
+  exact gap flagged and deferred in that entry). Explicitly sets
+  `search_path = public` (several pre-existing functions in this project
+  are flagged by the security advisor for NOT doing this —
+  `function_search_path_mutable` — deliberately didn't repeat that gap in
+  new code) and revokes EXECUTE from `public`/`anon` explicitly, granting
+  only to `authenticated` — tighter than the pre-existing RPCs
+  (`award_gold` etc., which this project's default privileges apparently
+  grant to `anon` automatically regardless of a bare `revoke ... from
+  public`, confirmed via `get_advisors` before and after the fix).
+  Reward-crediting REUSES existing RPCs rather than inventing new
+  plumbing: `award_gold`/`update_user_xp` (found via the advisor scan
+  during step 1). Amounts deliberately matched to the EXISTING economy,
+  not invented: challenger win → exactly 100 XP (identical to
+  `gamification.js`'s `onGameComplete` 2-player-win amount) + 8 gold to
+  the bot's owner (small — their bot lost); challenger loss → 0 XP
+  (matches the existing "only winners earn XP" rule exactly) + 20 gold to
+  the owner (matches the daily-login baseline — their bot defended
+  successfully, the biggest reward here); draw → 10 gold, 0 XP.
+  UI: a "Challenge other bots" section below Deploy — auto-loads on panel
+  open, a Refresh button, one row per challengeable bot (nickname +
+  win/loss/draw record) with its own Challenge button.
+  **Real bug caught and fixed during verification, not just a test
+  artifact:** the list auto-refreshes after a challenge completes (to
+  show updated records), and its own error-handling called the GLOBAL
+  `updateStatus()` — meaning a failure in that unrelated background
+  refresh could silently overwrite and hide a just-shown challenge
+  win/loss message, making a successful challenge look like it failed.
+  Fixed by scoping list-load errors to the list widget itself (inline
+  text) instead of ever touching the global status bar.
+  Verified headless (Playwright): the real query against the live
+  (currently empty) `deployed_bots` table correctly shows the empty-state
+  message; the real (this sandbox has no login credentials) not-logged-in
+  path is a genuine, unstubbed exercise of that refusal; with
+  `playMatch()`/`rpc()` stubbed, all three outcomes (challenger win/loss/
+  draw) produce the exact right RPC calls and amounts, and the fixed
+  status-clobbering bug is confirmed fixed (success message survives the
+  automatic list refresh). Zero uncaught page errors. (Two more race-
+  condition bugs caught and fixed IN THE TEST SCRIPT ITSELF before
+  trusting results — same "button text starts and ends the same, must
+  wait for it to change away before waiting for it to change back" lesson
+  as the Hill Climb panel tests, recurring in a new spot.)
 - **BOT TYCOON step 1: `deployed_bots` table (Supabase) + "Deploy this bot"
   UI action** — new Supabase migration `create_deployed_bots_table`
   (project `lovybwpypkaarstnvkbz`), `js/game-ui.js`. First concrete build
