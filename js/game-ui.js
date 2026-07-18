@@ -5868,9 +5868,47 @@ document.getElementById('undo-move').onclick = function() {
                 body.appendChild(deployTitle);
 
                 const deployDesc = document.createElement('div');
-                deployDesc.textContent = 'Publish your CURRENT live bot weights as a named bot other players can challenge on the leaderboard. Requires being logged in.';
+                deployDesc.textContent = 'Publish a bot as a named bot other players can challenge on the leaderboard. Requires being logged in.';
                 deployDesc.style.cssText = 'font-size:11px;color:#999;';
                 body.appendChild(deployDesc);
+
+                // Source picker: your current live WEIGHTS (default), or a
+                // captured bot from your collection (docs/bot-tycoon-proposal.md
+                // build-order step 4) — reuses this exact same insert logic
+                // below rather than a separate "deploy a capture" flow.
+                const deploySourceRow = document.createElement('div');
+                deploySourceRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;';
+                body.appendChild(deploySourceRow);
+
+                const deploySourceLabel = document.createElement('span');
+                deploySourceLabel.textContent = 'Source:';
+                deploySourceLabel.style.cssText = 'font-size:11px;color:#aaa;';
+                deploySourceRow.appendChild(deploySourceLabel);
+
+                const deploySourceSelect = document.createElement('select');
+                deploySourceSelect.style.cssText = 'flex:1;padding:4px 6px;background:#2d2d44;color:#eee;border:1px solid #555;border-radius:5px;font-size:12px;';
+                deploySourceRow.appendChild(deploySourceSelect);
+
+                let capturedBotsCache = [];
+                async function refreshCapturedBotsOptions() {
+                    deploySourceSelect.innerHTML = '<option value="">Current live bot (WEIGHTS)</option>';
+                    capturedBotsCache = [];
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (!session?.user?.id) return;
+                    const { data, error } = await supabase.from('captured_bots')
+                        .select('id, source_nickname, weights, captured_at')
+                        .eq('owner', session.user.id)
+                        .order('captured_at', { ascending: false })
+                        .limit(50);
+                    if (error || !data) return;
+                    capturedBotsCache = data;
+                    for (const cb of data) {
+                        const opt = document.createElement('option');
+                        opt.value = String(cb.id);
+                        opt.textContent = `Captured: ${cb.source_nickname} (${new Date(cb.captured_at).toLocaleDateString()})`;
+                        deploySourceSelect.appendChild(opt);
+                    }
+                }
 
                 const deployRow = document.createElement('div');
                 deployRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
@@ -5899,10 +5937,15 @@ document.getElementById('undo-move').onclick = function() {
                             updateStatus('Log in before deploying a bot — deployed bots are tied to your account.');
                             return;
                         }
+                        const capturedId = deploySourceSelect.value;
+                        const sourceWeights = capturedId
+                            ? capturedBotsCache.find(cb => String(cb.id) === capturedId)?.weights
+                            : { ...window.BotSystem.WEIGHTS };
+                        if (!sourceWeights) { updateStatus('Selected captured bot could not be found — try refreshing.'); return; }
                         const { error } = await supabase.from('deployed_bots').insert({
                             owner: session.user.id,
                             nickname,
-                            weights: { ...window.BotSystem.WEIGHTS },
+                            weights: sourceWeights,
                         });
                         if (error) {
                             // 23505 = unique_violation — this owner already has a
@@ -6049,6 +6092,16 @@ document.getElementById('undo-move').onclick = function() {
                                 ? `"${targetBot.nickname}" defeated your bot. No XP this time.`
                                 : `Your challenge against "${targetBot.nickname}" ended in a draw.`);
                         renderChallengeList(); // refresh records shown
+
+                        // Offer a capture attempt regardless of win/loss — a
+                        // close FIGHT is what matters (Pokemon's low-HP-easier-
+                        // catch idea), not who won. Chance is genuinely new,
+                        // ungrounded-in-precedent territory (unlike the reward
+                        // amounts above) — 20% floor for a lopsided game up to
+                        // 80% for a dead-even one, tunable later.
+                        const [myActivated, theirActivated] = result.activated || [0, 0];
+                        const closeness = Math.max(0, 5 - Math.abs(myActivated - theirActivated));
+                        showCaptureAttempt(targetBot, Math.round(Math.min(80, 20 + closeness * 12)));
                     } catch (e) {
                         console.error('Challenge failed:', e);
                         updateStatus('Challenge failed — see console.');
@@ -6058,6 +6111,148 @@ document.getElementById('undo-move').onclick = function() {
                     }
                 }
 
+                // ── Capture Stones ──────────────────────────────────────────────
+                // Build-order step 4 (docs/bot-tycoon-proposal.md). Deliberately
+                // diverges from this project's existing purchase convention
+                // (js/emoji-system.js persists owned items to localStorage, not
+                // the database — a real gap, flagged in TODO.md's new
+                // "Economy / purchases" entry): a stone is bought with real gold
+                // and produces a real collectible (another bot's weights), so
+                // both the stone count (user_profiles.capture_stones) and the
+                // resulting capture (captured_bots table) are properly
+                // database-backed from the start, not localStorage.
+                const captureSep = document.createElement('div');
+                captureSep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
+                body.appendChild(captureSep);
+
+                const captureTitle = document.createElement('div');
+                captureTitle.textContent = 'Capture Stones';
+                captureTitle.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
+                body.appendChild(captureTitle);
+
+                const captureDesc = document.createElement('div');
+                captureDesc.textContent = 'Buy a stone with gold, then use it right after a challenge to try copying that bot\'s weights into your collection — the closer the fight, the better your odds. Consumed whether the attempt succeeds or not.';
+                captureDesc.style.cssText = 'font-size:11px;color:#999;';
+                body.appendChild(captureDesc);
+
+                const captureRow = document.createElement('div');
+                captureRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+                body.appendChild(captureRow);
+
+                const stoneCountEl = document.createElement('span');
+                stoneCountEl.style.cssText = 'font-size:12px;color:#ddd;';
+                captureRow.appendChild(stoneCountEl);
+
+                const STONE_COST = 30; // between the two challenge-reward gold tiers (8/20) established above
+
+                const buyStoneBtn = document.createElement('button');
+                buyStoneBtn.textContent = `Buy Stone (${STONE_COST}g)`;
+                buyStoneBtn.style.cssText = 'padding:4px 10px;background:#2d4a3a;color:#eee;border:1px solid #5a8;border-radius:5px;cursor:pointer;font-size:12px;';
+                captureRow.appendChild(buyStoneBtn);
+
+                const captureAttemptEl = document.createElement('div');
+                captureAttemptEl.style.cssText = 'margin-top:6px;font-size:11px;color:#ccc;display:none;';
+                body.appendChild(captureAttemptEl);
+
+                async function refreshStoneCount() {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (!session?.user?.id) {
+                        stoneCountEl.textContent = 'Log in to buy/use capture stones.';
+                        buyStoneBtn.disabled = true;
+                        return null;
+                    }
+                    const { data, error } = await supabase.from('user_profiles')
+                        .select('capture_stones').eq('user_id', session.user.id).single();
+                    if (error || !data) { stoneCountEl.textContent = 'Capture stones: —'; return null; }
+                    stoneCountEl.textContent = `Capture stones: ${data.capture_stones}`;
+                    buyStoneBtn.disabled = false;
+                    return { userId: session.user.id, stones: data.capture_stones };
+                }
+
+                buyStoneBtn.onclick = async () => {
+                    buyStoneBtn.disabled = true;
+                    try {
+                        const info = await refreshStoneCount();
+                        if (!info) { updateStatus('Log in before buying a Capture Stone.'); return; }
+                        // Same trick the existing emoji shop already uses for
+                        // gold deduction — award_gold with a negative amount —
+                        // rather than a new RPC just for spending.
+                        const { error: goldErr } = await supabase.rpc('award_gold', {
+                            p_user_id: info.userId, p_gold_amount: -STONE_COST,
+                            p_description: 'Bought a Capture Stone',
+                        });
+                        if (goldErr) { updateStatus(`Could not buy stone: ${goldErr.message}`); return; }
+                        const { error: stoneErr } = await supabase.from('user_profiles')
+                            .update({ capture_stones: info.stones + 1 }).eq('user_id', info.userId);
+                        if (stoneErr) { updateStatus(`Gold was spent but the stone count update failed: ${stoneErr.message}`); return; }
+                        updateStatus('Bought a Capture Stone.');
+                        await refreshStoneCount();
+                    } catch (e) {
+                        console.error('Buy stone failed:', e);
+                        updateStatus('Could not buy stone — see console.');
+                    } finally {
+                        buyStoneBtn.disabled = false;
+                    }
+                };
+
+                // Offered as a follow-up right after a challenge (see
+                // runChallenge() above) — not a standalone button, since the
+                // odds are specific to how that one match just went.
+                function showCaptureAttempt(targetBot, chancePct) {
+                    captureAttemptEl.style.display = 'block';
+                    captureAttemptEl.innerHTML = '';
+                    const label = document.createElement('span');
+                    label.textContent = `Attempt to capture "${targetBot.nickname}"? (${chancePct}% chance) `;
+                    captureAttemptEl.appendChild(label);
+                    const btn = document.createElement('button');
+                    btn.textContent = 'Use Capture Stone';
+                    btn.style.cssText = 'padding:3px 8px;background:#3a2d4a;color:#eee;border:1px solid #85a;border-radius:4px;cursor:pointer;font-size:11px;';
+                    btn.onclick = () => attemptCapture(targetBot, chancePct, btn);
+                    captureAttemptEl.appendChild(btn);
+                }
+
+                async function attemptCapture(targetBot, chancePct, btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Rolling…';
+                    try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (!session?.user?.id) { updateStatus('Log in to use a Capture Stone.'); return; }
+                        const { data: profile, error: profErr } = await supabase.from('user_profiles')
+                            .select('capture_stones').eq('user_id', session.user.id).single();
+                        if (profErr || !profile) { updateStatus(`Could not check your Capture Stones: ${profErr?.message || 'unknown error'}`); return; }
+                        if (profile.capture_stones < 1) { updateStatus('You have no Capture Stones — buy one above.'); return; }
+
+                        // Consumed whether the roll succeeds or not.
+                        await supabase.from('user_profiles')
+                            .update({ capture_stones: profile.capture_stones - 1 }).eq('user_id', session.user.id);
+                        await refreshStoneCount();
+
+                        const success = Math.random() * 100 < chancePct;
+                        if (success) {
+                            const { error } = await supabase.from('captured_bots').insert({
+                                owner: session.user.id,
+                                source_nickname: targetBot.nickname,
+                                source_bot_id: targetBot.id,
+                                weights: targetBot.weights,
+                            });
+                            if (error) { updateStatus(`Capture roll succeeded but saving it failed: ${error.message}`); return; }
+                            updateStatus(`Captured "${targetBot.nickname}"! Added to your collection.`);
+                            refreshCapturedBotsOptions(); // so it's immediately selectable as a Deploy source
+                        } else {
+                            updateStatus(`"${targetBot.nickname}" broke free — capture failed.`);
+                        }
+                        captureAttemptEl.style.display = 'none';
+                    } catch (e) {
+                        console.error('Capture attempt failed:', e);
+                        updateStatus('Capture attempt failed — see console.');
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = 'Use Capture Stone';
+                    }
+                }
+
+                refreshCapturedBotsOptions();
+                refreshStoneCount();
                 renderChallengeList();
                 renderRoster();
                 document.body.appendChild(overlay);

@@ -93,6 +93,62 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT TYCOON step 4: Capture Stones** — new Supabase migrations
+  `add_capture_stones_to_user_profiles` (int column on `user_profiles`) +
+  `create_captured_bots_table` (project `lovybwpypkaarstnvkbz`),
+  `js/game-ui.js`. Fourth build-order step. **Deliberately diverges from
+  this project's EXISTING purchase convention** — `js/emoji-system.js`'s
+  shop persists owned items to `localStorage`, not the database (real gap,
+  now flagged in `TODO.md`'s new "Economy / purchases" entry, per explicit
+  user request to mark it rather than silently note it only here). A
+  capture stone is bought with real gold and produces a real collectible
+  (another bot's weights) — both `user_profiles.capture_stones` (a plain
+  int column, same style as `gold`/`total_xp`, not jsonb) and the new
+  `captured_bots` table (owner, source_nickname, source_bot_id → FK to
+  `deployed_bots` on delete set null, weights, captured_at) are properly
+  database-backed from the start. `captured_bots` RLS is OWNER-ONLY for
+  select/insert/delete (unlike `deployed_bots`' public-read) — this is a
+  personal collection, not a public listing. No new RPC needed for
+  buying: `user_profiles` already has an owner-only UPDATE policy
+  (confirmed via `pg_policies` before building, matching the existing
+  `_patchStats()` pattern in `gamification.js`), and gold deduction reuses
+  `award_gold` with a NEGATIVE amount — the exact same trick
+  `emoji-system.js`'s `purchaseEmoji()` already uses.
+  Three UI pieces, all in the Bot Training panel: (1) a Capture Stones
+  section — stone count, "Buy Stone (30g)" button; (2) a capture-attempt
+  prompt offered as a FOLLOW-UP right after any Challenge (not a
+  standalone button — the odds are specific to that one match), win or
+  lose, since Pokemon's "lower HP = easier catch" is about how close the
+  fight was, not who won: `chance% = min(80, 20 + closeness×12)` where
+  `closeness = max(0, 5 - |elementsActivatedGap|)` — 20% floor for a
+  lopsided game, 80% cap for a dead-even one. Stone is consumed on
+  attempt regardless of outcome. This formula and the 30g cost are
+  genuinely new, ungrounded-in-precedent numbers (unlike step 2's reward
+  amounts) — flagged explicitly to the user before building, tunable
+  later. (3) Extended "Deploy this bot" with a Source picker — your
+  current live `WEIGHTS` (default, unchanged) or any bot from your
+  captured collection — reusing the EXACT SAME `deployed_bots` insert
+  logic, just swapping which weights object it reads from.
+  Verified against the live Supabase project (`get_advisors` — zero new
+  warnings; no new RPC this time so no new anon/authenticated function
+  warnings either) and headless against the real page across three
+  passes: (a) buy flow — real not-logged-in refusals (both the disabled-
+  button state and the handler's own login check), then stubbed:
+  `award_gold` called with exactly `-30`, `capture_stones` incremented by
+  exactly 1; (b) the chance FORMULA driven through a REAL challenge
+  (`playMatch()` stubbed to return specific `activated` pairs) — tied
+  activation correctly offers 80%, max gap offers 20%, a mid gap offers
+  the exact predicted 56%; then both capture-attempt outcomes with
+  `Math.random()` forced: success inserts into `captured_bots` with the
+  correct owner/source/weights and decrements the stone, failure
+  decrements the stone identically but makes NO insert; (c) the Deploy
+  Source picker — real unstubbed default state (only the live-WEIGHTS
+  option, no login), stubbed population from `captured_bots`, deploying
+  with a captured source selected uses THAT weights object (verified via
+  a marker value), and — regression check — leaving the default selected
+  still deploys genuine live `WEIGHTS`, not a leftover captured value
+  from an earlier test. Zero uncaught page errors across all three
+  passes.
 - **BOT TYCOON step 3: bots merged into the Leaderboard tab** —
   `js/gamification.js`, `js/gamification-ui.js`. Third build-order step.
   Real design fork surfaced before building: bots have no XP (only a

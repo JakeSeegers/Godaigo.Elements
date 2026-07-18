@@ -57,6 +57,27 @@ High-level task list for the Godaigo game project. Update this as you complete o
 - [ ] **Accessibility** – Keyboard/screen reader support, focus management in modals.
 - [ ] **Mobile / responsive** – Touch, viewport, and layout on small screens.
 
+### Economy / purchases
+- [ ] **Emoji/cosmetics purchases live in `localStorage`, not the database** –
+  found while building Bot Tycoon capture stones (`docs/bot-tycoon-proposal.md`).
+  `js/emoji-system.js`'s `purchaseEmoji()` deducts gold via the real
+  `award_gold` RPC but then persists WHICH emojis you own to
+  `localStorage['godaigo_emojis_' + userId]` (`loadInventory()`/
+  `saveInventory()`), not to any Supabase table — same for cosmetics
+  (`js/cosmetics-system.js`, same pattern). Consequence: clearing browser
+  storage, switching browsers, or switching devices silently loses
+  everything you've paid gold for, even though the gold deduction itself
+  is real and permanent. The `shop_items` table and `user_profiles.inventory`
+  jsonb column both exist in the schema and LOOK like they were meant for
+  exactly this — `shop_items` has 0 rows and `inventory` is unused; neither
+  is actually read by the current purchase code. Should be migrated to a
+  real per-user, per-item ownership table (or at minimum write into
+  `user_profiles.inventory`) so purchases survive across devices/sessions
+  like gold and XP already do. Capture stones (`user_profiles.capture_stones`
+  column + `captured_bots` table) were deliberately built the RIGHT way
+  from the start rather than copying this pattern — see that entry in
+  `planning/current.md`.
+
 ### Code quality & docs
 - [ ] **TODO/FIXME in code** – Search codebase for inline TODOs and either implement or move to this file.
 - [ ] **Tests** – Unit or integration tests for SpellSystem, scroll effects, turn/overflow logic.
@@ -83,4 +104,4 @@ High-level task list for the Godaigo game project. Update this as you complete o
 
 ---
 
-*Last updated: Wandering River marked broken; added full scroll-ability task for Water, Fire, Wind, Void, Catacomb (and Earth verification).*
+*Last updated: added Economy/purchases backlog item — emoji/cosmetics purchases persist to localStorage instead of the database, found while building Bot Tycoon capture stones.*

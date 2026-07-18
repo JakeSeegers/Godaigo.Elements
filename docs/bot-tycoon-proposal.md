@@ -1,13 +1,16 @@
 # Bot Tycoon Proposal — player-facing bot ownership, breeding, and competition
 
-> Written for AI consumption. Status: IN PROGRESS — build-order steps 1-3
+> Written for AI consumption. Status: IN PROGRESS — build-order steps 1-4
 > (below) have landed: `deployed_bots` table + "Deploy this bot" UI; the
 > challenge flow (`record_deployed_bot_result` RPC + "Challenge other
 > bots" UI, reward-crediting reusing the existing `award_gold`/
-> `update_user_xp` RPCs); and bots merged into the Leaderboard tab as a
+> `update_user_xp` RPCs); bots merged into the Leaderboard tab as a
 > SEPARATE "Top Bots" section (not one interleaved list — confirmed with
-> the user, since bots have no XP to sort against players with). Step 4+
-> not started. Not
+> the user, since bots have no XP to sort against players with); and
+> Capture Stones (`user_profiles.capture_stones` + `captured_bots` table,
+> deliberately database-backed rather than following this project's
+> existing localStorage-based shop-item convention — see TODO.md's
+> "Economy / purchases" entry). Step 5+ not started. Not
 > scoped into `bot-roadmap.md`'s stages. Read this top to bottom before touching any
 > part of it; several pieces below deliberately simplify or reject an earlier
 > version of the idea for concrete technical/trust reasons — don't re-propose
@@ -252,8 +255,14 @@ consensus.
    bots now show in the existing Leaderboard tab under their own "Top
    Bots" section, sorted by win rate — see `planning/current.md`'s "BOT
    TYCOON step 3" entry.
-4. Capture stones (needs deployed_bots + a `shop_items` row + capture-chance
-   formula).
+4. **DONE — as a real `user_profiles.capture_stones` column + `captured_bots`
+   table, NOT the `shop_items` row originally envisioned here.** `shop_items`
+   turned out to be unused/vestigial — this project's actual existing shops
+   (emoji/cosmetics) hardcode items in JS and persist ownership to
+   localStorage, a real gap now flagged in `TODO.md`. Capture stones were
+   built database-backed from the start instead of copying that pattern.
+   See `planning/current.md`'s "BOT TYCOON step 4" entry for the exact
+   capture-chance formula and cost.
 5. Elemental weight-bundle items (needs validated bundle values, ideally
    derived the same way the Water/Fire bundles above already were).
 6. Wild-lobby-bot variety (draw from `deployed_bots`/`bot_champion_weights`
