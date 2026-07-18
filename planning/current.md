@@ -93,6 +93,40 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT TYCOON step 3: bots merged into the Leaderboard tab** —
+  `js/gamification.js`, `js/gamification-ui.js`. Third build-order step.
+  Real design fork surfaced before building: bots have no XP (only a
+  win/loss/draw record), so a literal single list sorted by one shared
+  number would need an invented XP-per-win-rate conversion factor — asked
+  the user directly rather than guessing; confirmed **two separate
+  sections** ("Top Players" by XP, unchanged; "Top Bots" by win rate, new)
+  over one interleaved list. New `window.gami.getBotLeaderboard(limit)`
+  mirrors `getLeaderboard()`'s existing shape exactly (same query
+  style/limit default) but reads `deployed_bots` or by `win_rate` instead
+  of `user_profiles` by `total_xp`. `_renderLeaderboard()` now fetches
+  both lists in parallel and renders two `.gami-leaderboard` blocks under
+  `.section-label` headers, reusing the EXISTING `.gami-lb-row`/
+  `.gami-lb-me`/`.gami-lb-rank`/`.gami-lb-name`/`.gami-lb-xp`/
+  `.gami-lb-level` classes for bots too (win% takes the `-xp` slot's
+  "big highlighted number" visual role, W-L-D record takes `-level`'s
+  "small secondary detail" role) — no new CSS needed. Bots owned by the
+  viewer get the same `.gami-lb-me` highlight class as their own player
+  row.
+  Verified headless (Playwright): stubbed data confirms both sections
+  render with correct win-percentage math, correct W-L-D formatting
+  (draw segment shown only when non-zero), and independent empty-states
+  (an empty bot list doesn't affect a populated player list or vice
+  versa); a REAL, unstubbed call against the live project confirms no
+  crash and correctly shows the genuine "No deployed bots yet" empty
+  state (the table has zero real rows right now). One thing this
+  sandbox genuinely cannot exercise: `window.gami.userId` is a
+  **getter-only** property ("read-only intent" per its own comment), so
+  the "highlight MY row" case can't be stubbed without calling the real,
+  side-effecting `init()` — verified by code inspection instead (the bot
+  highlight is the identical `owner === window.gami.userId` pattern the
+  existing, already-working player highlight already uses); what WAS
+  verified is the negative case — with userId genuinely null, no row is
+  spuriously highlighted.
 - **BOT TYCOON step 2: challenge flow — `record_deployed_bot_result` RPC +
   "Challenge other bots" UI, reward-crediting** — new Supabase migrations
   `create_record_deployed_bot_result_rpc` +

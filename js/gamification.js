@@ -247,6 +247,25 @@ window.gami = (function () {
             return data || [];
         },
 
+        /**
+         * Top N deployed bots ordered by win_rate (docs/bot-tycoon-proposal.md
+         * build-order step 3). Deliberately a SEPARATE list from
+         * getLeaderboard(), not merged into one sorted ranking — bots have no
+         * XP (only win/loss/draw record), so there's no shared unit to sort
+         * players and bots together against without inventing a conversion
+         * factor; the user explicitly chose two sections over that.
+         */
+        async getBotLeaderboard(limit) {
+            const { data, error } = await supabase
+                .from('deployed_bots')
+                .select('id, nickname, wins, losses, draws, win_rate, owner')
+                .eq('is_active', true)
+                .order('win_rate', { ascending: false })
+                .limit(limit || 10);
+            if (error) { console.error('[gami] bot leaderboard error:', error); return []; }
+            return data || [];
+        },
+
         /** All badges merged with the current user's earned status */
         async getBadgesWithStatus() {
             const { data: badges, error } = await supabase

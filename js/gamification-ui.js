@@ -292,15 +292,21 @@ async function _renderBadges(content) {
 
 // ── Leaderboard tab ──────────────────────────────────────────
 
+// Two SEPARATE sections (Players by XP, Bots by win rate), not one
+// interleaved list — bots have no XP, only a win/loss/draw record, so
+// there's no shared unit to sort them against players without inventing a
+// conversion factor. docs/bot-tycoon-proposal.md build-order step 3;
+// choice confirmed with the user rather than assumed.
 async function _renderLeaderboard(content) {
-    const rows = await window.gami.getLeaderboard(10);
-    if (!rows.length) {
-        content.innerHTML = '<div class="gami-loading">No players yet.</div>';
-        return;
-    }
+    content.innerHTML = '<div class="gami-loading">Loading…</div>';
+    const [playerRows, botRows] = await Promise.all([
+        window.gami.getLeaderboard(10),
+        window.gami.getBotLeaderboard(10),
+    ]);
 
     const medals = ['#1', '#2', '#3'];
-    const items  = rows.map((row, i) => {
+
+    const playersHTML = playerRows.length ? playerRows.map((row, i) => {
         const isMe = row.user_id === window.gami.userId;
         const rank = medals[i] || `#${i + 1}`;
         return `
@@ -311,9 +317,32 @@ async function _renderLeaderboard(content) {
                 <span class="gami-lb-level">Lv.${row.current_level}</span>
             </div>
         `;
-    }).join('');
+    }).join('') : '<div class="gami-loading">No players yet.</div>';
 
-    content.innerHTML = `<div class="gami-leaderboard">${items}</div>`;
+    // win_rate is (wins-losses)/decided, generated column-shaped — the
+    // headline number here is a plain win PERCENTAGE instead (more readable
+    // at a glance), computed from the same wins/losses columns.
+    const botsHTML = botRows.length ? botRows.map((bot, i) => {
+        const isMine = bot.owner === window.gami.userId;
+        const decided = bot.wins + bot.losses;
+        const pct = decided ? Math.round((bot.wins / decided) * 100) : 0;
+        const rank = medals[i] || `#${i + 1}`;
+        return `
+            <div class="gami-lb-row ${isMine ? 'gami-lb-me' : ''}">
+                <span class="gami-lb-rank">${rank}</span>
+                <span class="gami-lb-name">${_esc(bot.nickname)}</span>
+                <span class="gami-lb-xp">${pct}%</span>
+                <span class="gami-lb-level">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''}</span>
+            </div>
+        `;
+    }).join('') : '<div class="gami-loading">No deployed bots yet.</div>';
+
+    content.innerHTML = `
+        <div class="section-label" style="margin-bottom:6px;">Top Players</div>
+        <div class="gami-leaderboard">${playersHTML}</div>
+        <div class="section-label" style="margin-top:16px;margin-bottom:6px;">Top Bots</div>
+        <div class="gami-leaderboard">${botsHTML}</div>
+    `;
 }
 
 // ── Main-page leaderboard widget ──────────────────────────────
