@@ -9,7 +9,141 @@
 `claude/game-testing-player-count-0oxsn6` → remote: `JakeSeegers/Godaigo.Elements`
 (continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
 
+## Open question in progress: weight-tuning ceiling vs. missing feature (HANDOFF.md §3)
+No code changes yet — investigation only, picking up HANDOFF's "are we at the
+ceiling, or does the bot need a new sense" question.
+
+**anchored1 hillclimb session, 4 rounds so far (720 games):** 3 promotions
+(rounds 1, 3, 4), one round with no challenger clearing the bar (round 2).
+Confirm-vs-original-online-baseline results per chunk: 50%, 80% (same
+champion as the 50%, different 20-game sample — same champion scored
+wildly differently twice), 55%, 25%. No sustained upward trend — bouncing
+around the 55% promotion threshold rather than pulling away from it.
+`tools/.cache/hc-session-anchored1.json` holds full state; resume with
+`node tools/arena-headless.mjs --hillclimb --hc-session anchored1 --hc-rounds 1 --shards 6 --hc-games 30 --hc-hof 0`.
+
+**Weight diff (online champion's Supabase row vs. `DEFAULT_WEIGHTS`):** two
+findings. (1) The stored champion row is **missing all 6 Stage-4 tactical
+weights** (`placeEarthBlock`, `placeFireThreatBreak`, `placeWindPath`,
+`placeSelfBlockPenalty`, `placeTacticalBase`, `placeTacticalStarvesPlan`) —
+it predates Stage 4 and nobody has resubmitted since, so it's running that
+whole layer on code defaults. Not necessarily a search blocker (`mutate()`
+perturbs these same keys, since it only excludes the 3 brain-shape keys),
+but worth knowing. (2) Several LARGE, coherent weight deltas, not noise:
+`evalOpponentThreat` +73%, `evalCommonThreat` +36% (more opponent-aware);
+`evalActivated` −52%, `endTurnOnShrine` −39%, `moveReturnHome` +31% (less
+inclined to over-collect, more eager to just walk home once win-eligible);
+`discardResponseOnly` +99% (dumps response-only scrolls much faster,
+matching the known common-area-clog issue). Every one of these terms
+already exists in our evaluator — this is a different, better-tuned POINT
+in the same weight space, not evidence of a missing feature.
+
+**Visual + logged confirmation (online champion vs. `DEFAULT_WEIGHTS`,
+seeded replay, real headless capture of `window.ActionLog.entries()` — not
+a manually downloaded file, which turned out to be a stale unrelated log
+from an earlier session):** champion won decisively both times watched
+(5v3 activated in 59 turns visually; 5v4 in 73 turns in the logged replay).
+User's live-watch impression ("pretty derpy") was specifically about
+wandering/backtracking, confirmed in the data: `DEFAULT_WEIGHTS` took 643
+move actions to `ONLINE CHAMPION`'s 384 across a similar number of turns
+(~7.7 moves/turn vs ~4.5) — default wanders far more before committing,
+consistent with the `moveExploreGradient`/`moveRevisitPenalty`/shrine-value
+deltas above. Immediate-backtrack rate was similar for both sides (5-8%),
+so this isn't a NEW oscillation bug — existing movement weights are just
+tuned worse by default.
+
+**Read so far: this argues AGAINST needing a new evaluator feature.**
+Every behavioral gap observed traces to existing terms being weighted
+differently, not to something the bot structurally can't perceive. The
+4-round hillclimb's noisy, non-trending confirms look more like a search
+problem (the (1+λ) climb drifts round-to-round vs. its immediate
+predecessor only, never re-anchored to the ORIGINAL online baseline until
+the end-of-chunk confirm — so it can wander away from a good region just
+as easily as toward one) than a ceiling problem.
+
+**Hypothesis test — FALSIFIED: isolated movement-weight nudge, worth NOT
+repeating.** Tried the cheap version of "confirm the diff's story directly"
+before going back to more hillclimb rounds: built `nudged` = 
+`DEFAULT_WEIGHTS` with ONLY the 9 movement-related keys
+(`moveExploreGradient`, `moveRevisitPenalty`, `moveShrineValue`,
+`moveFixation`, `moveExplore`, `moveExplorePath`, `moveBase`,
+`moveApPenalty`, `moveReturnHome`) overridden to the online champion's
+actual values, leaving everything else (including the non-movement deltas
+like `evalOpponentThreat`/`discardResponseOnly`) at plain defaults. 30-game
+series vs the online champion, same seed as the plain-DEFAULT-vs-champion
+control: **nudged went 11-19 (37%) — WORSE than plain DEFAULT_WEIGHTS'
+14-16 (47%) in the identical matchup.** A single mechanistic replay
+(moves-per-turn) was inconclusive on its own (seat/seed interactions make
+one game's move-count hard to compare across different pairings), but the
+30-game win-rate is the real signal and it's unambiguous: pulling movement
+weights toward the champion's values IN ISOLATION, without the other
+correlated shifts, made the bot play worse, not better.
+
+**Conclusion: the champion's weight table is a co-adapted PACKAGE, not a
+sum of independently-swappable terms.** Don't retry single-axis or
+small-subset manual nudges — they backfired here and likely will again
+for the same reason (these weights interact; moving one without its
+correlated partners breaks whatever balance existed). The path forward is
+either (a) more hillclimb rounds, since it searches the full joint space
+rather than a hand-picked subset, or (b) as a sanity check, confirm that
+applying the online champion's FULL weight table (not a subset) reliably
+beats defaults at the expected ~60% clip — already informally confirmed
+via the two watched games (5v3, 5v4 activated, decisive both times), so
+the champion-as-a-whole is not in question, only whether OUR SEARCH can
+reach/beat it from here.
+
 ## Last Committed Work
+- **BOT TRAINING UI: Hill Climb added as a separate Method alongside Evolve
+  (GA)** — `js/game-ui.js`. User wanted the reliable, champion-anchored
+  hillclimb trainer (previously CLI-only, driving `tools/arena-headless.mjs
+  --hillclimb`) available from the actual "🧬 Bot Training" panel, as its
+  own selectable method rather than replacing Evolve. Added a `Method:`
+  choice row (`Evolve (GA)` / `Hill Climb`) — selecting Hill Climb forces
+  and visually disables Players at 2 (`hillClimb()` has no nPlayers concept,
+  unlike `evolve()`). New `runHillClimbTraining()` mirrors
+  `runWeightTraining()`'s shape but wraps `BotArena.hillClimb()`: explicitly
+  and robustly fetches the ONLINE champion from `bot_champion_weights` via
+  an awaited direct query before starting — same discipline as the CLI's
+  own anchoring fix (this file's "hillclimb: anchor training to the ONLINE
+  champion" entry, further down) — and **aborts with a clear error rather
+  than silently falling back to whatever `WEIGHTS` currently holds** if
+  that fetch fails, since `bot.js`'s own background `loadCommunityChampion()`
+  fetch is async/racy and could still be in-flight. After climbing, runs a
+  separate confirm series (`BotArena.run`, 20 games, ≥55% margin) against
+  that same online baseline before ever applying/submitting — a
+  round-level promotion inside `hillClimb()` is NOT trusted on its own
+  (30-game trials are noisy), matching the CLI's two-step discipline
+  exactly. On a confirmed improvement: applies the weights and best-effort
+  submits to `bot_champion_weights` if logged in (identical to the
+  existing Evolve path) — a real in-browser win becomes the new community
+  champion. On failure/stop: reverts to whatever was loaded before, same
+  as Evolve. Progress popup (`showTrainingPopup`) and the panel's own
+  progress line gained a `mode:'hillclimb'` branch (round X/Y, promotions
+  so far, best challenger win-rate this round) instead of
+  generation/fitness; the roster/lineage panel is left showing its
+  empty-state placeholder for this mode (no population concept to show).
+  Breeding is untouched — it's an evolve()-specific population/crossover
+  concept.
+  Verified headless (Playwright, real page, `hillClimb()`/`run()` stubbed
+  to fast controllable fakes so this tests the NEW wrapper/glue, not
+  `hillClimb()`/`run()` themselves — those were already extensively
+  verified earlier this session against the real online champion via the
+  CLI and direct scripts): selecting Hill Climb visually disables Players
+  (and clicking a disabled option is a no-op); the abort path genuinely
+  never calls `BotArena.hillClimb()` when the champion fetch is stubbed to
+  fail (negative control); a full stubbed run confirms `hillClimb()` is
+  called with the real fetched champion (>20 weight keys) and
+  rounds/lambda/gamesPerChallenge = 1/6/30, the progress callback fires,
+  the confirm `run()` call uses the climbed champion + 20 games, and an
+  IMPROVED result applies those weights live; a second stubbed run with a
+  losing confirm record correctly reverts live `WEIGHTS` to its exact
+  pre-run state (not the losing champion) instead of leaving it changed.
+  Zero uncaught page errors across the whole suite. (One real bug caught
+  and fixed IN THE TEST SCRIPT, not the feature, before trusting these
+  results: a race condition where "wait for the Start Training button
+  text to return to its idle label" could pass instantly before the async
+  click handler ever ran, since the label starts AND ends the same —
+  fixed with a two-phase wait for "changed away" then "changed back.")
 - **BOT ARENA: stall-attribution fitness penalty (the deferred item from the
   "hillclimb Phase 2" entry below, now built)** — `js/bot-arena.js`,
   `js/INDEX.md`. User question, while reviewing the HANDOFF'd anchored-

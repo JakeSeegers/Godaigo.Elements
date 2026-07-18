@@ -4157,6 +4157,104 @@ document.getElementById('undo-move').onclick = function() {
             return { improved, record };
         }
 
+        // ─── Hill Climb training (separate method from evolve() above) ──────
+        // Wraps BotArena.hillClimb() the same way runWeightTraining() wraps
+        // evolve() — a champion-anchored (1+λ) monotonic climber, distinct
+        // from evolve()'s population GA (see docs/bot-roadmap.md § STAGE 3a
+        // and the tools/arena-headless.mjs --hillclimb CLI this mirrors).
+        // Two things this MUST get right, both hard-learned from the CLI's
+        // own history (planning/current.md):
+        //   1. Anchor explicitly to the ONLINE champion via a direct,
+        //      awaited Supabase query — never trust window.BotSystem.WEIGHTS
+        //      already holding it, since bot.js's own background
+        //      loadCommunityChampion() fetch is async/racy and could still
+        //      be in flight (or have silently no-opped) when this starts.
+        //      ABORT with a clear error rather than silently falling back to
+        //      whatever WEIGHTS currently holds — a hillclimb session that
+        //      thinks it's anchored to the champion but is actually anchored
+        //      to defaults produces a champion that beats defaults but loses
+        //      online, with no indication anything went wrong.
+        //   2. A round-level promotion is NOT trustworthy on its own (30-game
+        //      trials are noisy) — always run a separate confirm series
+        //      against the true baseline before ever applying/submitting.
+        // hillClimb() itself is 2-player only (champion vs. mutant
+        // challengers) — no nPlayers concept, unlike evolve().
+        async function runHillClimbTraining(preset, onProgress, opts = {}) {
+            const { rounds, lambda, gamesPerChallenge, confirmGames, confirmMargin } = preset;
+            const visual = !!opts.visual;
+
+            let baseline;
+            try {
+                if (typeof supabase === 'undefined' || !supabase?.from) throw new Error('no Supabase client on this page');
+                const { data, error } = await supabase.from('bot_champion_weights')
+                    .select('weights, win_rate').order('win_rate', { ascending: false }).limit(1);
+                if (error) throw new Error(error.message);
+                if (!data?.length || !data[0].weights || typeof data[0].weights !== 'object') throw new Error('no champion rows in bot_champion_weights');
+                baseline = data[0].weights;
+            } catch (e) {
+                throw new Error(`Hill Climb needs the real online champion to anchor to, not defaults — couldn't fetch it (${e.message}). Try again when online.`);
+            }
+
+            const baselineWeights = { ...window.BotSystem.WEIGHTS };
+            let baselineStored = null;
+            try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
+            await leaveOnlineGameIfAny();
+
+            const totalGames = rounds * lambda * gamesPerChallenge + confirmGames;
+            const startedAt = Date.now();
+            let gamesDone = 0, lastRound = 0, lastInfo = null;
+            const report = (phase) => onProgress({
+                phase, gamesDone, totalGames, startedAt,
+                round: lastRound, rounds, info: lastInfo, mode: 'hillclimb',
+            });
+
+            const result = await window.BotArena.hillClimb({
+                champion: baseline, rounds, lambda, gamesPerChallenge, visual,
+                onRound: (round, total, info) => { lastRound = round; lastInfo = info; gamesDone = info.gamesPlayed; report('training'); },
+            });
+
+            if (window.BotArena.stopRequested()) {
+                window.BotArena.applyWeights(baselineWeights);
+                try {
+                    if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                    else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                } catch (e) {}
+                return { improved: false, record: 'stopped', promotions: result.promotions };
+            }
+
+            report('confirming');
+            const confirm = await window.BotArena.run(
+                result.champion, baseline, confirmGames, Date.now() % 100000,
+                { visual, onGame: () => { gamesDone++; report('confirming'); } });
+            const decided = confirm.aWins + confirm.bWins;
+            const winRate = decided ? confirm.aWins / decided : 0;
+            const improved = decided >= Math.ceil(confirmGames / 2) && winRate >= confirmMargin;
+            const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
+
+            if (improved) {
+                window.BotArena.applyWeights(result.champion);
+                try {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.user?.id) {
+                        await supabase.from('bot_champion_weights').insert({
+                            weights: result.champion,
+                            confirm_wins: confirm.aWins,
+                            confirm_losses: confirm.bWins,
+                            confirm_draws: confirm.draws,
+                            created_by: session.user.id,
+                        });
+                    }
+                } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
+            } else {
+                window.BotArena.applyWeights(baselineWeights);
+                try {
+                    if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                    else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                } catch (e) {}
+            }
+            return { improved, record, promotions: result.promotions };
+        }
+
         // ─── Persistent training-status popup ───────────────────────────────
         // Small fixed-corner popup showing live progress for whichever
         // Start Training / Start Breeding run is active — visible the moment
@@ -4223,15 +4321,26 @@ document.getElementById('undo-move').onclick = function() {
             el.style.display = 'block';
             const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
             const elapsedS = (Date.now() - p.startedAt) / 1000;
-            const playersLabel = p.nPlayers === 'all' ? 'all sizes (2–5)' : `${p.nPlayers || 2} players`;
-            const scenarioLine = `${p.mode === 'breeding' ? 'Breeding' : 'Training'} — ${playersLabel}, population ${p.popSize || '?'}`;
-            const genLine = p.phase === 'confirming'
-                ? (p.nPlayers === 'all'
-                    ? 'Confirming: champion vs. baseline at every size'
-                    : 'Confirming: new champion vs. starting weights')
-                : `Generation ${p.gen}/${p.generations}`;
-            const bestFitness = Array.isArray(p.fitness) && p.fitness.length ? Math.max(...p.fitness) : null;
-            const fitnessLine = bestFitness !== null ? `Best fitness so far: ${bestFitness.toFixed(1)}` : '';
+            let scenarioLine, genLine, fitnessLine;
+            if (p.mode === 'hillclimb') {
+                scenarioLine = 'Hill Climb — champion-anchored, 2 players';
+                genLine = p.phase === 'confirming'
+                    ? 'Confirming: climbed champion vs. online baseline'
+                    : `Round ${p.round}/${p.rounds}`;
+                fitnessLine = p.info
+                    ? `Promotions so far: ${p.info.promotions} · best challenger this round: ${Math.round(p.info.bestWinRate * 100)}%`
+                    : '';
+            } else {
+                const playersLabel = p.nPlayers === 'all' ? 'all sizes (2–5)' : `${p.nPlayers || 2} players`;
+                scenarioLine = `${p.mode === 'breeding' ? 'Breeding' : 'Training'} — ${playersLabel}, population ${p.popSize || '?'}`;
+                genLine = p.phase === 'confirming'
+                    ? (p.nPlayers === 'all'
+                        ? 'Confirming: champion vs. baseline at every size'
+                        : 'Confirming: new champion vs. starting weights')
+                    : `Generation ${p.gen}/${p.generations}`;
+                const bestFitness = Array.isArray(p.fitness) && p.fitness.length ? Math.max(...p.fitness) : null;
+                fitnessLine = bestFitness !== null ? `Best fitness so far: ${bestFitness.toFixed(1)}` : '';
+            }
             const progressLine = `Games: ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtPopupTime(elapsedS)} elapsed`;
             el.querySelector('#bt-popup-body').textContent =
                 [scenarioLine, genLine, progressLine, fitnessLine].filter(Boolean).join('\n');
@@ -5031,7 +5140,7 @@ document.getElementById('undo-move').onclick = function() {
         (function initBotTrainingPanel() {
             let clickCount = 0;
             let clickTimer = null;
-            const state = { n: 2, watchable: true, generations: 5 };
+            const state = { n: 2, watchable: true, generations: 5, method: 'evolve' };
 
             // Weight groupings mirror the section comments in bot.js's
             // DEFAULT_WEIGHTS — used purely for the drill-down diagram, so
@@ -5112,7 +5221,12 @@ document.getElementById('undo-move').onclick = function() {
                 controls.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
                 body.appendChild(controls);
 
-                function makeChoiceRow(label, options, getValue, setValue, help) {
+                // isDisabled: optional () => bool for a row disabled for a
+                // reason OTHER than "a run is active" (e.g. Players is fixed
+                // at 2 while Method is Hill Climb — that trainer has no
+                // nPlayers concept). Returns {repaint} so other rows (Method)
+                // can force a repaint of THIS row when their own value changes.
+                function makeChoiceRow(label, options, getValue, setValue, help, isDisabled) {
                     const row = document.createElement('div');
                     row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
                     const lbl = document.createElement('span');
@@ -5128,21 +5242,23 @@ document.getElementById('undo-move').onclick = function() {
                         return { b, value: opt.value };
                     });
                     function repaint() {
+                        const rowDisabled = !!isDisabled?.();
                         for (const { b, value } of buttons) {
                             const on = value === getValue();
-                            b.style.cssText = `padding:4px 9px;border-radius:5px;cursor:pointer;font-size:12px;` +
+                            b.style.cssText = `padding:4px 9px;border-radius:5px;cursor:${rowDisabled ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${rowDisabled ? '0.45' : '1'};` +
                                 `border:1px solid ${on ? '#6ef' : '#555'};background:${on ? '#2d4a4a' : '#2d2d44'};color:#eee;`;
                         }
                     }
                     for (const { b, value } of buttons) {
                         b.onclick = () => {
-                            if (startBtnRef.disabled) return; // locked while a run is active
+                            if (startBtnRef.disabled || isDisabled?.()) return; // locked while a run is active, or by another control
                             setValue(value);
                             repaint();
                         };
                     }
                     repaint();
                     controls.appendChild(row);
+                    return { repaint };
                 }
 
                 // startBtnRef is read inside makeChoiceRow's onclick above, so it
@@ -5153,27 +5269,42 @@ document.getElementById('undo-move').onclick = function() {
                 // Start Training / Start Breeding can run at a time.
                 let breedBtn;
 
-                makeChoiceRow('Players:',
+                // Method picked FIRST — Players' row below reads state.method
+                // to decide whether it's disabled, so it needs to exist first.
+                // Evolve = population GA (evolve() below) — noisier, ranks
+                // siblings against each other. Hill Climb = champion-anchored
+                // (1+λ) monotonic climber (hillClimb()) — holds the ONLINE
+                // champion fixed as the opponent every mutant challenger must
+                // clear a real margin against; the reliable trainer, same one
+                // driving the CLI's --hillclimb sessions. 2-player only — no
+                // nPlayers concept, unlike evolve().
+                makeChoiceRow('Method:', [
+                    { value: 'evolve', text: 'Evolve (GA)', title: 'Population-based genetic algorithm — a pool of weight-tables competes and breeds each generation.' },
+                    { value: 'hillclimb', text: 'Hill Climb', title: 'Champion-anchored climber — mutant challengers must beat the CURRENT ONLINE CHAMPION by a real margin to be promoted. 2 players only. The more reliable trainer.' },
+                ], () => state.method, (v) => { state.method = v; if (v === 'hillclimb') state.n = 2; playersRow.repaint(); });
+
+                const playersRow = makeChoiceRow('Players:',
                     [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })).concat([
                         { value: 'all', text: 'All', title: 'Generalist: train across arenas of every size (2–5 players) and confirm the champion across every size too. Best for real lobbies, which can be 2–5 players. (Breeding needs a specific count.)' },
                     ]),
                     () => state.n, (v) => { state.n = v; },
-                    'How many bots play each training game. "All" trains across mixed 2–5-player arenas and confirms the champion at every size. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game.');
+                    'How many bots play each training game. "All" trains across mixed 2–5-player arenas and confirms the champion at every size. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game. Fixed at 2 for Hill Climb, which has no population/nPlayers concept.',
+                    () => state.method === 'hillclimb');
 
                 makeChoiceRow('Speed:', [
                     { value: true, text: 'Watchable', title: 'Normal pacing — watch the board play out' },
                     { value: false, text: 'Extreme', title: 'Muted, minimal delay — much faster, nothing to watch (a true no-UI "headless" mode isn\'t possible in the browser tab the live game runs in)' },
                 ], () => state.watchable, (v) => { state.watchable = v; });
 
-                // Shared by both Start Training and Start Breeding below —
-                // controls evolve()'s generation count for whichever one
-                // runs. More generations = proportionally more games =
-                // proportionally longer (the progress readout under either
-                // button shows live games-done/total once running).
+                // Shared by Start Training (either method) and Start Breeding
+                // below. For Evolve/Breeding this is evolve()'s generation
+                // count; for Hill Climb it's the number of climbing ROUNDS
+                // (each round plays lambda=6 challengers × 30 games, same
+                // proportional-not-literal-game-count caveat applies).
                 makeChoiceRow('Repeat:',
                     [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
                     () => state.generations, (v) => { state.generations = v; },
-                    'Number of GENERATIONS to run, not total games — each generation plays many games on its own (a population of 6 plays ~18 games per generation by default), so Repeat=20 is roughly 20x that many games, not 20 games.');
+                    'Evolve/Breeding: number of GENERATIONS, not total games — each generation plays many games on its own. Hill Climb: number of climbing ROUNDS — each round plays 6 challengers × 30 games vs the champion. Either way this is proportionally, not literally, that many games.');
 
                 const progressText = document.createElement('div');
                 progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
@@ -5184,7 +5315,9 @@ document.getElementById('undo-move').onclick = function() {
                     progressText.style.display = 'block';
                     const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
                     const elapsedS = (Date.now() - p.startedAt) / 1000;
-                    const genLine = p.phase === 'confirming' ? 'Confirming result' : `gen ${p.gen}/${p.generations}`;
+                    const genLine = p.mode === 'hillclimb'
+                        ? (p.phase === 'confirming' ? 'confirming vs. online baseline' : `round ${p.round}/${p.rounds}`)
+                        : (p.phase === 'confirming' ? 'Confirming result' : `gen ${p.gen}/${p.generations}`);
                     progressText.textContent = `${genLine} — games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtTime(elapsedS)}`;
                     // Also update the persistent corner popup — see its own
                     // comment for why it's a separate, outer-scope function
@@ -5416,19 +5549,30 @@ document.getElementById('undo-move').onclick = function() {
                     resetInsights();
                     renderRoster();
                     try {
-                        const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10, gamesPerSize: 4 };
-                        const { improved, record } = await runWeightTraining(preset, renderProgress, {
-                            nPlayers: state.n, visual: state.watchable,
-                            onGeneration: handleGeneration,
-                        });
-                        progressText.style.display = 'none';
-                        updateStatus(improved
-                            ? `Training complete — champion beat the starting weights ${record} in the confirmation match. New weights applied and saved.`
-                            : `Training finished but did not beat the starting weights (${record}) — kept the previous weights.`);
+                        if (state.method === 'hillclimb') {
+                            const preset = { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, confirmGames: 20, confirmMargin: 0.55 };
+                            const { improved, record, promotions } = await runHillClimbTraining(preset, renderProgress, {
+                                visual: state.watchable,
+                            });
+                            progressText.style.display = 'none';
+                            updateStatus(improved
+                                ? `Hill Climb complete — ${promotions} promotion(s) this run, and the result beat the online champion ${record} in the confirmation match. New weights applied and saved.`
+                                : `Hill Climb finished (${promotions} promotion(s) this run) but did not beat the online champion by enough (${record}) — kept the previous weights.`);
+                        } else {
+                            const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10, gamesPerSize: 4 };
+                            const { improved, record } = await runWeightTraining(preset, renderProgress, {
+                                nPlayers: state.n, visual: state.watchable,
+                                onGeneration: handleGeneration,
+                            });
+                            progressText.style.display = 'none';
+                            updateStatus(improved
+                                ? `Training complete — champion beat the starting weights ${record} in the confirmation match. New weights applied and saved.`
+                                : `Training finished but did not beat the starting weights (${record}) — kept the previous weights.`);
+                        }
                     } catch (err) {
                         console.error('Bot training failed:', err);
                         progressText.style.display = 'none';
-                        updateStatus('Bot training failed — see console');
+                        updateStatus(`Bot training failed — ${err.message || 'see console'}`);
                     } finally {
                         startBtnRef.disabled = false;
                         startBtn.disabled = false;
