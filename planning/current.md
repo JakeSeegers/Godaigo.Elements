@@ -93,6 +93,47 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT TRAINING UI: popup redesign — round-history chips, color swatches,
+  a real progress bar, no emoji** — `js/game-ui.js`. Direct follow-up to
+  the live-progress entry just below: user tried the functionally-correct
+  popup and said it was "kind of small and boring" for something
+  player-facing that's "supposed to be engaging," specifically wanted a
+  concise summary of how ROUNDS have gone (not just the current instant),
+  and said not to use emoji for design elements. Rebuilt
+  `ensureTrainingPopup()`'s markup into distinct elements (scenario/phase/
+  matchup/progress-bar/history/summary) instead of one joined text blob,
+  and widened it (250-320px → 280-360px) to give the new pieces room.
+  Added: a real CSS progress bar (gold gradient fill) instead of a bare
+  percentage number; a compact chip strip — one small square per completed
+  round, gold-filled if promoted, dark-outlined if held, dashed-outline for
+  whichever round is currently in progress, each with a hover tooltip
+  giving the exact win-rate/record — this IS the "concise round-by-round
+  summary" ask, sized to stay glanceable even across many rounds (wraps
+  rather than growing tall); actual color SWATCHES (small filled squares
+  using the real hex values from `runHillClimbTraining`'s `sideAHex`/
+  `sideBHex`, added alongside the existing color-name strings) next to
+  "Challenger"/"Champion"/"Climbed champion"/"Online champion" in the
+  matchup line, instead of plain color-name text only. Removed the "🧬"
+  emoji from both the popup title and the full modal's title (`js/game-ui.js`
+  — this was the only emoji anywhere in the actual PLAYER-facing training
+  UI; the hidden developer cheat panel elsewhere in the file still uses
+  emoji on its own buttons, deliberately left alone as out of scope — it's
+  not player-facing). Reused `.panel-header`/`.panel-title`/`.hud-toggle-btn`
+  classes already introduced in the prior entry — no new visual system,
+  same HUD language, just genuinely used now with real content instead of
+  a single gray text block.
+  Verified headless (Playwright, real page, `hillClimb()`/`run()` stubbed to
+  simulate 2 rounds — one held, one promoted — plus a confirm game):
+  history chips accumulate correctly (1 after round 1, 2 after round 2, an
+  extra DASHED chip appears mid-round for the round still in progress and
+  disappears once that round resolves); chip fill style genuinely differs
+  between held (dark) and promoted (gold) rounds; matchup swatches render
+  the real configured hex values and the challenger number updates
+  correctly across challengers within a round; confirm phase correctly
+  swaps to "Climbed champion"/"Online champion" labels; the progress bar's
+  width strictly increases across the simulated run; a DOM-wide regex scan
+  confirms zero emoji anywhere in the popup, and the title text is exactly
+  "Bot Training". Zero uncaught page errors.
 - **BOT TRAINING UI: Hill Climb progress popup — live per-game updates +
   explicit "who's playing as which color" — fixing a popup that looked
   frozen and had never actually worked as asked before** — `js/bot-arena.js`,

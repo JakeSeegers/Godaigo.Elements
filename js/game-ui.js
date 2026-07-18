@@ -4205,24 +4205,30 @@ document.getElementById('undo-move').onclick = function() {
             let gamesDone = 0, lastRound = 0, lastInfo = null;
             let lastChallenger = 0, totalChallengers = lambda;
             let lastGameNum = 0, lastGameTotal = gamesPerChallenge;
+            // "How rounds have gone" summary the popup renders as a compact
+            // chip strip — one entry per completed round, oldest first.
+            const roundHistory = [];
             // Local-game color assignment (game-core.js's colorRankOrder):
             // player index 0 = Purple, 1 = Yellow (only the first two matter —
             // every trial here is 2-player). _playSeries alternates who's
             // player 0 each game (i%2===0), so this is recomputed from the
             // CURRENT game number every report, not a fixed assignment.
+            // Hex values match config.js's PLAYER_COLORS exactly.
             function sideColors() {
-                if (!lastGameNum) return { a: '—', b: '—' };
+                if (!lastGameNum) return { aName: '—', bName: '—', aHex: '#555', bHex: '#555' };
                 const aIsPlayer0 = (lastGameNum - 1) % 2 === 0;
-                return aIsPlayer0 ? { a: 'Purple', b: 'Yellow' } : { a: 'Yellow', b: 'Purple' };
+                return aIsPlayer0
+                    ? { aName: 'Purple', bName: 'Yellow', aHex: '#9458f4', bHex: '#ffce00' }
+                    : { aName: 'Yellow', bName: 'Purple', aHex: '#ffce00', bHex: '#9458f4' };
             }
             const report = (phase) => {
-                const { a, b } = sideColors();
+                const { aName, bName, aHex, bHex } = sideColors();
                 onProgress({
                     phase, gamesDone, totalGames, startedAt, mode: 'hillclimb',
-                    round: lastRound, rounds, info: lastInfo,
+                    round: lastRound, rounds, info: lastInfo, roundHistory,
                     challenger: lastChallenger, totalChallengers,
                     gameNum: lastGameNum, gameTotal: lastGameTotal,
-                    sideAColor: a, sideBColor: b,
+                    sideAColor: aName, sideBColor: bName, sideAHex: aHex, sideBHex: bHex,
                 });
             };
 
@@ -4238,7 +4244,11 @@ document.getElementById('undo-move').onclick = function() {
                 // every challenger, so it alone can't distinguish them).
                 onChallenger: (c, totalC, r, totalR) => { lastChallenger = c; totalChallengers = totalC; lastRound = r; lastGameNum = 0; report('training'); },
                 onGame: (gameNum, gameTotal) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; report('training'); },
-                onRound: (round, total, info) => { lastRound = round; lastInfo = info; gamesDone = info.gamesPlayed; report('training'); },
+                onRound: (round, total, info) => {
+                    lastRound = round; lastInfo = info; gamesDone = info.gamesPlayed;
+                    roundHistory.push({ round, promoted: info.promoted, winRate: info.bestWinRate, decided: info.bestDecided });
+                    report('training');
+                },
             });
 
             if (window.BotArena.stopRequested()) {
@@ -4287,7 +4297,7 @@ document.getElementById('undo-move').onclick = function() {
         // ─── Persistent training-status popup ───────────────────────────────
         // Small fixed-corner popup showing live progress for whichever
         // Start Training / Start Breeding run is active — visible the moment
-        // a run starts, independent of whether the full "🧬 Bot Training"
+        // a run starts, independent of whether the full "Bot Training"
         // modal is open, same spirit as the always-visible floating Hand/
         // Active/Common scroll panels (.fsp-* in css/styles.css) rather than
         // requiring a full-screen overlay to stay open just to see progress.
@@ -4311,18 +4321,34 @@ document.getElementById('undo-move').onclick = function() {
             // Fixed-corner positioning is bespoke to this floating popup, but the
             // header row reuses the SAME .panel-header/.panel-title/.hud-toggle-btn
             // classes every other HUD panel (Hand/Active/opponent Players, etc.)
-            // uses — same visual language, not a one-off popup style.
+            // uses — same visual language, not a one-off popup style. No emoji
+            // anywhere in here — player-facing, and the user explicitly asked
+            // for plain design elements (color swatches / chips) instead.
             el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9998;'
                 + 'background:#1a1a2e;border:1px solid #5a5;border-radius:8px;'
                 + 'box-shadow:0 4px 16px rgba(0,0,0,0.6);overflow:hidden;'
-                + 'min-width:250px;max-width:320px;font-size:11px;color:#ccc;display:none;';
+                + 'min-width:280px;max-width:360px;font-size:11px;color:#ccc;display:none;';
             el.innerHTML = `
                 <div class="panel-header" style="border-radius:7px 7px 0 0;">
-                    <span class="panel-title">🧬 Bot Training</span>
+                    <span class="panel-title">Bot Training</span>
                     <button id="bt-popup-expand" class="hud-toggle-btn" title="Open full panel">⤢</button>
                 </div>
-                <div style="padding:10px 12px;">
-                    <div id="bt-popup-body" style="white-space:pre-line;color:#aaa;margin-bottom:8px;line-height:1.4;"></div>
+                <div style="padding:12px 14px;">
+                    <div id="bt-popup-scenario" style="font-size:12px;font-weight:600;color:#eee;margin-bottom:2px;"></div>
+                    <div id="bt-popup-phase" style="font-size:11px;color:#999;margin-bottom:10px;"></div>
+
+                    <div id="bt-popup-matchup" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:#ddd;margin-bottom:8px;min-height:16px;"></div>
+
+                    <div style="background:#0d0d18;border:1px solid #333;border-radius:5px;height:10px;overflow:hidden;margin-bottom:4px;">
+                        <div id="bt-popup-bar" style="height:100%;background:linear-gradient(90deg,#8a6a3f,#d9b08c);width:0%;transition:width .25s ease-out;"></div>
+                    </div>
+                    <div id="bt-popup-progress-text" style="font-size:10px;color:#888;margin-bottom:10px;"></div>
+
+                    <div id="bt-popup-history-label" style="font-size:10px;color:#888;margin-bottom:4px;display:none;">Round history — filled = promoted</div>
+                    <div id="bt-popup-history" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:10px;"></div>
+
+                    <div id="bt-popup-summary" style="font-size:11px;color:#aaa;margin-bottom:10px;"></div>
+
                     <div style="display:flex;gap:6px;">
                         <button id="bt-popup-end-early" style="flex:1;padding:4px 6px;background:#2d3a4a;color:#eee;border:1px solid #578;border-radius:4px;cursor:pointer;font-size:11px;">End Early → Test Now</button>
                         <button id="bt-popup-stop" style="padding:4px 8px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:4px;cursor:pointer;font-size:11px;">Stop</button>
@@ -4349,50 +4375,86 @@ document.getElementById('undo-move').onclick = function() {
             return el;
         }
 
+        function swatch(hex) {
+            return `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${hex};flex-shrink:0;"></span>`;
+        }
+
         // p: {phase, gamesDone, totalGames, startedAt, gen, generations,
-        //     fitness, nPlayers, popSize, mode:'training'|'breeding'}
+        //     fitness, nPlayers, popSize, mode:'training'|'breeding'|'hillclimb',
+        //     round, rounds, challenger, totalChallengers, gameNum, gameTotal,
+        //     sideAColor/sideBColor/sideAHex/sideBHex, roundHistory, info}
         function showTrainingPopup(p) {
             const el = ensureTrainingPopup();
             el.style.display = 'block';
             const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
             const elapsedS = (Date.now() - p.startedAt) / 1000;
-            let scenarioLine, genLine, fitnessLine, matchupLine;
+            let scenarioLine, phaseLine, summaryLine, matchupHtml = '';
+            const historyEl = el.querySelector('#bt-popup-history');
+            const historyLabelEl = el.querySelector('#bt-popup-history-label');
+            historyEl.innerHTML = '';
+            historyLabelEl.style.display = 'none';
+
             if (p.mode === 'hillclimb') {
-                scenarioLine = 'Hill Climb — champion-anchored, 2 players';
-                genLine = p.phase === 'confirming'
-                    ? 'Confirming: climbed champion vs. online baseline'
+                scenarioLine = 'Hill Climb — champion-anchored';
+                phaseLine = p.phase === 'confirming'
+                    ? 'Confirming climbed champion vs. online baseline'
                     : `Round ${p.round}/${p.rounds}`;
                 // The explicit "what is literally happening right now" line —
                 // which challenger (or, once confirming, the climbed champion),
-                // which game in its series, and which real in-game color each
-                // side is playing as THIS game. Colors come pre-computed from
-                // the current game's parity (sideAColor/sideBColor — see
-                // runHillClimbTraining's sideColors()), not a fixed assignment.
+                // which game in its series, and a real color swatch for each
+                // side THIS game. Colors come pre-computed from the current
+                // game's parity (runHillClimbTraining's sideColors()) — sides
+                // alternate every game, never a fixed assignment.
                 if (p.gameNum) {
-                    matchupLine = p.phase === 'confirming'
-                        ? `Confirm game ${p.gameNum}/${p.gameTotal} — Climbed champion is ${p.sideAColor}, Online champion is ${p.sideBColor}`
-                        : `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion — game ${p.gameNum}/${p.gameTotal}\n`
-                            + `Challenger is ${p.sideAColor}, Champion is ${p.sideBColor}`;
+                    const [aLabel, bLabel] = p.phase === 'confirming'
+                        ? ['Climbed champion', 'Online champion']
+                        : [`Challenger ${p.challenger}/${p.totalChallengers}`, 'Champion'];
+                    matchupHtml = `${swatch(p.sideAHex)} ${aLabel} <span style="color:#666;">vs</span> ${swatch(p.sideBHex)} ${bLabel}`
+                        + `<span style="color:#777;margin-left:auto;">game ${p.gameNum}/${p.gameTotal}</span>`;
                 } else if (p.challenger) {
-                    matchupLine = `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion — starting its series…`;
+                    matchupHtml = `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion <span style="color:#777;">— starting…</span>`;
                 }
-                fitnessLine = p.info
-                    ? `Promotions so far: ${p.info.promotions} · best challenger this round: ${Math.round(p.info.bestWinRate * 100)}%`
-                    : '';
+                summaryLine = p.info
+                    ? `${p.info.promotions} promotion${p.info.promotions === 1 ? '' : 's'} so far · this round's best challenger: ${Math.round(p.info.bestWinRate * 100)}%`
+                    : 'Climbing…';
+                // The "how have rounds gone" summary: one chip per completed
+                // round (filled gold = promoted, hollow = held), plus a dashed
+                // chip for whichever round is still in progress.
+                if (p.roundHistory?.length || p.round > 0) {
+                    historyLabelEl.style.display = 'block';
+                    for (const h of p.roundHistory) {
+                        const chip = document.createElement('span');
+                        chip.title = `Round ${h.round}: ${h.promoted ? 'Promoted' : 'Held'} — ${Math.round(h.winRate * 100)}% of ${h.decided} decided`;
+                        chip.style.cssText = 'display:inline-block;width:12px;height:12px;border-radius:2px;'
+                            + (h.promoted ? 'background:#d9b08c;border:1px solid #d9b08c;' : 'background:#242438;border:1px solid #444;');
+                        historyEl.appendChild(chip);
+                    }
+                    if (p.phase !== 'confirming' && p.round > p.roundHistory.length) {
+                        const inProgress = document.createElement('span');
+                        inProgress.title = `Round ${p.round}: in progress`;
+                        inProgress.style.cssText = 'display:inline-block;width:12px;height:12px;border-radius:2px;border:1px dashed #888;background:transparent;';
+                        historyEl.appendChild(inProgress);
+                    }
+                }
             } else {
                 const playersLabel = p.nPlayers === 'all' ? 'all sizes (2–5)' : `${p.nPlayers || 2} players`;
                 scenarioLine = `${p.mode === 'breeding' ? 'Breeding' : 'Training'} — ${playersLabel}, population ${p.popSize || '?'}`;
-                genLine = p.phase === 'confirming'
+                phaseLine = p.phase === 'confirming'
                     ? (p.nPlayers === 'all'
                         ? 'Confirming: champion vs. baseline at every size'
                         : 'Confirming: new champion vs. starting weights')
                     : `Generation ${p.gen}/${p.generations}`;
                 const bestFitness = Array.isArray(p.fitness) && p.fitness.length ? Math.max(...p.fitness) : null;
-                fitnessLine = bestFitness !== null ? `Best fitness so far: ${bestFitness.toFixed(1)}` : '';
+                summaryLine = bestFitness !== null ? `Best fitness so far: ${bestFitness.toFixed(1)}` : '';
             }
-            const progressLine = `Games: ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtPopupTime(elapsedS)} elapsed`;
-            el.querySelector('#bt-popup-body').textContent =
-                [scenarioLine, genLine, matchupLine, progressLine, fitnessLine].filter(Boolean).join('\n');
+
+            el.querySelector('#bt-popup-scenario').textContent = scenarioLine;
+            el.querySelector('#bt-popup-phase').textContent = phaseLine;
+            el.querySelector('#bt-popup-matchup').innerHTML = matchupHtml;
+            el.querySelector('#bt-popup-bar').style.width = `${pct}%`;
+            el.querySelector('#bt-popup-progress-text').textContent =
+                `Games: ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtPopupTime(elapsedS)} elapsed`;
+            el.querySelector('#bt-popup-summary').textContent = summaryLine || '';
             // Nothing left to "skip ahead to" once already confirming —
             // and breeding has no confirmation phase to jump to at all, so
             // End Early there just means "stop generating more generations
@@ -5246,7 +5308,7 @@ document.getElementById('undo-move').onclick = function() {
                 const header = document.createElement('div');
                 header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #333;flex-shrink:0;';
                 const title = document.createElement('div');
-                title.textContent = '🧬 Bot Training';
+                title.textContent = 'Bot Training';
                 title.style.cssText = 'font-size:15px;font-weight:bold;color:#eee;';
                 header.appendChild(title);
                 const closeBtn = document.createElement('button');
