@@ -371,6 +371,11 @@ async function _gami_shopBuyStone(userId, currentStones) {
 // Bots" (redeploy one from your collection under a new name). Deliberately
 // NO training entry point here — the user asked to defer that mechanism to
 // a later discussion ("we'll talk about the training mechanism").
+// Populated by _renderStable(), read by _gami_stableTrainBot() — the inline
+// onclick handlers below can only pass simple values (id), not a whole
+// weights object, so the fetched rows are kept here for lookup by id.
+let _stableDeployedCache = [];
+
 async function _renderStable(content) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user?.id) {
@@ -381,7 +386,7 @@ async function _renderStable(content) {
 
     const [{ data: deployed }, { data: captured }] = await Promise.all([
         supabase.from('deployed_bots')
-            .select('id, nickname, wins, losses, draws, is_active')
+            .select('id, nickname, weights, wins, losses, draws, is_active')
             .eq('owner', userId)
             .order('id', { ascending: false }),
         supabase.from('captured_bots')
@@ -389,6 +394,7 @@ async function _renderStable(content) {
             .eq('owner', userId)
             .order('captured_at', { ascending: false }),
     ]);
+    _stableDeployedCache = deployed || [];
 
     const deployedHTML = (deployed || []).length ? deployed.map(bot => {
         const decided = bot.wins + bot.losses;
@@ -397,6 +403,7 @@ async function _renderStable(content) {
             <div class="gami-stable-row">
                 <span class="gami-stable-name">${_esc(bot.nickname)}</span>
                 <span class="gami-stable-record">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%)</span>
+                <button class="gami-stable-btn" onclick="_gami_stableTrainBot(${bot.id})">Train</button>
                 <button class="gami-stable-btn${bot.is_active ? '' : ' off'}"
                         onclick="_gami_stableToggleActive(${bot.id}, ${bot.is_active})">${bot.is_active ? 'Active' : 'Retired'}</button>
             </div>`;
@@ -422,6 +429,25 @@ async function _gami_stableToggleActive(botId, currentlyActive) {
         .update({ is_active: !currentlyActive }).eq('id', botId);
     if (error) { window.gami?.notify(`Could not update bot: ${error.message}`, 0, 'gold'); return; }
     gami_switchTab('stable');
+}
+
+// Launches the in-game Bot Training panel (js/game-ui.js) pre-loaded with
+// this SPECIFIC bot's weights, so a successful run writes the improvement
+// back into this bot's own deployed_bots row instead of just the ambient
+// live weights — see runWeightTraining()/runHillClimbTraining()'s
+// opts.sourceBotId handling and openBotTrainingPanel()'s consumption of
+// window._botTrainingSource for the other half of this.
+function _gami_stableTrainBot(botId) {
+    const bot = _stableDeployedCache.find(b => b.id === botId);
+    if (!bot) { window.gami?.notify('Could not find that bot — try refreshing.', 0, 'gold'); return; }
+    if (!window.BotArena) { window.gami?.notify('Bot training is not available right now.', 0, 'gold'); return; }
+    if (window.BotArena.isRunning()) { window.gami?.notify('A bot job is already running — stop it first.', 0, 'gold'); return; }
+    if (typeof window._openBotTrainingPanel !== 'function') { window.gami?.notify('Bot training is not available right now.', 0, 'gold'); return; }
+
+    window.BotArena.applyWeights(bot.weights || window.BotSystem?.WEIGHTS);
+    window._botTrainingSource = { id: bot.id, nickname: bot.nickname };
+    document.getElementById('gami-panel')?.remove();
+    window._openBotTrainingPanel();
 }
 
 async function _gami_stableDeployCaptured(capturedId, sourceNickname) {

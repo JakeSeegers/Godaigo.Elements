@@ -93,6 +93,56 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **STABLE: Train button — deferred "training mechanism" now built** —
+  `js/gamification-ui.js`, `js/game-ui.js`. User asked directly ("I should
+  be able to access the training environments in the stable in order to
+  make my bots stronger"), after this was explicitly deferred during the
+  Shop/Stable build. Real design fork before building: Hill Climb is
+  hard-anchored to the current #1 online champion by design (a deliberate,
+  hard-won earlier fix — anchoring it to anything else produced unreliable
+  results), so it can't literally "train YOUR bot" the way Evolve can
+  (which starts from whatever weights are currently loaded). Presented
+  both options to the user; they reframed it themselves — Hill Climb from
+  a Stable bot is "try to dethrone the champion with this bot," reward it
+  if it works, rather than a mismatch to avoid. Confirmed as final design:
+  BOTH methods available from Train, with different write-back semantics.
+  Each deployed bot row in Stable gets a **Train** button (next to
+  Active/Retired — captured bots need deploying first, since only
+  `deployed_bots` has an owner-UPDATE RLS policy, `captured_bots` is
+  select/insert/delete-only by design, an immutable capture record).
+  Clicking it applies that bot's OWN weights via
+  `window.BotArena.applyWeights()`, sets a one-shot signal
+  (`window._botTrainingSource = {id, nickname}`), and opens the Bot
+  Training panel (`window._openBotTrainingPanel()`). The panel's outer
+  `state` object (already persists Method/Players/Speed across reopens)
+  gained `sourceBotId`/`sourceBotNickname`, consumed from that one-shot
+  signal at open-time so a LATER unrelated open (the secret 5-click
+  Profile-title trigger) never inherits a stale bot; a "Training: X" banner
+  shows when set. `runWeightTraining()`/`runHillClimbTraining()` both
+  gained `opts.sourceBotId`/`opts.sourceBotNickname`, read only in their
+  existing `if (improved)` branch: **Evolve** with a source bot writes the
+  champion weights straight into that bot's `deployed_bots.weights` and
+  SKIPS the existing best-effort share to `bot_champion_weights` (self-play
+  improvement over the bot's own prior weights isn't a claim about the
+  online champion, so it shouldn't enter the shared pool); **Hill Climb**
+  with a source bot KEEPS the existing community-table share (it really
+  did just beat the online champion) AND writes the same champion weights
+  into that bot's row AND grants a reward via `update_user_xp`/
+  `award_gold` — **250 XP + 50 gold**, new/ungrounded-in-precedent numbers
+  like the capture-chance formula was (bigger than the 100 XP for beating
+  a regular player's deployed bot, since dethroning the actual #1
+  community champion is far rarer) — tunable later. Training launched
+  normally (no source bot, the existing secret-trigger path) is completely
+  unchanged: no bot-row writes, no reward, same community-share behavior
+  as before this existed. `state.sourceBotId`/`sourceBotNickname` are
+  cleared in the Start button's `finally` block once the run completes.
+  Verified headless (18 assertions): ambient (no source) Evolve/Hill Climb
+  runs behave EXACTLY as before (community share, no bot-row touch, no
+  reward) — regression check; sourced Evolve writes to the bot's row and
+  skips the community share; sourced Hill Climb does both the community
+  share AND the bot-row write AND grants exactly 250 XP/50 gold; the Train
+  button itself applies the right bot's weights immediately and opens the
+  panel with the correct "Training: ..." banner.
 - **BUGFIX: win-screen capture picker was flashing then getting covered** —
   `js/game-core.js`, `js/lobby.js`. User report after the entry below
   shipped: "It didn't prompt me to capture the bot after I won... I saw a

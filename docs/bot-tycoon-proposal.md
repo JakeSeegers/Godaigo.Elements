@@ -15,8 +15,12 @@
 > instead of sharing one global table), plus two things it unlocked: a
 > win-screen "Capture a Bot" picker, and dedicated Shop/Stable tabs in the
 > Profile modal (Capture Stones now sold in Shop, not the Bot Training
-> panel; a "Train" button/mechanism for Stable was explicitly deferred by
-> the user to a later discussion). Step 5 not started. Not
+> panel). Stable's Train button — initially deferred, then built once the
+> user asked directly — opens the Bot Training panel pre-loaded with a
+> specific deployed bot's weights; Evolve writes improvements back to that
+> bot quietly, Hill Climb ALSO keeps sharing to the community leaderboard
+> and rewards dethroning the online champion (250 XP + 50 gold). Step 5 not
+> started. Not
 > scoped into `bot-roadmap.md`'s stages. Read this top to bottom before touching any
 > part of it; several pieces below deliberately simplify or reject an earlier
 > version of the idea for concrete technical/trust reasons — don't re-propose

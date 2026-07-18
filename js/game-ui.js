@@ -4128,25 +4128,38 @@ document.getElementById('undo-move').onclick = function() {
 
             if (improved) {
                 window.BotArena.applyWeights(champion);
-                // Best-effort share to the community champion table — only
-                // when logged in (bot_champion_weights requires
-                // auth.uid() = created_by, same pattern as game_room/
-                // players). Never blocks or fails the local training result
-                // on account of this; a network hiccup or being logged out
-                // just means this run's improvement stays local, same as
-                // before this existed.
-                try {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.user?.id) {
-                        await supabase.from('bot_champion_weights').insert({
-                            weights: champion,
-                            confirm_wins: confirmWins,
-                            confirm_losses: confirmLosses,
-                            confirm_draws: confirmDraws,
-                            created_by: session.user.id,
-                        });
-                    }
-                } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
+                if (opts.sourceBotId) {
+                    // Launched from a specific Stable bot (game-ui.js's Train
+                    // button) — this is self-play improvement over THAT bot's
+                    // own prior weights, not a claim about the online
+                    // champion, so it goes back into the bot's own row, not
+                    // the shared community table.
+                    try {
+                        const { error } = await supabase.from('deployed_bots')
+                            .update({ weights: champion }).eq('id', opts.sourceBotId);
+                        if (error) console.warn('Could not save improved weights to the bot:', error);
+                    } catch (e) { console.warn('Could not save improved weights to the bot:', e); }
+                } else {
+                    // Best-effort share to the community champion table — only
+                    // when logged in (bot_champion_weights requires
+                    // auth.uid() = created_by, same pattern as game_room/
+                    // players). Never blocks or fails the local training result
+                    // on account of this; a network hiccup or being logged out
+                    // just means this run's improvement stays local, same as
+                    // before this existed.
+                    try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (session?.user?.id) {
+                            await supabase.from('bot_champion_weights').insert({
+                                weights: champion,
+                                confirm_wins: confirmWins,
+                                confirm_losses: confirmLosses,
+                                confirm_draws: confirmDraws,
+                                created_by: session.user.id,
+                            });
+                        }
+                    } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
+                }
             } else {
                 window.BotArena.applyWeights(baselineWeights);
                 try {
@@ -4272,8 +4285,10 @@ document.getElementById('undo-move').onclick = function() {
 
             if (improved) {
                 window.BotArena.applyWeights(result.champion);
+                let session = null;
                 try {
-                    const { data: { session } } = await supabase.auth.getSession();
+                    const { data } = await supabase.auth.getSession();
+                    session = data?.session || null;
                     if (session?.user?.id) {
                         await supabase.from('bot_champion_weights').insert({
                             weights: result.champion,
@@ -4284,6 +4299,31 @@ document.getElementById('undo-move').onclick = function() {
                         });
                     }
                 } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
+
+                if (opts.sourceBotId) {
+                    // Launched from a specific Stable bot (game-ui.js's Train
+                    // button) and it just beat the reigning online champion —
+                    // write the champion weights back into that bot's own row
+                    // (it's now carrying the weights that just became #1) and
+                    // reward the achievement. 250 XP / 50 gold are new,
+                    // ungrounded-in-precedent numbers (same as the
+                    // capture-chance formula was) — bigger than the 100 XP for
+                    // beating a regular player's deployed bot, since
+                    // dethroning the actual #1 community champion is far
+                    // rarer. Tunable later.
+                    try {
+                        const { error } = await supabase.from('deployed_bots')
+                            .update({ weights: result.champion }).eq('id', opts.sourceBotId);
+                        if (error) console.warn('Could not save champion weights to the bot:', error);
+                    } catch (e) { console.warn('Could not save champion weights to the bot:', e); }
+                    if (session?.user?.id) {
+                        const desc = `"${opts.sourceBotNickname || 'Your bot'}" dethroned the online champion`;
+                        try {
+                            await supabase.rpc('update_user_xp', { p_user_id: session.user.id, p_xp_points: 250, p_description: desc });
+                            await supabase.rpc('award_gold', { p_user_id: session.user.id, p_gold_amount: 50, p_description: desc });
+                        } catch (e) { console.warn('Could not grant the champion-defeat reward:', e); }
+                    }
+                }
             } else {
                 window.BotArena.applyWeights(baselineWeights);
                 try {
@@ -5251,7 +5291,7 @@ document.getElementById('undo-move').onclick = function() {
         (function initBotTrainingPanel() {
             let clickCount = 0;
             let clickTimer = null;
-            const state = { n: 2, watchable: true, generations: 5, method: 'evolve' };
+            const state = { n: 2, watchable: true, generations: 5, method: 'evolve', sourceBotId: null, sourceBotNickname: null };
 
             // Weight groupings mirror the section comments in bot.js's
             // DEFAULT_WEIGHTS — used purely for the drill-down diagram, so
@@ -5287,6 +5327,19 @@ document.getElementById('undo-move').onclick = function() {
                 const existing = document.getElementById('bot-training-overlay');
                 if (existing) { existing.remove(); return; }
                 if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
+
+                // Stable's "Train" button (gamification-ui.js) signals which bot
+                // this session is for via this one-shot window property — it
+                // already applied that bot's weights before opening. Consumed
+                // here into `state` (which persists across this modal being
+                // closed/reopened mid-run, e.g. via the popup's expand button)
+                // rather than read fresh every open, so a LATER unrelated open
+                // (the secret 5-click trigger) doesn't inherit a stale bot.
+                if (window._botTrainingSource) {
+                    state.sourceBotId = window._botTrainingSource.id;
+                    state.sourceBotNickname = window._botTrainingSource.nickname;
+                    window._botTrainingSource = null;
+                }
 
                 // ── Shell: full-screen overlay + centered modal box ──────────
                 const overlay = document.createElement('div');
@@ -5326,6 +5379,14 @@ document.getElementById('undo-move').onclick = function() {
                 desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match at the end. A small progress popup stays visible in the corner even after you close this panel — use it to check in or end the run early.';
                 desc.style.cssText = 'font-size:11px;color:#999;';
                 body.appendChild(desc);
+
+                if (state.sourceBotId) {
+                    const sourceBanner = document.createElement('div');
+                    sourceBanner.textContent = `Training: "${state.sourceBotNickname}" — a win updates this bot in your Stable`
+                        + (state.method === 'hillclimb' ? ' and, if it beats the online champion, dethrones them for a reward.' : '.');
+                    sourceBanner.style.cssText = 'font-size:11px;color:#d9b08c;background:#2a2416;border:1px solid #5a4a2a;border-radius:5px;padding:6px 10px;';
+                    body.appendChild(sourceBanner);
+                }
 
                 // ── Controls: Players / Speed / Repeat ───────────────────────
                 const controls = document.createElement('div');
@@ -5667,25 +5728,32 @@ document.getElementById('undo-move').onclick = function() {
                     startBtn.textContent = 'Training…';
                     resetInsights();
                     renderRoster();
+                    const trainedBotId = state.sourceBotId, trainedBotName = state.sourceBotNickname;
                     try {
                         if (state.method === 'hillclimb') {
                             const preset = { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, confirmGames: 20, confirmMargin: 0.55 };
                             const { improved, record, promotions } = await runHillClimbTraining(preset, renderProgress, {
                                 visual: state.watchable,
+                                sourceBotId: trainedBotId, sourceBotNickname: trainedBotName,
                             });
                             progressText.style.display = 'none';
                             updateStatus(improved
-                                ? `Hill Climb complete — ${promotions} promotion(s) this run, and the result beat the online champion ${record} in the confirmation match. New weights applied and saved.`
+                                ? (trainedBotId
+                                    ? `"${trainedBotName}" dethroned the online champion ${record} in the confirmation match! +250 XP, +50 gold.`
+                                    : `Hill Climb complete — ${promotions} promotion(s) this run, and the result beat the online champion ${record} in the confirmation match. New weights applied and saved.`)
                                 : `Hill Climb finished (${promotions} promotion(s) this run) but did not beat the online champion by enough (${record}) — kept the previous weights.`);
                         } else {
                             const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10, gamesPerSize: 4 };
                             const { improved, record } = await runWeightTraining(preset, renderProgress, {
                                 nPlayers: state.n, visual: state.watchable,
                                 onGeneration: handleGeneration,
+                                sourceBotId: trainedBotId, sourceBotNickname: trainedBotName,
                             });
                             progressText.style.display = 'none';
                             updateStatus(improved
-                                ? `Training complete — champion beat the starting weights ${record} in the confirmation match. New weights applied and saved.`
+                                ? (trainedBotId
+                                    ? `"${trainedBotName}" improved ${record} in the confirmation match — saved to your Stable.`
+                                    : `Training complete — champion beat the starting weights ${record} in the confirmation match. New weights applied and saved.`)
                                 : `Training finished but did not beat the starting weights (${record}) — kept the previous weights.`);
                         }
                     } catch (err) {
@@ -5698,6 +5766,11 @@ document.getElementById('undo-move').onclick = function() {
                         if (breedBtn) breedBtn.disabled = false;
                         startBtn.textContent = 'Start Training';
                         hideTrainingPopup();
+                        // This run's source (if any) is done its job — clear it
+                        // so a later, unrelated open (the secret 5-click
+                        // trigger) doesn't inherit it.
+                        state.sourceBotId = null;
+                        state.sourceBotNickname = null;
                     }
                 };
 
