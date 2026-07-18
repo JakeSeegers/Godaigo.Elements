@@ -1897,6 +1897,27 @@
                     box.appendChild(xpLine);
                 }
 
+                // docs/bot-tycoon-proposal.md build-order step 6: real multiplayer
+                // bots now carry a genuine source (players.bot_source_id →
+                // deployed_bots), so the winner can pick WHICH bot to try
+                // capturing instead of a generic "wild" placeholder. winnerIsBot
+                // guards the host-impersonation edge case: while bot-driver.js's
+                // asBot() impersonates a bot, myPlayerIndex briefly equals that
+                // bot's index, so checkWinCondition's isLocalWinner check (and
+                // thus this call) can fire on the HOST's client for a BOT's win —
+                // that's not a human victory, so no capture offer.
+                if (isMultiplayer) {
+                    const winnerRow = (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
+                        ? allPlayersData.find(p => p.player_index === playerIndex) : null;
+                    const winnerIsBot = window.isBotUsername?.(winnerRow?.username);
+                    const capturableBots = (!winnerIsBot && typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
+                        ? allPlayersData.filter(p => window.isBotUsername?.(p.username) && p.bot_source_id != null)
+                        : [];
+                    if (capturableBots.length) {
+                        box.appendChild(this.buildCaptureSection(capturableBots));
+                    }
+                }
+
                 const btnRow = document.createElement('div');
                 btnRow.className = 'game-over-btns';
 
@@ -1917,6 +1938,117 @@
                 box.appendChild(btnRow);
                 overlay.appendChild(box);
                 document.body.appendChild(overlay);
+            }
+
+            // Win-screen "Capture a Bot" widget. `bots` is a subset of
+            // allPlayersData rows for this game (real bot players with a
+            // genuine bot_source_id). Chance formula deliberately mirrors
+            // runChallenge()'s closeness-based one in game-ui.js: the winner
+            // just activated all 5 elements, so a bot's own activated count
+            // stands in for "how close the fight was" (20% floor up to ~80%
+            // for a bot that nearly won itself). Consumed whether the roll
+            // succeeds or not, same as the Bot Training panel's version.
+            buildCaptureSection(bots) {
+                const nameOf = (row) => row.username.replace(window.BOT_USERNAME_PREFIX || '🤖', '').trim();
+                const chanceFor = (row) => {
+                    const activated = spellSystem.playerScrolls?.[row.player_index]?.activated?.size || 0;
+                    return Math.round(Math.min(80, 20 + activated * 12));
+                };
+
+                const wrap = document.createElement('div');
+                wrap.className = 'game-over-capture';
+
+                const title = document.createElement('div');
+                title.className = 'game-over-capture-title';
+                title.textContent = 'Capture a Bot';
+                wrap.appendChild(title);
+
+                const select = document.createElement('select');
+                select.className = 'game-over-capture-select';
+                bots.forEach((row, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = String(i);
+                    opt.textContent = nameOf(row);
+                    select.appendChild(opt);
+                });
+                wrap.appendChild(select);
+
+                const info = document.createElement('div');
+                info.className = 'game-over-capture-info';
+                wrap.appendChild(info);
+
+                const btn = document.createElement('button');
+                btn.className = 'retro-dlg-btn ok';
+                btn.textContent = 'Use Capture Stone';
+                wrap.appendChild(btn);
+
+                async function refresh() {
+                    const bot = bots[Number(select.value || 0)];
+                    const chance = chanceFor(bot);
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (!session?.user?.id) {
+                        info.textContent = 'Log in to use a Capture Stone.';
+                        btn.disabled = true;
+                        return;
+                    }
+                    const { data: profile } = await supabase.from('user_profiles')
+                        .select('capture_stones').eq('user_id', session.user.id).single();
+                    const stones = profile?.capture_stones || 0;
+                    info.textContent = `${nameOf(bot)} — ${chance}% chance. You have ${stones} Capture Stone${stones === 1 ? '' : 's'}.`;
+                    btn.disabled = stones < 1;
+                    btn.textContent = stones < 1 ? 'No Stones (buy in the Shop)' : 'Use Capture Stone';
+                }
+                select.onchange = refresh;
+
+                btn.onclick = async () => {
+                    btn.disabled = true;
+                    btn.textContent = 'Rolling…';
+                    let stonesLeft = null; // recomputed for the finally block's button state only
+                    try {
+                        const bot = bots[Number(select.value || 0)];
+                        const chance = chanceFor(bot);
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (!session?.user?.id) { info.textContent = 'Log in to use a Capture Stone.'; return; }
+                        const { data: profile, error: profErr } = await supabase.from('user_profiles')
+                            .select('capture_stones').eq('user_id', session.user.id).single();
+                        if (profErr || !profile || profile.capture_stones < 1) {
+                            info.textContent = 'You have no Capture Stones — buy one in the Shop.';
+                            stonesLeft = profile?.capture_stones || 0;
+                            return;
+                        }
+                        stonesLeft = profile.capture_stones - 1;
+                        await supabase.from('user_profiles')
+                            .update({ capture_stones: stonesLeft }).eq('user_id', session.user.id);
+
+                        const success = Math.random() * 100 < chance;
+                        if (success) {
+                            const { error } = await supabase.from('captured_bots').insert({
+                                owner: session.user.id,
+                                source_nickname: nameOf(bot),
+                                source_bot_id: bot.bot_source_id,
+                                weights: bot.bot_weights,
+                            });
+                            info.textContent = error
+                                ? `Capture roll succeeded but saving it failed: ${error.message}`
+                                : `Captured "${nameOf(bot)}"! Added to your Stable.`;
+                        } else {
+                            info.textContent = `"${nameOf(bot)}" broke free — capture failed.`;
+                        }
+                    } catch (e) {
+                        console.error('Win-screen capture failed:', e);
+                        info.textContent = 'Capture attempt failed — see console.';
+                    } finally {
+                        // Only the button's own state is recomputed here — info
+                        // already holds the roll outcome set above and must not
+                        // be clobbered by a fresh chance/stone-count line (that's
+                        // what refresh() is for, wired to the select's onchange).
+                        btn.textContent = 'Use Capture Stone';
+                        btn.disabled = stonesLeft !== null && stonesLeft < 1;
+                    }
+                };
+
+                refresh();
+                return wrap;
             }
 
             createPatternVisual(scroll, elementType) {

@@ -6112,15 +6112,13 @@ document.getElementById('undo-move').onclick = function() {
                 }
 
                 // ── Capture Stones ──────────────────────────────────────────────
-                // Build-order step 4 (docs/bot-tycoon-proposal.md). Deliberately
-                // diverges from this project's existing purchase convention
-                // (js/emoji-system.js persists owned items to localStorage, not
-                // the database — a real gap, flagged in TODO.md's new
-                // "Economy / purchases" entry): a stone is bought with real gold
-                // and produces a real collectible (another bot's weights), so
-                // both the stone count (user_profiles.capture_stones) and the
-                // resulting capture (captured_bots table) are properly
-                // database-backed from the start, not localStorage.
+                // Build-order step 4 (docs/bot-tycoon-proposal.md). Stones are
+                // bought from the Shop tab in the Profile modal
+                // (js/gamification-ui.js) — moved there per explicit user
+                // request ("they should be in the shop"). This panel only
+                // shows the current count and lets you USE one right after a
+                // challenge (see runChallenge() above and showCaptureAttempt()/
+                // attemptCapture() below).
                 const captureSep = document.createElement('div');
                 captureSep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
                 body.appendChild(captureSep);
@@ -6131,7 +6129,7 @@ document.getElementById('undo-move').onclick = function() {
                 body.appendChild(captureTitle);
 
                 const captureDesc = document.createElement('div');
-                captureDesc.textContent = 'Buy a stone with gold, then use it right after a challenge to try copying that bot\'s weights into your collection — the closer the fight, the better your odds. Consumed whether the attempt succeeds or not.';
+                captureDesc.textContent = 'Buy stones in the Shop, then use one right after a challenge to try copying that bot\'s weights into your collection — the closer the fight, the better your odds. Consumed whether the attempt succeeds or not.';
                 captureDesc.style.cssText = 'font-size:11px;color:#999;';
                 body.appendChild(captureDesc);
 
@@ -6143,13 +6141,6 @@ document.getElementById('undo-move').onclick = function() {
                 stoneCountEl.style.cssText = 'font-size:12px;color:#ddd;';
                 captureRow.appendChild(stoneCountEl);
 
-                const STONE_COST = 30; // between the two challenge-reward gold tiers (8/20) established above
-
-                const buyStoneBtn = document.createElement('button');
-                buyStoneBtn.textContent = `Buy Stone (${STONE_COST}g)`;
-                buyStoneBtn.style.cssText = 'padding:4px 10px;background:#2d4a3a;color:#eee;border:1px solid #5a8;border-radius:5px;cursor:pointer;font-size:12px;';
-                captureRow.appendChild(buyStoneBtn);
-
                 const captureAttemptEl = document.createElement('div');
                 captureAttemptEl.style.cssText = 'margin-top:6px;font-size:11px;color:#ccc;display:none;';
                 body.appendChild(captureAttemptEl);
@@ -6157,43 +6148,15 @@ document.getElementById('undo-move').onclick = function() {
                 async function refreshStoneCount() {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (!session?.user?.id) {
-                        stoneCountEl.textContent = 'Log in to buy/use capture stones.';
-                        buyStoneBtn.disabled = true;
+                        stoneCountEl.textContent = 'Log in to use capture stones.';
                         return null;
                     }
                     const { data, error } = await supabase.from('user_profiles')
                         .select('capture_stones').eq('user_id', session.user.id).single();
                     if (error || !data) { stoneCountEl.textContent = 'Capture stones: —'; return null; }
                     stoneCountEl.textContent = `Capture stones: ${data.capture_stones}`;
-                    buyStoneBtn.disabled = false;
                     return { userId: session.user.id, stones: data.capture_stones };
                 }
-
-                buyStoneBtn.onclick = async () => {
-                    buyStoneBtn.disabled = true;
-                    try {
-                        const info = await refreshStoneCount();
-                        if (!info) { updateStatus('Log in before buying a Capture Stone.'); return; }
-                        // Same trick the existing emoji shop already uses for
-                        // gold deduction — award_gold with a negative amount —
-                        // rather than a new RPC just for spending.
-                        const { error: goldErr } = await supabase.rpc('award_gold', {
-                            p_user_id: info.userId, p_gold_amount: -STONE_COST,
-                            p_description: 'Bought a Capture Stone',
-                        });
-                        if (goldErr) { updateStatus(`Could not buy stone: ${goldErr.message}`); return; }
-                        const { error: stoneErr } = await supabase.from('user_profiles')
-                            .update({ capture_stones: info.stones + 1 }).eq('user_id', info.userId);
-                        if (stoneErr) { updateStatus(`Gold was spent but the stone count update failed: ${stoneErr.message}`); return; }
-                        updateStatus('Bought a Capture Stone.');
-                        await refreshStoneCount();
-                    } catch (e) {
-                        console.error('Buy stone failed:', e);
-                        updateStatus('Could not buy stone — see console.');
-                    } finally {
-                        buyStoneBtn.disabled = false;
-                    }
-                };
 
                 // Offered as a follow-up right after a challenge (see
                 // runChallenge() above) — not a standalone button, since the

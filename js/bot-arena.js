@@ -91,9 +91,15 @@
 //
 // SUPPRESSED DURING A MUTED (non-visual) RUN: win-screen modal
 // (spellSystem.showLevelComplete), end-turn AP prompt, SoundSystem,
-// JoytoneBridge, gamification (window.gami — otherwise arena games would
-// farm real XP onto the logged-in profile). spectate() and visual
-// run()/evolve() keep sounds/music/animations/win-screen, only muting gami.
+// gamification (window.gami — otherwise arena games would farm real XP onto
+// the logged-in profile). spectate() (one continuous game) keeps sounds,
+// music, animations, and the win screen — only gami is muted.
+// JoytoneBridge is the one exception to "visual keeps everything": run(),
+// evolve(), hillClimb(), and confirmAcrossSizes() suppress it UNCONDITIONALLY
+// (see suppressJoytone()), regardless of opts.visual, because unlike
+// spectate() they play many short games back to back — each one's own
+// #lobby-wrapper hide/show cycle would otherwise reboot the music engine and
+// restart playback from scratch every single game.
 //
 // LOAD ORDER: after bot.js.
 // ============================================================

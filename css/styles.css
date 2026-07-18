@@ -2300,6 +2300,38 @@ svg {
 .gami-lb-xp   { color: #d9b08c; font-size: 20px; font-family: var(--font-terminal); font-weight: bold; flex-shrink: 0; }
 .gami-lb-level { color: #777; font-size: 18px; font-family: var(--font-terminal); flex-shrink: 0; margin-left: 4px; }
 
+/* --- Stable tab --- */
+.gami-stable-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.gami-stable-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #252525;
+    border-radius: 2px;
+    border: 2px solid #333;
+}
+.gami-stable-name { flex: 1; color: #eee; font-size: 15px; font-family: var(--font-terminal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gami-stable-record { color: #999; font-size: 13px; font-family: var(--font-terminal); flex-shrink: 0; }
+.gami-stable-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: var(--font-terminal) !important;
+    border: 1px solid #6abf40;
+    border-radius: 2px;
+    background: #1a3a1a;
+    color: #6abf40;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.gami-stable-btn:hover { background: #224a22; }
+.gami-stable-btn.off { border-color: #c05050; background: #2a1a1a; color: #c05050; }
+.gami-stable-empty { color: #999; font-size: 12px; font-style: italic; padding: 4px 0; }
+
 /* --- Settings tab --- */
 .gami-settings-list {
     display: flex;
@@ -3452,6 +3484,38 @@ label, .hud-ap-label, .hud-ap-value {
     display: flex;
     gap: 12px;
     margin-top: 6px;
+}
+
+.game-over-capture {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid #333;
+}
+.game-over-capture-title {
+    font-family: var(--font-pixel);
+    font-size: 13px;
+    color: #b98cd9;
+    letter-spacing: 1px;
+}
+.game-over-capture-select {
+    font-family: var(--font-terminal);
+    font-size: 14px;
+    background: #1a1a2a;
+    color: #eee;
+    border: 1px solid #555;
+    border-radius: 2px;
+    padding: 3px 6px;
+    min-width: 200px;
+}
+.game-over-capture-info {
+    font-family: var(--font-terminal);
+    font-size: 12px;
+    color: #999;
+    min-height: 14px;
 }
 
 .retro-dlg-box.wide {

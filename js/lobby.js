@@ -1079,10 +1079,14 @@
                                 updateStatus(`${playerName} left the game`);
 
                                 // Check if I'm the only player left (scoped to this room)
-                            const { data: remainingPlayers } = await supabase
-                                .from('players')
-                                .select('id, username, player_index, color')
-                                .eq('game_id', currentGameId);
+                                // NOTE: bot_weights/bot_source_id are included so a mid-game
+                                // disconnect/removal doesn't silently strip per-bot identity
+                                // out of allPlayersData for the rest of the game (bot-driver.js
+                                // asBot() reads them fresh from this array every bot turn).
+                                const { data: remainingPlayers } = await supabase
+                                    .from('players')
+                                    .select('id, username, player_index, color, bot_weights, bot_source_id')
+                                    .eq('game_id', currentGameId);
 
                                 console.log('💥 Remaining players after deletion:', remainingPlayers);
                                 console.log('📍 My player ID:', myPlayerId);
@@ -1306,9 +1310,17 @@
         // colors, turn order, start conditions. bot-driver.js's watcher
         // already drives WHICHEVER bot is active off a live-queried set of
         // bot indices, so any number of bots (up to the room's 5-player
-        // cap) works with no changes there — every bot shares whatever
-        // champion weights window.BotSystem.WEIGHTS currently holds (see
-        // js/bot.js's community-champion fetch), same as a single bot did.
+        // cap) works with no changes there.
+        //
+        // docs/bot-tycoon-proposal.md build-order step 6: each bot now gets
+        // its own identity pulled from a random ACTIVE `deployed_bots` row
+        // (name shown in-game, weights stored on the row itself as
+        // `bot_weights`/`bot_source_id` — bot-driver.js's asBot() applies
+        // them for the duration of that bot's turn) instead of every seat
+        // silently sharing window.BotSystem.WEIGHTS. Falls back to the
+        // ORIGINAL generic "🤖 Bot N" / shared-weights behavior when no
+        // deployed bots exist yet (fresh install) or the query fails —
+        // additive, never blocks adding a bot.
         async function addBotPlayer() {
             if (!isHost || !currentGameId) return;
             try {
@@ -1320,12 +1332,32 @@
 
                 if ((players || []).length >= 5) { alert('Room is full!'); return; }
                 const botCount = (players || []).filter(p => window.isBotUsername?.(p.username)).length;
+
+                let username = `${window.BOT_USERNAME_PREFIX || '🤖'} Bot ${botCount + 1}`;
+                let botWeights = null;
+                let botSourceId = null;
+                try {
+                    const { data: candidates } = await supabase
+                        .from('deployed_bots')
+                        .select('id, nickname, weights')
+                        .eq('is_active', true)
+                        .limit(50);
+                    if (candidates?.length) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        username = `${window.BOT_USERNAME_PREFIX || '🤖'} ${pick.nickname}`;
+                        botWeights = pick.weights;
+                        botSourceId = pick.id;
+                    }
+                } catch (e) { /* fall back to the generic bot above */ }
+
                 await supabase.from('players').insert([{
-                    username: `${window.BOT_USERNAME_PREFIX || '🤖'} Bot ${botCount + 1}`,
+                    username,
                     is_ready: true, // bots are always ready
-                    game_id: currentGameId
+                    game_id: currentGameId,
+                    bot_weights: botWeights,
+                    bot_source_id: botSourceId,
                 }]);
-                console.log('🤖 Bot added to lobby');
+                console.log(`🤖 Bot added to lobby as "${username}"`);
                 updatePlayerList();
             } catch (e) {
                 console.error('Add bot failed:', e);

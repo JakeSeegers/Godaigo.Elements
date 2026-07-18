@@ -93,6 +93,88 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT TYCOON step 6 (pulled forward) + win-screen capture + Shop/Stable
+  tabs** — `js/lobby.js`, `js/bot-driver.js`, `js/game-core.js`,
+  `js/game-ui.js`, `js/gamification-ui.js`, `index.html`, `css/styles.css`,
+  migration `add_bot_source_to_players`. Follow-up to step 4 after the user
+  asked three things in one message: (1) real per-bot variety instead of
+  every bot sharing one global weight table ("I think we should be able to
+  pick the bot we're capturing, as, ideally, the bots in the game are
+  actually different and pulled from different uploaded bots on the
+  leaderboard"); (2) Capture Stones moved to a real Shop tab, plus a Stable
+  tab for managing bots, plus auth-bar buttons for both — explicitly
+  DEFERRING any "Train" button/mechanism to a later discussion; (3) using a
+  capture stone at the win-screen popup, bot-game-only.
+  **Per-bot variety (the riskiest piece — touches core multiplayer bot
+  code):** `players` gained `bot_weights jsonb` / `bot_source_id bigint →
+  deployed_bots(id) on delete set null`. `addBotPlayer()` now randomly
+  picks one of up to 50 active `deployed_bots` and stamps the new player's
+  username as `🤖 {nickname}` (falls back to the old generic `🤖 Bot N` /
+  null weights if none exist or the query fails). `bot-driver.js`'s
+  `asBot()` snapshots the FULL live `window.BotSystem.WEIGHTS` table,
+  swaps in the bot's own `bot_weights` for its impersonated turn, restores
+  in `finally` — so a legacy bot with no `bot_weights` leaves WEIGHTS
+  untouched, and one bot's table never leaks into the next bot's turn in a
+  multi-bot room. Found and fixed a real regression risk while wiring this
+  up: a narrower `players` SELECT fired on player-removal/disconnect
+  events (mid-game) didn't include the two new columns, which would have
+  silently stripped per-bot identity out of `allPlayersData` for the rest
+  of any game after a disconnect — added them to that query too.
+  Verified headless: a dedicated Playwright pass drove the REAL
+  `BotDriver._driveBotTurn()` through three simulated turns (two distinct
+  `bot_weights`, one legacy bot with none) with `BotSystem.turn` stubbed to
+  observe `WEIGHTS.castBase` mid-turn — correct per-bot application, full
+  restoration after each turn, no cross-bot leakage, correct no-op
+  fallback. Script deleted after passing.
+  **Win-screen capture picker:** `showLevelComplete()` now offers a
+  "Capture a Bot" widget when (a) real multiplayer, (b) the winner is a
+  genuine human, (c) at least one real (non-legacy) bot was in the game.
+  Guards the host-impersonation edge case explicitly: while `asBot()`
+  impersonates a bot, `myPlayerIndex` briefly equals that bot's own index,
+  so `checkWinCondition`'s `isLocalWinner` check (and thus this call) can
+  fire on the HOST's client for a BOT's win — checked the winning row's
+  username against `isBotUsername()` so that case never offers a capture.
+  Picker lists bots by their REAL per-bot names (derived by stripping the
+  `🤖 ` prefix off `username`); chance formula deliberately mirrors the
+  existing challenge-flow one (`min(80, 20 + botActivated×12)`, using the
+  bot's own activated-element count as the "how close was the fight"
+  signal, since the human just hit 5 by definition). Consumed regardless of
+  outcome, inserts into `captured_bots` with the SELECTED bot's actual
+  `bot_source_id`/`bot_weights` — real lineage, not a "wild" placeholder.
+  Verified headless (14 assertions): bot-win-during-impersonation correctly
+  shows no capture UI; genuine human win with 2 real bots shows both by
+  name with independently-correct per-bot chances; capturing the
+  second-listed bot inserts the right source/weights and decrements
+  stones; no-bots-in-game shows nothing. First pass caught a real bug —
+  the click handler's `finally` block called the full `refresh()`, which
+  clobbered the just-set "Captured X!" outcome message with a stale
+  chance/stone-count line milliseconds later — fixed by only touching the
+  button's own state in `finally`, never `info.textContent`, after a
+  result has been set.
+  **Shop + Stable tabs:** two new tabs in the Profile modal
+  (`js/gamification-ui.js`), between Badges and Board. Shop currently holds
+  only the Capture Stones purchase (moved out of the in-game Bot Training
+  panel per explicit request — buying is now Shop-only; USING a stone
+  stays contextual to wherever the capture opportunity happens: the
+  Challenge flow's post-match prompt, or the new win-screen picker).
+  Stable shows "My Deployed Bots" (nickname, win-loss-draw record, an
+  Active/Retired toggle that flips `is_active` via a direct client update —
+  `deployed_bots` already had an owner-only UPDATE policy, no new RPC
+  needed) and "My Captured Bots" (source nickname, capture date, a Deploy
+  button that inserts a new `deployed_bots` row from that capture's stored
+  weights, retrying under a different name via `prompt()` on the rare
+  `unique(owner,nickname)` collision). Deliberately NO training entry
+  point in Stable — explicitly deferred per the user's own words ("we'll
+  talk about the training mechanism"). New `gami_openPanelOnTab(tab)`
+  generalizes the existing `gami_openSettings()` toggle-or-switch logic;
+  wired to new "Shop"/"Stable" buttons next to Profile in the auth bar
+  (`index.html`). Verified headless (19 assertions): Shop's buy button
+  spends real gold via `award_gold` and increments `capture_stones`,
+  repaints with the fresh count; the Shop auth-bar button toggles the
+  panel closed on a second click (matching Profile's own behavior); Stable
+  lists both sections correctly, the Active/Retired toggle flips the real
+  DB row and repaints, and deploying a captured bot inserts a row carrying
+  that bot's actual weights.
 - **BOT TYCOON step 4: Capture Stones** — new Supabase migrations
   `add_capture_stones_to_user_profiles` (int column on `user_profiles`) +
   `create_captured_bots_table` (project `lovybwpypkaarstnvkbz`),

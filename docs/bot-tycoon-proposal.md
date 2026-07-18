@@ -10,7 +10,13 @@
 > Capture Stones (`user_profiles.capture_stones` + `captured_bots` table,
 > deliberately database-backed rather than following this project's
 > existing localStorage-based shop-item convention — see TODO.md's
-> "Economy / purchases" entry). Step 5+ not started. Not
+> "Economy / purchases" entry); and step 6, pulled forward out of order
+> (real bots in multiplayer games now carry their own per-bot weights
+> instead of sharing one global table), plus two things it unlocked: a
+> win-screen "Capture a Bot" picker, and dedicated Shop/Stable tabs in the
+> Profile modal (Capture Stones now sold in Shop, not the Bot Training
+> panel; a "Train" button/mechanism for Stable was explicitly deferred by
+> the user to a later discussion). Step 5 not started. Not
 > scoped into `bot-roadmap.md`'s stages. Read this top to bottom before touching any
 > part of it; several pieces below deliberately simplify or reject an earlier
 > version of the idea for concrete technical/trust reasons — don't re-propose
@@ -265,6 +271,12 @@ consensus.
    capture-chance formula and cost.
 5. Elemental weight-bundle items (needs validated bundle values, ideally
    derived the same way the Water/Fire bundles above already were).
-6. Wild-lobby-bot variety (draw from `deployed_bots`/`bot_champion_weights`
-   instead of one shared `WEIGHTS`) — nice-to-have, not load-bearing for
-   the rest.
+6. **DONE — pulled forward out of order**, once the user explicitly asked
+   for it while discussing win-screen capture ("I think we should be able
+   to pick the bot we're capturing, as, ideally, the bots in the game are
+   actually different and pulled from different uploaded bots on the
+   leaderboard"). Real multiplayer bots now draw from `deployed_bots`
+   (`players.bot_weights`/`bot_source_id`) instead of sharing one global
+   `WEIGHTS` table — see `planning/current.md`'s "BOT TYCOON step 6" entry
+   for the schema, the `bot-driver.js` save/swap/restore mechanics, and the
+   win-screen capture picker + Shop/Stable tabs it unlocked.

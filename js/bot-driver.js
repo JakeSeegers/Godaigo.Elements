@@ -89,12 +89,30 @@
         const row = (typeof allPlayersData !== 'undefined')
             ? allPlayersData.find(p => p.player_index === botIndex) : null;
         if (row && row.color) playerColor = row.color;
+
+        // docs/bot-tycoon-proposal.md build-order step 6: this bot may carry
+        // its own distinct weights (players.bot_weights, set when it was
+        // added — see lobby.js addBotPlayer()) instead of sharing whatever
+        // window.BotSystem.WEIGHTS currently holds. Same save-and-restore
+        // discipline as myPlayerIndex/playerColor above: snapshot the FULL
+        // live table before swapping, put it back in the finally block no
+        // matter what happens in fn(), so a bot with no bot_weights
+        // (fallback / pre-existing rows) leaves WEIGHTS completely
+        // untouched, and a multi-bot room's NEXT bot never inherits this
+        // one's table.
+        let savedWeights = null;
+        if (row?.bot_weights && window.BotArena?.applyWeights) {
+            savedWeights = { ...window.BotSystem.WEIGHTS };
+            window.BotArena.applyWeights(row.bot_weights);
+        }
+
         if (typeof updateEndTurnButtonVisibility === 'function') updateEndTurnButtonVisibility();
         try {
             await fn();
         } finally {
             myPlayerIndex = realIndex;
             playerColor = realColor;
+            if (savedWeights) window.BotArena.applyWeights(savedWeights);
             driverRealIndex = null;
             driverAP = null;
             if (typeof updateEndTurnButtonVisibility === 'function') updateEndTurnButtonVisibility();

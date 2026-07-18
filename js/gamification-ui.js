@@ -26,6 +26,8 @@ function gami_openPanel() {
                 <button class="gami-tab"        role="tab" onclick="gami_switchTab('cosmetics')">Colours</button>
                 <button class="gami-tab"        role="tab" onclick="gami_switchTab('emojis')">Emojis</button>
                 <button class="gami-tab"        role="tab" onclick="gami_switchTab('badges')">Badges</button>
+                <button class="gami-tab"        role="tab" onclick="gami_switchTab('shop')">Shop</button>
+                <button class="gami-tab"        role="tab" onclick="gami_switchTab('stable')">Stable</button>
                 <button class="gami-tab"        role="tab" onclick="gami_switchTab('leaderboard')">Board</button>
                 <button class="gami-tab"        role="tab" onclick="gami_switchTab('settings')">Settings</button>
             </div>
@@ -45,21 +47,28 @@ function gami_openPanel() {
 
 /** Open the panel directly on the Settings tab (usable from in-game HUD) */
 function gami_openSettings() {
+    gami_openPanelOnTab('settings');
+}
+
+/** Open the panel directly on a given tab (auth-bar Shop/Stable buttons,
+ *  gami_openSettings). Toggles closed if already open on that same tab,
+ *  otherwise switches to it — mirrors gami_openPanel()'s own toggle. */
+function gami_openPanelOnTab(tab) {
     const existing = document.getElementById('gami-panel');
     if (existing) {
-        // Panel already open — if we're already on settings, close it; otherwise switch to it
         const activeTab = existing.querySelector('.gami-tab.active');
-        if (activeTab && activeTab.textContent.trim() === 'Settings') {
+        const label = { profile: 'Stats', cosmetics: 'Colours', emojis: 'Emojis', badges: 'Badges',
+                         shop: 'Shop', stable: 'Stable', leaderboard: 'Board', settings: 'Settings' }[tab];
+        if (activeTab && activeTab.textContent.trim() === label) {
             existing.remove();
         } else {
-            gami_switchTab('settings');
+            gami_switchTab(tab);
         }
         return;
     }
-    // Open panel, but land on settings tab instead of profile
+    // gami_openPanel() ends on 'profile'; immediately switch to the target tab
     gami_openPanel();
-    // gami_openPanel ends on 'profile'; immediately switch to settings
-    gami_switchTab('settings');
+    gami_switchTab(tab);
 }
 
 /** Switch the active tab and load its content */
@@ -68,7 +77,7 @@ async function gami_switchTab(tab) {
     if (!panel) return;
 
     const tabs   = panel.querySelectorAll('.gami-tab');
-    const tabIdx = ['profile', 'cosmetics', 'emojis', 'badges', 'leaderboard', 'settings'].indexOf(tab);
+    const tabIdx = ['profile', 'cosmetics', 'emojis', 'badges', 'shop', 'stable', 'leaderboard', 'settings'].indexOf(tab);
     tabs.forEach((btn, i) => btn.classList.toggle('active', i === tabIdx));
 
     const content = document.getElementById('gami-content');
@@ -79,6 +88,8 @@ async function gami_switchTab(tab) {
         else if (tab === 'cosmetics')        _renderCosmetics(content);
         else if (tab === 'emojis')           _renderEmojis(content);
         else if (tab === 'badges')      await _renderBadges(content);
+        else if (tab === 'shop')        await _renderShop(content);
+        else if (tab === 'stable')      await _renderStable(content);
         else if (tab === 'settings')         _renderSettings(content);
         else                            await _renderLeaderboard(content);
     } catch (err) {
@@ -288,6 +299,157 @@ async function _renderBadges(content) {
     `).join('');
 
     content.innerHTML = `<div class="gami-badges-grid">${cards}</div>`;
+}
+
+// ── Shop tab ─────────────────────────────────────────────────
+
+// docs/bot-tycoon-proposal.md: Capture Stones are sold here rather than
+// buried in the in-game Bot Training panel — the user explicitly asked for
+// this move ("they should be in the shop"). USING a stone stays contextual
+// to wherever the capture opportunity happens (Bot Training's post-challenge
+// flow, the win-screen picker) — only the purchase moved.
+const GAMI_STONE_COST = 30; // matches the cost already established alongside the challenge-reward economy (game-ui.js)
+
+async function _renderShop(content) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) {
+        content.innerHTML = '<div class="gami-loading">Log in to visit the shop.</div>';
+        return;
+    }
+    const { data: profile } = await supabase.from('user_profiles')
+        .select('gold, capture_stones').eq('user_id', session.user.id).single();
+    const gold   = profile?.gold || 0;
+    const stones = profile?.capture_stones || 0;
+    const canAfford = gold >= GAMI_STONE_COST;
+
+    content.innerHTML = `
+        <div class="gami-cos-header">
+            <span style="color:#eee;font-size:15px;font-weight:bold;">Shop</span>
+            <span style="color:#d9b08c;font-size:14px;">${gold}g</span>
+        </div>
+        <div class="gami-section-title" style="margin-top:8px;">Capture Stones</div>
+        <div style="color:#999;font-size:12px;margin-bottom:10px;">
+            Use a stone after challenging a bot, or right on the win screen after
+            a game with real bots, to try copying it into your Stable. The closer
+            the fight, the better your odds — consumed whether the attempt
+            succeeds or not.
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span style="color:#ddd;font-size:13px;">You have <b>${stones}</b> Capture Stone${stones === 1 ? '' : 's'}.</span>
+            <button id="gami-shop-buy-stone" class="gami-cos-btn buy${canAfford ? '' : ' cant-afford'}">${GAMI_STONE_COST}g</button>
+        </div>
+    `;
+    document.getElementById('gami-shop-buy-stone').onclick = () => _gami_shopBuyStone(session.user.id, stones);
+}
+
+async function _gami_shopBuyStone(userId, currentStones) {
+    const btn = document.getElementById('gami-shop-buy-stone');
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+        // Same trick the existing emoji/cosmetics shops already use for gold
+        // deduction — award_gold with a negative amount.
+        const { error: goldErr } = await supabase.rpc('award_gold', {
+            p_user_id: userId, p_gold_amount: -GAMI_STONE_COST,
+            p_description: 'Bought a Capture Stone',
+        });
+        if (goldErr) { window.gami?.notify(`Could not buy stone: ${goldErr.message}`, 0, 'gold'); return; }
+        const { error: stoneErr } = await supabase.from('user_profiles')
+            .update({ capture_stones: currentStones + 1 }).eq('user_id', userId);
+        if (stoneErr) { window.gami?.notify(`Gold was spent but the stone count update failed: ${stoneErr.message}`, 0, 'gold'); return; }
+        window.gami?.notify('Bought a Capture Stone', -GAMI_STONE_COST, 'gold');
+    } catch (e) {
+        console.error('[gami-ui] buy stone failed:', e);
+        window.gami?.notify('Could not buy stone — see console.', 0, 'gold');
+    } finally {
+        gami_switchTab('shop'); // repaint with fresh gold/stone counts
+    }
+}
+
+// ── Stable tab ───────────────────────────────────────────────
+
+// "My Deployed Bots" (retire/reactivate a published bot) and "My Captured
+// Bots" (redeploy one from your collection under a new name). Deliberately
+// NO training entry point here — the user asked to defer that mechanism to
+// a later discussion ("we'll talk about the training mechanism").
+async function _renderStable(content) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) {
+        content.innerHTML = '<div class="gami-loading">Log in to see your Stable.</div>';
+        return;
+    }
+    const userId = session.user.id;
+
+    const [{ data: deployed }, { data: captured }] = await Promise.all([
+        supabase.from('deployed_bots')
+            .select('id, nickname, wins, losses, draws, is_active')
+            .eq('owner', userId)
+            .order('id', { ascending: false }),
+        supabase.from('captured_bots')
+            .select('id, source_nickname, captured_at')
+            .eq('owner', userId)
+            .order('captured_at', { ascending: false }),
+    ]);
+
+    const deployedHTML = (deployed || []).length ? deployed.map(bot => {
+        const decided = bot.wins + bot.losses;
+        const pct = decided ? Math.round((bot.wins / decided) * 100) : 0;
+        return `
+            <div class="gami-stable-row">
+                <span class="gami-stable-name">${_esc(bot.nickname)}</span>
+                <span class="gami-stable-record">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%)</span>
+                <button class="gami-stable-btn${bot.is_active ? '' : ' off'}"
+                        onclick="_gami_stableToggleActive(${bot.id}, ${bot.is_active})">${bot.is_active ? 'Active' : 'Retired'}</button>
+            </div>`;
+    }).join('') : '<div class="gami-stable-empty">No deployed bots yet — deploy one from the in-game Bot Training panel.</div>';
+
+    const capturedHTML = (captured || []).length ? captured.map(cb => `
+        <div class="gami-stable-row">
+            <span class="gami-stable-name">${_esc(cb.source_nickname)}</span>
+            <span class="gami-stable-record">${new Date(cb.captured_at).toLocaleDateString()}</span>
+            <button class="gami-stable-btn" onclick="_gami_stableDeployCaptured(${cb.id}, '${_esc(cb.source_nickname).replace(/'/g, "\\'")}')">Deploy</button>
+        </div>`).join('') : '<div class="gami-stable-empty">No captured bots yet — try capturing one after a challenge or a win.</div>';
+
+    content.innerHTML = `
+        <div class="gami-section-title">My Deployed Bots</div>
+        <div class="gami-stable-list">${deployedHTML}</div>
+        <div class="gami-section-title" style="margin-top:16px;">My Captured Bots</div>
+        <div class="gami-stable-list">${capturedHTML}</div>
+    `;
+}
+
+async function _gami_stableToggleActive(botId, currentlyActive) {
+    const { error } = await supabase.from('deployed_bots')
+        .update({ is_active: !currentlyActive }).eq('id', botId);
+    if (error) { window.gami?.notify(`Could not update bot: ${error.message}`, 0, 'gold'); return; }
+    gami_switchTab('stable');
+}
+
+async function _gami_stableDeployCaptured(capturedId, sourceNickname) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    const { data: cb, error: fetchErr } = await supabase.from('captured_bots')
+        .select('weights').eq('id', capturedId).eq('owner', session.user.id).single();
+    if (fetchErr || !cb) { window.gami?.notify('Could not find that captured bot.', 0, 'gold'); return; }
+
+    // deployed_bots has unique(owner, nickname) — a straight redeploy under
+    // the name it was captured with is the common case, but ask for a
+    // different name rather than silently failing on the rare collision.
+    let nickname = sourceNickname;
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const { error } = await supabase.from('deployed_bots').insert({
+            owner: session.user.id,
+            nickname,
+            weights: cb.weights,
+        });
+        if (!error) {
+            window.gami?.notify(`"${nickname}" deployed — other players can now challenge it.`, 0, 'gold');
+            gami_switchTab('stable');
+            return;
+        }
+        if (error.code !== '23505') { window.gami?.notify(`Could not deploy: ${error.message}`, 0, 'gold'); return; }
+        nickname = window.prompt(`You already have a bot named "${nickname}". Pick a different name:`, `${sourceNickname} ${attempt + 2}`);
+        if (!nickname) return;
+    }
 }
 
 // ── Leaderboard tab ──────────────────────────────────────────
