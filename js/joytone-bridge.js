@@ -73,6 +73,7 @@
         if (!popup) return;
         popup.style.display = 'none';
         popupVisible = false;
+        api()?.onHidden();
     }
 
     function togglePopup() {
@@ -99,6 +100,11 @@
         a.setMute(muted);
         a.setVolume(volume);
         a.setPower?.(!muted);
+        // Sync the child's per-frame animation loop to whether the popup is
+        // actually on screen right now (almost always closed at game start —
+        // that's the default) before boot() kicks off playback, so the
+        // canvas/DOM redraw loop never spins for a view nobody can see.
+        (popupVisible ? a.onShown : a.onHidden)?.();
         try { await a.boot(); } catch (e) { console.warn('Joytone boot failed:', e); }
     }
 

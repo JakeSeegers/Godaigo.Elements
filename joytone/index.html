@@ -263,8 +263,7 @@ input[type=range]{cursor:pointer}
     <span id="playhead-time" style="font-size:11px;color:#666;min-width:40px">0:00</span>
     <div class="sep"></div>
     <!-- Tools -->
-    <button class="tool-btn active" id="tool-pencil" title="Draw notes (D)">✏</button>
-    <button class="tool-btn" id="tool-pointer" title="Select / Move (S)">⟡</button>
+    <button class="tool-btn active" id="tool-pointer" title="Select / Move (S)">⟡</button>
     <button class="tool-btn" id="tool-eraser" title="Erase (E)">⌫</button>
     <div class="sep"></div>
     <!-- Quantize -->
@@ -392,7 +391,7 @@ input[type=range]{cursor:pointer}
 
   <!-- Status bar -->
   <div id="status-bar">
-    <span id="status-msg">Drop a .mid file anywhere to import · Space = play/pause · D/S/E = draw/select/erase</span>
+    <span id="status-msg">Drop a .mid file anywhere to import · Space = play/pause · S/E = select/erase</span>
     <div id="zoom-controls">
       <button onclick="zoomOut()" style="padding:1px 7px;font-size:14px" title="Zoom out (-)">−</button>
       <span id="zoom-label" style="font-size:11px;width:70px;text-align:center">80 px/beat</span>
@@ -553,7 +552,7 @@ const DEFAULT_MASTER_FX = () => ({
 // ── STATE ──────────────────────────────────────────────────────────
 let project = null;           // the active project object
 let activeSectionId = 'A';    // which section is shown in piano roll
-let selectedTrackId = null;   // track that pencil/keyboard-preview target
+let selectedTrackId = null;   // track that keyboard-preview targets
 let fxSnapshots = [];         // saved FX-state buttons/preset bank
 let fxMorphSerial = 0;        // cancels in-progress FX state morphs
 let fxStateSticky = false;    // 🧷 toggle: recalled state applies to ALL tracks + future generated ones
@@ -656,7 +655,7 @@ const PR = {
 };
 
 // Interaction
-let activeTool = 'pencil';  // 'pencil' | 'pointer' | 'eraser'
+let activeTool = 'pointer';  // 'pointer' | 'eraser'
 let quantSnap  = 0.5;       // beats
 let dragState  = null;      // current drag operation
 let mouseDownNote = null;
@@ -1267,6 +1266,37 @@ function getOrCreateEngine(track) {
   return trackEngines[track.id];
 }
 
+// Grow mode keeps appending sections for the length of a game and never
+// removes old ones, so trackEngines would otherwise accumulate one
+// permanently-connected node chain (+ a running LFO) per track forever.
+// Called whenever the playback cursor moves to a new section: keeps only
+// the previous/current/next section's engines alive (previous stays alive
+// so its reverb/rev-reverb tail can finish decaying; next stays alive
+// because the rev-reverb pre-roll schedules into it slightly ahead of
+// time) and tears down everything else. Torn-down tracks recreate their
+// engine lazily via getOrCreateEngine() the next time they're reached.
+function pruneDistantEngines() {
+  if (!project?.sectionOrder?.length) return;
+  const n = project.sectionOrder.length;
+  const idx = ((currentSectionPlayIdx % n) + n) % n;
+  const keepSections = new Set([
+    project.sectionOrder[(idx - 1 + n) % n],
+    project.sectionOrder[idx],
+    project.sectionOrder[(idx + 1) % n],
+  ]);
+  const keepTrackIds = new Set();
+  for (const secId of keepSections) {
+    const sec = project.sections[secId];
+    if (sec) for (const id of Object.keys(sec.tracks)) keepTrackIds.add(id);
+  }
+  for (const id of Object.keys(trackEngines)) {
+    if (!keepTrackIds.has(id)) {
+      trackEngines[id].destroy();
+      delete trackEngines[id];
+    }
+  }
+}
+
 // ── SYNTHESIS ──────────────────────────────────────────────────────
 function createNoiseBuffer(ctx) {
   const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
@@ -1820,6 +1850,7 @@ function startPlayback(fromBeat) {
   ghostCursor = playStartBeat;
   ghostSectionIdx = currentSectionPlayIdx;
   ghostBeatOffset = 0;
+  pruneDistantEngines();
   schedInterval = setInterval(scheduleAhead, SCHED_MS);
   document.getElementById('btn-play').textContent = '⏸ Pause';
   document.getElementById('btn-play').classList.add('playing');
@@ -1961,6 +1992,7 @@ function scheduleAhead() {
       // advance to next section
       sectionBeatOffset += secLenBeats;
       currentSectionPlayIdx++;
+      pruneDistantEngines();
       continue;
     }
 
@@ -2004,6 +2036,7 @@ function scheduleAhead() {
       }
       sectionBeatOffset += secLenBeats;
       currentSectionPlayIdx++;
+      pruneDistantEngines();
     } else {
       break;
     }
@@ -2011,8 +2044,19 @@ function scheduleAhead() {
 }
 
 let animFrameId = null;
+// Whether this app's UI is actually being looked at. True standalone (the
+// designer's own tab). When embedded in Godaigo's hidden popup iframe, the
+// bridge (onShown/onHidden below) drives this — it starts every game with
+// the popup closed, so this gets set false before the first frame. Measured
+// on this box: a display:none ancestor does NOT throttle requestAnimationFrame
+// in a same-origin child iframe — rAF still fired at the monitor's full
+// refresh rate whether the popup was shown or hidden. Left unguarded, that's
+// a canvas redraw + DOM write every frame, for the whole game, for a view
+// nobody can see.
+let popupVisible = true;
 function animLoop() {
   if (!isPlaying) return;
+  if (!popupVisible) { animFrameId = null; return; }
   PR.dirty = true;
   schedRedraw();
   // Update playhead time display
@@ -2277,41 +2321,19 @@ noteCanvas.addEventListener('mousedown', async e => {
     }
     return;
   }
-  if (activeTool === 'pointer') {
-    if (hit) {
-      pushUndo();
-      dragState = {
-        type: hit.isResize ? 'resize' : 'move',
-        noteId: hit.note.id,
-        trackId: hit.track.id,
-        trackColor: hit.track.color,
-        startX: x, startY: y,
-        origBeat: hit.note.beatStart,
-        origMidi: hit.note.midiNote,
-        origDur:  hit.note.duration,
-        ghostNote: { ...hit.note },
-      };
-    }
-    return;
-  }
-  // Pencil: create note
-  {
+  if (hit) {
     pushUndo();
-    const beat = snapBeat(xToBeat(x), quantSnap);
-    const midi = clamp(yToMidi(y), MIDI_MIN, MIDI_MAX);
-    const dur  = quantSnap || 0.5;
-    const note = makeNote(beat, midi, dur);
-    // Place in selected track. If nothing is selected yet, fall back to first non-muted track.
-    const tracks = Object.values(activeTracks());
-    const target = ensureSelectedTrack() || tracks.find(t=>!t.muted) || tracks[0];
-    if (target) {
-      target.notes.push(note);
-      dragState = { type:'draw', noteId:note.id, trackId:target.id, startX:x, origBeat:beat, origMidi:midi };
-      // preview sound
-      const eng = getOrCreateEngine(target);
-      playTrackMidiNote(target, midi, beatToSec(dur), audioCtx.currentTime, eng.dest(), 100);
-    }
-    PR.dirty = true; schedRedraw(); saveProject();
+    dragState = {
+      type: hit.isResize ? 'resize' : 'move',
+      noteId: hit.note.id,
+      trackId: hit.track.id,
+      trackColor: hit.track.color,
+      startX: x, startY: y,
+      origBeat: hit.note.beatStart,
+      origMidi: hit.note.midiNote,
+      origDur:  hit.note.duration,
+      ghostNote: { ...hit.note },
+    };
   }
 });
 
@@ -2335,10 +2357,6 @@ noteCanvas.addEventListener('mousemove', e => {
     const newMidi = clamp(dragState.origMidi + dm, MIDI_MIN, MIDI_MAX);
     dragState.ghostNote = { ...note, beatStart: newBeat, midiNote: newMidi };
     note.beatStart = newBeat; note.midiNote = newMidi;
-  } else if (dragState.type === 'draw') {
-    const curBeat = xToBeat(x);
-    const newDur  = Math.max(quantSnap||0.0625, snapBeat(curBeat - dragState.origBeat, quantSnap||0.0625));
-    note.duration = newDur;
   }
   PR.dirty = true; schedRedraw();
 });
@@ -2443,7 +2461,7 @@ function renderTrackHeaders() {
     card.appendChild(fxPanel);
     card.appendChild(eqPanel);
 
-    // Clicking a track header selects the track used by the pencil tool.
+    // Clicking a track header selects the track for keyboard-preview.
     card.addEventListener('click', () => selectTrack(track.id, { render:false }));
 
     // Events
@@ -4848,7 +4866,6 @@ document.addEventListener('keydown', async e => {
       if (isPlaying) { stopPlayback(); }
       else { await ensureAudio(); if (!audioCtx) break; startPlayback(0); }
       break;
-    case 'd': case 'D': setTool('pencil'); break;
     case 's': case 'S': setTool('pointer'); break;
     case 'e': case 'E': setTool('eraser'); break;
     case '+': case '=': zoomIn(); break;
@@ -4858,10 +4875,10 @@ document.addEventListener('keydown', async e => {
 
 function setTool(name) {
   activeTool = name;
-  ['pencil','pointer','eraser'].forEach(t => {
+  ['pointer','eraser'].forEach(t => {
     document.getElementById('tool-'+t).classList.toggle('active', t===name);
   });
-  noteCanvas.style.cursor = name==='eraser'?'cell':name==='pointer'?'default':'crosshair';
+  noteCanvas.style.cursor = name==='eraser'?'cell':'default';
 }
 
 // ── MASTER CONTROLS ────────────────────────────────────────────────
@@ -5721,21 +5738,27 @@ init();
 
   // Append one riff for a revealed tile. All randomness (orchestration pick,
   // composition, drummer loops) is seeded from seedStr, so every client that
-  // processes the same tile grows the identical sequence. Returns the
-  // generation key, or null when every variation of the element is used up
-  // (a sequence can never be added twice).
+  // processes the same tile grows the identical sequence. Capped to ONE riff
+  // per element (earth/water/fire/wind/void) plus ONE catacomb (dual) riff
+  // for the whole game — six generations max, however many tiles get
+  // revealed — so a long game's accumulated sections/tracks stay bounded.
+  // Returns the generation key, or null when that type is already used.
   function addTileTheme(elementKey, seedStr) {
     const run = _queue.then(async () => {
       if (!booted && !(await boot())) return null;
       const rng = mulberry32(hash32(String(seedStr)));
+      const alreadyGenerated = (prefix) => {
+        for (const k of usedGenerations) if (k.startsWith(prefix)) return true;
+        return false;
+      };
       let el, orch, genKey;
       if (elementKey === 'catacomb') {
+        if (alreadyGenerated('catacomb|')) return null; // one catacomb riff per game
         // Dual-element blend — seeded pick of the two fused elements
         const g = [...GODAI];
         const a = g.splice((rng() * g.length) | 0, 1)[0];
         const b = g[(rng() * g.length) | 0];
         genKey = `catacomb|${a}>${b}`;
-        if (usedGenerations.has(genKey)) return null;
         const ea = ELEMENTS[a], eb = ELEMENTS[b];
         el = { emoji: '⚰️', name: `Catacomb: ${ea.name}→${eb.name}`, color: '#4e342e',
                rootPc: ea.rootPc, rootPc2: eb.rootPc, orch: 'blend' };
@@ -5743,15 +5766,8 @@ init();
       } else {
         el = ELEMENTS[elementKey];
         if (!el) return null;
-        // Seeded orchestration; walk forward to the next unused one
-        const base = (rng() * ORCHS.length) | 0;
-        let pick = null;
-        for (let i = 0; i < ORCHS.length; i++) {
-          const o = ORCHS[(base + i) % ORCHS.length];
-          if (!usedGenerations.has(`${elementKey}|${o}`)) { pick = o; break; }
-        }
-        if (!pick) return null;
-        orch = pick;
+        if (alreadyGenerated(`${elementKey}|`)) return null; // one riff per element per game
+        orch = ORCHS[(rng() * ORCHS.length) | 0];
         genKey = `${elementKey}|${orch}`;
       }
       usedGenerations.add(genKey);
@@ -5776,9 +5792,21 @@ init();
     usedGenerations.clear();
   }
 
-  // Parent just made the iframe visible — canvases were sized at 0 while hidden
+  // Parent just made the iframe visible — canvases were sized at 0 while hidden.
+  // Also resumes the per-frame animLoop (see popupVisible), which onHidden()
+  // below stopped rescheduling while nobody could see it.
   function onShown() {
+    popupVisible = true;
     requestAnimationFrame(() => { resizeCanvases(); PR.gridDirty = true; PR.dirty = true; schedRedraw(); });
+    if (isPlaying && !animFrameId) animFrameId = requestAnimationFrame(animLoop);
+  }
+
+  // Parent just hid the popup (closed it, or a game started with it closed —
+  // the default). Stops animLoop's per-frame canvas/DOM work; the scheduler
+  // that actually drives audio (setInterval-based, in scheduleAhead) is
+  // untouched and keeps playing normally.
+  function onHidden() {
+    popupVisible = false;
   }
 
   function getState() {
@@ -5807,7 +5835,7 @@ init();
     }
   }, true);
 
-  window.JoytoneAPI = { boot, addTileTheme, setVolume, setMute, setPower, stop: stopAll, unlock, onShown, getState };
+  window.JoytoneAPI = { boot, addTileTheme, setVolume, setMute, setPower, stop: stopAll, unlock, onShown, onHidden, getState };
 })();
 </script>
 
