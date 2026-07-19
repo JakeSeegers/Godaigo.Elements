@@ -39,6 +39,17 @@ window.crtOverlay = (function () {
     // Flicker state
     let _flickerAlpha = 0;
 
+    // Private RNG for cosmetic noise. NEVER use Math.random here: the bot
+    // arena seeds Math.random per game for deterministic replays, and this
+    // overlay runs every animation frame — consuming the shared stream at
+    // frame rate made mid-game deck reshuffles (scroll-effects shuffleDeck)
+    // timing-dependent and broke seeded-game determinism.
+    let _noiseSeed = 0x9e3779b9;
+    function _rand() {
+        _noiseSeed = (_noiseSeed * 1664525 + 1013904223) >>> 0;
+        return _noiseSeed / 4294967296;
+    }
+
     // ── Storage ───────────────────────────────────────────────
 
     function _key(userId) {
@@ -158,11 +169,11 @@ window.crtOverlay = (function () {
             const imageData = gctx.createImageData(256, 256);
             const data = imageData.data;
             for (let i = 0; i < data.length; i += 4) {
-                const v = (Math.random() * 40) | 0;
+                const v = (_rand() * 40) | 0;
                 data[i]     = v;
                 data[i + 1] = v;
                 data[i + 2] = v;
-                data[i + 3] = Math.random() < 0.45 ? 22 : 0;
+                data[i + 3] = _rand() < 0.45 ? 22 : 0;
             }
             gctx.putImageData(imageData, 0, 0);
             _grainPatterns.push(_ctx.createPattern(gc, 'repeat'));
@@ -187,7 +198,7 @@ window.crtOverlay = (function () {
     }
 
     function _drawFlicker(ctx, w, h) {
-        _flickerAlpha += (Math.random() - 0.5) * 0.012;
+        _flickerAlpha += (_rand() - 0.5) * 0.012;
         _flickerAlpha  = Math.max(0, Math.min(0.045, _flickerAlpha));
         if (_flickerAlpha > 0.001) {
             ctx.fillStyle = `rgba(0,0,0,${_flickerAlpha.toFixed(3)})`;

@@ -93,6 +93,38 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **TRAINER STATISTICS: mirror-paired seeds + CRN + successive halving;
+  CRT overlay was breaking seeded-game determinism (fixed)** —
+  `js/bot-arena.js`, `js/crt-overlay.js`, `tools/arena-headless.mjs`,
+  `js/INDEX.md`. Prep for the generalist training run: squeeze more signal
+  from the same game budget. (1) `_playSeries` MIRROR-PAIRS games:
+  consecutive games share one deck seed with sides swapped (`gi >> 1`), so
+  deck luck helps each side exactly once per pair and cancels out of the
+  tally; `opts.gameIndexOffset` lets staged callers continue a seed
+  sequence. (2) hillClimb COMMON RANDOM NUMBERS: all challengers in a
+  round face the champion on the SAME seed sequence (dropped the
+  per-challenger seed term) — ranking differences now come from weights,
+  not decks; same fix in the CLI's task seeds (champ + HoF gauntlet).
+  (3) hillClimb SUCCESSIVE HALVING (opts.halving !== false, default on):
+  all λ challengers play a short block on shared decks, top half advances,
+  single finalist completes the full gamesPerChallenge — promotion bar
+  unchanged, judged on the finalist's full cumulative record; λ=6 G=30
+  drops 180 → 100 games/round. CLI's own sharded round loop NOT halved yet
+  (parallel restructure — deferred; it gets pairing+CRN for free since its
+  trials call BotArena.run).
+  **Determinism bug found by the mirror test, fixed:** crt-overlay's
+  flicker consumed `Math.random()` EVERY FRAME from the same stream the
+  arena seeds per game — mid-game deck reshuffles (scroll-effects
+  `shuffleDeck`, e.g. after Scholar's Insight) landed at a
+  frame-count-dependent stream position, so "seeded" games weren't
+  reproducible (start-of-game shuffles were safe — synchronous before any
+  frame). crt-overlay now uses a private LCG for flicker + grain; game
+  RNG untouched by cosmetics. Verified (6/6): A-vs-A self-play 10 games →
+  EXACTLY 5-5 with all 5 pairs true mirrors (same seat wins, same turn
+  counts) — held even through 2 stall-restarts (restart seeds derive
+  deterministically, so a pair stalls+restarts in mirror too); halving
+  budget exact (14 games for λ=4 G=6, vs 24 legacy); one shared trial
+  seed in logs; two stage-cuts; `halving:false` reproduces legacy budget.
 - **BOT Stage 2.5 step 4 tranche 2: Refreshing Thought / Mason's Savvy /
   Heavy Stomp / Combust simulated; simCast ordering bug fixed** —
   `js/bot-sim.js`, `docs/bot-roadmap.md`, `js/INDEX.md`. SIMULATED_SCROLLS

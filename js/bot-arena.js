@@ -605,14 +605,25 @@
     // Computes aFitness/bFitness via sideFitness() (not just win tallies)
     // and fires opts.onGame per game, same as before the N-player refactor.
     // ----------------------------------------------------------------
+    // MIRROR-PAIRED seeds (variance reduction): consecutive games (0,1),
+    // (2,3), ... share ONE deck seed with the sides swapped — the whole
+    // pipeline is seeded/deterministic, so a lucky shuffle helps each side
+    // exactly once per pair and deck luck cancels out of the win tally.
+    // (Self-play sanity property: A-vs-A must split every decided pair
+    // exactly 1-1 — the mirrored game IS the first game with seats
+    // swapped.) opts.gameIndexOffset lets staged callers (hillClimb's
+    // successive halving) CONTINUE a challenger's seed sequence across
+    // blocks instead of replaying the same decks.
     async function _playSeries(weightsA, weightsB, nGames, seed, opts) {
         const result = { aWins: 0, bWins: 0, draws: 0, avgTurns: 0, aFitness: 0, bFitness: 0, games: [] };
+        const offset = opts.gameIndexOffset || 0;
         for (let i = 0; i < nGames && !_stopRequested; i++) {
-            const aIsPlayer0 = i % 2 === 0;
+            const gi = offset + i;
+            const aIsPlayer0 = gi % 2 === 0;
             const g = await playGame(
                 aIsPlayer0 ? weightsA : weightsB,
                 aIsPlayer0 ? weightsB : weightsA,
-                seed * 1000 + i,
+                seed * 1000 + (gi >> 1),
                 opts
             );
             const aWon = g.winner !== null && ((g.winner === 0) === aIsPlayer0);
@@ -975,34 +986,80 @@
                 const challengers = [];
                 for (let c = 0; c < lambda; c++) challengers.push(mutate(champion, rng, sigma));
 
-                // Each challenger plays the champion head-to-head. Challenger is
-                // side A, champion side B; _playSeries alternates who is player 0
-                // so first-move advantage cancels. Rank by net wins, then the
-                // sideFitness margin (win + progress − stalls) as a tie-break.
-                let best = null;
-                for (let c = 0; c < challengers.length && !_stopRequested; c++) {
-                    // Fired once per challenger, BEFORE its trial series starts —
-                    // lets a UI progress display say WHICH challenger is currently
-                    // playing (onGame's own gameNumber/totalGames resets to 1/N for
-                    // every challenger, so it alone can't distinguish challenger 1
-                    // from challenger 4 of the same round).
-                    if (typeof opts.onChallenger === 'function') {
-                        try { opts.onChallenger(c + 1, lambda, round + 1, rounds); } catch (e) { /* UI callback errors never abort a run */ }
-                    }
-                    const trialSeed = (seed * 1000003 + round * 1009 + c) >>> 0;
-                    const r = await _playSeries(challengers[c], champion, gamesPerChallenge, trialSeed, { ...opts, visual });
-                    gamesPlayed += r.aWins + r.bWins + r.draws;
-                    const decided = r.aWins + r.bWins;
-                    const winRate = decided > 0 ? r.aWins / decided : 0;
-                    const netWins = r.aWins - r.bWins;
-                    const fitMargin = r.aFitness - r.bFitness;
-                    const cand = { w: challengers[c], winRate, decided, netWins, fitMargin,
-                                   aWins: r.aWins, bWins: r.bWins, draws: r.draws };
-                    if (!best || netWins > best.netWins ||
-                        (netWins === best.netWins && fitMargin > best.fitMargin)) best = cand;
-                    log(`round ${round + 1} challenger ${c + 1}/${lambda}: ${r.aWins}-${r.bWins}` +
-                        `${r.draws ? ' (' + r.draws + 'd)' : ''} vs champion (winRate ${(winRate * 100).toFixed(0)}% of ${decided} decided)`);
+                // COMMON RANDOM NUMBERS: every challenger in this round faces
+                // the champion on the SAME seed sequence (no per-challenger
+                // seed term, unlike before) — combined with _playSeries'
+                // mirror-pairing, ranking differences between challengers come
+                // from their weights, not from who drew the luckier decks.
+                const trialSeed = (seed * 1000003 + round * 1009) >>> 0;
+
+                // SUCCESSIVE HALVING (opts.halving !== false): every
+                // challenger gets a short paired audition on the same decks,
+                // only the leaders advance to longer blocks, and the single
+                // finalist finishes out the full gamesPerChallenge budget.
+                // The promotion bar below is judged on the finalist's FULL
+                // cumulative record — rigor unchanged, only the games wasted
+                // on obvious losers are saved (λ=6, G=30: 180 → 100 games).
+                const halving = opts.halving !== false && lambda > 1;
+                let stages;
+                if (halving) {
+                    let b = Math.ceil(gamesPerChallenge / 3);
+                    if (b % 2) b++; // even blocks keep mirror pairs whole
+                    const b1 = Math.min(b, gamesPerChallenge);
+                    const b2 = Math.min(b, gamesPerChallenge - b1);
+                    const b3 = gamesPerChallenge - b1 - b2;
+                    stages = [{ games: b1, keep: Math.ceil(lambda / 2) },
+                              { games: b2, keep: 1 },
+                              { games: b3, keep: 1 }].filter(s => s.games > 0);
+                } else {
+                    stages = [{ games: gamesPerChallenge, keep: 1 }];
                 }
+
+                // Cumulative per-challenger records across stages; rank by net
+                // wins, then the sideFitness margin — same ordering as before.
+                let survivors = challengers.map((w, c) => ({
+                    w, c, played: 0, aWins: 0, bWins: 0, draws: 0, aFitness: 0, bFitness: 0 }));
+                for (let s = 0; s < stages.length && !_stopRequested; s++) {
+                    const st = stages[s];
+                    for (let k = 0; k < survivors.length && !_stopRequested; k++) {
+                        const cand = survivors[k];
+                        // Fired per challenger before its series — lets the UI
+                        // say which challenger (of the current stage's
+                        // survivors) is playing; onGame's own count resets per
+                        // series so it can't distinguish them alone.
+                        if (typeof opts.onChallenger === 'function') {
+                            try { opts.onChallenger(k + 1, survivors.length, round + 1, rounds); } catch (e) { /* UI callback errors never abort a run */ }
+                        }
+                        // gameIndexOffset continues this challenger's seed
+                        // sequence — later stages play NEW decks (identical
+                        // across survivors), never replays of stage 1.
+                        const r = await _playSeries(cand.w, champion, st.games, trialSeed,
+                            { ...opts, visual, gameIndexOffset: cand.played });
+                        cand.played += st.games;
+                        cand.aWins += r.aWins; cand.bWins += r.bWins; cand.draws += r.draws;
+                        cand.aFitness += r.aFitness; cand.bFitness += r.bFitness;
+                        gamesPlayed += r.aWins + r.bWins + r.draws;
+                        log(`round ${round + 1} stage ${s + 1}/${stages.length} challenger #${cand.c + 1}` +
+                            ` (trial seed ${trialSeed}): ${cand.aWins}-${cand.bWins}` +
+                            `${cand.draws ? ' (' + cand.draws + 'd)' : ''} over ${cand.played} games`);
+                    }
+                    survivors.sort((x, y) => ((y.aWins - y.bWins) - (x.aWins - x.bWins)) ||
+                        ((y.aFitness - y.bFitness) - (x.aFitness - x.bFitness)));
+                    if (survivors.length > st.keep) {
+                        log(`round ${round + 1} stage ${s + 1}: cutting ${survivors.length} → ${st.keep}` +
+                            ` (dropped: ${survivors.slice(st.keep).map(x => '#' + (x.c + 1) + ' at ' + x.aWins + '-' + x.bWins).join(', ')})`);
+                        survivors = survivors.slice(0, st.keep);
+                    }
+                }
+                const finalist = survivors[0] || null;
+                const decidedF = finalist ? finalist.aWins + finalist.bWins : 0;
+                const best = finalist ? {
+                    w: finalist.w, decided: decidedF,
+                    winRate: decidedF > 0 ? finalist.aWins / decidedF : 0,
+                    netWins: finalist.aWins - finalist.bWins,
+                    fitMargin: finalist.aFitness - finalist.bFitness,
+                    aWins: finalist.aWins, bWins: finalist.bWins, draws: finalist.draws,
+                } : null;
 
                 // Promote ONLY on a real margin over enough decisive games.
                 const promoted = !!best && best.decided >= minDecided && best.winRate >= promoteWinRate;

@@ -598,10 +598,15 @@ async function runHillClimb(browser, url) {
         const hofPer = hof.length ? Math.max(2, Math.round(OPTS.hcHofGames / hof.length)) : 0;
         const tasks = [];
         challengers.forEach((w, idx) => {
+            // COMMON RANDOM NUMBERS: no per-challenger term in the seed — all
+            // challengers this round face the champion (and each HoF member)
+            // on the SAME decks, so ranking differences come from weights,
+            // not deck luck. (BotArena._playSeries additionally mirror-pairs
+            // consecutive games onto one seed with sides swapped.)
             tasks.push({ label: `round ${gRound + 1} ch ${idx + 1} vs champion`,
-                a: w, b: champion, games: N, seed: (OPTS.seed * 1000003 + gRound * 1009 + idx) >>> 0, ci: idx, kind: 'champ' });
+                a: w, b: champion, games: N, seed: (OPTS.seed * 1000003 + gRound * 1009) >>> 0, ci: idx, kind: 'champ' });
             hof.forEach((hw, hi) => tasks.push({ label: `round ${gRound + 1} ch ${idx + 1} vs HoF#${hi + 1}`,
-                a: w, b: hw, games: hofPer, seed: (OPTS.seed * 7919 + gRound * 101 + idx * 13 + hi) >>> 0, ci: idx, kind: 'hof' }));
+                a: w, b: hw, games: hofPer, seed: (OPTS.seed * 7919 + gRound * 101 + hi) >>> 0, ci: idx, kind: 'hof' }));
         });
         const results = await runSeriesPool(browser, url, tasks);
         const agg = challengers.map(() => ({ cA: 0, cB: 0, cFit: 0, hA: 0, hB: 0 }));
