@@ -26,9 +26,12 @@
 //   cast        AP cost, hand→active, win-condition activation (incl. the
 //               empty-source-pool rule and catacomb component elements) are
 //               exact. The scroll EFFECT is simulated only for scrolls in
-//               SIMULATED_SCROLLS; anything else is recorded in
-//               snap.sim.unsimulatedCasts so a search can score it with a
-//               flat heuristic instead of pretending to know the outcome.
+//               SIMULATED_SCROLLS — currently Create (VOID_SCROLL_5),
+//               Transmute (FIRE_SCROLL_4), Arson (FIRE_SCROLL_5), each
+//               mirroring its BotEffects driver's deterministic choice —
+//               anything else is recorded in snap.sim.unsimulatedCasts so a
+//               search can score it with a flat heuristic instead of
+//               pretending to know the outcome.
 //
 // KNOWN ACCEPTED DIVERGENCES (deliberate, all rare and all logged):
 //   - scroll-effect side effects of non-whitelisted casts
@@ -74,7 +77,9 @@
     // cast bookkeeping only + an entry in snap.sim.unsimulatedCasts. Add a
     // scroll here ONLY together with harness evidence that its simulation
     // matches the real effect.
-    const SIMULATED_SCROLLS = new Set();
+    // Stage 2.5 step 4, first tranche (modal-only, pure pool/AP effects
+    // with deterministic BotEffects drivers): Create, Transmute, Arson.
+    const SIMULATED_SCROLLS = new Set(['VOID_SCROLL_5', 'FIRE_SCROLL_4', 'FIRE_SCROLL_5']);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
     // hidden non-player tiles expose only the outer ring; revealed/player
@@ -378,6 +383,107 @@
         applyFireInteractions(snap, placed);
     }
 
+    // ----------------------------------------------------------------
+    // Whitelisted scroll-effect simulations (Stage 2.5 step 4).
+    // Each mirrors BOTH the real effect's state change AND the exact
+    // deterministic choice its BotEffects driver would make — a simulated
+    // cast must land on the same outcome the real cast (resolved by the
+    // driver) produces, or validate() flags the divergence.
+    // ----------------------------------------------------------------
+    const CREATE_RANKS = { earth: 5, water: 4, fire: 3, wind: 2, void: 1 };
+
+    // Mirror of bot-effects.js's elementNeed()/rankedElements() (same
+    // constants, same stable-sort tie-break — validate() is the drift alarm
+    // if the two ever diverge).
+    function effectElementNeed(snap, p, element) {
+        const room = Math.max(0, POOL_CAP - (p.pool[element] || 0));
+        let v = 1.0 * room;
+        if (!p.activated.includes(element)) v += 2.5 * room;
+        if ((snap.sourcePool[element] || 0) <= 0) v += -3.0 * room;
+        return v;
+    }
+    function effectRankedElements(snap, p) {
+        return [...ELEMENTS].sort((a, b) =>
+            effectElementNeed(snap, p, b) - effectElementNeed(snap, p, a));
+    }
+
+    // Create (VOID_SCROLL_5): the driver clicks the best-need element whose
+    // pool still has room (full-pool buttons aren't clickable);
+    // drawStonesToPool then grants min(rank, source available, pool room).
+    function simEffectCreate(snap, p) {
+        const el = effectRankedElements(snap, p).find(e => (p.pool[e] || 0) < POOL_CAP);
+        if (!el) return; // every pool full — nothing clickable, cast fizzles
+        const drawn = Math.min(
+            CREATE_RANKS[el],
+            snap.sourcePool[el] || 0,
+            POOL_CAP - (p.pool[el] || 0)
+        );
+        if (drawn > 0) {
+            snap.sourcePool[el] -= drawn;
+            p.pool[el] = (p.pool[el] || 0) + drawn;
+        }
+    }
+
+    // Transmute (FIRE_SCROLL_4): the driver discards the most-plentiful
+    // NON-void stone (returned to the source pool, capped) for +2 AP each
+    // (capped at 5 + void stones held), until total AP reaches
+    // min(cap, WEIGHTS.transmuteTargetAP) or stones run out. Never scrolls,
+    // never void — driveTransmute skips both (see its comment; skipping
+    // void is also what makes this mirror exact, since a void discard
+    // clamps voidAP through a current/void split the snapshot can't see).
+    function simEffectTransmute(snap, p) {
+        const maxTotal = BASE_AP + (p.pool.void || 0);
+        const target = Math.min(maxTotal,
+            window.BotSystem?.WEIGHTS?.transmuteTargetAP ?? 7);
+        while (snap.turn.ap < target) {
+            let best = null, bestCount = 0;
+            for (const el of ELEMENTS) {
+                if (el === 'void') continue;
+                if ((p.pool[el] || 0) > bestCount) { bestCount = p.pool[el]; best = el; }
+            }
+            if (!best) break;
+            p.pool[best]--;
+            if ((snap.sourcePool[best] || 0) < SOURCE_CAP) snap.sourcePool[best]++;
+            snap.turn.ap = Math.min(maxTotal, snap.turn.ap + 2);
+        }
+    }
+
+    // Arson (FIRE_SCROLL_5): the driver targets the biggest threat
+    // (rankedOpponents: most activated ×1000 + total pool, stable
+    // tie-break = lowest index), then destroys 1 stone of that opponent's
+    // most-plentiful type (destroyed outright — NOT returned to the source
+    // pool, unlike Transmute), and the scroll moves from the caster's
+    // active area to the common area (replacing any same-element scroll
+    // there, per discardToCommonArea). If the target has no stones the
+    // real flow aborts before any of that — scroll stays in active.
+    // Excavate immunity is a buff the snapshot doesn't carry — accepted
+    // (rare) divergence in target choice.
+    function simEffectArson(snap, p, scrollName) {
+        const meIdx = snap.turn.activePlayerIndex;
+        let target = null, bestScore = -1;
+        for (const op of snap.players) {
+            if (!op || op.index === meIdx) continue;
+            const score = op.activated.length * 1000 +
+                ELEMENTS.reduce((s, el) => s + (op.pool[el] || 0), 0);
+            if (score > bestScore) { bestScore = score; target = op; }
+        }
+        if (!target) return;
+        let el = null, count = 0;
+        for (const e of ELEMENTS) {
+            if ((target.pool[e] || 0) > count) { count = target.pool[e]; el = e; }
+        }
+        if (!el) return; // target has no stones — real flow aborts, scroll stays put
+        target.pool[el]--;
+        // handleScrollDisposition(..., forceToCommonArea): active → common
+        // area (a common-area cast isn't in active, and simply stays there)
+        const ai = p.active.indexOf(scrollName);
+        if (ai !== -1) { p.active.splice(ai, 1); p.activeCount--; }
+        if (!snap.commonArea) snap.commonArea = [];
+        snap.commonArea = snap.commonArea.filter(name =>
+            window.SCROLL_DEFINITIONS?.[name]?.element !== 'fire');
+        if (!snap.commonArea.includes(scrollName)) snap.commonArea.push(scrollName);
+    }
+
     function simCast(snap, a) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
@@ -421,8 +527,18 @@
                 scroll: a.scroll,
                 grantedNew: p.activated.length > activatedBefore,
             });
+        } else if (a.scroll === 'FIRE_SCROLL_4') {
+            // Transmute's execute() activates fire with NO source-pool gate
+            // (deliberate belt-and-suspenders in scroll-effects.js — the
+            // gated block above may have skipped it when the fire source
+            // pool is empty; the real cast still activates).
+            if (!p.activated.includes('fire')) p.activated.push('fire');
+            simEffectTransmute(snap, p);
+        } else if (a.scroll === 'VOID_SCROLL_5') {
+            simEffectCreate(snap, p);
+        } else if (a.scroll === 'FIRE_SCROLL_5') {
+            simEffectArson(snap, p, a.scroll);
         }
-        // (no whitelisted effects implemented yet)
     }
 
     function simDiscard(snap, a) {

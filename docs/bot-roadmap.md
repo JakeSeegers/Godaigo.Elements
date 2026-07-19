@@ -32,7 +32,7 @@ different concerns and neither blocks the other:
 | R5 | Server-side bot execution + bot-vs-bot | TODO | backend service running `bot.js` logic headless |
 | 2 | Forward model + lookahead search | **DONE** (steps 1–4; step 5 MCTS optional, not started) | `js/bot-sim.js` + `bot.js` searchPick |
 | 3a | Weight evolution via self-play arena | **DONE** (run + evolve built; first measurements taken; large-scale evolution awaits R5; cheat-panel "🧬 Train Weights" button runs a modest preset without the console) | `js/bot-arena.js`, `js/game-ui.js` cheat panel |
-| 2.5 | Scroll-effect usage: selection targets + response scrolls | **DONE** — full choice-space inventory covered: all selection effects, response scrolls, Excavate's deferred teleport, and the 2 previously-drag-only scrolls (Take Flight, Telekinesis) | `js/bot-effects.js` + bot-sim whitelist |
+| 2.5 | Scroll-effect usage: selection targets + response scrolls | **DONE** — full choice-space inventory covered: all selection effects, response scrolls, Excavate's deferred teleport, and the 2 previously-drag-only scrolls (Take Flight, Telekinesis). Step 4 (simulator whitelist) first tranche done: Create/Transmute/Arson simulated with 9/9 harness scenarios at zero divergence | `js/bot-effects.js` + bot-sim whitelist |
 | 3b | Human game logging → eval set / cloning data | TODO | `js/bot-logger.js` (new) + Supabase table |
 | 3c | Neural RL (optional, last) | TODO | — |
 
@@ -929,11 +929,44 @@ Build order (each step independently commit-able and arena-measurable):
    - Known related bug this would help: response-only (level-1) scrolls can
      permanently clog a common-area element slot since neither bot can ever
      cast OR respond with one today — see the "Related finding" note above.
-4. **Whitelist effects in the simulator.** For each scroll whose effect the
-   bot can now drive, implement it in `BotSim` and add it to
-   `SIMULATED_SCROLLS` — ONLY together with harness evidence
-   (`BotSim.validate`) that the simulation matches reality. This is what
-   lets `searchPick()` plan around effects instead of scoring them blind.
+4. **Whitelist effects in the simulator (FIRST TRANCHE DONE — Create,
+   Transmute, Arson).** For each scroll whose effect the bot can now drive,
+   implement it in `BotSim` and add it to `SIMULATED_SCROLLS` — ONLY
+   together with harness evidence (`BotSim.validate`) that the simulation
+   matches reality. This is what lets `searchPick()` plan around effects
+   instead of scoring them blind.
+
+   **Tranche 1 (2026-07-19): VOID_SCROLL_5 (Create), FIRE_SCROLL_4
+   (Transmute), FIRE_SCROLL_5 (Arson)** — chosen because all three are
+   modal-only pure pool/AP effects with deterministic BotEffects drivers,
+   so the sim can mirror BOTH the state change AND the exact choice the
+   driver makes (a simulated cast must land where the real driven cast
+   lands, or the whole exercise is self-deception). Implementation notes:
+   - The sim mirrors bot-effects' `elementNeed()`/`rankedElements()`
+     constants verbatim (`effectElementNeed` in bot-sim.js) — if either
+     side's heuristic changes, the validation harness is the drift alarm.
+   - **Transmute's `execute()` activates fire UNCONDITIONALLY** (an early
+     `activated.add('fire')` in scroll-effects.js, deliberately ahead of
+     the modal) — it BYPASSES the empty-source-pool gate every other
+     scroll respects. Mirrored faithfully; flagged as a possible rules
+     inconsistency worth a design decision someday.
+   - `driveTransmute()` changed to never discard VOID stones: 2 AP for a
+     stone that permanently raises the AP cap was a bad trade anyway
+     (same reasoning as `placeVoidSpendPenalty`), and a void discard
+     clamps voidAP through a current/void AP split the snapshot doesn't
+     carry — skipping void is what makes the mirror provably exact.
+   - Excavate-immunity (a buff, not in the snapshot) can skew Arson's
+     target choice — accepted, rare divergence, same class as the other
+     documented buff gaps.
+   Harness evidence: 9/9 targeted scenarios, ZERO divergence (scenarios
+   cover need-ranking, source caps, pool-room edges, the void AP cap,
+   unconditional fire activation with a dead fire source, empty-opponent
+   no-op, and 3-player biggest-threat targeting). A/B arena (greedy vs
+   hybrid, 10 games, seed 500, whitelist ON vs OFF): identical 7-3 hybrid
+   margin and near-identical fitness both conditions — no regression (the
+   acceptance bar), no measurable gain at this sample size (expected:
+   these scrolls decide few positions per game; value should compound as
+   more scrolls join the whitelist — rerun at scale once R5 lands).
 
 Acceptance per increment: arena win rate vs. the pre-increment bot improves
 (same weights, same seeds); no increment may regress the Stage-1 fixed bugs

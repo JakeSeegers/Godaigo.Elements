@@ -93,6 +93,51 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT Stage 2.5 step 4 tranche 1: BotSim simulates Create/Transmute/Arson**
+  — `js/bot-sim.js`, `js/bot-effects.js`, `docs/bot-roadmap.md`,
+  `js/INDEX.md`. First real progress on the intelligence track's designated
+  next step: `SIMULATED_SCROLLS` is no longer empty. Each simulation mirrors
+  BOTH the effect's state change AND the exact deterministic choice its
+  BotEffects driver makes (need-ranked element for Create; most-plentiful
+  NON-void discard loop up to `transmuteTargetAP` for Transmute; biggest-
+  threat targeting + scroll-to-common-area for Arson) so a simulated cast
+  lands where the real driven cast lands. Two notable discoveries recorded
+  in the roadmap: Transmute's `execute()` activates fire UNCONDITIONALLY
+  (bypasses the empty-source-pool gate every other scroll respects —
+  mirrored faithfully, flagged as a possible rules inconsistency), and
+  `driveTransmute()` now never discards void stones (bad trade per the
+  `placeVoidSpendPenalty` reasoning; also what makes the mirror provably
+  exact, since a void discard clamps voidAP through a current/void split
+  the snapshot can't see). Verified: 9/9 targeted harness scenarios at ZERO
+  divergence (need-ranking, source caps, pool-room edges, void AP cap,
+  unconditional fire activation with dead fire source, empty-opponent
+  no-op, 3-player threat targeting). A/B arena (greedy vs hybrid, 10 games,
+  seed 500, whitelist ON vs OFF): identical 7-3 hybrid margin both ways —
+  no regression, no measurable gain at this sample (expected; rerun at
+  scale as the whitelist grows). Natural next increment: tranche 2
+  (Combust + tile-flip scrolls — board-geometry effects).
+- **LOGGING: win-skip warn→log + plan-fallback NOTE** — `js/game-core.js`,
+  `js/bot.js`. From a glitch-hunt session (8 seeded arena games, 2-5
+  players, full instrumentation — all clean: legitimate winners, zero
+  errors, zero invariant violations, no DOM accumulation across games).
+  IMPORTANT negative result preserved in bot.js: a planNextAction pre-gate
+  ("step off stone first" / "skip pawn-occupied cells") to avoid the
+  "Plan action failed" fallback was TRIED and REVERTED — it made bots
+  pathologically passive (7/8 seeded games stalled out vs 7/8 clean wins).
+  The rejection+replan path is load-bearing recovery; do not re-try.
+  Separate latent lead: one `TypeError: reading 'element'` seen during a
+  stall-restart teardown (1 in 24 restarts) — worth chasing if stalls spike.
+- **PERF: three memory fixes** — `js/lobby.js` (scroll-state sync interval
+  stacked one permanent 3s validator + duplicate broadcast per game joined;
+  now tracked/cleared), `js/crt-overlay.js` (grain regenerated a 256KB
+  ImageData ~30×/s forever → pool of 8 pre-rendered tiles, zero per-frame
+  allocation), `js/joytone-bridge.js` (full DAW iframe loaded at page load
+  even muted → lazy-created on first actual need; muted players and
+  suppressed training runs never load it). 15/15 headless assertions.
+  NOTE: the working tree still carries an UNCOMMITTED pre-existing
+  cast→activate wording sweep (game-core, game-ui, lobby, scroll files,
+  index.html, others) that predates these sessions — deliberately left
+  out of these commits for the user to review/commit themselves.
 - **BOT TYCOON polish: owner names, deploy-once, Breed removed** —
   `js/gamification.js`, `js/gamification-ui.js`, `js/game-ui.js`, migration
   `add_captured_bot_source_to_deployed_bots`. Three explicit user requests

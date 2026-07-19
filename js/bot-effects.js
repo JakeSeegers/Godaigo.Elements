@@ -530,7 +530,13 @@
         // Discard the stone type the bot is holding the MOST of first —
         // least likely to be needed for a specific pattern. Never touch
         // scrolls: Transmute's AP gain isn't worth a hand/active slot.
-        const stoneButtons = buttons.filter(b => /^Discard 1 /.test(b.textContent) && !b.disabled);
+        // Never void either: 2 AP is a bad trade for a stone that permanently
+        // raises the AP cap (same reasoning as bot.js's placeVoidSpendPenalty)
+        // — and skipping it is what keeps BotSim's Transmute mirror exact,
+        // since a void discard clamps voidAP through a current/void AP split
+        // the snapshot doesn't carry.
+        const stoneButtons = buttons.filter(b => /^Discard 1 /.test(b.textContent) &&
+            !/^Discard 1 void/.test(b.textContent) && !b.disabled);
         let best = null, bestCount = -1;
         stoneButtons.forEach(b => {
             const m = b.textContent.match(/\((\d+)\)$/);
