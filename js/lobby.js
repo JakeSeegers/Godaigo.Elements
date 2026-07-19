@@ -405,6 +405,7 @@
             if (playersSubscription) { playersSubscription.unsubscribe(); playersSubscription = null; }
             if (gameRoomSubscription) { gameRoomSubscription.unsubscribe(); gameRoomSubscription = null; }
             if (gameChannel) { gameChannel.unsubscribe(); gameChannel = null; }
+            stopScrollStateSync();
             document.getElementById('ready-controls').style.display = 'none';
             showGameBrowser();
         }
@@ -713,6 +714,7 @@
                     gameChannel.unsubscribe();
                     gameChannel = null;
                 }
+                stopScrollStateSync();
 
                 // Reset UI state
                 const readyCtrl = document.getElementById('ready-controls');
@@ -1831,7 +1833,20 @@
         let gameChannel = null; // Global reference to the game broadcast channel
 
         // Set up broadcast channel for real-time game synchronization
+        // Scroll-state validation interval — one per game channel. Must be
+        // tracked and cleared: setupGameBroadcast() runs once per game joined
+        // in this tab, and an untracked interval here permanently stacks
+        // (N games = N validators + N duplicate sync broadcasts every 3s).
+        let scrollStateSyncInterval = null;
+        function stopScrollStateSync() {
+            if (scrollStateSyncInterval) {
+                clearInterval(scrollStateSyncInterval);
+                scrollStateSyncInterval = null;
+            }
+        }
+
         function setupGameBroadcast() {
+            stopScrollStateSync();
             if (gameChannel) {
                 gameChannel.unsubscribe();
             }
@@ -3215,7 +3230,7 @@
             });
 
             // Aggressive scroll state validation and sync (every 3 seconds)
-            setInterval(() => {
+            scrollStateSyncInterval = setInterval(() => {
                 if (!isMultiplayer || !spellSystem) return;
 
                 // Validate current state (only logs if errors found)

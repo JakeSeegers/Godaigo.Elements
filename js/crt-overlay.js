@@ -29,11 +29,12 @@ window.crtOverlay = (function () {
     // Scanline pattern — rebuilt on resize, reused every frame
     let _scanPattern = null;
 
-    // Offscreen grain canvas (256×256, tiled)
-    let _grainCanvas  = null;
-    let _grainCtx     = null;
-    let _grainPattern = null;
-    let _grainFrame   = 0;
+    // Grain: a fixed pool of pre-rendered 256×256 tiles cycled per frame.
+    // Generating grain live (createImageData + createPattern ~30×/s) churned
+    // ~7 MB/s of garbage; an 8-tile cycle is visually identical random static.
+    const GRAIN_POOL_SIZE = 8;
+    let _grainPatterns = null;
+    let _grainFrame    = 0;
 
     // Flicker state
     let _flickerAlpha = 0;
@@ -97,12 +98,6 @@ window.crtOverlay = (function () {
         document.body.appendChild(_canvas);
         _ctx = _canvas.getContext('2d');
 
-        // Grain offscreen canvas
-        _grainCanvas = document.createElement('canvas');
-        _grainCanvas.width  = 256;
-        _grainCanvas.height = 256;
-        _grainCtx = _grainCanvas.getContext('2d');
-
         window.addEventListener('resize', _onResize);
         // Defer resize to next frame so the canvas is fully laid out
         requestAnimationFrame(() => { _onResize(); _loop(); });
@@ -115,8 +110,7 @@ window.crtOverlay = (function () {
         _canvas.height = h;
         _vignetteGrad  = _buildVignetteGrad(w, h);
         _scanPattern   = _buildScanPattern();
-        // Grain pattern rebuilt next grain frame
-        _grainPattern  = null;
+        // Grain pool is size-independent (tiled patterns) — no rebuild needed
     }
 
     // ── Effect builders ───────────────────────────────────────
@@ -154,20 +148,25 @@ window.crtOverlay = (function () {
         return _ctx.createPattern(sc, 'repeat');
     }
 
-    function _updateGrain() {
-        const iw = _grainCanvas.width;
-        const ih = _grainCanvas.height;
-        const imageData = _grainCtx.createImageData(iw, ih);
-        const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            const v = (Math.random() * 40) | 0;
-            data[i]     = v;
-            data[i + 1] = v;
-            data[i + 2] = v;
-            data[i + 3] = Math.random() < 0.45 ? 22 : 0;
+    function _buildGrainPool() {
+        _grainPatterns = [];
+        for (let n = 0; n < GRAIN_POOL_SIZE; n++) {
+            const gc = document.createElement('canvas');
+            gc.width  = 256;
+            gc.height = 256;
+            const gctx = gc.getContext('2d');
+            const imageData = gctx.createImageData(256, 256);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const v = (Math.random() * 40) | 0;
+                data[i]     = v;
+                data[i + 1] = v;
+                data[i + 2] = v;
+                data[i + 3] = Math.random() < 0.45 ? 22 : 0;
+            }
+            gctx.putImageData(imageData, 0, 0);
+            _grainPatterns.push(_ctx.createPattern(gc, 'repeat'));
         }
-        _grainCtx.putImageData(imageData, 0, 0);
-        _grainPattern = _ctx.createPattern(_grainCanvas, 'repeat');
     }
 
     // ── Render loop ───────────────────────────────────────────
@@ -203,15 +202,13 @@ window.crtOverlay = (function () {
     }
 
     function _drawGrain(ctx, w, h) {
-        // Update grain tile every 2nd frame
+        if (!_grainPatterns) _buildGrainPool();
+        // Advance to the next pooled tile every 2nd frame (matches the old
+        // regeneration cadence) — zero allocation per frame
         _grainFrame++;
-        if (_grainFrame % 2 === 0 || !_grainPattern) {
-            _updateGrain();
-        }
-        if (_grainPattern) {
-            ctx.fillStyle = _grainPattern;
-            ctx.fillRect(0, 0, w, h);
-        }
+        const pattern = _grainPatterns[(_grainFrame >> 1) % GRAIN_POOL_SIZE];
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, w, h);
     }
 
     function _drawScanlines(ctx, w, h) {

@@ -62,11 +62,36 @@
         document.body.appendChild(popup);
     }
 
+    // Lazy iframe: the embedded Joytone app is a full DAW (audio engine +
+    // sequencer UI) — don't pay its memory cost until something actually
+    // needs it (an unmuted game start, an unmute mid-game, or the popup).
+    // A player who keeps music muted never loads it at all.
+    // Resolves with the child's JoytoneAPI, or null if it never appears.
+    let _framePromise = null;
+    function ensureFrame() {
+        if (!_framePromise) {
+            if (!popup) buildDom();
+            _framePromise = new Promise((resolve) => {
+                const deadline = Date.now() + 15000;
+                const check = () => {
+                    const a = api();
+                    if (a) return resolve(a);
+                    if (Date.now() > deadline) {
+                        console.warn('Joytone: iframe API never became ready');
+                        return resolve(null);
+                    }
+                    setTimeout(check, 100);
+                };
+                check();
+            });
+        }
+        return _framePromise;
+    }
+
     function showPopup() {
-        if (!popup) return;
+        ensureFrame().then(a => { if (popupVisible) a?.onShown(); });
         popup.style.display = 'block';
         popupVisible = true;
-        api()?.onShown();
     }
 
     function hidePopup() {
@@ -89,14 +114,14 @@
     // soundtrack this is designed around. Real gameplay (including watching
     // a single "Bot match" via spectate()) is never suppressed.
     let suppressed = false;
+    let bootedThisGame = false; // so a mid-game unmute boots exactly once
 
-    async function startForGame() {
-        if (gameActive) return;
-        gameActive = true;
-        handledTiles.clear();
-        if (suppressed) return;
-        const a = api();
-        if (!a) return;
+    // The shared boot sequence — used at unmuted game start, and by a
+    // mid-game unmute when the muted start skipped loading the iframe.
+    async function _bootEngine() {
+        const a = await ensureFrame();
+        if (!a || !gameActive || suppressed || bootedThisGame) return;
+        bootedThisGame = true;
         a.setMute(muted);
         a.setVolume(volume);
         a.setPower?.(!muted);
@@ -108,9 +133,23 @@
         try { await a.boot(); } catch (e) { console.warn('Joytone boot failed:', e); }
     }
 
+    async function startForGame() {
+        if (gameActive) return;
+        gameActive = true;
+        bootedThisGame = false;
+        handledTiles.clear();
+        if (suppressed) return;
+        // Muted with no iframe loaded yet: skip entirely — this is the lazy
+        // win. (A muted player with the iframe already up keeps the old
+        // powered-off behavior via _bootEngine's setPower(false).)
+        if (muted && !iframe) return;
+        await _bootEngine();
+    }
+
     function stopForLobby() {
         if (!gameActive) return;
         gameActive = false;
+        bootedThisGame = false;
         handledTiles.clear();
         api()?.stop();
     }
@@ -154,6 +193,12 @@
     function setMuted(m) {
         muted = !!m;
         localStorage.setItem('godaigo_joytone_muted', muted ? 'true' : 'false');
+        // Unmuting mid-game when the muted start skipped loading the iframe:
+        // load + boot now (from the current game's theme onward).
+        if (!muted && gameActive && !suppressed && !bootedThisGame) {
+            _bootEngine();
+            return;
+        }
         api()?.setMute(muted);
         if (!suppressed) api()?.setPower(!muted);
     }
@@ -219,7 +264,7 @@
     }
 
     function init() {
-        buildDom();
+        // No buildDom() here — the iframe is created lazily by ensureFrame()
         watchLobby();
         document.addEventListener('keydown', onKeyDown);
         document.addEventListener('keyup', onKeyUp);
