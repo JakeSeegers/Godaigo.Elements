@@ -59,7 +59,7 @@ function rotateHex(q, r, steps) {
 
 // Earth scroll effect definitions
 const EARTH_SCROLL_EFFECTS = {
-    1: { name: 'Iron Stance', description: 'Counter the most recently cast scroll. That scroll is cancelled.', isCounter: true },
+    1: { name: 'Iron Stance', description: 'Counter the most recently activated scroll. That scroll is cancelled.', isCounter: true },
     2: { name: 'Shifting Sands', description: 'Select two tiles to swap their positions. Tiles must have no stones or players on them.' },
     3: { name: "Mason's Savvy", description: 'Draw up to 5 earth stones. This turn, place earth stones within 5 hexes of player.' },
     4: { name: 'Heavy Stomp', description: 'Select a tile to flip. Hidden tiles are revealed (draw scroll). Revealed tiles become hidden.' },
@@ -68,7 +68,7 @@ const EARTH_SCROLL_EFFECTS = {
 
 // Water scroll effect definitions
 const WATER_SCROLL_EFFECTS = {
-    1: { name: 'Reflect', description: 'Duplicate the effect of the scroll that was last cast this turn.', isResponse: true },
+    1: { name: 'Reflect', description: 'Duplicate the effect of the scroll that was last activated this turn.', isResponse: true },
     2: { name: 'Refreshing Thought', description: 'Draw a Catacomb scroll.' },
     3: { name: 'Inspiring Draught', description: 'Draw 2 scrolls from any decks, then put 1 back and shuffle that deck.' },
     4: { name: 'Wandering River', description: 'Select a tile. Until your next turn, that tile counts as any element type you choose.' },
@@ -88,7 +88,7 @@ const FIRE_SCROLL_EFFECTS = {
 const VOID_SCROLL_EFFECTS = {
     1: { name: 'Psychic', description: 'Counter the previous scroll, then play it during your turn. Move Psychic to the common area.', isCounter: true },
     2: { name: "Scholar's Insight", description: 'Search through a Scroll Deck and add a scroll of your choice to your hand. Shuffle that deck afterwards.' },
-    3: { name: 'Simplify', description: 'Scrolls cost 1 AP for you to cast until the beginning of your next turn.' },
+    3: { name: 'Simplify', description: 'Scrolls cost 1 AP for you to activate until the beginning of your next turn.' },
     4: { name: 'Telekinesis', description: 'Move a tile unoccupied by stones or players. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.' },
     5: { name: 'Create', description: 'Choose a stone type and draw stones equal to that stone\'s rank (Earth 5, Water 4, Fire 3, Wind 2, Void 1). Cannot exceed 5 of that type.' }
 };

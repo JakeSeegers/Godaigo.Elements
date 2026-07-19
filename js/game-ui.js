@@ -2560,7 +2560,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             handNavActive = true;
             handNavIndex = 0;
             highlightScrollCard('hand', 0);
-            updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · Tab=common · Space=cast · Esc cancel`);
+            updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · Tab=common · Space=activate · Esc cancel`);
         }
 
         function enterActiveNav() {
@@ -2573,7 +2573,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             activeNavActive = true;
             activeNavIndex = 0;
             highlightScrollCard('active', 0);
-            updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Tab=common · Space=cast · Esc cancel`);
+            updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Tab=common · Space=activate · Esc cancel`);
         }
 
         function enterCommonNav() {
@@ -2586,7 +2586,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             commonNavActive = true;
             commonNavIndex = 0;
             highlightScrollCard('common', 0);
-            updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} — ← → pick · Space=cast · Esc cancel`);
+            updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} — ← → pick · Space=activate · Esc cancel`);
         }
 
         // Stone placement keyboard-preview state
@@ -3001,17 +3001,17 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     const scrolls = getHandScrolls();
                     handNavIndex = (handNavIndex + dir + scrolls.length) % scrolls.length;
                     highlightScrollCard('hand', handNavIndex);
-                    updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · Tab=common · Space=cast · Esc cancel`);
+                    updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · Tab=common · Space=activate · Esc cancel`);
                 } else if (activeNavActive) {
                     const scrolls = getActiveScrolls();
                     activeNavIndex = (activeNavIndex + dir + scrolls.length) % scrolls.length;
                     highlightScrollCard('active', activeNavIndex);
-                    updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Tab=common · Space=cast · Esc cancel`);
+                    updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Tab=common · Space=activate · Esc cancel`);
                 } else if (commonNavActive) {
                     const scrolls = getCommonScrolls();
                     commonNavIndex = (commonNavIndex + dir + scrolls.length) % scrolls.length;
                     highlightScrollCard('common', commonNavIndex);
-                    updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} — ← → pick · Space=cast · Esc cancel`);
+                    updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} — ← → pick · Space=activate · Esc cancel`);
                 } else if (tilePreviewActive) {
                     tilePreviewIndex = (tilePreviewIndex + dir + tilePreviewPositions.length) % tilePreviewPositions.length;
                     showTilePreviewGhost(tilePreviewPositions[tilePreviewIndex]);
@@ -5214,7 +5214,7 @@ document.getElementById('undo-move').onclick = function() {
 
                     makeSelect('Trigger', 'trigger', [
                         ['stone_destroyed', 'Stone destroyed'],
-                        ['scroll_cast',     'Scroll cast'],
+                        ['scroll_cast',     'Scroll activated'],
                         ['tile_placed',     'Tile placed'],
                         ['turn_end',        'Turn end'],
                     ]);
@@ -5298,7 +5298,7 @@ document.getElementById('undo-move').onclick = function() {
             // a 50-number table reads as "these are about movement" instead
             // of one long undifferentiated list.
             const WEIGHT_CATEGORIES = [
-                { name: 'Casting', keys: ['castBase', 'castUnactivated', 'castDeadElement', 'castAlreadyWon', 'castNoCredit', 'castLevel'] },
+                { name: 'Activating', keys: ['castBase', 'castUnactivated', 'castDeadElement', 'castAlreadyWon', 'castNoCredit', 'castLevel'] },
                 { name: 'Stone placement', keys: ['placeBase', 'placeProgress', 'placeUnactivated', 'placeNoCredit', 'placeDoomed', 'planDeficitPenalty'] },
                 { name: 'Movement', keys: ['moveBase', 'moveShrineValue', 'moveApPenalty', 'moveExplore', 'moveExploreGradient', 'moveExplorePath', 'moveRevisitPenalty', 'moveFixation'] },
                 { name: 'Breaking a stone', keys: ['breakStoneBase', 'breakStoneApPenalty'] },

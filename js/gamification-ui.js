@@ -723,7 +723,7 @@ function _renderSettings(content) {
                     <div class="gami-keybind-row"><kbd>← →</kbd><span>Cycle cards while in nav mode</span></div>
                     <div class="gami-keybind-row"><kbd>Enter</kbd><span>Move Hand card → Active</span></div>
                     <div class="gami-keybind-row"><kbd>Tab</kbd><span>Move card → Common Area</span></div>
-                    <div class="gami-keybind-row"><kbd>Space</kbd><span>Cast selected scroll</span></div>
+                    <div class="gami-keybind-row"><kbd>Space</kbd><span>Activate selected scroll</span></div>
                     <div class="gami-keybind-row"><kbd>Esc</kbd><span>Exit navigation</span></div>
                 </div>
             </div>

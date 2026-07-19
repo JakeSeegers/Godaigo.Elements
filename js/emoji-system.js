@@ -15,7 +15,7 @@
     const EMOJI_TIERS = [
         { id: 5,   name: 'Common Reactions',        cost: 30,  color: '#9e9e9e', badge: 'T5' },
         { id: 4,   name: 'Competitive Spirit',       cost: 60,  color: '#4CAF50', badge: 'T4' },
-        { id: 3,   name: 'Spell & Magic Reactions',  cost: 120, color: '#2196F3', badge: 'T3' },
+        { id: 3,   name: 'Scroll & Magic Reactions',  cost: 120, color: '#2196F3', badge: 'T3' },
         { id: 3.5, name: 'Colored Hearts',           cost: 150, color: '#E91E63', badge: 'T3.5' },
         { id: 2,   name: 'Competitive & Victory',    cost: 200, color: '#FF9800', badge: 'T2' },
         { id: 1,   name: 'Elemental & Legendary',    cost: 400, color: '#9C27B0', badge: 'T1' },

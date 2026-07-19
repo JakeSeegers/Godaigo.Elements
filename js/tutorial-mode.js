@@ -126,7 +126,7 @@ const TutorialMode = (function () {
         {
             id: 'scroll-found',
             title: 'You Found a Scroll!',
-            content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll — a powerful earth spell.
+            content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll — a powerful earth scroll.
             <div style="margin-top:10px;">
                 Close the hand panel by clicking <strong>✕</strong>.
             </div>`,
@@ -170,11 +170,11 @@ const TutorialMode = (function () {
             content: `Your scrolls are split across three panels:
             <ul style="margin:10px 0; padding-left:18px; line-height:1.6;">
                 <li><strong>Hand</strong> — private; max 2 scrolls</li>
-                <li><strong>Active</strong> — face-up, visible to all; scrolls here can be cast</li>
-                <li><strong>Common Area</strong> — shared pool any player can cast from</li>
+                <li><strong>Active</strong> — face-up, visible to all; scrolls here can be activated</li>
+                <li><strong>Common Area</strong> — shared pool any player can activate from</li>
             </ul>
             <div style="margin-top:8px;">
-                <strong>Click "Move to Active Area"</strong> on a scroll to get it ready to cast.
+                <strong>Click "Move to Active Area"</strong> on a scroll to get it ready to activate.
             </div>`,
             action: 'scroll-moved',
             nextLabel: null,
@@ -186,12 +186,12 @@ const TutorialMode = (function () {
             title: 'How to Win',
             content: `To win, <strong>activate a scroll of each element</strong> (Earth, Water, Fire, Wind, Void), then <strong>return to the center of your player shrine</strong> (your starting tile).
             <div style="margin-top:10px;">
-                To cast a scroll you need to:
+                To activate a scroll you need to:
                 <ol style="margin:8px 0; padding-left:18px; line-height:1.6;">
                     <li>Have it in your <strong>Active Area</strong> or <strong>Common Area</strong></li>
                     <li>Stand in the <strong>center</strong> of the pattern</li>
                     <li>Build the pattern with <strong>stones</strong> on the board</li>
-                    <li>Spend <strong>2 AP</strong> and click <strong>Cast Spell</strong></li>
+                    <li>Spend <strong>2 AP</strong> and click <strong>Activate Scroll</strong></li>
                 </ol>
             </div>`,
             action: 'read',
@@ -221,7 +221,7 @@ const TutorialMode = (function () {
                 <strong>Place the remaining stones</strong> to complete it.
             </div>
             <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                Once the pattern is complete, the "Cast ✦" button on the scroll card will glow.
+                Once the pattern is complete, the "Activate ✦" button on the scroll card will glow.
             </div>`,
             action: 'pattern-built',
             nextLabel: null,
@@ -230,13 +230,13 @@ const TutorialMode = (function () {
         // ── 11  cast avalanche (action-gated: onSpellCast) ────────────────────
         {
             id: 'cast-avalanche',
-            title: 'Cast Avalanche!',
-            content: `The pattern is complete! Now cast the scroll.
+            title: 'Activate Avalanche!',
+            content: `The pattern is complete! Now activate the scroll.
             <div style="margin-top:10px;">
-                Click <strong>Cast Spell</strong> in the dock — or the glowing <strong>Cast ✦</strong> button on the Avalanche scroll card.
+                Click <strong>Activate Scroll</strong> in the dock — or the glowing <strong>Activate ✦</strong> button on the Avalanche scroll card.
             </div>
             <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                Casting costs 2 AP. After casting, your Earth win-condition is fulfilled!
+                Activating costs 2 AP. After activating, your Earth win-condition is fulfilled!
             </div>`,
             action: 'spell-cast',
             nextLabel: null,
@@ -329,7 +329,7 @@ const TutorialMode = (function () {
             <ul style="margin:10px 0; padding-left:18px; line-height:1.6;">
                 <li><strong>AP pips</strong> — five orange squares; each = 1 remaining AP</li>
                 <li><strong>Shrine dots</strong> — light up as you activate scrolls</li>
-                <li><strong>Cast Spell</strong> — casts the best matching scroll from Active or Common Area</li>
+                <li><strong>Activate Scroll</strong> — activates the best matching scroll from Active or Common Area</li>
                 <li><strong>End Turn</strong> — ends your turn; AP resets to 5 next turn</li>
             </ul>`,
             action: 'read',
@@ -535,7 +535,7 @@ const TutorialMode = (function () {
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
             'pattern-built': 'Build the Avalanche pattern (4 Earth stones) around your pawn — see the scroll card for the layout…',
-            'spell-cast':    'Click "Cast Spell" in the dock (or the Cast ✦ button on the scroll card) to cast Avalanche…',
+            'spell-cast':    'Click "Activate Scroll" in the dock (or the Activate ✦ button on the scroll card) to activate Avalanche…',
             'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'wind-move':         'Drag a Wind stone, drop it on any hex, then move your pawn through or past it…',
@@ -731,7 +731,7 @@ const TutorialMode = (function () {
                 const ss = window.spellSystem;
                 if (ss && typeof ss.checkPattern === 'function' && !ss.checkPattern('EARTH_SCROLL_5')) {
                     if (typeof updateStatus === 'function')
-                        updateStatus('Pattern broken — replace the Earth stone, then Cast Spell.');
+                        updateStatus('Pattern broken — replace the Earth stone, then Activate Scroll.');
                 }
             }, 1000);
         }
@@ -739,7 +739,7 @@ const TutorialMode = (function () {
         const hintMessages = {
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
-            'spell-cast':    'Click "Cast Spell" in the dock after placing the pattern…',
+            'spell-cast':    'Click "Activate Scroll" in the dock after placing the pattern…',
             'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'wind-move':         'Drag a Wind stone from the pool, drop it on any hex, then move your pawn through or past it…',

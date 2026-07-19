@@ -538,7 +538,7 @@
                 // the scroll this action asked for (otherwise the cast
                 // silently no-ops and the caller loops on it forever).
                 const title = [...document.querySelectorAll('h3')]
-                    .find(h => h.textContent === 'Select Scroll to Cast');
+                    .find(h => h.textContent === 'Select Scroll to Activate');
                 const popup = title?.parentElement?.parentElement;
                 if (popup) {
                     const displayName = window.spellSystem.patterns?.[a.scroll]?.name ||

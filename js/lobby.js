@@ -2222,9 +2222,9 @@
                 // Show notification
                 const playerName = getPlayerColorName(playerIndex);
                 if (isCatacomb) {
-                    updateStatus(`${playerName} cast ${spellName}! Activated: ${elements.join(', ')}`);
+                    updateStatus(`${playerName} activated ${spellName}! Activated: ${elements.join(', ')}`);
                 } else {
-                    updateStatus(`${playerName} cast ${spellName}! Activated ${element} (level ${level})`);
+                    updateStatus(`${playerName} activated ${spellName}! Activated ${element} (level ${level})`);
                 }
             });
 
@@ -2270,7 +2270,7 @@
                     spellSystem.scrollEffects.activeBuffs.simplify = { expiresThisTurn: true, playerIndex };
                 }
                 const playerName = getPlayerColorName(playerIndex);
-                updateStatus(`Simplify: ${playerName}'s scrolls cost 1 AP to cast until their next turn.`);
+                updateStatus(`Simplify: ${playerName}'s scrolls cost 1 AP to activate until their next turn.`);
             });
 
             // Reflect triggered at start of turn: run the reflected scroll's effect and update activated elements.

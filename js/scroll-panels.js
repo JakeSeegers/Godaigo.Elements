@@ -375,8 +375,8 @@ const ScrollPanelSystem = (() => {
                 const patternMatches = typeof sp.checkPattern === 'function' && sp.checkPattern(scrollName);
                 const castBtn = document.createElement('button');
                 castBtn.className = 'fsp-card-btn fsp-card-btn-cast' + (patternMatches ? ' fsp-cast-ready' : ' fsp-cast-dim');
-                castBtn.textContent = patternMatches ? 'Cast ✦' : 'Cast';
-                castBtn.title = patternMatches ? 'Pattern matches — ready to cast!' : 'Place stones in the required pattern first';
+                castBtn.textContent = patternMatches ? 'Activate ✦' : 'Activate';
+                castBtn.title = patternMatches ? 'Pattern matches — ready to activate!' : 'Place stones in the required pattern first';
                 castBtn.addEventListener('click', e => {
                     e.stopPropagation();
                     sp.castSpell();
@@ -389,8 +389,8 @@ const ScrollPanelSystem = (() => {
                 const patternMatches = typeof sp.checkPattern === 'function' && sp.checkPattern(scrollName);
                 const castBtn = document.createElement('button');
                 castBtn.className = 'fsp-card-btn fsp-card-btn-cast' + (patternMatches ? ' fsp-cast-ready' : ' fsp-cast-dim');
-                castBtn.textContent = patternMatches ? 'Cast ✦' : 'Cast';
-                castBtn.title = patternMatches ? 'Pattern matches — ready to cast!' : 'Place stones in the required pattern first';
+                castBtn.textContent = patternMatches ? 'Activate ✦' : 'Activate';
+                castBtn.title = patternMatches ? 'Pattern matches — ready to activate!' : 'Place stones in the required pattern first';
                 castBtn.addEventListener('click', e => {
                     e.stopPropagation();
                     sp.castSpell();

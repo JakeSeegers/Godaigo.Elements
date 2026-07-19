@@ -153,7 +153,7 @@ const ScrollEffects = {
          */
         EARTH_SCROLL_1: {
             name: 'Iron Stance',
-            description: 'Counter the most recently cast scroll. That scroll is cancelled.',
+            description: 'Counter the most recently activated scroll. That scroll is cancelled.',
             isCounter: true,
             priority: 1,
 
@@ -317,7 +317,7 @@ const ScrollEffects = {
          */
         WATER_SCROLL_1: {
             name: 'Reflect',
-            description: 'Duplicate the effect of the scroll that was last cast this turn.',
+            description: 'Duplicate the effect of the scroll that was last activated this turn.',
             isCounter: false,
             priority: 1,
 
@@ -357,7 +357,7 @@ const ScrollEffects = {
                 // Get the last scroll cast this turn (main-phase Reflect)
                 const lastScroll = system.lastScrollCastThisTurn;
                 if (!lastScroll || !lastScroll.name) {
-                    updateStatus('Reflect failed: No scroll was cast this turn!');
+                    updateStatus('Reflect failed: No scroll was activated this turn!');
                     return { success: false, reason: 'No scroll cast this turn' };
                 }
 
@@ -1113,7 +1113,7 @@ const ScrollEffects = {
 
         VOID_SCROLL_3: {
             name: 'Simplify',
-            description: 'Scrolls cost 1 AP for you to cast until the beginning of your next turn.',
+            description: 'Scrolls cost 1 AP for you to activate until the beginning of your next turn.',
             isCounter: false,
             priority: 3,
             execute(casterIndex, context, system) {
@@ -1123,7 +1123,7 @@ const ScrollEffects = {
                     playerIndex: casterIndex
                 };
                 const playerName = typeof getPlayerColorName === 'function' ? getPlayerColorName(casterIndex) : `Player ${casterIndex + 1}`;
-                const message = `Simplify: ${playerName}'s scrolls cost 1 AP to cast until their next turn.`;
+                const message = `Simplify: ${playerName}'s scrolls cost 1 AP to activate until their next turn.`;
                 updateStatus(message);
 
                 if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
@@ -5023,7 +5023,7 @@ const ScrollEffects = {
         this.showPlunderPlayerModal(targets, casterIndex, castingScrollName, (targetPlayerIndex) => {
             // Step 2: Get target's active scrolls
             if (!self.spellSystem) {
-                updateStatus('Plunder: spell system unavailable.');
+                updateStatus('Plunder: scroll system unavailable.');
                 return;
             }
             self.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);

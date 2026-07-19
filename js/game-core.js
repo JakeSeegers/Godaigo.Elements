@@ -1287,7 +1287,7 @@
                 // must move off before casting (see isPlayerRestingOnStone).
                 if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
                     window.SoundSystem?.play('error');
-                    updateStatus('Cannot cast while standing on a stone — move to an empty hex first.');
+                    updateStatus('Cannot activate while standing on a stone — move to an empty hex first.');
                     return false;
                 }
                 // Scrolls in Active Area OR Common Area can be activated
@@ -1358,7 +1358,7 @@
 
                 if (matchingSpells.length === 0) {
                     window.SoundSystem?.play('error');
-                    updateStatus("No valid spell pattern found! Check console for details.");
+                    updateStatus("No valid scroll pattern found! Check console for details.");
                     console.log('\n✗ No matching patterns');
                     return false;
                 }
@@ -1390,7 +1390,7 @@
                 if (affordableSpells.length === 0) {
                     window.SoundSystem?.play('error');
                     const minCost = Math.min(...matchingSpells.map(({ spell }) => this.getSpellCost(spell, activePlayerIndex)));
-                    updateStatus(`Not enough AP! Need ${minCost} AP to cast.`);
+                    updateStatus(`Not enough AP! Need ${minCost} AP to activate.`);
                     return false;
                 }
 
@@ -1419,7 +1419,7 @@
                 header.style.justifyContent = 'space-between';
                 header.style.marginBottom = '12px';
                 const title = document.createElement('h3');
-                title.textContent = 'Select Scroll to Cast';
+                title.textContent = 'Select Scroll to Activate';
                 title.style.textAlign = 'center';
                 title.style.margin = '0';
                 title.style.flex = '1';
@@ -1454,7 +1454,7 @@
             executeSpell({name, spell, fromCommonArea = false}) {
                 const cost = this.getSpellCost(spell, activePlayerIndex);
                 if (!canAfford(cost)) {
-                    updateStatus(`Not enough AP! Need ${cost} AP to cast.`);
+                    updateStatus(`Not enough AP! Need ${cost} AP to activate.`);
                     return false;
                 }
                 // Spend AP first (may be reduced by buffs)
@@ -1612,7 +1612,7 @@
                                     window.gami.onElementActivated(spell.element, Array.from(this.getPlayerScrolls(false).activated));
                                 }
                             } else {
-                                updateStatus(`The ${spell.element} shrine source is depleted — scroll effect cast, but win condition not met.`);
+                                updateStatus(`The ${spell.element} shrine source is depleted — scroll effect activated, but win condition not met.`);
                                 // Normal rules enforcement (empty-source-pool rule), not an anomaly — log, don't warn
                                 console.log(`📜 Win condition skipped for ${spell.element}: source pool is empty.`);
                             }
@@ -1682,7 +1682,7 @@
                     });
 
                     updatePlayerElementSymbols(activePlayerIndex);
-                    updateStatus(`Catacomb spell cast! Added ${rewards.join(', ')} stones!`);
+                    updateStatus(`Catacomb scroll activated! Added ${rewards.join(', ')} stones!`);
                 } else {
                     // Regular element scrolls
                     playerPool[spell.element] = Math.min(
@@ -1698,9 +1698,9 @@
                         const isNew1 = !ps1.activated.has(spell.element);
                         ps1.activated.add(spell.element);
                         if (isNew1) window.SoundSystem?.onWinCondition(spell.element);
-                        updateStatus(`Spell cast! Added +${spell.level} ${spell.element} stones!`);
+                        updateStatus(`Scroll activated! Added +${spell.level} ${spell.element} stones!`);
                     } else {
-                        updateStatus(`The ${spell.element} shrine source is depleted — scroll effect cast, but win condition not met.`);
+                        updateStatus(`The ${spell.element} shrine source is depleted — scroll effect activated, but win condition not met.`);
                         // Normal rules enforcement (empty-source-pool rule), not an anomaly — log, don't warn
                         console.log(`📜 Win condition skipped for ${spell.element}: source pool is empty (default path).`);
                     }
@@ -2381,7 +2381,7 @@
                 popup.appendChild(handSection);
 
                 const infoText = document.createElement('div');
-                infoText.innerHTML = '<strong>Tip:</strong> Move scrolls from Hand to Active Area (0 AP) to prepare for casting. Scrolls in Active Area stay there after casting. Scrolls cannot be moved back to Hand — discard to Common Area instead. Common Area scrolls are shared (max 1 per element).';
+                infoText.innerHTML = '<strong>Tip:</strong> Move scrolls from Hand to Active Area (0 AP) to prepare for activating. Scrolls in Active Area stay there after activating. Scrolls cannot be moved back to Hand — discard to Common Area instead. Common Area scrolls are shared (max 1 per element).';
                 infoText.className = 'si-tip';
                 popup.appendChild(infoText);
 

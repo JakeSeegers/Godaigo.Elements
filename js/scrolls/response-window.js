@@ -460,7 +460,7 @@ class ResponseWindowSystem {
         // Show what scroll was cast
         const scrollInfo = document.createElement('div');
         const scrollDef = this.spellSystem.patterns[this.pendingScrollData.name];
-        scrollInfo.innerHTML = `<strong>${this.getPlayerName(this.currentCaster)}</strong> cast <span style="color: ${this.getElementColor(scrollDef?.element)}">${scrollDef?.name || this.pendingScrollData.name}</span>`;
+        scrollInfo.innerHTML = `<strong>${this.getPlayerName(this.currentCaster)}</strong> activated <span style="color: ${this.getElementColor(scrollDef?.element)}">${scrollDef?.name || this.pendingScrollData.name}</span>`;
         scrollInfo.style.fontSize = '16px';
         scrollInfo.style.marginBottom = '10px';
         header.appendChild(scrollInfo);
@@ -624,7 +624,7 @@ class ResponseWindowSystem {
 
         const scrollDef = this.spellSystem.patterns[this.pendingScrollData?.name];
         const scrollInfo = document.createElement('div');
-        scrollInfo.innerHTML = `<strong>${this.getPlayerName(this.currentCaster)}</strong> cast <span style="color: ${this.getElementColor(scrollDef?.element)}">${scrollDef?.name || this.pendingScrollData?.name}</span>`;
+        scrollInfo.innerHTML = `<strong>${this.getPlayerName(this.currentCaster)}</strong> activated <span style="color: ${this.getElementColor(scrollDef?.element)}">${scrollDef?.name || this.pendingScrollData?.name}</span>`;
         scrollInfo.style.fontSize = '16px';
         scrollInfo.style.marginBottom = '10px';
         header.appendChild(scrollInfo);
@@ -971,7 +971,7 @@ class ResponseWindowSystem {
         });
 
         const title = document.createElement('h2');
-        title.textContent = 'SCROLL CAST';
+        title.textContent = 'SCROLL ACTIVATED';
         title.style.color = '#27ae60';
         title.style.margin = '0 0 15px 0';
         modal.appendChild(title);
