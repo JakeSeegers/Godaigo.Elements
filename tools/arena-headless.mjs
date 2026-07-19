@@ -63,7 +63,12 @@
 //                       Each chunk writes apply-champion.txt (local-apply, pinned, +
 //                       an optional "share online" Supabase snippet).
 //   --seed N            base RNG seed (default 1)
-//   --players N         players per game, 2-5 (default 2)
+//   --players N|all     players per game, 2-5, or 'all' (default 2). 'all' is
+//                       GENERALIST mode: evolve samples a fresh player count
+//                       per game, and --confirm swaps the 2p playoff+series
+//                       for BotArena.confirmAcrossSizes (champion vs a field
+//                       of baselines at every size, same seed per champion)
+//   --games-per-size N  generalist confirm: games per table size (default 4)
 //   --speed X           BotSystem.speedScale (default 0.1, arena normal)
 //   --timeout M         watchdog: kill everything after M minutes (default 360 = 6h).
 //                       hillclimb checkpoints every round to its output json, so a
@@ -112,7 +117,10 @@ const OPTS = {
     confirmGames: +arg('confirm-games', 10),
     games: +arg('games', 4),
     seed: +arg('seed', 1),
-    players: +arg('players', 2),
+    // 2-5, or 'all' (GENERALIST mode): evolve samples a fresh player count
+    // per game and confirm uses the across-sizes gate instead of a 2p series
+    players: (v => v === 'all' ? 'all' : +v)(arg('players', 2)),
+    gamesPerSize: +arg('games-per-size', 4), // generalist confirm: games per table size
     speed: +arg('speed', 0.1),
     timeoutMs: +arg('timeout', 360) * 60_000, // watchdog cap in MINUTES (default 6h; hillclimb runs are multi-hour)
     headed: !!arg('headed', false),
@@ -258,10 +266,12 @@ async function runSmoke(browser, url) {
         if (players === 2) {
             return await window.BotArena.run(undefined, undefined, games, seed, { speed });
         }
-        // >2 players: no A/B series concept — play N playMatch games directly.
+        // >2 players (or 'all' — cycle 2..5): no A/B series concept — play
+        // N playMatch games directly.
         const out = { games: [], turns: 0 };
         for (let g = 0; g < games; g++) {
-            const r = await window.BotArena.playMatch(Array(players).fill(undefined), { seed: seed + g, speed });
+            const n = players === 'all' ? 2 + (g % 4) : players;
+            const r = await window.BotArena.playMatch(Array(n).fill(undefined), { seed: seed + g, speed });
             out.games.push({ winner: r.winner, turns: r.turns, activated: r.activated });
             out.turns += r.turns;
         }
@@ -310,7 +320,7 @@ async function runEvolveShard(browser, url, shardIndex) {
 async function runEvolve(browser, url) {
     const perShardGames = OPTS.players === 2
         ? OPTS.generations * (OPTS.pop * (OPTS.pop - 1) / 2) * OPTS.gamesPerPair
-        : OPTS.generations * OPTS.pop * 3;
+        : OPTS.generations * OPTS.pop * 3; // >2 or 'all': evolve's default gamesPerGen = popSize*3
     console.log(`[runner] evolve: ${OPTS.shards} shard(s) × ${OPTS.generations} gen × pop ${OPTS.pop} × ${OPTS.gamesPerPair} game(s)/pair ≈ ${perShardGames} games per shard, in parallel`);
 
     const t0 = Date.now();
@@ -390,6 +400,72 @@ async function runConfirm(browser, url) {
         return { ...window.BotSystem.WEIGHTS };
     });
     await basePage.context().close();
+
+    // GENERALIST confirm (evolve ran with --players all, or a fixed count >2):
+    // a 2-player playoff + 2-player series would endorse the best DUELIST, the
+    // exact mistake the across-sizes gate exists to prevent. Instead every
+    // shard champion runs confirmAcrossSizes vs the baseline — champion in one
+    // (rotating) seat against a field of baselines at each size — in parallel
+    // across the page pool, ON THE SAME SEED (common random numbers: all
+    // champions face identical decks, so ranking measures weights, not luck).
+    const playersMode = evolveResults.opts?.players ?? OPTS.players;
+    if (playersMode === 'all' || (typeof playersMode === 'number' && playersMode > 2)) {
+        const sizes = playersMode === 'all' ? [2, 3, 4, 5] : [playersMode];
+        const confirmSeed = OPTS.seed + 900_001;
+        console.log(`[runner] generalist confirm: sizes [${sizes.join(',')}] × ${OPTS.gamesPerSize} game(s)/size per champion, shared seed ${confirmSeed}`);
+
+        const confirms = new Array(champions.length);
+        const queue = champions.map((c, i) => ({ ...c, index: i }));
+        const poolSize = Math.min(OPTS.shards, queue.length);
+        await Promise.all(Array.from({ length: poolSize }, async (_, w) => {
+            const page = await bootGamePage(browser, url, `confirm worker ${w}`);
+            let task;
+            while ((task = queue.shift())) {
+                console.log(`[runner] confirm-across-sizes: shard ${task.shard} champion starting on worker ${w}`);
+                const r = await page.evaluate(async ({ champion, baseline, sizes, gamesPerSize, seed, speed }) => {
+                    const res = await window.BotArena.confirmAcrossSizes(champion, baseline, { sizes, gamesPerSize, seed, speed });
+                    return JSON.parse(JSON.stringify(res));
+                }, { champion: task.w, baseline, sizes, gamesPerSize: OPTS.gamesPerSize, seed: confirmSeed, speed: OPTS.speed });
+                console.log(`[runner] shard ${task.shard}: ${r.improved ? 'BEAT' : 'did not beat'} baseline — ` +
+                    `champF ${r.champFitness.toFixed(2)} vs baseF ${r.baseFitness.toFixed(2)} (${r.record})`);
+                confirms[task.index] = r;
+            }
+            await page.context().close();
+        }));
+
+        const ranked = champions.map((c, i) => ({ ...c, conf: confirms[i], margin: confirms[i].champFitness - confirms[i].baseFitness }))
+            .sort((a, b) => (b.conf.improved - a.conf.improved) || (b.margin - a.margin));
+        const winner = ranked[0];
+        const confirmed = !!winner.conf.improved;
+
+        const outPath = OPTS.out || join(CACHE_DIR, `champion-${Date.now()}.json`);
+        writeFileSync(outPath, JSON.stringify({
+            when: new Date().toISOString(),
+            source: resultsPath,
+            mode: 'generalist',
+            sizes, gamesPerSize: OPTS.gamesPerSize,
+            confirms: champions.map((c, i) => ({ shard: c.shard, ...confirms[i] })),
+            confirmed,
+            championShard: winner.shard,
+            champion: winner.w,
+        }, null, 2));
+
+        console.log('[runner] --- generalist confirm verdict ---');
+        if (confirmed) {
+            const applyPath = join(CACHE_DIR, 'apply-champion.txt');
+            writeFileSync(applyPath,
+                `// Paste this whole line into the game's browser console, then reload the page:\n` +
+                `localStorage.setItem('godaigo_bot_weights', ${JSON.stringify(JSON.stringify(winner.w))});\n`);
+            console.log(`[runner] CONFIRMED: shard ${winner.shard}'s champion beat the baseline field across sizes ` +
+                `(${winner.conf.record}; fitness ${winner.conf.champFitness.toFixed(2)} vs ${winner.conf.baseFitness.toFixed(2)}).`);
+            console.log(`[runner] full details written to ${outPath}; apply line in ${applyPath}`);
+        } else {
+            console.log(`[runner] NOT confirmed: no shard champion beat the baseline field ` +
+                `(best: shard ${winner.shard}, ${winner.conf.record}). Keep the current weights.`);
+            console.log(`[runner] details written to ${outPath}`);
+        }
+        return;
+    }
 
     // Playoff: round-robin among shard champions, evolve-style summed fitness.
     let playoff = null;

@@ -93,6 +93,34 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **HEADLESS GENERALIST TRAINING: `--players all` wired through
+  arena-headless evolve + a confirmAcrossSizes-based confirm phase** —
+  `tools/arena-headless.mjs`. Option B from the training discussion: make
+  serious multi-size training runs cheap before launching one. `--players`
+  now accepts `all` (evolve's nPlayers plumbing already existed — the CLI
+  just couldn't express it; smoke mode cycles sizes 2-5). The confirm
+  phase, when the evolve results were generalist (players 'all' or a fixed
+  count >2), REPLACES the 2p playoff + 2p series — which would endorse the
+  best DUELIST, the exact mistake the gate exists to prevent — with
+  parallel `confirmAcrossSizes` runs: every shard champion vs a field of
+  baselines at each size (champion seat rotating), ALL champions on the
+  SAME confirm seed (common random numbers), ranked by improved-then-
+  fitness-margin, endorsed only if it beat the field. Writes the same
+  champion-*.json + apply-champion.txt outputs. DESIGN NOTE (user-raised):
+  duelist training is a deliberate player choice in Bot Tycoon, not a
+  legacy mode — the Stable panel's Players row (2 = duelist, All =
+  generalist) is untouched, headless default stays 2, and the Challenge
+  flow is literally a 2p duel so duelist builds have real economy value.
+  Possible future: show a bot's training lineage as a Stable tag.
+  Verified end-to-end (real run, 2 shards, mixed-size games, ~13 min):
+  generalist evolve produced 2 shard champions; confirm ran both through
+  2/3/4/5p fields in parallel on the shared seed, correctly split the
+  verdicts (shard 0 not improved, shard 1 improved), endorsed shard 1,
+  wrote outputs; a mid-confirm trap-loop stall restarted cleanly.
+  Smoke-scale settings — the endorsed champion itself is statistically
+  meaningless; the REAL run is:
+  `node tools/arena-headless.mjs --evolve --shards 6 --generations 8 --pop 6 --players all`
+  then `node tools/arena-headless.mjs --confirm --players all --games-per-size 6`.
 - **TRAINER STATISTICS: mirror-paired seeds + CRN + successive halving;
   CRT overlay was breaking seeded-game determinism (fixed)** —
   `js/bot-arena.js`, `js/crt-overlay.js`, `tools/arena-headless.mjs`,
