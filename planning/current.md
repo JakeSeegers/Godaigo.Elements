@@ -93,6 +93,24 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT Stage 2.5 step 4 tranche 2: Refreshing Thought / Mason's Savvy /
+  Heavy Stomp / Combust simulated; simCast ordering bug fixed** —
+  `js/bot-sim.js`, `docs/bot-roadmap.md`, `js/INDEX.md`. SIMULATED_SCROLLS
+  now holds 7. Tranche adds draws + the first board-geometry effects
+  (shared TILE_RADIUS=80 rule mirrors tileHasStones/tileHasPlayers/
+  destroyStonesOnTile). **Call to Adventure evaluated and EXCLUDED** — its
+  buff grants stones of the revealed element on the flip ITSELF
+  (game-core revealTile ctaBuff branch); element is hidden info, an honest
+  sim can't predict the pool change. **Real sim bug found by the harness,
+  fixed for ALL casts:** simCast credited element activation BEFORE the
+  effect, but applyScrollEffects runs execute() first and gates activation
+  on the POST-effect source pool — Mason's Savvy draining the last earth
+  forfeits the earth activation in the real game; sim now agrees (its
+  activation block moved after effect dispatch). Verified: 16/16 harness
+  scenarios (9 tranche-1 regression + 7 new) zero unaccepted divergence;
+  A/B arena 30 games/condition: OFF 20-10 hybrid, ON 19-11 —
+  indistinguishable, cast tallies near-identical (no regression; an
+  earlier 10-game 5-5 was noise — 10-game A/Bs are smoke tests only).
 - **BOT Stage 2.5 step 4 tranche 1: BotSim simulates Create/Transmute/Arson**
   — `js/bot-sim.js`, `js/bot-effects.js`, `docs/bot-roadmap.md`,
   `js/INDEX.md`. First real progress on the intelligence track's designated

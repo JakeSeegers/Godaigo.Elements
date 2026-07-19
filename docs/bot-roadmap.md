@@ -968,6 +968,49 @@ Build order (each step independently commit-able and arena-measurable):
    these scrolls decide few positions per game; value should compound as
    more scrolls join the whitelist — rerun at scale once R5 lands).
 
+   **Tranche 2 (2026-07-19): WATER_SCROLL_2 (Refreshing Thought),
+   EARTH_SCROLL_3 (Mason's Savvy), EARTH_SCROLL_4 (Heavy Stomp),
+   CATACOMB_SCROLL_10 (Combust).** Draws + the first board-geometry
+   effects (shared `TILE_RADIUS`=TILE_SIZE*4 rule mirrors
+   tileHasStones/tileHasPlayers/destroyStonesOnTile). Notes:
+   - **Call to Adventure (CATACOMB_SCROLL_3) evaluated and EXCLUDED**: its
+     buff grants stones of the revealed element on the flip ITSELF
+     (game-core revealTile's ctaBuff branch), and that element is hidden
+     information — an honest simulation cannot predict the pool change.
+     It stays an unsimulated cast on purpose.
+   - Mason's placement buff / Heavy Stomp reveal's catacomb +1 AP / a
+     pre-existing CTA buff affecting a Stomp reveal: all accepted
+     divergences, same documented classes as before (buffs not in
+     snapshot; hidden element unknowable).
+   - **Real simulator bug found and fixed by the harness** (value beyond
+     the 4 scrolls): simCast credited the element activation BEFORE
+     applying the effect, but the real applyScrollEffects runs execute()
+     FIRST and gates activation on the POST-effect source pool — so
+     Mason's Savvy draining the last earth stones forfeits the earth
+     activation in the real game, and the sim now agrees. simCast's
+     activation block moved after the effect dispatch to mirror the real
+     order for every cast, simulated or not.
+   Harness evidence: 16/16 scenarios (9 tranche-1 regression + 7 new),
+   ZERO unaccepted divergence, zero page errors. New scenarios cover:
+   unknowable-identity draw (count-only hand compare), source-capped
+   Mason's draw AND the activation-forfeit ordering case, forced-element
+   Stomp reveal, deliberate catacomb reveal exercising the documented +1
+   AP acceptance, the hide branch (all tiles revealed), and Combust
+   destroying the most-stoned tile with stones NOT returned to the
+   source pool (distinct from Transmute's return — diff-verified).
+   A/B arena, 30 games per condition (greedy vs hybrid, seed 500,
+   whitelist ON vs OFF, per-scroll cast tally via a chained
+   logScrollEvent counter): OFF 20-10 hybrid, ON 19-11 hybrid —
+   statistically indistinguishable, and the simulated scrolls' cast
+   counts are near-identical across conditions (~4 casts/game total, so
+   they're common, not rare) — no regression, behavior stable. An
+   earlier 10-game sample showed a scary-looking 5-5 that the 30-game
+   run reveals as pure noise — treat 10-game A/Bs as smoke tests only.
+   Neutral-not-yet-positive is expected: the tallies show these scrolls
+   were already being cast whenever available, so modeling their
+   outcomes changes leaf VALUES more than decisions; the payoff route
+   is deeper search / evaluator retuning over the modeled outcomes.
+
 Acceptance per increment: arena win rate vs. the pre-increment bot improves
 (same weights, same seeds); no increment may regress the Stage-1 fixed bugs
 (recast loops, oscillation, overflow stalls).

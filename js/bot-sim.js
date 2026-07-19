@@ -77,9 +77,18 @@
     // cast bookkeeping only + an entry in snap.sim.unsimulatedCasts. Add a
     // scroll here ONLY together with harness evidence that its simulation
     // matches the real effect.
-    // Stage 2.5 step 4, first tranche (modal-only, pure pool/AP effects
-    // with deterministic BotEffects drivers): Create, Transmute, Arson.
-    const SIMULATED_SCROLLS = new Set(['VOID_SCROLL_5', 'FIRE_SCROLL_4', 'FIRE_SCROLL_5']);
+    // Stage 2.5 step 4, tranche 1 (modal-only, pure pool/AP effects with
+    // deterministic BotEffects drivers): Create, Transmute, Arson.
+    // Tranche 2 (draws + board-geometry effects): Refreshing Thought,
+    // Mason's Savvy, Heavy Stomp, Combust. Call to Adventure was evaluated
+    // and deliberately EXCLUDED: its buff grants stones of the revealed
+    // tile's element ON THE FLIP ITSELF (game-core revealTile ctaBuff
+    // branch), and that element is hidden information — an honest
+    // simulation cannot predict the pool change.
+    const SIMULATED_SCROLLS = new Set([
+        'VOID_SCROLL_5', 'FIRE_SCROLL_4', 'FIRE_SCROLL_5',
+        'WATER_SCROLL_2', 'EARTH_SCROLL_3', 'EARTH_SCROLL_4', 'CATACOMB_SCROLL_10',
+    ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
     // hidden non-player tiles expose only the outer ring; revealed/player
@@ -484,6 +493,81 @@
         if (!snap.commonArea.includes(scrollName)) snap.commonArea.push(scrollName);
     }
 
+    // ── Tranche 2 ────────────────────────────────────────────────────
+    // Tile-geometry rule shared by flip/combust eligibility: a stone or
+    // pawn "on a tile" = within TILE_SIZE*4 of the tile centre (mirrors
+    // tileHasStones/tileHasPlayers/destroyStonesOnTile in scroll-effects).
+    const TILE_RADIUS = 80;
+    function tileStoneCount(snap, t) {
+        return snap.stones.filter(s => dist(s.x, s.y, t.x, t.y) < TILE_RADIUS).length;
+    }
+    function tileHasPawns(snap, t) {
+        return snap.players.some(pl => pl && dist(pl.x, pl.y, t.x, t.y) < TILE_RADIUS);
+    }
+
+    // Refreshing Thought (WATER_SCROLL_2): draw the top catacomb-deck
+    // scroll to hand. Identity (and deck emptiness) aren't in the snapshot
+    // — drawn as UNKNOWN_SCROLL; an exhausted deck's no-op is an accepted
+    // rare divergence.
+    function simEffectRefreshingThought(snap) {
+        drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+    }
+
+    // Mason's Savvy (EARTH_SCROLL_3): draw up to 5 earth (source/room
+    // capped). The 5-hex placement buff isn't in the snapshot — accepted
+    // gap, same class as every activeBuffs omission.
+    function simEffectMasonsSavvy(snap, p) {
+        const drawn = Math.min(5, snap.sourcePool.earth || 0, POOL_CAP - (p.pool.earth || 0));
+        if (drawn > 0) {
+            snap.sourcePool.earth -= drawn;
+            p.pool.earth = (p.pool.earth || 0) + drawn;
+        }
+    }
+
+    // Heavy Stomp (EARTH_SCROLL_4): eligible = non-player tiles with no
+    // stones/pawns on them. The driver strongly prefers REVEALING the
+    // hidden eligible tile nearest the pawn (strict-closer, first wins
+    // ties); only with zero hidden eligible tiles does it hide
+    // eligible[0]. Reveal side effects mirror simMove's: element becomes
+    // 'unknown', a scroll is drawn to hand, catacomb's +1 AP unmodelled.
+    function simEffectHeavyStomp(snap, p) {
+        const eligible = snap.tiles.filter(t =>
+            !t.isPlayerTile && tileStoneCount(snap, t) === 0 && !tileHasPawns(snap, t));
+        if (!eligible.length) return; // real flow bails before any selection
+        const hidden = eligible.filter(t => !t.revealed);
+        if (hidden.length) {
+            let pick = null, best = Infinity;
+            for (const t of hidden) {
+                const d = dist(t.x, t.y, p.x, p.y);
+                if (d < best) { best = d; pick = t; }
+            }
+            pick.revealed = true;
+            pick.shrineType = 'unknown'; // NEVER invent the hidden element
+            drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+            simNotes(snap).notes.push(`Heavy Stomp revealed tile ${pick.id} (element unknown; catacomb +1 AP not modelled)`);
+        } else {
+            const t = eligible[0];
+            t.revealed = false;
+            t.shrineType = null; // face-down tiles mask their element
+        }
+    }
+
+    // Combust (CATACOMB_SCROLL_10): destroy EVERY stone on the non-player
+    // tile holding the most stones (driver argmax, first wins ties, tile
+    // order = placedTiles order = snap.tiles order). Destroyed stones are
+    // removed OUTRIGHT — unlike fire-interaction/Transmute destroys they
+    // do NOT return to the source pool (destroyStonesOnTile just splices).
+    function simEffectCombust(snap) {
+        let pick = null, best = 0;
+        for (const t of snap.tiles) {
+            if (t.isPlayerTile) continue;
+            const n = tileStoneCount(snap, t);
+            if (n > best) { best = n; pick = t; }
+        }
+        if (!pick) return; // no tile with stones — real flow bails
+        snap.stones = snap.stones.filter(s => dist(s.x, s.y, pick.x, pick.y) >= TILE_RADIUS);
+    }
+
     function simCast(snap, a) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
@@ -501,7 +585,34 @@
             }
         }
 
-        // Win-condition activation (applyScrollEffects):
+        // The EFFECT runs before win-condition tracking — mirrors
+        // applyScrollEffects' real order (execute() at game-core ~1564,
+        // activation gate at ~1605 reading the POST-effect source pool).
+        // Order matters when an effect drains its own element's source:
+        // Mason's Savvy taking the last earth stones correctly forfeits
+        // the earth activation. (Caught by the harness as a genuine
+        // divergence when this block ran before the effect.)
+        if (a.scroll === 'FIRE_SCROLL_4') {
+            // Transmute's execute() activates fire with NO source-pool gate
+            // (deliberate belt-and-suspenders in scroll-effects.js) — the
+            // real cast activates fire even when the fire source is empty.
+            if (!p.activated.includes('fire')) p.activated.push('fire');
+            simEffectTransmute(snap, p);
+        } else if (a.scroll === 'VOID_SCROLL_5') {
+            simEffectCreate(snap, p);
+        } else if (a.scroll === 'FIRE_SCROLL_5') {
+            simEffectArson(snap, p, a.scroll);
+        } else if (a.scroll === 'WATER_SCROLL_2') {
+            simEffectRefreshingThought(snap);
+        } else if (a.scroll === 'EARTH_SCROLL_3') {
+            simEffectMasonsSavvy(snap, p);
+        } else if (a.scroll === 'EARTH_SCROLL_4') {
+            simEffectHeavyStomp(snap, p);
+        } else if (a.scroll === 'CATACOMB_SCROLL_10') {
+            simEffectCombust(snap);
+        }
+
+        // Win-condition activation (applyScrollEffects, AFTER the effect):
         //  - catacomb scrolls credit each component element, no source guard
         //  - otherwise credit only while the element's SOURCE pool has stones
         if (def) {
@@ -517,27 +628,16 @@
             }
         }
 
-        // The effect itself: whitelist-gated honesty about what we can't model.
-        // grantedNew lets an evaluator credit the flat stand-in value ONLY for
-        // casts that advanced the win condition — otherwise a search farms the
-        // flat value by re-casting an already-won scroll forever (the same
+        // Whitelist-gated honesty about what we can't model. grantedNew lets
+        // an evaluator credit the flat stand-in value ONLY for casts that
+        // advanced the win condition — otherwise a search farms the flat
+        // value by re-casting an already-won scroll forever (the same
         // infinite-recast loop Stage 1's castAlreadyWon weight fixed).
         if (!SIMULATED_SCROLLS.has(a.scroll)) {
             simNotes(snap).unsimulatedCasts.push({
                 scroll: a.scroll,
                 grantedNew: p.activated.length > activatedBefore,
             });
-        } else if (a.scroll === 'FIRE_SCROLL_4') {
-            // Transmute's execute() activates fire with NO source-pool gate
-            // (deliberate belt-and-suspenders in scroll-effects.js — the
-            // gated block above may have skipped it when the fire source
-            // pool is empty; the real cast still activates).
-            if (!p.activated.includes('fire')) p.activated.push('fire');
-            simEffectTransmute(snap, p);
-        } else if (a.scroll === 'VOID_SCROLL_5') {
-            simEffectCreate(snap, p);
-        } else if (a.scroll === 'FIRE_SCROLL_5') {
-            simEffectArson(snap, p, a.scroll);
         }
     }
 
