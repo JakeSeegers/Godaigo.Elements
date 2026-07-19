@@ -217,6 +217,28 @@ not hand-guessed numbers.
 - **"Programmatic neural improvements"** — maps to `bot-roadmap.md` Stage
   3c (Neural RL), explicitly scoped there as optional and LAST, gated on
   self-play throughput this proposal doesn't change. Not assumed here.
+- **PRIVATE TRAINING HISTORY (backlog — user-specified 2026-07-19, not
+  built).** Log each Train-button run against the specific deployed bot:
+  date, method (Evolve / Hill Climb), Players mode (2 = duelist, 3-5 =
+  size specialist, All = generalist), and outcome (improved-and-applied
+  vs no improvement). Three binding design decisions from the user:
+  (1) **Owner-only visibility** — the history is the trainer's private
+  notebook, shown in the Stable only, never on the leaderboard/challenge
+  list. ARCHITECTURAL CONSEQUENCE: it CANNOT be a column on
+  `deployed_bots` — that table is public-SELECT by design (leaderboard/
+  matchmaking browse it) and Postgres RLS is row-level, not column-level,
+  so a history column would leak to everyone. It needs its own table
+  (e.g. `bot_training_log`: bot_id FK → deployed_bots on delete cascade,
+  owner, method, players_mode, improved, created_at) with owner-only
+  SELECT/INSERT RLS — the same pattern `captured_bots` already uses.
+  (2) **NOT carried over on capture** — capturing a bot copies its
+  weights (the abilities) but never its training history (the previous
+  trainer's records); a bot deployed from a capture starts a fresh,
+  empty log. The separate-table design enforces this for free: capture
+  inserts no log rows, and the log's owner-only RLS means even a leak
+  path would show the capturer nothing.
+  (3) No public "Duelist/Generalist" tag for now — the earlier idea of a
+  visible lineage badge was explicitly narrowed to owner-private history.
 
 ---
 
