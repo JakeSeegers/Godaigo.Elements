@@ -93,6 +93,55 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **BOT TYCOON polish: owner names, deploy-once, Breed removed** —
+  `js/gamification.js`, `js/gamification-ui.js`, `js/game-ui.js`, migration
+  `add_captured_bot_source_to_deployed_bots`. Three explicit user requests
+  in one message.
+  **See who deployed a bot**: `deployed_bots.owner` has no FK to
+  `user_profiles` (only to `auth.users`), so PostgREST can't embed the
+  join — `getBotLeaderboard()` (`gamification.js`) and `renderChallengeList()`
+  (`game-ui.js`) each now run one extra batch query
+  (`user_profiles.select('user_id, display_name').in('user_id', ownerIds)`)
+  and attach `owner_name`/resolve it inline. Shown as a small "by X" label
+  next to the nickname in both the Leaderboard's Top Bots section and the
+  Challenge list.
+  **Deploy each source only once**: new nullable `deployed_bots.captured_bot_id`
+  (→ `captured_bots.id`, `on delete set null`; NULL = deployed straight from
+  live WEIGHTS) — deliberately NO database-level unique constraint, because
+  the 3 pre-existing real rows already have one owner with two NULL-source
+  deploys (both from live WEIGHTS, predating this feature) — adding a
+  partial-unique index would have failed to apply without touching real
+  player data. Enforced app-side instead, in two places that do the same
+  check: (1) the Deploy panel's Source `<select>` now filters OUT
+  already-used sources entirely (no "Current live bot" option once used
+  once; each captured bot vanishes from the list once deployed) — queries
+  the owner's own `deployed_bots.captured_bot_id`s before rendering
+  options; (2) both deploy paths (`game-ui.js`'s Deploy button,
+  `gamification-ui.js`'s `_gami_stableDeployCaptured()`) run a
+  check-before-insert query as a safety net against a stale dropdown (e.g.
+  two tabs open), returning a clear message rather than silently
+  succeeding or throwing a raw DB error. Stable's "My Captured Bots" list
+  marks already-deployed captures "Deployed" with no Deploy button instead
+  of a dead-end click. Nickname-uniqueness (existing `unique(owner,
+  nickname)`) is untouched — deploying a second bot still just needs any
+  new name, exactly as before.
+  **Breed from champion files removed**: the whole upload-two-`.json`-
+  files-and-crossover flow (title/desc/file-input/seed-list/Start Breeding
+  button + its handler) is gone from the Bot Training panel per explicit
+  request — it produced a downloadable file with no bot-ownership concept,
+  disconnected from the rest of Bot Tycoon. `evolve()`'s own internal
+  genetic crossover (bot-arena.js, used by Start Training's Evolve method)
+  is a completely separate mechanism and is untouched. Cleaned up every
+  now-stale comment/doc reference to "Start Breeding" alongside the code
+  (`js/INDEX.md`, `docs/bot-tycoon-proposal.md`) rather than leaving them
+  describing a feature that no longer exists.
+  Verified headless (12 assertions): Breed section text/button confirmed
+  absent from the panel; Source select correctly starts with live-WEIGHTS
+  + both test captures, then live-WEIGHTS disappears after one deploy from
+  it, then each captured bot disappears from the list right after IT gets
+  deployed (three sequential real deploys through the actual UI, not just
+  unit-testing the filter function); `getBotLeaderboard()` resolves
+  `owner_name` correctly for a bot owned by someone else.
 - **STABLE: Train button — deferred "training mechanism" now built** —
   `js/gamification-ui.js`, `js/game-ui.js`. User asked directly ("I should
   be able to access the training environments in the stable in order to

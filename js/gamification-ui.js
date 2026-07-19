@@ -386,7 +386,7 @@ async function _renderStable(content) {
 
     const [{ data: deployed }, { data: captured }] = await Promise.all([
         supabase.from('deployed_bots')
-            .select('id, nickname, weights, wins, losses, draws, is_active')
+            .select('id, nickname, weights, wins, losses, draws, is_active, captured_bot_id, owner')
             .eq('owner', userId)
             .order('id', { ascending: false }),
         supabase.from('captured_bots')
@@ -395,6 +395,10 @@ async function _renderStable(content) {
             .order('captured_at', { ascending: false }),
     ]);
     _stableDeployedCache = deployed || [];
+    // Each source (live WEIGHTS, or a specific captured bot) can only be
+    // deployed once per owner — see js/game-ui.js's Deploy button for the
+    // full rationale. Used here to grey out captures that are already spent.
+    const usedCapturedIds = new Set((deployed || []).map(b => b.captured_bot_id).filter(id => id != null));
 
     const deployedHTML = (deployed || []).length ? deployed.map(bot => {
         const decided = bot.wins + bot.losses;
@@ -409,12 +413,17 @@ async function _renderStable(content) {
             </div>`;
     }).join('') : '<div class="gami-stable-empty">No deployed bots yet — deploy one from the in-game Bot Training panel.</div>';
 
-    const capturedHTML = (captured || []).length ? captured.map(cb => `
+    const capturedHTML = (captured || []).length ? captured.map(cb => {
+        const alreadyDeployed = usedCapturedIds.has(cb.id);
+        return `
         <div class="gami-stable-row">
             <span class="gami-stable-name">${_esc(cb.source_nickname)}</span>
             <span class="gami-stable-record">${new Date(cb.captured_at).toLocaleDateString()}</span>
-            <button class="gami-stable-btn" onclick="_gami_stableDeployCaptured(${cb.id}, '${_esc(cb.source_nickname).replace(/'/g, "\\'")}')">Deploy</button>
-        </div>`).join('') : '<div class="gami-stable-empty">No captured bots yet — try capturing one after a challenge or a win.</div>';
+            ${alreadyDeployed
+                ? `<span class="gami-stable-record">Deployed</span>`
+                : `<button class="gami-stable-btn" onclick="_gami_stableDeployCaptured(${cb.id}, '${_esc(cb.source_nickname).replace(/'/g, "\\'")}')">Deploy</button>`}
+        </div>`;
+    }).join('') : '<div class="gami-stable-empty">No captured bots yet — try capturing one after a challenge or a win.</div>';
 
     content.innerHTML = `
         <div class="gami-section-title">My Deployed Bots</div>
@@ -457,6 +466,14 @@ async function _gami_stableDeployCaptured(capturedId, sourceNickname) {
         .select('weights').eq('id', capturedId).eq('owner', session.user.id).single();
     if (fetchErr || !cb) { window.gami?.notify('Could not find that captured bot.', 0, 'gold'); return; }
 
+    // Each captured bot may only be deployed once per owner, ever — the
+    // Deploy button in Stable already hides already-deployed captures, but
+    // this is the actual enforcement (no DB-level constraint — see
+    // js/game-ui.js's deployBtn.onclick for why).
+    const { data: dupes } = await supabase.from('deployed_bots')
+        .select('id').eq('owner', session.user.id).eq('captured_bot_id', capturedId).limit(1);
+    if (dupes?.length) { window.gami?.notify('You already deployed this captured bot.', 0, 'gold'); gami_switchTab('stable'); return; }
+
     // deployed_bots has unique(owner, nickname) — a straight redeploy under
     // the name it was captured with is the common case, but ask for a
     // different name rather than silently failing on the rare collision.
@@ -466,6 +483,7 @@ async function _gami_stableDeployCaptured(capturedId, sourceNickname) {
             owner: session.user.id,
             nickname,
             weights: cb.weights,
+            captured_bot_id: capturedId,
         });
         if (!error) {
             window.gami?.notify(`"${nickname}" deployed — other players can now challenge it.`, 0, 'gold');
@@ -518,7 +536,7 @@ async function _renderLeaderboard(content) {
         return `
             <div class="gami-lb-row ${isMine ? 'gami-lb-me' : ''}">
                 <span class="gami-lb-rank">${rank}</span>
-                <span class="gami-lb-name">${_esc(bot.nickname)}</span>
+                <span class="gami-lb-name">${_esc(bot.nickname)} <span style="font-size:11px;color:#888;font-weight:normal;">by ${_esc(bot.owner_name || 'Unknown')}</span></span>
                 <span class="gami-lb-xp">${pct}%</span>
                 <span class="gami-lb-level">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''}</span>
             </div>

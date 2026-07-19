@@ -263,7 +263,18 @@ window.gami = (function () {
                 .order('win_rate', { ascending: false })
                 .limit(limit || 10);
             if (error) { console.error('[gami] bot leaderboard error:', error); return []; }
-            return data || [];
+            const rows = data || [];
+            // deployed_bots.owner has no FK to user_profiles (only to
+            // auth.users), so PostgREST can't embed this — a second batch
+            // query is the simplest correct join for "who deployed this bot".
+            const ownerIds = [...new Set(rows.map(r => r.owner).filter(Boolean))];
+            if (ownerIds.length) {
+                const { data: owners } = await supabase.from('user_profiles')
+                    .select('user_id, display_name').in('user_id', ownerIds);
+                const nameById = new Map((owners || []).map(o => [o.user_id, o.display_name]));
+                for (const r of rows) r.owner_name = nameById.get(r.owner) || 'Unknown';
+            }
+            return rows;
         },
 
         /** All badges merged with the current user's earned status */

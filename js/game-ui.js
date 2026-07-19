@@ -4336,7 +4336,7 @@ document.getElementById('undo-move').onclick = function() {
 
         // ─── Persistent training-status popup ───────────────────────────────
         // Small fixed-corner popup showing live progress for whichever
-        // Start Training / Start Breeding run is active — visible the moment
+        // Start Training run is active — visible the moment
         // a run starts, independent of whether the full "Bot Training"
         // modal is open, same spirit as the always-visible floating Hand/
         // Active/Common scroll panels (.fsp-* in css/styles.css) rather than
@@ -4478,7 +4478,7 @@ document.getElementById('undo-move').onclick = function() {
                 }
             } else {
                 const playersLabel = p.nPlayers === 'all' ? 'all sizes (2–5)' : `${p.nPlayers || 2} players`;
-                scenarioLine = `${p.mode === 'breeding' ? 'Breeding' : 'Training'} — ${playersLabel}, population ${p.popSize || '?'}`;
+                scenarioLine = `Training — ${playersLabel}, population ${p.popSize || '?'}`;
                 phaseLine = p.phase === 'confirming'
                     ? (p.nPlayers === 'all'
                         ? 'Confirming: champion vs. baseline at every size'
@@ -5436,10 +5436,6 @@ document.getElementById('undo-move').onclick = function() {
                 // startBtnRef is read inside makeChoiceRow's onclick above, so it
                 // needs to exist (even if reassigned below) before the rows are built.
                 const startBtnRef = { disabled: false };
-                // breedBtn is declared before it's built (below) so
-                // startBtn's onclick can cross-disable it — only one of
-                // Start Training / Start Breeding can run at a time.
-                let breedBtn;
 
                 // Method picked FIRST — Players' row below reads state.method
                 // to decide whether it's disabled, so it needs to exist first.
@@ -5457,7 +5453,7 @@ document.getElementById('undo-move').onclick = function() {
 
                 const playersRow = makeChoiceRow('Players:',
                     [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })).concat([
-                        { value: 'all', text: 'All', title: 'Generalist: train across arenas of every size (2–5 players) and confirm the champion across every size too. Best for real lobbies, which can be 2–5 players. (Breeding needs a specific count.)' },
+                        { value: 'all', text: 'All', title: 'Generalist: train across arenas of every size (2–5 players) and confirm the champion across every size too. Best for real lobbies, which can be 2–5 players.' },
                     ]),
                     () => state.n, (v) => { state.n = v; },
                     'How many bots play each training game. "All" trains across mixed 2–5-player arenas and confirms the champion at every size. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game. Fixed at 2 for Hill Climb, which has no population/nPlayers concept.',
@@ -5468,15 +5464,14 @@ document.getElementById('undo-move').onclick = function() {
                     { value: false, text: 'Extreme', title: 'Muted, minimal delay — much faster, nothing to watch (a true no-UI "headless" mode isn\'t possible in the browser tab the live game runs in)' },
                 ], () => state.watchable, (v) => { state.watchable = v; });
 
-                // Shared by Start Training (either method) and Start Breeding
-                // below. For Evolve/Breeding this is evolve()'s generation
-                // count; for Hill Climb it's the number of climbing ROUNDS
-                // (each round plays lambda=6 challengers × 30 games, same
+                // For Evolve this is evolve()'s generation count; for Hill
+                // Climb it's the number of climbing ROUNDS (each round plays
+                // lambda=6 challengers × 30 games, same
                 // proportional-not-literal-game-count caveat applies).
                 makeChoiceRow('Repeat:',
                     [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
                     () => state.generations, (v) => { state.generations = v; },
-                    'Evolve/Breeding: number of GENERATIONS, not total games — each generation plays many games on its own. Hill Climb: number of climbing ROUNDS — each round plays 6 challengers × 30 games vs the champion. Either way this is proportionally, not literally, that many games.');
+                    'Evolve: number of GENERATIONS, not total games — each generation plays many games on its own. Hill Climb: number of climbing ROUNDS — each round plays 6 challengers × 30 games vs the champion. Either way this is proportionally, not literally, that many games.');
 
                 const progressText = document.createElement('div');
                 progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
@@ -5524,9 +5519,8 @@ document.getElementById('undo-move').onclick = function() {
                 actionRow.appendChild(stopBtn);
 
                 // ── Live roster + generation log + weight-diagram drill-down ──
-                // Shared by BOTH Start Training and Start Breeding below —
-                // whichever one is running (or most recently ran) populates
-                // this. Population membership persists id/lineage across
+                // Populated by Start Training's Evolve method (Hill Climb has
+                // no population concept). Population membership persists id/lineage across
                 // generations (see bot-arena.js's newMember()/elites), so the
                 // roster can show "same bot survived" vs "freshly bred" from
                 // one generation to the next instead of just bare numbers.
@@ -5705,8 +5699,7 @@ document.getElementById('undo-move').onclick = function() {
                 }
 
                 // Wired into evolve()'s onGeneration (4th arg — richer roster
-                // data, see bot-arena.js) by both Start Training and Start
-                // Breeding below, so either flow feeds the same live views.
+                // data, see bot-arena.js) by Start Training's Evolve method.
                 function handleGeneration(gen, total, fitnessArr, members) {
                     currentRoster = members;
                     genLog.push({ gen, total, bestId: members[0].id, bestFitness: members[0].fitness });
@@ -5715,16 +5708,15 @@ document.getElementById('undo-move').onclick = function() {
                     if (selectedMemberId != null) renderDetail(); // keep the open diagram live
                 }
 
-                const breedSep = document.createElement('div');
-                breedSep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
-                body.appendChild(breedSep);
+                const startBtnSep = document.createElement('div');
+                startBtnSep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
+                body.appendChild(startBtnSep);
 
                 startBtn.onclick = async () => {
                     if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
                     if (!await stopAnyRunningBotJob()) return;
                     startBtnRef.disabled = true;
                     startBtn.disabled = true;
-                    if (breedBtn) breedBtn.disabled = true;
                     startBtn.textContent = 'Training…';
                     resetInsights();
                     renderRoster();
@@ -5763,7 +5755,6 @@ document.getElementById('undo-move').onclick = function() {
                     } finally {
                         startBtnRef.disabled = false;
                         startBtn.disabled = false;
-                        if (breedBtn) breedBtn.disabled = false;
                         startBtn.textContent = 'Start Training';
                         hideTrainingPopup();
                         // This run's source (if any) is done its job — clear it
@@ -5774,162 +5765,16 @@ document.getElementById('undo-move').onclick = function() {
                     }
                 };
 
-                // ── Breed from champion files ────────────────────────────────
-                // Separate flow from Start Training above: no confirm-vs-
-                // baseline gate, no effect on this browser's live bot
-                // weights — it exists purely to produce a downloadable
-                // champion file, e.g. to carry a lineage between browsers/
-                // devices (there's no server backend this game could persist
-                // trained weights to — see the "why not Supabase" discussion).
-                // Population size = the Players count selected above (so a
-                // 5-player run breeds a population of 5): up to 2 uploaded
-                // files seed it directly, any remaining slots are crossover-
-                // bred from those seeds (or mutated from current WEIGHTS if
-                // nothing was uploaded).
-                const breedTitle = document.createElement('div');
-                breedTitle.textContent = 'Breed from champion files';
-                breedTitle.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
-                body.appendChild(breedTitle);
-
-                const breedDesc = document.createElement('div');
-                breedDesc.textContent = 'Upload up to 2 champion .json files as parents (population = Players above). Produces a downloaded champion file at the end — does NOT change your current live bot weights.';
-                breedDesc.style.cssText = 'font-size:11px;color:#999;';
-                body.appendChild(breedDesc);
-
-                const seedFiles = []; // {name, weights}
-                const fileListText = document.createElement('div');
-                fileListText.style.cssText = 'font-size:11px;color:#9c9;white-space:pre-line;';
-                function renderFileList() {
-                    fileListText.textContent = seedFiles.length ? seedFiles.map(f => `✓ ${f.name}`).join('\n') : '';
-                }
-
-                const fileInput = document.createElement('input');
-                fileInput.type = 'file';
-                fileInput.accept = 'application/json';
-                fileInput.multiple = true;
-                fileInput.style.cssText = 'font-size:11px;color:#ccc;max-width:100%;';
-                fileInput.onchange = async () => {
-                    const files = Array.from(fileInput.files || []);
-                    for (const file of files) {
-                        if (seedFiles.length >= 2) { updateStatus('Only 2 seed champions are used — extra files ignored'); break; }
-                        try {
-                            const parsed = JSON.parse(await file.text());
-                            const numericKeys = (parsed && typeof parsed === 'object')
-                                ? Object.values(parsed).filter(v => typeof v === 'number').length : 0;
-                            if (numericKeys < 20) {
-                                updateStatus(`"${file.name}" doesn't look like a champion weights file — skipped`);
-                                continue;
-                            }
-                            seedFiles.push({ name: file.name, weights: parsed });
-                        } catch (e) {
-                            updateStatus(`Could not read "${file.name}" — skipped`);
-                        }
-                    }
-                    fileInput.value = '';
-                    renderFileList();
-                };
-                body.appendChild(fileInput);
-                body.appendChild(fileListText);
-
-                const clearSeedsBtn = document.createElement('button');
-                clearSeedsBtn.textContent = 'Clear uploaded';
-                clearSeedsBtn.style.cssText = 'padding:3px 8px;background:#2d2d44;color:#ccc;border:1px solid #555;border-radius:5px;cursor:pointer;font-size:11px;align-self:flex-start;';
-                clearSeedsBtn.onclick = () => { seedFiles.length = 0; renderFileList(); };
-                body.appendChild(clearSeedsBtn);
-                // Repeat count is the shared row built above (with Players/Speed) —
-                // both Start Training and Start Breeding read state.generations.
-
-                breedBtn = document.createElement('button');
-                breedBtn.textContent = 'Start Breeding';
-                breedBtn.style.cssText = 'padding:6px 10px;background:#2d3a4a;color:#eee;border:1px solid #58a;border-radius:5px;cursor:pointer;font-size:12px;';
-                breedBtn.onclick = async () => {
-                    if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
-                    if (state.n === 'all') { updateStatus('Breeding needs a specific player count (2–5) — "All" is a training-only mode. Pick a number of Players first.'); return; }
-                    if (!await stopAnyRunningBotJob()) return;
-                    startBtnRef.disabled = true;
-                    startBtn.disabled = true;
-                    breedBtn.disabled = true;
-                    breedBtn.textContent = 'Breeding…';
-                    resetInsights();
-                    renderRoster();
-                    try {
-                        await leaveOnlineGameIfAny();
-                        const baselineWeights = { ...window.BotSystem.WEIGHTS };
-                        let baselineStored = null;
-                        try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
-
-                        const popSize = state.n;
-                        const gamesPerPair = 2; // evolve()'s own default, kept explicit for the totalGames estimate below
-                        const gamesPerGen = popSize * 3; // ditto
-                        const pairs = popSize * (popSize - 1) / 2;
-                        const totalGames = (state.n > 2 ? gamesPerGen : pairs * gamesPerPair) * state.generations;
-                        const startedAt = Date.now();
-                        let gamesDone = 0, lastGen = 0, lastFitness = null;
-                        const report = () => renderProgress({
-                            phase: 'training', gamesDone, totalGames, startedAt,
-                            gen: lastGen, generations: state.generations, fitness: lastFitness,
-                            nPlayers: state.n, popSize, mode: 'breeding',
-                        });
-
-                        const champion = await window.BotArena.evolve(state.generations, {
-                            nPlayers: state.n, popSize, visual: state.watchable,
-                            seedWeights: seedFiles.map(f => f.weights),
-                            onGeneration: (gen, total, fitness, members) => {
-                                lastGen = gen; lastFitness = fitness; report();
-                                handleGeneration(gen, total, fitness, members);
-                            },
-                            onGame: () => { gamesDone++; report(); },
-                        });
-
-                        // Restore the browser's LIVE weights — breeding
-                        // produces a file artifact, it should never silently
-                        // change which weights this browser's own bots use
-                        // next time (unlike Start Training above, which has
-                        // its own confirm-vs-baseline gate for exactly that;
-                        // evolve() itself unconditionally writes to
-                        // localStorage every generation regardless of caller).
-                        window.BotArena.applyWeights(baselineWeights);
-                        try {
-                            if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
-                            else localStorage.setItem('godaigo_bot_weights', baselineStored);
-                        } catch (e) {}
-
-                        const blob = new Blob([JSON.stringify(champion, null, 1)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `godaigo-champion-${Date.now()}.json`;
-                        document.body.appendChild(a);
-                        a.click();
-                        a.remove();
-                        URL.revokeObjectURL(url);
-
-                        progressText.style.display = 'none';
-                        updateStatus(`Breeding complete (${state.generations} generation${state.generations > 1 ? 's' : ''}) — champion downloaded. Your live bot weights were left unchanged.`);
-                    } catch (err) {
-                        console.error('Bot breeding failed:', err);
-                        progressText.style.display = 'none';
-                        updateStatus('Bot breeding failed — see console');
-                    } finally {
-                        startBtnRef.disabled = false;
-                        startBtn.disabled = false;
-                        breedBtn.disabled = false;
-                        breedBtn.textContent = 'Start Breeding';
-                        hideTrainingPopup();
-                    }
-                };
-                body.appendChild(breedBtn);
-
                 // ── Deploy this bot ────────────────────────────────────────────
                 // Takes whatever is CURRENTLY in window.BotSystem.WEIGHTS
-                // (freshly trained/bred, or just whatever's loaded) and
-                // publishes it as an individually-owned, named row in the
+                // (freshly trained, or just whatever's loaded) and publishes
+                // it as an individually-owned, named row in the
                 // `deployed_bots` table — the foundation step the whole Bot
                 // Tycoon leaderboard/challenge economy depends on
                 // (docs/bot-tycoon-proposal.md § SUGGESTED BUILD ORDER step 1).
-                // Deliberately separate from Start Training/Start Breeding —
-                // an explicit publish action, not an automatic side effect of
-                // a good result. Always available regardless of run state;
+                // Deliberately separate from Start Training — an explicit
+                // publish action, not an automatic side effect of a good
+                // result. Always available regardless of run state;
                 // deploying doesn't touch BotArena at all.
                 const deploySep = document.createElement('div');
                 deploySep.style.cssText = 'border-top:1px solid #333;margin:2px 0;';
@@ -5941,7 +5786,7 @@ document.getElementById('undo-move').onclick = function() {
                 body.appendChild(deployTitle);
 
                 const deployDesc = document.createElement('div');
-                deployDesc.textContent = 'Publish a bot as a named bot other players can challenge on the leaderboard. Requires being logged in.';
+                deployDesc.textContent = 'Publish a bot as a named bot other players can challenge on the leaderboard. Requires being logged in. Each source (your live bot, or a specific captured bot) can only be deployed once — capture another bot if you want a second deploy.';
                 deployDesc.style.cssText = 'font-size:11px;color:#999;';
                 body.appendChild(deployDesc);
 
@@ -5949,6 +5794,14 @@ document.getElementById('undo-move').onclick = function() {
                 // captured bot from your collection (docs/bot-tycoon-proposal.md
                 // build-order step 4) — reuses this exact same insert logic
                 // below rather than a separate "deploy a capture" flow.
+                // Each source can only be deployed ONCE per owner, ever (per
+                // explicit user request — otherwise one live WEIGHTS table or
+                // one capture could be redeployed under new names to flood
+                // the leaderboard with clones of the same bot): a second
+                // deployed bot requires capturing a genuinely different one
+                // first. Already-used sources are filtered OUT of this list
+                // entirely rather than shown disabled — there's nothing
+                // useful to do with them here.
                 const deploySourceRow = document.createElement('div');
                 deploySourceRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;';
                 body.appendChild(deploySourceRow);
@@ -5964,22 +5817,49 @@ document.getElementById('undo-move').onclick = function() {
 
                 let capturedBotsCache = [];
                 async function refreshCapturedBotsOptions() {
-                    deploySourceSelect.innerHTML = '<option value="">Current live bot (WEIGHTS)</option>';
+                    deploySourceSelect.innerHTML = '';
                     capturedBotsCache = [];
                     const { data: { session } } = await supabase.auth.getSession();
-                    if (!session?.user?.id) return;
+                    if (!session?.user?.id) {
+                        deploySourceSelect.innerHTML = '<option value="">Current live bot (WEIGHTS)</option>';
+                        return;
+                    }
+
+                    const { data: mine } = await supabase.from('deployed_bots')
+                        .select('captured_bot_id').eq('owner', session.user.id);
+                    const usedCapturedIds = new Set((mine || []).map(r => r.captured_bot_id).filter(id => id != null));
+                    const liveAlreadyUsed = (mine || []).some(r => r.captured_bot_id == null);
+
+                    if (!liveAlreadyUsed) {
+                        const opt = document.createElement('option');
+                        opt.value = '';
+                        opt.textContent = 'Current live bot (WEIGHTS)';
+                        deploySourceSelect.appendChild(opt);
+                    }
+
                     const { data, error } = await supabase.from('captured_bots')
                         .select('id, source_nickname, weights, captured_at')
                         .eq('owner', session.user.id)
                         .order('captured_at', { ascending: false })
                         .limit(50);
-                    if (error || !data) return;
-                    capturedBotsCache = data;
-                    for (const cb of data) {
+                    if (!error && data) {
+                        capturedBotsCache = data.filter(cb => !usedCapturedIds.has(cb.id));
+                        for (const cb of capturedBotsCache) {
+                            const opt = document.createElement('option');
+                            opt.value = String(cb.id);
+                            opt.textContent = `Captured: ${cb.source_nickname} (${new Date(cb.captured_at).toLocaleDateString()})`;
+                            deploySourceSelect.appendChild(opt);
+                        }
+                    }
+
+                    if (!deploySourceSelect.options.length) {
                         const opt = document.createElement('option');
-                        opt.value = String(cb.id);
-                        opt.textContent = `Captured: ${cb.source_nickname} (${new Date(cb.captured_at).toLocaleDateString()})`;
+                        opt.value = '';
+                        opt.textContent = 'No available sources — capture a bot first';
                         deploySourceSelect.appendChild(opt);
+                        deploySourceSelect.disabled = true;
+                    } else {
+                        deploySourceSelect.disabled = false;
                     }
                 }
 
@@ -6002,6 +5882,7 @@ document.getElementById('undo-move').onclick = function() {
                 deployBtn.onclick = async () => {
                     const nickname = nicknameInput.value.trim();
                     if (!nickname) { updateStatus('Name your bot before deploying.'); return; }
+                    if (deploySourceSelect.disabled) { updateStatus('No available sources to deploy — capture a bot first.'); return; }
                     deployBtn.disabled = true;
                     deployBtn.textContent = 'Deploying…';
                     try {
@@ -6015,10 +5896,29 @@ document.getElementById('undo-move').onclick = function() {
                             ? capturedBotsCache.find(cb => String(cb.id) === capturedId)?.weights
                             : { ...window.BotSystem.WEIGHTS };
                         if (!sourceWeights) { updateStatus('Selected captured bot could not be found — try refreshing.'); return; }
+
+                        // Safety net against the dropdown's own filtering going
+                        // stale (e.g. two tabs open) — each source (live WEIGHTS,
+                        // or a specific captured bot) may only be deployed once
+                        // per owner, ever. No DB-level constraint for this: some
+                        // pre-existing rows already predate the captured_bot_id
+                        // column and can't be retrofitted without touching real
+                        // player data, so this check is the actual enforcement.
+                        let dupeQuery = supabase.from('deployed_bots').select('id').eq('owner', session.user.id);
+                        dupeQuery = capturedId ? dupeQuery.eq('captured_bot_id', Number(capturedId)) : dupeQuery.is('captured_bot_id', null);
+                        const { data: dupes } = await dupeQuery.limit(1);
+                        if (dupes?.length) {
+                            updateStatus(capturedId
+                                ? 'You already deployed this captured bot — capture a different one if you want another.'
+                                : "You've already deployed your own bot — capture another player's bot if you want a second one.");
+                            return;
+                        }
+
                         const { error } = await supabase.from('deployed_bots').insert({
                             owner: session.user.id,
                             nickname,
                             weights: sourceWeights,
+                            captured_bot_id: capturedId ? Number(capturedId) : null,
                         });
                         if (error) {
                             // 23505 = unique_violation — this owner already has a
@@ -6030,6 +5930,7 @@ document.getElementById('undo-move').onclick = function() {
                         }
                         updateStatus(`"${nickname}" is deployed — other players can now challenge it.`);
                         nicknameInput.value = '';
+                        refreshCapturedBotsOptions();
                     } catch (e) {
                         console.error('Deploy bot failed:', e);
                         updateStatus('Could not deploy — see console.');
@@ -6098,14 +5999,25 @@ document.getElementById('undo-move').onclick = function() {
                             challengeListEl.innerHTML = '<div style="font-size:11px;color:#777;font-style:italic;">No other deployed bots yet — be the first to deploy one above.</div>';
                             return;
                         }
+                        // deployed_bots.owner has no FK to user_profiles (only
+                        // to auth.users), so PostgREST can't embed this — a
+                        // second batch query resolves "who deployed this bot".
+                        const ownerIds = [...new Set(data.map(b => b.owner).filter(Boolean))];
+                        let ownerNameById = new Map();
+                        if (ownerIds.length) {
+                            const { data: owners } = await supabase.from('user_profiles')
+                                .select('user_id, display_name').in('user_id', ownerIds);
+                            ownerNameById = new Map((owners || []).map(o => [o.user_id, o.display_name]));
+                        }
                         challengeListEl.innerHTML = '';
                         for (const bot of data) {
                             const row = document.createElement('div');
                             row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 6px;background:#22223a;border-radius:4px;';
                             const decided = bot.wins + bot.losses;
                             const pct = decided ? Math.round((bot.wins / decided) * 100) : 0;
+                            const ownerName = ownerNameById.get(bot.owner) || 'Unknown';
                             const label = document.createElement('span');
-                            label.textContent = `${bot.nickname} — ${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%)`;
+                            label.textContent = `${bot.nickname} (by ${ownerName}) — ${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%)`;
                             label.style.cssText = 'flex:1;font-size:11px;color:#ddd;';
                             row.appendChild(label);
                             const btn = document.createElement('button');

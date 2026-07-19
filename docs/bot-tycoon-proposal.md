@@ -40,7 +40,7 @@ that already exist in this codebase — see § WHAT ALREADY EXISTS below.
 
 ## CORE LOOP
 
-1. Train/breed/capture a bot → deploy it with a nickname.
+1. Train/capture a bot → deploy it with a nickname.
 2. Your deployed bot sits on the shared leaderboard as a challengeable entity.
 3. Other players challenge bots within a rank window of their own position.
 4. Challenger's own browser runs the match locally (see § CHALLENGE EXECUTION
@@ -60,7 +60,7 @@ that already exist in this codebase — see § WHAT ALREADY EXISTS below.
 | Purchasable items with gold | `shop_items` table (schema exists, 0 rows, unused) + `emoji-system.js`/`cosmetics-system.js` purchase/equip pattern |
 | A place bot weight tables already live | `bot_champion_weights` (weights jsonb, win_rate generated column, confirm_wins/losses/draws, created_by) |
 | Local bot-vs-bot execution, no server involved | `BotArena.playMatch(weightsPerPlayer, opts)` — already runs a full game client-side |
-| Uploading someone else's trained bot as a breeding parent | `game-ui.js`'s "Breed from champion files" flow (`openBotTrainingPanel()`) — accepts up to 2 uploaded `.json` champion files |
+| Improving a SPECIFIC deployed bot | Stable's Train button (`gamification-ui.js`) — opens the training panel pre-loaded with that bot's weights, writes a successful run back into its own row |
 | Shared leaderboard UI | `gamification-ui.js` Profile modal, Leaderboard tab (currently human-only) |
 | XP/gold economy | `js/gamification.js` (`window.gami`), `user_profiles.total_xp/gold/stats` |
 | Reliable, champion-anchored bot trainer | `BotArena.hillClimb()` — being wired into the training panel as a separate mode from `evolve()` (see `planning/current.md`, tracked independently of this proposal) |
@@ -200,9 +200,15 @@ not hand-guessed numbers.
 
 - **Self-play against your own deployed bot** — already possible via
   `BotArena.spectate()`/local arena; no new work.
-- **Breeding** — already possible via "Breed from champion files"; a
-  deployed/captured bot should be selectable as a parent directly (skip the
-  manual `.json` upload step) — small UI addition, no new mechanism.
+- **Training a SPECIFIC deployed bot** — DONE. Stable's Train button
+  (`gamification-ui.js`) loads that bot's weights and opens the panel; a
+  successful Evolve run writes back to that bot's own row, a successful
+  Hill Climb ALSO shares to the community leaderboard and rewards
+  dethroning the online champion (250 XP + 50 gold). See
+  `planning/current.md`'s "STABLE: Train button" entry. The panel's
+  "Breed from champion files" upload flow was removed per explicit user
+  request — it never had a bot-ownership concept anyway (produced a
+  downloadable file, not a deployed/captured bot).
 - **Lightweight in-browser hillclimb** — this is the separately-tracked
   "Hill Climb as a training-panel option" work (see `planning/current.md`);
   this proposal assumes it lands and deployed bots become a natural
