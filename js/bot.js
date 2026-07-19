@@ -1178,6 +1178,14 @@
             plan._lastTargetKey = null;
         }
 
+        // NOTE: do NOT add a "step off the stone first" / "skip pawn-occupied
+        // cells" pre-gate here to avoid the applyAction rejections botAct()
+        // logs as "Plan action failed". That was tried (2026-07-19) and made
+        // the bots pathologically passive: 7/8 seeded arena games wedged into
+        // full stall-outs (vs 7/8 clean wins before). The rejection path is
+        // the CHEAP, EFFECTIVE recovery — the plan is wiped, scoring takes
+        // over, and the bot stays active. The log line is noise, not a bug.
+
         if (missing.length) {
             // Only ever attempt/target a cell whose type is ALREADY in pool —
             // applyAction('placeStone') rejects one that isn't (no stones of

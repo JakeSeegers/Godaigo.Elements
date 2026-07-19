@@ -1613,7 +1613,8 @@
                                 }
                             } else {
                                 updateStatus(`The ${spell.element} shrine source is depleted — scroll effect cast, but win condition not met.`);
-                                console.warn(`📜 Win condition skipped for ${spell.element}: source pool is empty.`);
+                                // Normal rules enforcement (empty-source-pool rule), not an anomaly — log, don't warn
+                                console.log(`📜 Win condition skipped for ${spell.element}: source pool is empty.`);
                             }
                         }
                         updatePlayerElementSymbols(activePlayerIndex);
@@ -1700,7 +1701,8 @@
                         updateStatus(`Spell cast! Added +${spell.level} ${spell.element} stones!`);
                     } else {
                         updateStatus(`The ${spell.element} shrine source is depleted — scroll effect cast, but win condition not met.`);
-                        console.warn(`📜 Win condition skipped for ${spell.element}: source pool is empty (default path).`);
+                        // Normal rules enforcement (empty-source-pool rule), not an anomaly — log, don't warn
+                        console.log(`📜 Win condition skipped for ${spell.element}: source pool is empty (default path).`);
                     }
                     updatePlayerElementSymbols(activePlayerIndex);
                 }
