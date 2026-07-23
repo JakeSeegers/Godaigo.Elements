@@ -1280,11 +1280,24 @@
         return { improved, record, perSize, champFitness, baseFitness, champWins, baseWins, draws, aWins: champWins, bWins: baseWins };
     }
 
+    // Return a gaussian-perturbed COPY of a weight table (a fresh random draw
+    // each call, so successive calls differ). Reuses mutate() so the same
+    // brain-shape keys (searchDepth/searchBreadth/searchHybrid) are left alone.
+    // Used by the "Noisy anchor" training toggle: train against a displaced
+    // opponent so the result is robust to a DISTRIBUTION near the anchor, not
+    // overfit to one exact table — then confirm against the TRUE anchor.
+    // sigma default 0.15 (gentler than mutate's 0.2 breeding default).
+    function perturbWeights(table, sigma = 0.15) {
+        const rng = mulberry32(((Date.now() >>> 0) ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
+        return mutate({ ...table }, rng, sigma);
+    }
+
     window.BotArena = {
         run, evolve, playGame, playMatch, spectate, stop,
         hillClimb, // champion-anchored monotonic climber (the reliable trainer)
         confirmAcrossSizes, // N-player champion-vs-field confirmation gate
         endEarly, // soft-stop: cuts evolve()'s / hillClimb()'s loop short but keeps its result usable
+        perturbWeights, // gaussian-perturbed copy of a weight table (Noisy anchor toggle)
         isSpectating, isEvolving, isClimbing, isRunning,
         stopRequested: () => _stopRequested, // was stop() called for the run in progress (or the one that just ended)?
         endEarlyRequested,

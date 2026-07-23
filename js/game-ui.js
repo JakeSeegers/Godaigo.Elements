@@ -4069,6 +4069,14 @@ document.getElementById('undo-move').onclick = function() {
             try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
             await leaveOnlineGameIfAny();
 
+            // Noisy anchor (opts.noisyAnchor): seed the population from a
+            // perturbed copy of the live weights so evolution starts displaced
+            // and generalizes, while the confirmation gate below still compares
+            // against baselineWeights (the TRUE, unperturbed live table).
+            const seedWeights = (opts.noisyAnchor && typeof window.BotArena.perturbWeights === 'function')
+                ? [window.BotArena.perturbWeights(baselineWeights)]
+                : undefined;
+
             const pairs = popSize * (popSize - 1) / 2;
             const sampledPerGen = opts.gamesPerGen ?? popSize * 2;
             const confirmTotal = allSizes ? confirmSizes.length * gamesPerSize : confirmGames;
@@ -4082,7 +4090,7 @@ document.getElementById('undo-move').onclick = function() {
             });
 
             const champion = await window.BotArena.evolve(generations, {
-                gamesPerPair, popSize, nPlayers, visual,
+                gamesPerPair, popSize, nPlayers, visual, seedWeights,
                 gamesPerGen: (allSizes || nPlayers > 2) ? sampledPerGen : undefined,
                 onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report('training'); },
                 onGame: () => { gamesDone++; report('training'); },
@@ -4228,6 +4236,15 @@ document.getElementById('undo-move').onclick = function() {
                 }
             }
 
+            // Noisy anchor (opts.noisyAnchor): climb from a perturbed copy of
+            // the anchor so the champion generalizes, but keep `baseline` (the
+            // TRUE anchor) for the confirmation run below — a win must still be
+            // a win against the real thing. Falls back to the exact anchor when
+            // BotArena.perturbWeights is somehow unavailable.
+            const climbAnchor = (opts.noisyAnchor && typeof window.BotArena.perturbWeights === 'function')
+                ? window.BotArena.perturbWeights(baseline)
+                : baseline;
+
             const baselineWeights = { ...window.BotSystem.WEIGHTS };
             let baselineStored = null;
             try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
@@ -4266,7 +4283,7 @@ document.getElementById('undo-move').onclick = function() {
             };
 
             const result = await window.BotArena.hillClimb({
-                champion: baseline, rounds, lambda, gamesPerChallenge, visual,
+                champion: climbAnchor, rounds, lambda, gamesPerChallenge, visual,
                 // onRound alone only updates once per ROUND — a round is
                 // lambda*gamesPerChallenge games (180 by default) played
                 // sequentially in this one tab (no --shards parallelism like
@@ -5336,7 +5353,7 @@ document.getElementById('undo-move').onclick = function() {
         (function initBotTrainingPanel() {
             let clickCount = 0;
             let clickTimer = null;
-            const state = { n: 2, watchable: true, generations: 5, method: 'evolve', sourceBotId: null, sourceBotNickname: null };
+            const state = { n: 2, watchable: true, generations: 5, method: 'evolve', noisyAnchor: false, sourceBotId: null, sourceBotNickname: null };
 
             // Weight groupings mirror the section comments in bot.js's
             // DEFAULT_WEIGHTS — used purely for the drill-down diagram, so
@@ -5535,6 +5552,18 @@ document.getElementById('undo-move').onclick = function() {
                     [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
                     () => state.generations, (v) => { state.generations = v; },
                     'Evolve: number of GENERATIONS, not total games — each generation plays many games on its own. Hill Climb: number of climbing ROUNDS — each round plays 6 challengers × 30 games vs the champion. Either way this is proportionally, not literally, that many games.');
+
+                // Noisy anchor: train against a gaussian-perturbed copy of the
+                // anchor (the champion / your bot / the Void Knight) instead of
+                // the exact table, then CONFIRM against the true anchor. Pushes
+                // the result to be robust to a distribution of nearby opponents
+                // rather than overfit to one exact champion — a direct counter
+                // to the co-evolution weakness (siblings beating siblings).
+                makeChoiceRow('Anchor:', [
+                    { value: false, text: 'Exact', title: 'Train against the anchor weights exactly as they are.' },
+                    { value: true, text: 'Noisy', title: 'Train against a slightly perturbed copy of the anchor each session (more robust, less overfit); the final confirmation match is still played against the TRUE anchor, so a win still means a real improvement.' },
+                ], () => state.noisyAnchor, (v) => { state.noisyAnchor = v; },
+                    'Noisy trains against a randomly perturbed version of the opponent so the result generalizes to a range of opponents instead of overfitting one exact champion. The confirmation match at the end always uses the true, unperturbed anchor — so "improved" still means genuinely better.');
 
                 const progressText = document.createElement('div');
                 progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
@@ -5791,7 +5820,7 @@ document.getElementById('undo-move').onclick = function() {
                         if (state.method === 'hillclimb') {
                             const preset = { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, confirmGames: 20, confirmMargin: 0.55 };
                             const { improved, record, promotions } = await runHillClimbTraining(preset, renderProgress, {
-                                visual: state.watchable,
+                                visual: state.watchable, noisyAnchor: state.noisyAnchor,
                                 sourceBotId: trainedBotId, sourceBotNickname: trainedBotName,
                                 leaderWeights: state.leaderWeights,
                             });
@@ -5806,7 +5835,7 @@ document.getElementById('undo-move').onclick = function() {
                         } else {
                             const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10, gamesPerSize: 4 };
                             const { improved, record } = await runWeightTraining(preset, renderProgress, {
-                                nPlayers: state.n, visual: state.watchable,
+                                nPlayers: state.n, visual: state.watchable, noisyAnchor: state.noisyAnchor,
                                 onGeneration: handleGeneration,
                                 sourceBotId: trainedBotId, sourceBotNickname: trainedBotName,
                             });
