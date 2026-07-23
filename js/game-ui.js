@@ -4196,16 +4196,36 @@ document.getElementById('undo-move').onclick = function() {
             const { rounds, lambda, gamesPerChallenge, confirmGames, confirmMargin } = preset;
             const visual = !!opts.visual;
 
+            // ANCHOR-FOLLOWS-BUTTON (design decision 2026-07-23): which weights
+            // the climb starts from and must beat is decided by WHERE the run
+            // was launched, not by the method:
+            //   opts.leaderWeights  — leaderboard "Train the leader": climb the
+            //       Void Knight's own weights; an improvement updates the PUBLIC
+            //       bot (void_knight table) and pays a small gold bounty. The
+            //       local browser's weights are restored either way.
+            //   opts.sourceBotId    — Stable "Train": SELF-anchored — climb the
+            //       bot's own weights (already applied by the Train button) and
+            //       confirm against its own prior self. Writes back to the
+            //       bot's row only; dethroning rewards now live exclusively on
+            //       the leaderboard's Challenge button.
+            //   neither             — legacy ambient run (cheat panel): anchor
+            //       to the online champion, exactly as before.
             let baseline;
-            try {
-                if (typeof supabase === 'undefined' || !supabase?.from) throw new Error('no Supabase client on this page');
-                const { data, error } = await supabase.from('bot_champion_weights')
-                    .select('weights, win_rate').order('win_rate', { ascending: false }).limit(1);
-                if (error) throw new Error(error.message);
-                if (!data?.length || !data[0].weights || typeof data[0].weights !== 'object') throw new Error('no champion rows in bot_champion_weights');
-                baseline = data[0].weights;
-            } catch (e) {
-                throw new Error(`Hill Climb needs the real online champion to anchor to, not defaults — couldn't fetch it (${e.message}). Try again when online.`);
+            if (opts.leaderWeights && typeof opts.leaderWeights === 'object') {
+                baseline = opts.leaderWeights;
+            } else if (opts.sourceBotId) {
+                baseline = { ...window.BotSystem.WEIGHTS };
+            } else {
+                try {
+                    if (typeof supabase === 'undefined' || !supabase?.from) throw new Error('no Supabase client on this page');
+                    const { data, error } = await supabase.from('bot_champion_weights')
+                        .select('weights, win_rate').order('win_rate', { ascending: false }).limit(1);
+                    if (error) throw new Error(error.message);
+                    if (!data?.length || !data[0].weights || typeof data[0].weights !== 'object') throw new Error('no champion rows in bot_champion_weights');
+                    baseline = data[0].weights;
+                } catch (e) {
+                    throw new Error(`Hill Climb needs the real online champion to anchor to, not defaults — couldn't fetch it (${e.message}). Try again when online.`);
+                }
             }
 
             const baselineWeights = { ...window.BotSystem.WEIGHTS };
@@ -4284,45 +4304,70 @@ document.getElementById('undo-move').onclick = function() {
             const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
 
             if (improved) {
-                window.BotArena.applyWeights(result.champion);
-                let session = null;
-                try {
-                    const { data } = await supabase.auth.getSession();
-                    session = data?.session || null;
-                    if (session?.user?.id) {
-                        await supabase.from('bot_champion_weights').insert({
-                            weights: result.champion,
-                            confirm_wins: confirm.aWins,
-                            confirm_losses: confirm.bWins,
-                            confirm_draws: confirm.draws,
-                            created_by: session.user.id,
-                        });
-                    }
-                } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
-
-                if (opts.sourceBotId) {
-                    // Launched from a specific Stable bot (game-ui.js's Train
-                    // button) and it just beat the reigning online champion —
-                    // write the champion weights back into that bot's own row
-                    // (it's now carrying the weights that just became #1) and
-                    // reward the achievement. 250 XP / 50 gold are new,
-                    // ungrounded-in-precedent numbers (same as the
-                    // capture-chance formula was) — bigger than the 100 XP for
-                    // beating a regular player's deployed bot, since
-                    // dethroning the actual #1 community champion is far
-                    // rarer. Tunable later.
+                if (opts.leaderWeights && typeof opts.leaderWeights === 'object') {
+                    // "Train the leader": the improvement belongs to the PUBLIC
+                    // Void Knight, not this browser — restore the local weights
+                    // (hillClimb() saved promotions into localStorage as it
+                    // went), append the stronger Knight, pay the public-good
+                    // bounty. No XP — XP is only ever for winning games
+                    // (design decision 2026-07-23).
+                    window.BotArena.applyWeights(baselineWeights);
+                    try {
+                        if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                        else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                    } catch (e) {}
+                    try {
+                        const { data } = await supabase.auth.getSession();
+                        const session = data?.session || null;
+                        if (session?.user?.id) {
+                            const { error } = await supabase.from('void_knight').insert({
+                                weights: result.champion,
+                                update_type: 'training',
+                                updated_by: session.user.id,
+                                confirm_wins: confirm.aWins,
+                                confirm_losses: confirm.bWins,
+                                confirm_draws: confirm.draws,
+                            });
+                            if (error) {
+                                console.warn('Could not save the stronger Void Knight:', error);
+                            } else {
+                                await supabase.rpc('award_gold', {
+                                    p_user_id: session.user.id, p_gold_amount: 25,
+                                    p_description: 'Trained the Void Knight (public good)',
+                                });
+                                window.gami?.notify('The Void Knight grew stronger under your training.', 25, 'gold');
+                            }
+                        }
+                    } catch (e) { console.warn('Void Knight save failed (continuing):', e); }
+                } else if (opts.sourceBotId) {
+                    // Stable "Train": self-improvement over the bot's own prior
+                    // weights — apply locally and write back to that bot's row
+                    // ONLY. No community-champion share, no XP/gold: dethroning
+                    // rewards moved to the leaderboard's Challenge button
+                    // (design decision 2026-07-23).
+                    window.BotArena.applyWeights(result.champion);
                     try {
                         const { error } = await supabase.from('deployed_bots')
                             .update({ weights: result.champion }).eq('id', opts.sourceBotId);
-                        if (error) console.warn('Could not save champion weights to the bot:', error);
-                    } catch (e) { console.warn('Could not save champion weights to the bot:', e); }
-                    if (session?.user?.id) {
-                        const desc = `"${opts.sourceBotNickname || 'Your bot'}" dethroned the online champion`;
-                        try {
-                            await supabase.rpc('update_user_xp', { p_user_id: session.user.id, p_xp_points: 250, p_description: desc });
-                            await supabase.rpc('award_gold', { p_user_id: session.user.id, p_gold_amount: 50, p_description: desc });
-                        } catch (e) { console.warn('Could not grant the champion-defeat reward:', e); }
-                    }
+                        if (error) console.warn('Could not save improved weights to the bot:', error);
+                    } catch (e) { console.warn('Could not save improved weights to the bot:', e); }
+                } else {
+                    // Legacy ambient run (cheat panel): apply + share to the
+                    // community champion table, exactly as before.
+                    window.BotArena.applyWeights(result.champion);
+                    try {
+                        const { data } = await supabase.auth.getSession();
+                        const session = data?.session || null;
+                        if (session?.user?.id) {
+                            await supabase.from('bot_champion_weights').insert({
+                                weights: result.champion,
+                                confirm_wins: confirm.aWins,
+                                confirm_losses: confirm.bWins,
+                                confirm_draws: confirm.draws,
+                                created_by: session.user.id,
+                            });
+                        }
+                    } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
                 }
             } else {
                 window.BotArena.applyWeights(baselineWeights);
@@ -5341,6 +5386,18 @@ document.getElementById('undo-move').onclick = function() {
                     window._botTrainingSource = null;
                 }
 
+                // "Train the leader" (gamification-ui's Void Knight button):
+                // same one-shot handoff pattern as _botTrainingSource above.
+                // Forces Hill Climb — the leader flow is defined as a hill
+                // climb on the Void Knight's own weights (design 2026-07-23).
+                if (window._botTrainingLeader) {
+                    state.leaderWeights = window._botTrainingLeader.weights;
+                    state.sourceBotId = null;
+                    state.sourceBotNickname = null;
+                    state.method = 'hillclimb';
+                    window._botTrainingLeader = null;
+                }
+
                 // ── Shell: full-screen overlay + centered modal box ──────────
                 const overlay = document.createElement('div');
                 overlay.id = 'bot-training-overlay';
@@ -5382,10 +5439,16 @@ document.getElementById('undo-move').onclick = function() {
 
                 if (state.sourceBotId) {
                     const sourceBanner = document.createElement('div');
-                    sourceBanner.textContent = `Training: "${state.sourceBotNickname}" — a win updates this bot in your Stable`
-                        + (state.method === 'hillclimb' ? ' and, if it beats the online champion, dethrones them for a reward.' : '.');
+                    sourceBanner.textContent = `Training: "${state.sourceBotNickname}" — a confirmed improvement over this bot's own current weights is saved back to your Stable.`;
                     sourceBanner.style.cssText = 'font-size:11px;color:#d9b08c;background:#2a2416;border:1px solid #5a4a2a;border-radius:5px;padding:6px 10px;';
                     body.appendChild(sourceBanner);
+                }
+
+                if (state.leaderWeights) {
+                    const leaderBanner = document.createElement('div');
+                    leaderBanner.textContent = 'Training THE VOID KNIGHT — a confirmed improvement updates the public leader bot for everyone and pays a 25 gold bounty. Your own bot and weights are untouched either way.';
+                    leaderBanner.style.cssText = 'font-size:11px;color:#c9a6ff;background:#221a33;border:1px solid #5a3f8a;border-radius:5px;padding:6px 10px;';
+                    body.appendChild(leaderBanner);
                 }
 
                 // ── Controls: Players / Speed / Repeat ───────────────────────
@@ -5722,18 +5785,24 @@ document.getElementById('undo-move').onclick = function() {
                     renderRoster();
                     const trainedBotId = state.sourceBotId, trainedBotName = state.sourceBotNickname;
                     try {
+                        // Leader mode is hill-climb-only by definition — enforce
+                        // even if the Method row was flipped after opening.
+                        if (state.leaderWeights) state.method = 'hillclimb';
                         if (state.method === 'hillclimb') {
                             const preset = { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, confirmGames: 20, confirmMargin: 0.55 };
                             const { improved, record, promotions } = await runHillClimbTraining(preset, renderProgress, {
                                 visual: state.watchable,
                                 sourceBotId: trainedBotId, sourceBotNickname: trainedBotName,
+                                leaderWeights: state.leaderWeights,
                             });
                             progressText.style.display = 'none';
                             updateStatus(improved
-                                ? (trainedBotId
-                                    ? `"${trainedBotName}" dethroned the online champion ${record} in the confirmation match! +250 XP, +50 gold.`
-                                    : `Hill Climb complete — ${promotions} promotion(s) this run, and the result beat the online champion ${record} in the confirmation match. New weights applied and saved.`)
-                                : `Hill Climb finished (${promotions} promotion(s) this run) but did not beat the online champion by enough (${record}) — kept the previous weights.`);
+                                ? (state.leaderWeights
+                                    ? `The Void Knight grew stronger — ${record} in the confirmation match. +25 gold for the public good.`
+                                    : trainedBotId
+                                        ? `"${trainedBotName}" out-climbed its old self ${record} in the confirmation match — saved to your Stable.`
+                                        : `Hill Climb complete — ${promotions} promotion(s) this run, and the result beat the anchor weights ${record} in the confirmation match. New weights applied and saved.`)
+                                : `Hill Climb finished (${promotions} promotion(s) this run) but did not beat the anchor weights by enough (${record}) — nothing was changed.`);
                         } else {
                             const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10, gamesPerSize: 4 };
                             const { improved, record } = await runWeightTraining(preset, renderProgress, {
@@ -5759,9 +5828,10 @@ document.getElementById('undo-move').onclick = function() {
                         hideTrainingPopup();
                         // This run's source (if any) is done its job — clear it
                         // so a later, unrelated open (the secret 5-click
-                        // trigger) doesn't inherit it.
+                        // trigger) doesn't inherit it. Same for leader mode.
                         state.sourceBotId = null;
                         state.sourceBotNickname = null;
+                        state.leaderWeights = null;
                     }
                 };
 
@@ -5882,6 +5952,7 @@ document.getElementById('undo-move').onclick = function() {
                 deployBtn.onclick = async () => {
                     const nickname = nicknameInput.value.trim();
                     if (!nickname) { updateStatus('Name your bot before deploying.'); return; }
+                    if (/void\s*knight/i.test(nickname)) { updateStatus('That name is reserved for the Void Knight itself — pick another.'); return; }
                     if (deploySourceSelect.disabled) { updateStatus('No available sources to deploy — capture a bot first.'); return; }
                     deployBtn.disabled = true;
                     deployBtn.textContent = 'Deploying…';
@@ -5914,21 +5985,32 @@ document.getElementById('undo-move').onclick = function() {
                             return;
                         }
 
-                        const { error } = await supabase.from('deployed_bots').insert({
+                        const { data: newBot, error } = await supabase.from('deployed_bots').insert({
                             owner: session.user.id,
                             nickname,
                             weights: sourceWeights,
                             captured_bot_id: capturedId ? Number(capturedId) : null,
-                        });
+                        }).select('id').single();
                         if (error) {
-                            // 23505 = unique_violation — this owner already has a
-                            // bot with this exact nickname (unique(owner, nickname)).
+                            // 23505 = unique_violation — bot nicknames are now
+                            // globally unique across ALL players (case-
+                            // insensitive), not just per owner.
                             updateStatus(error.code === '23505'
-                                ? `You already have a bot named "${nickname}" — pick a different name.`
+                                ? `The name "${nickname}" is already taken (bot names are unique across all players) — pick another.`
                                 : `Could not deploy: ${error.message}`);
                             return;
                         }
-                        updateStatus(`"${nickname}" is deployed — other players can now challenge it.`);
+                        // One leaderboard bot per player (design 2026-07-23):
+                        // the newest deploy IS your leaderboard bot — bench the
+                        // rest. Best-effort; the Stable's Active toggle enforces
+                        // the same invariant on every activation.
+                        if (newBot?.id) {
+                            try {
+                                await supabase.from('deployed_bots').update({ is_active: false })
+                                    .eq('owner', session.user.id).neq('id', newBot.id);
+                            } catch (e) { console.warn('Could not bench other bots (continuing):', e); }
+                        }
+                        updateStatus(`"${nickname}" is deployed as your leaderboard bot — other players can now challenge it. (Any previously deployed bots were benched.)`);
                         nicknameInput.value = '';
                         refreshCapturedBotsOptions();
                     } catch (e) {

@@ -405,7 +405,7 @@ async function _renderStable(content) {
         const pct = decided ? Math.round((bot.wins / decided) * 100) : 0;
         return `
             <div class="gami-stable-row">
-                <span class="gami-stable-name">${_esc(bot.nickname)}</span>
+                <span class="gami-stable-name" style="cursor:pointer;text-decoration:underline dotted;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${bot.id})">${_esc(bot.nickname)}</span>
                 <span class="gami-stable-record">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%)</span>
                 <button class="gami-stable-btn" onclick="_gami_stableTrainBot(${bot.id})">Train</button>
                 <button class="gami-stable-btn${bot.is_active ? '' : ' off'}"
@@ -434,6 +434,16 @@ async function _renderStable(content) {
 }
 
 async function _gami_stableToggleActive(botId, currentlyActive) {
+    // One leaderboard bot per player (design 2026-07-23): active = visible on
+    // the leaderboard, so activating a bot benches every other one first.
+    if (!currentlyActive) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+            const { error: benchErr } = await supabase.from('deployed_bots')
+                .update({ is_active: false }).eq('owner', session.user.id).neq('id', botId);
+            if (benchErr) { window.gami?.notify(`Could not bench your other bots: ${benchErr.message}`, 0, 'gold'); return; }
+        }
+    }
     const { error } = await supabase.from('deployed_bots')
         .update({ is_active: !currentlyActive }).eq('id', botId);
     if (error) { window.gami?.notify(`Could not update bot: ${error.message}`, 0, 'gold'); return; }
@@ -479,19 +489,32 @@ async function _gami_stableDeployCaptured(capturedId, sourceNickname) {
     // different name rather than silently failing on the rare collision.
     let nickname = sourceNickname;
     for (let attempt = 0; attempt < 5; attempt++) {
-        const { error } = await supabase.from('deployed_bots').insert({
+        if (/void\s*knight/i.test(nickname)) {
+            nickname = window.prompt('That name is reserved for the Void Knight itself. Pick a different name:', `${sourceNickname} ${attempt + 2}`);
+            if (!nickname) return;
+            continue;
+        }
+        const { data: newBot, error } = await supabase.from('deployed_bots').insert({
             owner: session.user.id,
             nickname,
             weights: cb.weights,
             captured_bot_id: capturedId,
-        });
+        }).select('id').single();
         if (!error) {
-            window.gami?.notify(`"${nickname}" deployed — other players can now challenge it.`, 0, 'gold');
+            // One leaderboard bot per player: the fresh deploy takes the slot.
+            if (newBot?.id) {
+                try {
+                    await supabase.from('deployed_bots').update({ is_active: false })
+                        .eq('owner', session.user.id).neq('id', newBot.id);
+                } catch (e) { console.warn('Could not bench other bots (continuing):', e); }
+            }
+            window.gami?.notify(`"${nickname}" deployed as your leaderboard bot — other players can now challenge it.`, 0, 'gold');
             gami_switchTab('stable');
             return;
         }
         if (error.code !== '23505') { window.gami?.notify(`Could not deploy: ${error.message}`, 0, 'gold'); return; }
-        nickname = window.prompt(`You already have a bot named "${nickname}". Pick a different name:`, `${sourceNickname} ${attempt + 2}`);
+        // Nicknames are globally unique across all players now, not just per owner.
+        nickname = window.prompt(`The name "${nickname}" is already taken (bot names are unique across all players). Pick a different name:`, `${sourceNickname} ${attempt + 2}`);
         if (!nickname) return;
     }
 }
@@ -503,12 +526,33 @@ async function _gami_stableDeployCaptured(capturedId, sourceNickname) {
 // there's no shared unit to sort them against players without inventing a
 // conversion factor. docs/bot-tycoon-proposal.md build-order step 3;
 // choice confirmed with the user rather than assumed.
+// Latest void_knight row (the CURRENT Knight is the newest row), cached so
+// the inline Challenge/Train onclick handlers can read it without refetching.
+let _gamiVoidKnight = null;
+
 async function _renderLeaderboard(content) {
     content.innerHTML = '<div class="gami-loading">Loading…</div>';
-    const [playerRows, botRows] = await Promise.all([
+    const [playerRows, botRows, vkRes] = await Promise.all([
         window.gami.getLeaderboard(10),
         window.gami.getBotLeaderboard(10),
+        supabase.from('void_knight').select('*').order('id', { ascending: false }).limit(1),
     ]);
+    _gamiVoidKnight = vkRes?.data?.[0] || null;
+    const hideBots = localStorage.getItem('godaigo_hide_bots') === '1';
+
+    // Reigning-champion accolade line: the last bot (and owner) to dethrone
+    // the Knight keeps the title until someone else does — even if community
+    // training has since pushed the Knight past that bot's strength.
+    let vkChampLine = 'Undefeated — no bot holds the champion title yet.';
+    if (_gamiVoidKnight?.champion_name) {
+        let ownerName = '';
+        if (_gamiVoidKnight.champion_owner) {
+            const { data: prof } = await supabase.from('user_profiles')
+                .select('display_name').eq('user_id', _gamiVoidKnight.champion_owner).limit(1);
+            if (prof?.[0]?.display_name) ownerName = ` by ${_esc(prof[0].display_name)}`;
+        }
+        vkChampLine = `Reigning champion: <b>${_esc(_gamiVoidKnight.champion_name)}</b>${ownerName}`;
+    }
 
     const medals = ['#1', '#2', '#3'];
 
@@ -543,12 +587,209 @@ async function _renderLeaderboard(content) {
         `;
     }).join('') : '<div class="gami-loading">No deployed bots yet.</div>';
 
+    // The Void Knight card — the system-owned public leader bot everyone can
+    // Challenge (dethrone it: your active bot's weights get copied into it,
+    // you take the champion title + gold) or Train (public-good hill climb
+    // on ITS weights, small gold bounty on a confirmed improvement).
+    const vkHTML = _gamiVoidKnight ? `
+        <div style="border:1px solid #9458f4;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:rgba(148,88,244,0.08);">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-weight:bold;color:#c9a6ff;">⚔️ The Void Knight</span>
+                <span style="font-size:11px;color:#888;">grew stronger ${new Date(_gamiVoidKnight.created_at).toLocaleDateString()}</span>
+                <span style="flex:1;"></span>
+                <button class="gami-stable-btn" onclick="_gami_challengeLeader()" title="Your active deployed bot plays it head-to-head — win decisively to dethrone it">Challenge</button>
+                <button class="gami-stable-btn" onclick="_gami_trainLeader()" title="Hill-climb the Knight's own weights — a confirmed improvement updates it for everyone (+25 gold)">Train</button>
+            </div>
+            <div style="font-size:11px;color:#999;margin-top:4px;">${vkChampLine}</div>
+        </div>` : '';
+
+    const botsSection = hideBots ? '' : `
+        ${vkHTML}
+        <div class="section-label" style="margin-bottom:6px;">Top Bots</div>
+        <div class="gami-leaderboard">${botsHTML}</div>`;
+
     content.innerHTML = `
         <div class="section-label" style="margin-bottom:6px;">Top Players</div>
         <div class="gami-leaderboard">${playersHTML}</div>
-        <div class="section-label" style="margin-top:16px;margin-bottom:6px;">Top Bots</div>
-        <div class="gami-leaderboard">${botsHTML}</div>
+        <div style="display:flex;align-items:center;justify-content:flex-end;margin-top:16px;margin-bottom:6px;">
+            <label style="font-size:11px;color:#999;cursor:pointer;user-select:none;">
+                <input type="checkbox" id="gami-hide-bots"${hideBots ? ' checked' : ''}> Hide bots
+            </label>
+        </div>
+        ${botsSection}
     `;
+    const hideToggle = document.getElementById('gami-hide-bots');
+    if (hideToggle) hideToggle.onchange = () => {
+        try { localStorage.setItem('godaigo_hide_bots', hideToggle.checked ? '1' : '0'); } catch (e) {}
+        gami_switchTab('leaderboard');
+    };
+}
+
+// ── The Void Knight: challenge & train ────────────────────────
+// Design (2026-07-23): the Void Knight is the system-owned public leader
+// bot. CHALLENGE is pure evaluation — your ACTIVE deployed bot plays a
+// mirror-paired local series against it; win >=55% of decided games over
+// 20 and the Knight COPIES your bot's weights (a fork — you keep evolving
+// yours independently), you take the reigning-champion accolade + gold.
+// No XP: XP is only ever for winning games. TRAIN routes to the Bot
+// Training panel in leader mode (hill climb anchored to the Knight's own
+// weights — see runHillClimbTraining's opts.leaderWeights in game-ui.js).
+const GAMI_VK_CHALLENGE_GAMES = 20;
+const GAMI_VK_CHALLENGE_MARGIN = 0.55;
+const GAMI_VK_DETHRONE_GOLD = 50;
+
+async function _gami_challengeLeader() {
+    const vk = _gamiVoidKnight;
+    if (!vk?.weights) { window.gami?.notify('The Void Knight is unreachable right now — try again later.', 0, 'gold'); return; }
+    if (typeof isMultiplayer !== 'undefined' && isMultiplayer) { window.gami?.notify('Leave your online game first — the challenge plays out locally.', 0, 'gold'); return; }
+    if (!window.BotArena) { window.gami?.notify('Bot systems are not loaded on this page.', 0, 'gold'); return; }
+    if (window.BotArena.isRunning()) { window.gami?.notify('A bot job is already running — stop it first.', 0, 'gold'); return; }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) { window.gami?.notify('Log in to challenge the Void Knight.', 0, 'gold'); return; }
+    const { data: myBots } = await supabase.from('deployed_bots')
+        .select('id, nickname, weights').eq('owner', session.user.id).eq('is_active', true)
+        .order('id', { ascending: false }).limit(1);
+    const myBot = myBots?.[0];
+    if (!myBot?.weights) { window.gami?.notify('You need an ACTIVE deployed bot to challenge with — deploy or activate one in your Stable.', 0, 'gold'); return; }
+
+    document.getElementById('gami-panel')?.remove();
+    const status = document.createElement('div');
+    status.id = 'gami-vk-challenge-status';
+    status.style.cssText = 'position:fixed;bottom:16px;left:16px;z-index:10000;background:#1a1a2e;border:1px solid #9458f4;border-radius:8px;color:#ddd;font-size:12px;padding:8px 12px;box-shadow:0 4px 16px rgba(0,0,0,0.6);';
+    status.textContent = `⚔️ "${myBot.nickname}" vs The Void Knight — starting…`;
+    document.body.appendChild(status);
+
+    // BotArena.run swaps live WEIGHTS per turn and doesn't restore them —
+    // snapshot and put them back no matter how the series ends.
+    const savedWeights = { ...window.BotSystem.WEIGHTS };
+    let wins = 0, losses = 0;
+    try {
+        const result = await window.BotArena.run(myBot.weights, vk.weights, GAMI_VK_CHALLENGE_GAMES, Date.now() % 100000, {
+            onGame: (n, total, g) => {
+                // g.winner is a seat index; sides alternate each game (even
+                // game number → my bot was player 0) — same mapping run() uses.
+                if (g && g.winner !== null) {
+                    const mineWasP0 = (n - 1) % 2 === 0;
+                    if ((g.winner === 0) === mineWasP0) wins++; else losses++;
+                }
+                status.textContent = `⚔️ "${myBot.nickname}" vs The Void Knight — game ${n}/${total} (${wins}-${losses})`;
+            },
+        });
+        const decided = result.aWins + result.bWins;
+        const winRate = decided ? result.aWins / decided : 0;
+        const record = `${result.aWins}-${result.bWins}` + (result.draws ? ` (${result.draws} draws)` : '');
+        if (window.BotArena.stopRequested()) { window.gami?.notify(`Challenge stopped early (${record}) — no result recorded.`, 0, 'gold'); return; }
+        const won = decided >= Math.ceil(GAMI_VK_CHALLENGE_GAMES / 2) && winRate >= GAMI_VK_CHALLENGE_MARGIN;
+        if (won) {
+            const { error } = await supabase.from('void_knight').insert({
+                weights: myBot.weights, update_type: 'dethrone', updated_by: session.user.id,
+                champion_name: myBot.nickname, champion_owner: session.user.id,
+                confirm_wins: result.aWins, confirm_losses: result.bWins, confirm_draws: result.draws,
+            });
+            if (error) { window.gami?.notify(`Won ${record}, but could not record the dethroning: ${error.message}`, 0, 'gold'); return; }
+            try {
+                await supabase.rpc('award_gold', {
+                    p_user_id: session.user.id, p_gold_amount: GAMI_VK_DETHRONE_GOLD,
+                    p_description: `"${myBot.nickname}" dethroned the Void Knight`,
+                });
+            } catch (e) { console.warn('[gami-ui] dethrone gold failed:', e); }
+            window.gami?.notify(`"${myBot.nickname}" DETHRONED the Void Knight ${record}! The Knight now carries your bot's weights — the title is yours until someone takes it.`, GAMI_VK_DETHRONE_GOLD, 'gold');
+        } else {
+            window.gami?.notify(`The Void Knight held its ground — ${record}. Train your bot and challenge again.`, 0, 'gold');
+        }
+    } catch (e) {
+        console.error('[gami-ui] Void Knight challenge failed:', e);
+        window.gami?.notify('Challenge failed — see console.', 0, 'gold');
+    } finally {
+        window.BotArena.applyWeights(savedWeights);
+        status.remove();
+    }
+}
+
+function _gami_trainLeader() {
+    const vk = _gamiVoidKnight;
+    if (!vk?.weights) { window.gami?.notify('The Void Knight is unreachable right now — try again later.', 0, 'gold'); return; }
+    if (!window.BotArena) { window.gami?.notify('Bot systems are not loaded on this page.', 0, 'gold'); return; }
+    if (window.BotArena.isRunning()) { window.gami?.notify('A bot job is already running — stop it first.', 0, 'gold'); return; }
+    if (typeof window._openBotTrainingPanel !== 'function') { window.gami?.notify('Bot training is not available right now.', 0, 'gold'); return; }
+    window._botTrainingLeader = { weights: vk.weights };
+    document.getElementById('gami-panel')?.remove();
+    window._openBotTrainingPanel();
+}
+
+// ── Bot detail: the five-element "petals" view ────────────────
+// Each bot's personality shown as five petals — one per element — scored by
+// how far its weights deviate from stock DEFAULT_WEIGHTS along the
+// pre-validated elemental weight bundles from docs/bot-tycoon-proposal.md
+// § ELEMENTAL WEIGHT-BUNDLE ITEMS. Purely descriptive (a lens on the weight
+// table); 50 = stock, higher = leans into that element's personality.
+const GAMI_PETAL_BUNDLES = {
+    earth: { color: '#69d83a', keys: { placeEarthBlock: 1, placeSelfBlockPenalty: 1, moveFixation: 1, moveExploreGradient: -1, moveExplore: -1, placeProgress: 1, castBase: 1 } },
+    water: { color: '#5894f4', keys: { evalOpponentThreat: 1, evalCommonThreat: 1, discardResponseOnly: 1 } },
+    fire:  { color: '#ed1b43', keys: { placeFireThreatBreak: 1, evalActivated: -1, endTurnOnShrine: -1, moveReturnHome: 1 } },
+    wind:  { color: '#ffce00', keys: { placeWindPath: 1, moveExplorePath: 1, placeEarthBlock: -1, placeFireThreatBreak: -1 } },
+    void:  { color: '#9458f4', keys: { searchDepth: 1, searchBreadth: 1, evalVoidHeld: 1, shrineVoidBonus: 1 } },
+};
+
+function _gami_petalScores(weights) {
+    const defaults = window.BotSystem?.DEFAULT_WEIGHTS || {};
+    const scores = {};
+    for (const [el, bundle] of Object.entries(GAMI_PETAL_BUNDLES)) {
+        let sum = 0, n = 0;
+        for (const [k, dir] of Object.entries(bundle.keys)) {
+            if (typeof weights?.[k] !== 'number' || typeof defaults[k] !== 'number') continue;
+            const rel = (weights[k] - defaults[k]) / (Math.abs(defaults[k]) || 1);
+            sum += dir * rel; n++;
+        }
+        // 0.5 = stock; tanh squash keeps wildly-mutated tables on the dial
+        scores[el] = n ? Math.min(1, Math.max(0, 0.5 + 0.5 * Math.tanh((sum / n) * 1.5))) : 0.5;
+    }
+    return scores;
+}
+
+function _gami_showBotPetals(botId) {
+    const bot = _stableDeployedCache.find(b => b.id === botId);
+    if (!bot) { window.gami?.notify('Could not find that bot — try refreshing.', 0, 'gold'); return; }
+    document.getElementById('gami-petals-overlay')?.remove();
+
+    const scores = _gami_petalScores(bot.weights || {});
+    const order = ['earth', 'water', 'fire', 'wind', 'void'];
+    const cx = 110, cy = 112, rMax = 82;
+    const petals = order.map((el, i) => {
+        const angle = -90 + i * 72 + 90; // earth at the top, clockwise
+        const len = 18 + scores[el] * (rMax - 18);
+        const c = GAMI_PETAL_BUNDLES[el].color;
+        return `<g transform="rotate(${angle} ${cx} ${cy})">
+            <ellipse cx="${cx}" cy="${cy - len / 2}" rx="15" ry="${len / 2}" fill="${c}" fill-opacity="0.5" stroke="${c}" stroke-width="1.5"/>
+        </g>`;
+    }).join('');
+    const labels = order.map((el, i) => {
+        const a = (-90 + i * 72 + 90) * Math.PI / 180;
+        const lx = cx + Math.sin(a) * (rMax + 16);
+        const ly = cy - Math.cos(a) * (rMax + 16);
+        return `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" fill="${GAMI_PETAL_BUNDLES[el].color}" font-size="10" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${el.toUpperCase()} ${(scores[el] * 100).toFixed(0)}</text>`;
+    }).join('');
+
+    const decided = bot.wins + bot.losses;
+    const pct = decided ? Math.round((bot.wins / decided) * 100) : 0;
+    const overlay = document.createElement('div');
+    overlay.id = 'gami-petals-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10001;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+        <div style="background:#1a1a2e;border:1px solid #444;border-radius:10px;padding:16px 20px;max-width:320px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.7);">
+            <div style="font-weight:bold;color:#eee;font-size:14px;margin-bottom:2px;">${_esc(bot.nickname)}</div>
+            <div style="font-size:11px;color:#999;margin-bottom:6px;">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%) · ${bot.is_active ? 'Active on the leaderboard' : 'Benched'}</div>
+            <svg viewBox="0 0 220 224" width="240" height="244" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="${cx}" cy="${cy}" r="${rMax}" fill="none" stroke="#333" stroke-dasharray="3 3"/>
+                ${petals}
+                <circle cx="${cx}" cy="${cy}" r="10" fill="#1a1a2e" stroke="#666"/>
+                ${labels}
+            </svg>
+            <div style="font-size:10px;color:#777;margin-top:4px;">50 = stock weights. Petals show how this bot's tuning leans across the five elements.</div>
+            <button class="gami-stable-btn" style="margin-top:10px;" onclick="document.getElementById('gami-petals-overlay').remove()">Close</button>
+        </div>`;
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
 }
 
 // ── Main-page leaderboard widget ──────────────────────────────
