@@ -1547,12 +1547,29 @@
         }
 
         // Handle game start
+        // Synchronous re-entrancy guard for handleGameStart. The 'active'-class
+        // check below cannot stop CONCURRENT calls: the class is only added near
+        // the END of the function, after several awaited Supabase round-trips,
+        // and the host always triggers handleGameStart twice inside that window
+        // (its own direct call after starting the game + the game_room Realtime
+        // callback). Both used to run the full init — double UI init, every tile
+        // placed twice, duplicate broadcast-channel subscriptions. Cleared in
+        // finally (not on success only) so a FAILED start can still be retried
+        // by the Realtime/fallback-poll paths, and a leave-then-rejoin (which
+        // removes the class) is never blocked by stale state.
+        let _gameStartInFlight = false;
+
         async function handleGameStart() {
             // Guard against duplicate calls (host's direct call + Realtime subscription racing)
             if (document.getElementById('game-layout').classList.contains('active')) {
                 console.log('🔁 handleGameStart: game already active — skipping duplicate call');
                 return;
             }
+            if (_gameStartInFlight) {
+                console.log('🔁 handleGameStart: start already in flight — skipping duplicate call');
+                return;
+            }
+            _gameStartInFlight = true;
             try {
                 // Wait for player_index to be assigned (retry up to 10 times)
                 let myPlayer = null;
@@ -1665,6 +1682,8 @@
             } catch (error) {
                 console.error('Error handling game start:', error);
                 alert('Failed to start game: ' + error.message);
+            } finally {
+                _gameStartInFlight = false;
             }
         }
 
