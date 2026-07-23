@@ -331,9 +331,13 @@
                     return false;
                 }
             }
+            // user_id ties this seat to the auth account so game results can
+            // move the positional ladder (null for guests — they just don't
+            // anchor ladder movement).
+            const authUid = (await supabase.auth.getSession())?.data?.session?.user?.id || null;
             const { data, error } = await supabase
                 .from('players')
-                .insert([{ username, is_ready: false, game_id: gameId }])
+                .insert([{ username, is_ready: false, game_id: gameId, user_id: authUid }])
                 .select()
                 .single();
             if (error) { setBrowserStatus('Could not join: ' + error.message); return false; }
@@ -615,10 +619,12 @@
                     return;
                 }
 
-                // Insert player into database
+                // Insert player into database (user_id ties the seat to the
+                // auth account so game results can move the positional ladder)
+                const joinAuthUid = (await supabase.auth.getSession())?.data?.session?.user?.id || null;
                 const { data, error } = await supabase
                     .from('players')
-                    .insert([{ username, is_ready: false }])
+                    .insert([{ username, is_ready: false, user_id: joinAuthUid }])
                     .select()
                     .single();
 
@@ -819,6 +825,7 @@
         // Guard: XP is awarded once per game session — prevents double-award from
         // multiple handleGameOver calls (game-core direct + broadcast echo + DB subscription)
         let _gameOverXpAwarded = false;
+        let _gameOverLadderReported = false; // same once-per-game guard, for the ladder RPC
 
         // Handle game over - mark game as finished and show win screen
         // Real winner check for XP crediting / win-screen "you won" framing —
@@ -856,6 +863,39 @@
                     }
                 } else {
                     console.log('[XP] handleGameOver called again — XP already awarded this session, skipping.');
+                }
+
+                // Positional ladder: the winner — human OR bot — takes the
+                // position of the highest-ranked opponent they beat (server
+                // no-ops if nobody they beat was ranked higher). Reported once,
+                // by the client that detected the win: the winning human's own
+                // client (ladder_game_result rejects claiming a win for anyone
+                // else), or the HOST when a bot won, since bots have no client
+                // and the host drove the winning turn. Seats without a
+                // resolvable identity (guests with no user_id, generic bots
+                // with no deployed source) simply don't anchor movement.
+                if (!_gameOverLadderReported) {
+                    _gameOverLadderReported = true;
+                    try {
+                        const rows = (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData)) ? allPlayersData : [];
+                        const winnerRow = rows.find(p => p.player_index === winnerPlayerIndex);
+                        const winnerIsBot = window.isBotUsername?.(winnerRow?.username);
+                        const shouldReport = isGenuineLocalWinner(winnerPlayerIndex) || (winnerIsBot && isHost);
+                        if (shouldReport && winnerRow) {
+                            const losers = rows.filter(p => p.player_index !== winnerPlayerIndex);
+                            const args = {
+                                p_winner_user: winnerIsBot ? null : (window.gami?.userId || null),
+                                p_winner_bot: winnerIsBot ? (winnerRow.bot_source_id || null) : null,
+                                p_loser_users: losers.filter(p => !window.isBotUsername?.(p.username) && p.user_id).map(p => p.user_id),
+                                p_loser_bots: losers.filter(p => window.isBotUsername?.(p.username) && p.bot_source_id).map(p => p.bot_source_id),
+                            };
+                            if (args.p_winner_user || args.p_winner_bot) {
+                                const { data: newRank, error: ladderErr } = await supabase.rpc('ladder_game_result', args);
+                                if (ladderErr) console.warn('[ladder] game result not applied:', ladderErr.message);
+                                else console.log(`[ladder] game result applied — winner now #${newRank}`);
+                            }
+                        }
+                    } catch (e) { console.warn('[ladder] game result failed (continuing):', e); }
                 }
 
                 // Show win screen after XP is secured
@@ -1120,7 +1160,7 @@
                                 // asBot() reads them fresh from this array every bot turn).
                                 const { data: remainingPlayers } = await supabase
                                     .from('players')
-                                    .select('id, username, player_index, color, bot_weights, bot_source_id')
+                                    .select('id, username, player_index, color, bot_weights, bot_source_id, user_id')
                                     .eq('game_id', currentGameId);
 
                                 console.log('💥 Remaining players after deletion:', remainingPlayers);
