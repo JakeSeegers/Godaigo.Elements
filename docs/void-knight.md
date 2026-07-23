@@ -78,10 +78,16 @@ consumable items should reuse it.
 leaderboard ordering (XP stays for profile Stats). Seeded once from XP with
 active bots at the bottom; new entrants (players via `ladder_ensure_player`
 on first Board view, bots via `ladder_ensure_bot` on deploy) join at the
-bottom. Positions move ONLY via the bot-challenge flow: the security-definer
-RPC `ladder_bot_challenge` moves the winner into the loser's position and
-shifts everyone between down one (deferred unique rank constraint makes the
-shift atomic); losses, draws, and downward wins are no-ops. No client write
+bottom. Positions move two ways, both "winner takes the loser's position,
+everyone between shifts down one" (deferred unique rank constraint makes the
+shift atomic; losses, draws, and downward wins are no-ops):
+(1) Stable bot-challenges via RPC `ladder_bot_challenge`;
+(2) REAL multiplayer games via RPC `ladder_game_result` — the winner (human
+OR bot) takes the position of the highest-ranked opponent they beat.
+Human seats are mapped via `players.user_id` (stamped on join; guests stay
+null and don't anchor movement), bots via `players.bot_source_id`. Reported
+once per game from `handleGameOver`: by the winning human's own client (the
+RPC rejects claiming a win for anyone else), or by the HOST when a bot won. No client write
 policies — rank arithmetic cannot be forged directly, though results are
 still client-reported (see item 3 below). Rendered on the FIRST PAGE
 (`loadMainLeaderboard`) and the profile Board tab, with the hide-bots
