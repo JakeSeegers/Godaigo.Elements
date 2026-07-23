@@ -405,8 +405,9 @@ async function _renderStable(content) {
         const pct = decided ? Math.round((bot.wins / decided) * 100) : 0;
         return `
             <div class="gami-stable-row">
-                <span class="gami-stable-name" style="cursor:pointer;text-decoration:underline dotted;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${bot.id})">${_esc(bot.nickname)}</span>
+                <span class="gami-stable-name" style="cursor:pointer;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${bot.id})">${_esc(bot.nickname)}</span>
                 <span class="gami-stable-record">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%)</span>
+                <button class="gami-stable-btn" onclick="_gami_showBotPetals(${bot.id})">Details</button>
                 <button class="gami-stable-btn" onclick="_gami_stableTrainBot(${bot.id})">Train</button>
                 <button class="gami-stable-btn${bot.is_active ? '' : ' off'}"
                         onclick="_gami_stableToggleActive(${bot.id}, ${bot.is_active})">${bot.is_active ? 'Active' : 'Retired'}</button>
@@ -501,12 +502,14 @@ async function _gami_stableDeployCaptured(capturedId, sourceNickname) {
             captured_bot_id: capturedId,
         }).select('id').single();
         if (!error) {
-            // One leaderboard bot per player: the fresh deploy takes the slot.
+            // One leaderboard bot per player: the fresh deploy takes the slot
+            // and joins the positional ladder at the bottom.
             if (newBot?.id) {
                 try {
                     await supabase.from('deployed_bots').update({ is_active: false })
                         .eq('owner', session.user.id).neq('id', newBot.id);
-                } catch (e) { console.warn('Could not bench other bots (continuing):', e); }
+                    await supabase.rpc('ladder_ensure_bot', { p_bot_id: newBot.id });
+                } catch (e) { console.warn('Could not bench other bots / join ladder (continuing):', e); }
             }
             window.gami?.notify(`"${nickname}" deployed as your leaderboard bot — other players can now challenge it.`, 0, 'gold');
             gami_switchTab('stable');
@@ -530,11 +533,58 @@ async function _gami_stableDeployCaptured(capturedId, sourceNickname) {
 // the inline Challenge/Train onclick handlers can read it without refetching.
 let _gamiVoidKnight = null;
 
+// Fetch the unified positional ladder (players AND bots, one ranked list —
+// design 2026-07-23) and resolve display names. Benched bots keep their rank
+// in the table but are filtered from display.
+async function _gami_fetchLadder(limit) {
+    const { data: rows, error } = await supabase.from('ladder')
+        .select('rank, entity_type, user_id, bot_id')
+        .order('rank', { ascending: true }).limit(limit || 20);
+    if (error || !rows?.length) return [];
+    const userIds = [...new Set(rows.filter(r => r.entity_type === 'player').map(r => r.user_id))];
+    const botIds = rows.filter(r => r.entity_type === 'bot').map(r => r.bot_id);
+    const [profRes, botRes] = await Promise.all([
+        userIds.length ? supabase.from('user_profiles').select('user_id, display_name').in('user_id', userIds) : Promise.resolve({ data: [] }),
+        botIds.length ? supabase.from('deployed_bots').select('id, nickname, owner, is_active').in('id', botIds) : Promise.resolve({ data: [] }),
+    ]);
+    const profs = new Map((profRes.data || []).map(p => [p.user_id, p.display_name]));
+    const bots = new Map((botRes.data || []).map(b => [b.id, b]));
+    const ownerIds = [...new Set((botRes.data || []).map(b => b.owner).filter(Boolean))];
+    let owners = new Map();
+    if (ownerIds.length) {
+        const { data: o } = await supabase.from('user_profiles').select('user_id, display_name').in('user_id', ownerIds);
+        owners = new Map((o || []).map(x => [x.user_id, x.display_name]));
+    }
+    const me = window.gami?.userId || null;
+    return rows.map(r => {
+        if (r.entity_type === 'bot') {
+            const b = bots.get(r.bot_id);
+            if (!b) return null;
+            return { rank: r.rank, isBot: true, isMe: b.owner === me, name: b.nickname, ownerName: owners.get(b.owner) || 'Unknown', botId: b.id, active: b.is_active };
+        }
+        return { rank: r.rank, isBot: false, isMe: r.user_id === me, name: profs.get(r.user_id) || 'Unknown', active: true };
+    }).filter(Boolean);
+}
+
+function _gami_ladderRowsHTML(rows, hideBots) {
+    const shown = rows.filter(r => r.active && (!hideBots || !r.isBot));
+    if (!shown.length) return '<div class="gami-loading">No ranked entrants yet.</div>';
+    return shown.map(r => `
+        <div class="gami-lb-row ${r.isMe ? 'gami-lb-me' : ''}"${r.isBot ? ` style="cursor:pointer;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${r.botId})"` : ''}>
+            <span class="gami-lb-rank">#${r.rank}</span>
+            <span class="gami-lb-name">${_esc(r.name)}${r.isBot ? ` <span style="font-size:11px;color:#888;font-weight:normal;">bot by ${_esc(r.ownerName)}</span>` : ''}</span>
+        </div>`).join('');
+}
+
 async function _renderLeaderboard(content) {
     content.innerHTML = '<div class="gami-loading">Loading…</div>';
-    const [playerRows, botRows, vkRes] = await Promise.all([
-        window.gami.getLeaderboard(10),
-        window.gami.getBotLeaderboard(10),
+    // Join the ladder on first view (idempotent server-side) so new players
+    // enter at the bottom, per the design.
+    if (window.gami?.userId) {
+        try { await supabase.rpc('ladder_ensure_player', { p_user: window.gami.userId }); } catch (e) {}
+    }
+    const [ladderRows, vkRes] = await Promise.all([
+        _gami_fetchLadder(25),
         supabase.from('void_knight').select('*').order('id', { ascending: false }).limit(1),
     ]);
     _gamiVoidKnight = vkRes?.data?.[0] || null;
@@ -554,69 +604,32 @@ async function _renderLeaderboard(content) {
         vkChampLine = `Reigning champion: <b>${_esc(_gamiVoidKnight.champion_name)}</b>${ownerName}`;
     }
 
-    const medals = ['#1', '#2', '#3'];
-
-    const playersHTML = playerRows.length ? playerRows.map((row, i) => {
-        const isMe = row.user_id === window.gami.userId;
-        const rank = medals[i] || `#${i + 1}`;
-        return `
-            <div class="gami-lb-row ${isMe ? 'gami-lb-me' : ''}">
-                <span class="gami-lb-rank">${rank}</span>
-                <span class="gami-lb-name">${_esc(row.display_name)}</span>
-                <span class="gami-lb-xp">${(row.total_xp || 0).toLocaleString()} XP</span>
-                <span class="gami-lb-level">Lv.${row.current_level}</span>
-            </div>
-        `;
-    }).join('') : '<div class="gami-loading">No players yet.</div>';
-
-    // win_rate is (wins-losses)/decided, generated column-shaped — the
-    // headline number here is a plain win PERCENTAGE instead (more readable
-    // at a glance), computed from the same wins/losses columns.
-    const botsHTML = botRows.length ? botRows.map((bot, i) => {
-        const isMine = bot.owner === window.gami.userId;
-        const decided = bot.wins + bot.losses;
-        const pct = decided ? Math.round((bot.wins / decided) * 100) : 0;
-        const rank = medals[i] || `#${i + 1}`;
-        return `
-            <div class="gami-lb-row ${isMine ? 'gami-lb-me' : ''}">
-                <span class="gami-lb-rank">${rank}</span>
-                <span class="gami-lb-name">${_esc(bot.nickname)} <span style="font-size:11px;color:#888;font-weight:normal;">by ${_esc(bot.owner_name || 'Unknown')}</span></span>
-                <span class="gami-lb-xp">${pct}%</span>
-                <span class="gami-lb-level">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''}</span>
-            </div>
-        `;
-    }).join('') : '<div class="gami-loading">No deployed bots yet.</div>';
-
-    // The Void Knight card — the system-owned public leader bot everyone can
+    // The Void Knight block — the system-owned public leader bot everyone can
     // Challenge (dethrone it: your active bot's weights get copied into it,
     // you take the champion title + gold) or Train (public-good hill climb
-    // on ITS weights, small gold bounty on a confirmed improvement).
+    // on ITS weights, small gold bounty on a confirmed improvement). Rendered
+    // with the same row components as the rest of the leaderboard.
     const vkHTML = _gamiVoidKnight ? `
-        <div style="border:1px solid #9458f4;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:rgba(148,88,244,0.08);">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <span style="font-weight:bold;color:#c9a6ff;">⚔️ The Void Knight</span>
-                <span style="font-size:11px;color:#888;">grew stronger ${new Date(_gamiVoidKnight.created_at).toLocaleDateString()}</span>
-                <span style="flex:1;"></span>
+        <div class="section-label" style="margin-bottom:6px;">The Void Knight</div>
+        <div class="gami-leaderboard" style="margin-bottom:4px;">
+            <div class="gami-lb-row">
+                <span class="gami-lb-name">The Void Knight <span style="font-size:11px;color:#888;font-weight:normal;">public leader bot</span></span>
                 <button class="gami-stable-btn" onclick="_gami_challengeLeader()" title="Your active deployed bot plays it head-to-head — win decisively to dethrone it">Challenge</button>
-                <button class="gami-stable-btn" onclick="_gami_trainLeader()" title="Hill-climb the Knight's own weights — a confirmed improvement updates it for everyone (+25 gold)">Train</button>
+                <button class="gami-stable-btn" onclick="_gami_trainLeader()" title="Improve the Knight's own weights for everyone — a confirmed improvement pays 25 gold">Train</button>
             </div>
-            <div style="font-size:11px;color:#999;margin-top:4px;">${vkChampLine}</div>
-        </div>` : '';
-
-    const botsSection = hideBots ? '' : `
-        ${vkHTML}
-        <div class="section-label" style="margin-bottom:6px;">Top Bots</div>
-        <div class="gami-leaderboard">${botsHTML}</div>`;
+        </div>
+        <div style="font-size:11px;color:#999;margin-bottom:14px;">${vkChampLine}</div>` : '';
 
     content.innerHTML = `
-        <div class="section-label" style="margin-bottom:6px;">Top Players</div>
-        <div class="gami-leaderboard">${playersHTML}</div>
-        <div style="display:flex;align-items:center;justify-content:flex-end;margin-top:16px;margin-bottom:6px;">
+        ${hideBots ? '' : vkHTML}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span class="section-label" style="margin:0;">Ladder</span>
             <label style="font-size:11px;color:#999;cursor:pointer;user-select:none;">
                 <input type="checkbox" id="gami-hide-bots"${hideBots ? ' checked' : ''}> Hide bots
             </label>
         </div>
-        ${botsSection}
+        <div class="gami-leaderboard">${_gami_ladderRowsHTML(ladderRows, hideBots)}</div>
+        <div style="font-size:10px;color:#777;margin-top:6px;">Players and bots share one ladder. Positions move only through challenges — beat someone ranked above you and take their spot.</div>
     `;
     const hideToggle = document.getElementById('gami-hide-bots');
     if (hideToggle) hideToggle.onchange = () => {
@@ -656,7 +669,7 @@ async function _gami_challengeLeader() {
     const status = document.createElement('div');
     status.id = 'gami-vk-challenge-status';
     status.style.cssText = 'position:fixed;bottom:16px;left:16px;z-index:10000;background:#1a1a2e;border:1px solid #9458f4;border-radius:8px;color:#ddd;font-size:12px;padding:8px 12px;box-shadow:0 4px 16px rgba(0,0,0,0.6);';
-    status.textContent = `⚔️ "${myBot.nickname}" vs The Void Knight — starting…`;
+    status.textContent = `"${myBot.nickname}" vs The Void Knight — starting…`;
     document.body.appendChild(status);
 
     // BotArena.run swaps live WEIGHTS per turn and doesn't restore them —
@@ -672,7 +685,7 @@ async function _gami_challengeLeader() {
                     const mineWasP0 = (n - 1) % 2 === 0;
                     if ((g.winner === 0) === mineWasP0) wins++; else losses++;
                 }
-                status.textContent = `⚔️ "${myBot.nickname}" vs The Void Knight — game ${n}/${total} (${wins}-${losses})`;
+                status.textContent = `"${myBot.nickname}" vs The Void Knight — game ${n}/${total} (${wins}-${losses})`;
             },
         });
         const decided = result.aWins + result.bWins;
@@ -747,8 +760,16 @@ function _gami_petalScores(weights) {
     return scores;
 }
 
-function _gami_showBotPetals(botId) {
-    const bot = _stableDeployedCache.find(b => b.id === botId);
+async function _gami_showBotPetals(botId) {
+    let bot = _stableDeployedCache.find(b => b.id === botId);
+    if (!bot) {
+        // Not one of mine (clicked from the ladder) — deployed_bots is
+        // public-select, so fetch it directly.
+        const { data } = await supabase.from('deployed_bots')
+            .select('id, nickname, weights, wins, losses, draws, is_active')
+            .eq('id', botId).limit(1);
+        bot = data?.[0];
+    }
     if (!bot) { window.gami?.notify('Could not find that bot — try refreshing.', 0, 'gold'); return; }
     document.getElementById('gami-petals-overlay')?.remove();
 
@@ -799,25 +820,22 @@ async function loadMainLeaderboard() {
     if (!el) return;
     el.innerHTML = '<div class="gami-loading">Loading…</div>';
 
-    const raw = await window.gami?.getLeaderboard(20);
-    const rows = (raw || []).filter(r => (r.total_xp || 0) > 0).slice(0, 10);
-    if (!rows.length) {
-        el.innerHTML = '<div class="gami-loading" style="padding:12px;">No ranked players yet.</div>';
+    // The unified positional ladder (players + bots, one ranked list) is THE
+    // leaderboard now — XP lives on in the profile Stats tab (design
+    // 2026-07-23). Benched bots and (optionally) all bots are filtered from
+    // display; rank numbers are the stored ladder positions, so gaps are real.
+    const hideBots = localStorage.getItem('godaigo_hide_bots') === '1';
+    const rows = await _gami_fetchLadder(30);
+    const shown = rows.filter(r => r.active && (!hideBots || !r.isBot)).slice(0, 10);
+    if (!shown.length) {
+        el.innerHTML = '<div class="gami-loading" style="padding:12px;">No ranked entrants yet.</div>';
         return;
     }
-
-    const medals = ['#1', '#2', '#3'];
-    el.innerHTML = rows.map((row, i) => {
-        const isMe = row.user_id === window.gami.userId;
-        const rank = medals[i] || `#${i + 1}`;
-        return `
-            <div class="gami-lb-row ${isMe ? 'gami-lb-me' : ''}">
-                <span class="gami-lb-rank">${rank}</span>
-                <span class="gami-lb-name">${_esc(row.display_name)}</span>
-                <span class="gami-lb-xp">${(row.total_xp || 0).toLocaleString()} XP</span>
-                <span class="gami-lb-level">Lv.${row.current_level}</span>
-            </div>`;
-    }).join('');
+    el.innerHTML = shown.map(r => `
+        <div class="gami-lb-row ${r.isMe ? 'gami-lb-me' : ''}"${r.isBot ? ` style="cursor:pointer;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${r.botId})"` : ''}>
+            <span class="gami-lb-rank">#${r.rank}</span>
+            <span class="gami-lb-name">${_esc(r.name)}${r.isBot ? ` <span style="font-size:11px;color:#888;font-weight:normal;">bot by ${_esc(r.ownerName)}</span>` : ''}</span>
+        </div>`).join('');
 }
 
 window.loadMainLeaderboard = loadMainLeaderboard;

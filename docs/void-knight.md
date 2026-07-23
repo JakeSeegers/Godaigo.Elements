@@ -72,18 +72,37 @@ bot-tycoon-proposal § ELEMENTAL WEIGHT-BUNDLE ITEMS (tanh-squashed;
 is the single source of the bundle definitions — the future elemental
 consumable items should reuse it.
 
+## Positional ladder (shipped 2026-07-23, same day)
+
+`public.ladder`: ONE ranked list of players AND bots, replacing XP as the
+leaderboard ordering (XP stays for profile Stats). Seeded once from XP with
+active bots at the bottom; new entrants (players via `ladder_ensure_player`
+on first Board view, bots via `ladder_ensure_bot` on deploy) join at the
+bottom. Positions move ONLY via the bot-challenge flow: the security-definer
+RPC `ladder_bot_challenge` moves the winner into the loser's position and
+shifts everyone between down one (deferred unique rank constraint makes the
+shift atomic); losses, draws, and downward wins are no-ops. No client write
+policies — rank arithmetic cannot be forged directly, though results are
+still client-reported (see item 3 below). Rendered on the FIRST PAGE
+(`loadMainLeaderboard`) and the profile Board tab, with the hide-bots
+viewer toggle; benched bots keep their rank but are hidden, so visible rank
+numbers can have gaps. Known v1 nuance: challenges fight with your live
+WEIGHTS but the ladder entity that moves is your active DEPLOYED bot.
+
+## UI rules learned here
+
+NO emojis anywhere in user-facing text (user: "it's corny"); new UI must
+reuse existing component classes (gami-lb-row, gami-stable-btn,
+section-label), not one-off styled cards.
+
 ## Explicitly deferred (design settled, not built)
 
-1. **Positional ladder** replacing the XP-sorted leaderboard: humans + bots
-   on one ladder, seeded once from XP, moved ONLY by head-to-head challenges
-   (winner takes loser's position); XP stays for profile stats/unlocks.
-   Maybe a tournament structure instead — user is considering.
-2. **Stable self-training (target + gauntlet)**: pick one bot to improve,
+1. **Stable self-training (target + gauntlet)**: pick one bot to improve,
    your other bots form the opponent field — needs the CLI hall-of-fame
    gauntlet ported into in-browser `hillClimb()`.
-3. **Practice vs my bot**: a normal local game against a specific deployed
+2. **Practice vs my bot**: a normal local game against a specific deployed
    bot's weights. Prerequisite for the later imitation-learning idea
    (perceptron-style weight nudges from human action logs).
-4. **Challenge trust**: results are client-run and self-reported. Cheap v2:
+3. **Challenge trust**: results are client-run and self-reported. Cheap v2:
    commit-then-play (register seed+weights before the series) + random
    deterministic replay audits. Noted, deliberately not in v1.

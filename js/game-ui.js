@@ -6008,9 +6008,11 @@ document.getElementById('undo-move').onclick = function() {
                             try {
                                 await supabase.from('deployed_bots').update({ is_active: false })
                                     .eq('owner', session.user.id).neq('id', newBot.id);
-                            } catch (e) { console.warn('Could not bench other bots (continuing):', e); }
+                                // Join the positional ladder at the bottom.
+                                await supabase.rpc('ladder_ensure_bot', { p_bot_id: newBot.id });
+                            } catch (e) { console.warn('Could not bench other bots / join ladder (continuing):', e); }
                         }
-                        updateStatus(`"${nickname}" is deployed as your leaderboard bot — other players can now challenge it. (Any previously deployed bots were benched.)`);
+                        updateStatus(`"${nickname}" is deployed as your leaderboard bot and joins the ladder at the bottom — other players can now challenge it. (Any previously deployed bots were benched.)`);
                         nicknameInput.value = '';
                         refreshCapturedBotsOptions();
                     } catch (e) {
@@ -6153,8 +6155,26 @@ document.getElementById('undo-move').onclick = function() {
                             });
                         }
 
+                        // Positional ladder: a win against a bot ranked above
+                        // yours moves YOUR ACTIVE DEPLOYED BOT into its spot
+                        // (server-side ladder_bot_challenge is a no-op on a
+                        // loss/draw or a downward win). The ladder entity is
+                        // your deployed bot, so with none deployed there is
+                        // nothing to move.
+                        let ladderNote = '';
+                        try {
+                            const { data: mine } = await supabase.from('deployed_bots')
+                                .select('id').eq('owner', session.user.id).eq('is_active', true).limit(1);
+                            if (mine?.length) {
+                                const { data: newRank, error: ladderErr } = await supabase.rpc('ladder_bot_challenge', {
+                                    p_my_bot: mine[0].id, p_target_bot: targetBot.id, p_won: iWon,
+                                });
+                                if (!ladderErr && iWon && typeof newRank === 'number') ladderNote = ` Your bot climbs to #${newRank} on the ladder.`;
+                            }
+                        } catch (e) { console.warn('Ladder update failed (continuing):', e); }
+
                         updateStatus(iWon
-                            ? `You beat "${targetBot.nickname}"! +100 XP.`
+                            ? `You beat "${targetBot.nickname}"! +100 XP.${ladderNote}`
                             : theyWon
                                 ? `"${targetBot.nickname}" defeated your bot. No XP this time.`
                                 : `Your challenge against "${targetBot.nickname}" ended in a draw.`);
