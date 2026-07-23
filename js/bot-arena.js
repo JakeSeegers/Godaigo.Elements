@@ -448,7 +448,15 @@
 
         const result = { winner: null, turns: 0, activated: new Array(nPlayers).fill(0), stuckTurns, stalled: false, stallers: [] };
         try {
-            for (let turn = 0; turn < turnCap && !_stopRequested; turn++) {
+            // Also break on _endEarlyRequested so "End Early → Test Now" aborts
+            // the in-progress game immediately rather than waiting for it to
+            // reach a winner or the turn cap (near-identical hillClimb bots can
+            // run a single game to the cap, ~15-20s). The current game's result
+            // is discarded either way — endEarly ends the round and confirms the
+            // best champion SO FAR. evolve()/hillClimb() clear the flag before
+            // their confirmation run(), and spectate() resets it on entry, so no
+            // other playMatch caller is cut short by a stale request.
+            for (let turn = 0; turn < turnCap && !_stopRequested && !_endEarlyRequested; turn++) {
                 if (visual) { try { currentTurnNumber = turn + 1; } catch (e) {} }
                 const idx = activePlayerIndex;
                 if (weightsPerPlayer[idx] !== undefined) setWeights(weightsPerPlayer[idx]);
@@ -617,7 +625,12 @@
     async function _playSeries(weightsA, weightsB, nGames, seed, opts) {
         const result = { aWins: 0, bWins: 0, draws: 0, avgTurns: 0, aFitness: 0, bFitness: 0, games: [] };
         const offset = opts.gameIndexOffset || 0;
-        for (let i = 0; i < nGames && !_stopRequested; i++) {
+        // Honor endEarly() at the GAME boundary so "End Early → Test Now" stops
+        // within one game, not one full challenger block (~10 games) or round
+        // (~100). Safe because evolve()/hillClimb() clear _endEarlyRequested in
+        // their finally blocks before the confirmation run() is issued — so the
+        // confirm series, which also flows through here, always plays in full.
+        for (let i = 0; i < nGames && !_stopRequested && !_endEarlyRequested; i++) {
             const gi = offset + i;
             const aIsPlayer0 = gi % 2 === 0;
             const g = await playGame(
@@ -889,6 +902,9 @@
             if (restore) restore();
             unsuppressJoytone();
             _evolving = false;
+            // Clear so the caller's confirmation run() (shared _playSeries)
+            // isn't itself cut short by a still-set endEarly request.
+            _endEarlyRequested = false;
         }
         return champion;
     }
@@ -1019,9 +1035,20 @@
                 // wins, then the sideFitness margin — same ordering as before.
                 let survivors = challengers.map((w, c) => ({
                     w, c, played: 0, aWins: 0, bWins: 0, draws: 0, aFitness: 0, bFitness: 0 }));
-                for (let s = 0; s < stages.length && !_stopRequested; s++) {
+                // endEarly() must cut the round short at a challenger boundary,
+                // not only between whole rounds — a full round is ~100 games
+                // (successive halving), so without this check "End Early → Test
+                // Now" appears dead for minutes while the current round grinds
+                // on. Breaking here leaves partial challenger records, which is
+                // safe: the promotion gate below needs minDecided decisive
+                // games, so an interrupted round simply may not promote and the
+                // best champion SO FAR is what gets confirmed — exactly the
+                // button's promise. NOT added to _playSeries itself: that is
+                // shared with the confirmation run(), which must always play in
+                // full even after endEarly.
+                for (let s = 0; s < stages.length && !_stopRequested && !_endEarlyRequested; s++) {
                     const st = stages[s];
-                    for (let k = 0; k < survivors.length && !_stopRequested; k++) {
+                    for (let k = 0; k < survivors.length && !_stopRequested && !_endEarlyRequested; k++) {
                         const cand = survivors[k];
                         // Fired per challenger before its series — lets the UI
                         // say which challenger (of the current stage's
@@ -1093,6 +1120,9 @@
             if (restore) restore();
             unsuppressJoytone();
             _climbing = false;
+            // Clear so the caller's confirmation run() (shared _playSeries)
+            // isn't itself cut short by a still-set endEarly request.
+            _endEarlyRequested = false;
         }
         log(`hillClimb complete: ${promotions} promotion(s) over ${roundLog.length} round(s), ${gamesPlayed} games.`);
         return { champion, promotions, rounds: roundLog, gamesPlayed };
@@ -1124,6 +1154,7 @@
         }
         _spectating = true;
         _stopRequested = false;
+        _endEarlyRequested = false; // a stale endEarly from a prior training run must not abort spectate's first game
 
         // Keep sounds, music, animations, and the WIN SCREEN — only mute
         // gamification so bot games can't farm XP onto a logged-in profile.
