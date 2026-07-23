@@ -1867,7 +1867,15 @@
         const m = mem(startingPlayer);
         const wasForced = m.turnRepeatStreak >= 1; // circuit breaker armed for this turn
         const turnMoves = [];
-        let productive = false; // cast or placeStone applied this turn — see unproductiveStreak below
+        // A cast is unambiguous progress. A placeStone is only progress if the
+        // stone ACTUALLY STICKS — placing a pattern stone that then vanishes
+        // (observed with void stones in host-driven multiplayer, cause still
+        // open) must NOT reset unproductiveStreak, or the circuit breaker never
+        // fires and the bot loops forever re-placing the same vanishing stones.
+        // So track casts separately from pattern placements and resolve
+        // "productive" at end of turn by checking which placements survived.
+        let castThisTurn = false;
+        const placedThisTurn = []; // {x, y, type} for scroll-pattern placeStones
         let endedTurn = false;
         try {
             for (let i = 0; i < 30; i++) {                    // safety cap
@@ -1898,8 +1906,13 @@
                 if (applied.type === 'move') turnMoves.push(`${applied.x.toFixed(1)},${applied.y.toFixed(1)}`);
                 // Tactical (scroll:null) drops are terrain control, not
                 // progress toward the win — they must not mask a stall or
-                // unproductiveStreak's circuit breaker never fires.
-                if (applied.type === 'cast' || (applied.type === 'placeStone' && applied.scroll)) productive = true;
+                // unproductiveStreak's circuit breaker never fires. Pattern
+                // placements are recorded here but only COUNT as progress if
+                // they survive to end of turn (checked below).
+                if (applied.type === 'cast') castThisTurn = true;
+                else if (applied.type === 'placeStone' && applied.scroll) {
+                    placedThisTurn.push({ x: applied.x, y: applied.y, type: applied.stoneType });
+                }
                 if (applied.type === 'endTurn') { endedTurn = true; break; }
                 await tick(350);
             }
@@ -1957,11 +1970,22 @@
         // target every turn; a genuinely dead position (nothing anywhere
         // still grants win credit) just means findFixationTarget() keeps
         // returning null and the old fallback continues, same as before.
+        // Resolve productivity: a cast always counts; a pattern placement only
+        // counts if the stone is STILL on the board now (a placement that
+        // vanished this turn made no real progress). survivedPlacements < total
+        // means stones the bot placed disappeared — surface it, since that is a
+        // genuine bug (a stuck bot re-placing vanishing stones is the symptom).
+        const survived = placedThisTurn.filter(p =>
+            placedStones.some(s => s.type === p.type && Math.hypot(s.x - p.x, s.y - p.y) < 5)).length;
+        if (placedThisTurn.length && survived < placedThisTurn.length) {
+            log(`WARNING: ${placedThisTurn.length - survived}/${placedThisTurn.length} pattern stone(s) placed this turn vanished before turn end — not counting them as progress`);
+        }
+        const productive = castThisTurn || survived > 0;
         if (productive) m.unproductiveStreak = 0;
         else {
             m.unproductiveStreak++;
             if (m.unproductiveStreak === UNPRODUCTIVE_LIMIT) {
-                log(`${m.unproductiveStreak} turns with no cast/placeStone — trying fixation targets from now on`);
+                log(`${m.unproductiveStreak} turns with no lasting cast/placeStone — trying fixation targets from now on`);
             }
         }
         log('Turn autopilot finished');
