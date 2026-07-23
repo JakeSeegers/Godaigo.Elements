@@ -1166,6 +1166,13 @@
             }
 
             showScrollNotification(scrollInfo, elementType, scrollId) {
+                // Host driving a bot (bot-driver.js asBot()): this draw is the
+                // BOT's, not the local player's — myPlayerIndex is swapped to
+                // the bot right now, so the panel-open below would render the
+                // BOT's hand on the host's screen. Skip all of it; the scroll
+                // was already added to the bot's hand before this call, so no
+                // game state is lost.
+                if (window.BotDriver?.controlsActivePlayer?.()) return;
                 const stoneType = STONE_TYPES[elementType];
                 const color = stoneType ? stoneType.color : '#9458f4';
 

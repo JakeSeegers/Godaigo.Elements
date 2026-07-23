@@ -38,10 +38,22 @@ const ScrollPanelSystem = (() => {
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(out)); } catch {}
     }
 
+    // Clamp a panel position into the current viewport — a position saved on
+    // a wider/taller window (or dragged to the far edge) would otherwise put
+    // the panel entirely offscreen, making every "open" look like a no-op.
+    // localStorage survives hard refreshes, so without this the panel stays
+    // lost until site data is cleared. Same 60/40px margins the drag handler
+    // enforces.
+    function _clampToViewport(state) {
+        state.x = Math.max(0, Math.min(window.innerWidth  - 60, state.x));
+        state.y = Math.max(0, Math.min(window.innerHeight - 40, state.y));
+    }
+
     // ---- Panel creation ----
     function createPanel(id, title) {
         const stored = loadStored()[id] || {};
         const state  = { ...DEFAULTS[id], ...stored };
+        _clampToViewport(state);
         panels[id]   = { el: null, state, open: false };
 
         const el = document.createElement('div');
@@ -188,6 +200,11 @@ const ScrollPanelSystem = (() => {
     function openPanel(id) {
         const p = panels[id];
         if (!p) return;
+        // Re-clamp on every open — the window may have shrunk (or the panel
+        // been dragged near an edge) since createPanel restored the position.
+        _clampToViewport(p.state);
+        p.el.style.left = p.state.x + 'px';
+        p.el.style.top  = p.state.y + 'px';
         p.open = true;
         p.el.style.display = 'flex';
         renderPanel(id);
