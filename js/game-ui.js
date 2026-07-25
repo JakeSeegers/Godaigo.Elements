@@ -6465,6 +6465,12 @@ document.getElementById('undo-move').onclick = function() {
                 head.textContent = 'Edit: ' + sel;
                 panelEl.appendChild(head);
 
+                // ── Shared state: one `styles` model is the source of truth.
+                //    UI controls and the CSS box both read/write it, stay in
+                //    sync, and apply live. The CSS box is the copy/paste surface.
+                let styles = Object.assign({}, existing.styles || {});
+                const refreshers = [];   // control -> re-read its value from `styles`
+
                 // Text content (leaf elements only)
                 let textArea = null;
                 if (isLeaf) {
@@ -6478,64 +6484,138 @@ document.getElementById('undo-move').onclick = function() {
                     panelEl.appendChild(textArea);
                 }
 
-                // CSS box — the single source of truth. Shows this element's
-                // override CSS as plain text; edit it directly, or select-all +
-                // Ctrl+C to copy it and Ctrl+V it into another element's box.
-                const cssLbl = document.createElement('div');
-                cssLbl.textContent = 'CSS — edit directly, or copy/paste between elements';
-                Object.assign(cssLbl.style, { fontSize: '11px', color: '#999' });
+                // CSS box element (appended lower down, but created now so the
+                // control helpers can push their changes into it).
                 const cssBox = document.createElement('textarea');
                 cssBox.spellcheck = false;
-                Object.assign(cssBox.style, { width: '100%', boxSizing: 'border-box', height: '180px', background: '#0f0f16', color: '#d7e0ff', border: '1px solid #444', borderRadius: '4px', padding: '6px', fontSize: '12px', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', lineHeight: '1.5', resize: 'vertical', whiteSpace: 'pre' });
-                cssBox.value = serializeCss(existing.styles || {});
-                cssBox.placeholder = 'font-size: 24px;\ncolor: #ffcc00;\n-webkit-text-stroke: 1px #000;\ntext-shadow: 1px 1px 2px #000;';
-                panelEl.appendChild(cssLbl);
-                panelEl.appendChild(cssBox);
+                Object.assign(cssBox.style, { width: '100%', boxSizing: 'border-box', height: '150px', background: '#0f0f16', color: '#d7e0ff', border: '1px solid #444', borderRadius: '4px', padding: '6px', fontSize: '12px', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', lineHeight: '1.5', resize: 'vertical', whiteSpace: 'pre' });
+                cssBox.placeholder = 'font-size: 24px;\ncolor: #ffcc00;\n-webkit-text-stroke: 1px #000;';
 
                 function apply() {
-                    const styles = parseCss(cssBox.value);
                     const ov = {};
-                    if (Object.keys(styles).length) ov.styles = styles;
+                    if (Object.keys(styles).length) ov.styles = Object.assign({}, styles);
                     if (textArea && textArea.value !== originalText) ov.text = textArea.value;
                     if (!ov.styles && ov.text == null) delete overrides[sel];
                     else overrides[sel] = ov;
                     applyOne(sel, overrides[sel] || {});
                     highlight(el);
                 }
-                cssBox.addEventListener('input', apply);
+                function syncBox() { cssBox.value = serializeCss(styles); }
+                function commit() { syncBox(); apply(); }            // after a control edit
+                function refreshControls() { refreshers.forEach((fn) => fn()); }
+                function setProp(prop, val) {
+                    if (val == null || val === '') delete styles[prop];
+                    else styles[prop] = val;
+                }
+
+                // ── Control factories ───────────────────────────────────────
+                function rowWith(labelText, control) {
+                    const row = document.createElement('label');
+                    Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#ccc' });
+                    const span = document.createElement('span');
+                    span.textContent = labelText;
+                    Object.assign(span.style, { flex: '0 0 82px' });
+                    row.appendChild(span);
+                    row.appendChild(control);
+                    return row;
+                }
+                function styleInput(el2) {
+                    Object.assign(el2.style, { flex: '1', minWidth: '0', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '3px 5px', fontSize: '12px' });
+                    return el2;
+                }
+                function addText(labelText, prop, opts) {
+                    opts = opts || {};
+                    const inp = styleInput(document.createElement('input'));
+                    inp.type = 'text';
+                    if (opts.placeholder) inp.placeholder = opts.placeholder;
+                    inp.addEventListener('input', () => {
+                        let v = inp.value.trim();
+                        if (opts.len && v && /^-?\d*\.?\d+$/.test(v)) v = v + 'px';
+                        setProp(prop, v);
+                        commit();
+                    });
+                    refreshers.push(() => { inp.value = styles[prop] != null ? styles[prop] : ''; });
+                    panelEl.appendChild(rowWith(labelText, inp));
+                }
+                function addSelect(labelText, prop, options) {
+                    const sel2 = styleInput(document.createElement('select'));
+                    ['—'].concat(options).forEach((o, i) => {
+                        const op = document.createElement('option');
+                        op.value = i === 0 ? '' : o; op.textContent = o;
+                        sel2.appendChild(op);
+                    });
+                    sel2.addEventListener('change', () => { setProp(prop, sel2.value || null); commit(); });
+                    refreshers.push(() => { sel2.value = styles[prop] || ''; });
+                    panelEl.appendChild(rowWith(labelText, sel2));
+                }
+                function addColor(labelText, prop) {
+                    const wrap = document.createElement('span');
+                    Object.assign(wrap.style, { display: 'flex', alignItems: 'center', gap: '6px', flex: '1' });
+                    const sw = document.createElement('input'); sw.type = 'color';
+                    Object.assign(sw.style, { width: '34px', height: '24px', padding: '0', background: 'none', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', flex: '0 0 auto' });
+                    const tx = styleInput(document.createElement('input')); tx.type = 'text'; tx.placeholder = 'unset';
+                    sw.addEventListener('input', () => { tx.value = sw.value; setProp(prop, sw.value); commit(); });
+                    tx.addEventListener('input', () => { const v = tx.value.trim(); setProp(prop, v || null); if (/^#([0-9a-f]{6})$/i.test(v)) sw.value = v; commit(); });
+                    wrap.appendChild(sw); wrap.appendChild(tx);
+                    refreshers.push(() => { const v = styles[prop] || ''; tx.value = v; if (/^#([0-9a-f]{6})$/i.test(v)) sw.value = v; });
+                    panelEl.appendChild(rowWith(labelText, wrap));
+                }
+                function addOutline() {
+                    const wrap = document.createElement('span');
+                    Object.assign(wrap.style, { display: 'flex', alignItems: 'center', gap: '6px', flex: '1' });
+                    const w = styleInput(document.createElement('input')); w.type = 'text'; w.placeholder = 'width px';
+                    const sw = document.createElement('input'); sw.type = 'color'; sw.value = '#000000';
+                    Object.assign(sw.style, { width: '34px', height: '24px', padding: '0', background: 'none', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', flex: '0 0 auto' });
+                    function upd() {
+                        const ww = parseFloat(w.value);
+                        if (ww > 0) { styles['-webkit-text-stroke'] = ww + 'px ' + sw.value; styles['paint-order'] = 'stroke fill'; }
+                        else { delete styles['-webkit-text-stroke']; delete styles['paint-order']; }
+                        commit();
+                    }
+                    w.addEventListener('input', upd); sw.addEventListener('input', upd);
+                    wrap.appendChild(w); wrap.appendChild(sw);
+                    refreshers.push(() => {
+                        const v = styles['-webkit-text-stroke'] || '';
+                        const mw = v.match(/([\d.]+)px/); w.value = mw ? mw[1] : '';
+                        const mc = v.match(/#([0-9a-f]{6})/i); if (mc) sw.value = '#' + mc[1];
+                    });
+                    panelEl.appendChild(rowWith('Outline', wrap));
+                }
+
+                // ── Build the control panel ─────────────────────────────────
+                addText('Font size', 'font-size', { len: true, placeholder: parseFloat(cs.fontSize) + ' (px)' });
+                addText('Font', 'font-family', { placeholder: cs.fontFamily.split(',')[0] });
+                addSelect('Weight', 'font-weight', ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900']);
+                addSelect('Style', 'font-style', ['normal', 'italic', 'oblique']);
+                addSelect('Align', 'text-align', ['left', 'center', 'right', 'justify']);
+                addSelect('Transform', 'text-transform', ['none', 'uppercase', 'lowercase', 'capitalize']);
+                addText('Letter sp.', 'letter-spacing', { len: true, placeholder: 'px' });
+                addText('Line height', 'line-height', { placeholder: cs.lineHeight });
+                addColor('Text color', 'color');
+                addColor('Background', 'background-color');
+                addOutline();
+                addText('Text shadow', 'text-shadow', { placeholder: '1px 1px 2px #000' });
+                addText('Opacity', 'opacity', { placeholder: '0–1' });
+                addText('Padding', 'padding', { placeholder: 'e.g. 4px 8px' });
+                addText('Border', 'border', { placeholder: 'e.g. 1px solid #fff' });
+                addText('Radius', 'border-radius', { len: true });
+
+                // ── CSS box (source of truth + copy/paste surface) ──────────
+                const cssLbl = document.createElement('div');
+                cssLbl.textContent = 'CSS — reflects the controls; edit or copy/paste between elements';
+                Object.assign(cssLbl.style, { fontSize: '11px', color: '#999', marginTop: '4px' });
+                panelEl.appendChild(cssLbl);
+                panelEl.appendChild(cssBox);
+                cssBox.addEventListener('input', () => {
+                    styles = parseCss(cssBox.value);
+                    apply();
+                    refreshControls();      // keep the UI controls in sync with hand-edited CSS
+                });
                 if (textArea) textArea.addEventListener('input', apply);
 
-                // Quick-insert chips: add a common property (seeded from the
-                // element's current computed value) to the CSS box if missing.
-                const chips = document.createElement('div');
-                Object.assign(chips.style, { display: 'flex', flexWrap: 'wrap', gap: '4px' });
-                const quick = [
-                    ['font-size', cs.fontSize],
-                    ['color', cs.color],
-                    ['font-family', cs.fontFamily.split(',')[0]],
-                    ['font-weight', cs.fontWeight],
-                    ['-webkit-text-stroke', '1px #000000'],
-                    ['text-shadow', '1px 1px 2px #000000'],
-                    ['background-color', '#000000'],
-                    ['letter-spacing', '1px']
-                ];
-                quick.forEach(([prop, val]) => {
-                    const chip = document.createElement('button');
-                    chip.textContent = '+ ' + prop;
-                    Object.assign(chip.style, { padding: '3px 7px', fontSize: '11px', background: '#2d2d44', color: '#cbd', border: '1px solid #555', borderRadius: '10px', cursor: 'pointer' });
-                    chip.onclick = () => {
-                        const styles = parseCss(cssBox.value);
-                        if (!(prop in styles)) {
-                            styles[prop] = val;
-                            if (prop === '-webkit-text-stroke') styles['paint-order'] = 'stroke fill';
-                            cssBox.value = serializeCss(styles);
-                            apply();
-                        }
-                        cssBox.focus();
-                    };
-                    chips.appendChild(chip);
-                });
-                panelEl.appendChild(chips);
+                // Populate controls + box from the initial styles.
+                refreshControls();
+                syncBox();
 
                 const btnRow = document.createElement('div');
                 Object.assign(btnRow.style, { display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' });
@@ -6547,8 +6627,9 @@ document.getElementById('undo-move').onclick = function() {
                     return b;
                 }
                 btnRow.appendChild(mkBtn('Load current styles', '#26304a', () => {
-                    cssBox.value = serializeCss(snapshotComputed(el));
-                    apply();
+                    styles = snapshotComputed(el);
+                    refreshControls();
+                    commit();
                 }));
                 btnRow.appendChild(mkBtn('Reset', '#3a1f28', () => {
                     delete overrides[sel];
