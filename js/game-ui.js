@@ -6845,6 +6845,9 @@ document.getElementById('undo-move').onclick = function() {
                 Object.assign(body.style, { display: 'flex', flexDirection: 'column', gap: '6px' });
                 panel.appendChild(body);
 
+                let rowInputs = [];      // { source, inp } for each detected font
+                let allInpRef = null;    // the "Replace ALL" input
+
                 function targetInput(sourceName) {
                     const inp = document.createElement('input');
                     inp.type = 'text';
@@ -6852,16 +6855,26 @@ document.getElementById('undo-move').onclick = function() {
                     inp.placeholder = '(no change)';
                     Object.assign(inp.style, { flex: '1', minWidth: '0', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '3px 5px', fontSize: '12px' });
                     inp.value = fontMap[sourceName] || '';
-                    inp.addEventListener('change', () => {
-                        const v = inp.value.trim();
-                        if (v) fontMap[sourceName] = v; else delete fontMap[sourceName];
-                        applyFontMap();
-                    });
+                    // Live-apply on change too, but the Run button is the reliable path.
+                    inp.addEventListener('change', runNow);
+                    rowInputs.push({ source: sourceName, inp });
                     return inp;
+                }
+
+                // Read every row (and the Replace-ALL field) into the font map and
+                // apply. A row's own target wins; otherwise Replace-ALL fills in.
+                function runNow() {
+                    const all = allInpRef ? allInpRef.value.trim() : '';
+                    rowInputs.forEach(({ source, inp }) => {
+                        const v = inp.value.trim() || all;
+                        if (v) fontMap[source] = v; else delete fontMap[source];
+                    });
+                    applyFontMap();
                 }
 
                 function render() {
                     body.innerHTML = '';
+                    rowInputs = [];
                     const used = collectUsedFonts();
                     datalist.innerHTML = '';
                     const suggest = Array.from(new Set(websafe.concat(used.map((u) => u[0]))));
@@ -6876,13 +6889,8 @@ document.getElementById('undo-move').onclick = function() {
                     const allInp = document.createElement('input');
                     allInp.type = 'text'; allInp.setAttribute('list', 'fontswap-suggestions'); allInp.placeholder = 'font for everything';
                     Object.assign(allInp.style, { flex: '1', minWidth: '0', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '3px 5px', fontSize: '12px' });
-                    allInp.addEventListener('change', () => {
-                        const v = allInp.value.trim();
-                        if (!v) return;
-                        used.forEach(([name]) => { fontMap[name] = v; });
-                        applyFontMap();
-                        render();
-                    });
+                    allInp.addEventListener('change', runNow);
+                    allInpRef = allInp;
                     allRow.appendChild(allLbl); allRow.appendChild(allInp);
                     body.appendChild(allRow);
 
@@ -6911,6 +6919,10 @@ document.getElementById('undo-move').onclick = function() {
                     b.onclick = fn;
                     return b;
                 }
+                // Primary action — reads the fields and actually switches fonts.
+                const runBtn = mkBtn('▶ Switch Fonts', '#2e7d32', () => { runNow(); render(); });
+                Object.assign(runBtn.style, { flex: '1 0 100%', fontWeight: 'bold', color: '#fff' });
+                btnRow.appendChild(runBtn);
                 btnRow.appendChild(mkBtn('Rescan', '#26304a', render));
                 btnRow.appendChild(mkBtn('Reset fonts', '#3a1f28', () => { revertAllFonts(); render(); }));
                 btnRow.appendChild(mkBtn('Close', '#2d2d44', () => panel.remove()));
