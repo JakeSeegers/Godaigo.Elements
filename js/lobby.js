@@ -56,8 +56,20 @@
             }
         }
 
+        // Is the currently signed-in account the developer account ("TheHermit")?
+        // All hidden cheat/dev tooling is gated on this. Identity comes from the
+        // Supabase-derived username captured in onAuthSuccess (auth metadata /
+        // user_profiles.display_name), so no one else can reach these screens.
+        window.isHermit = function () {
+            // Case-insensitive so the login-email fallback ("thehermit") matches
+            // the registered display username ("TheHermit") just the same.
+            return (window.currentUsername || '').trim().toLowerCase() === 'thehermit';
+        };
+
         async function authSignOut() {
             await supabase.auth.signOut();
+            window.currentUsername = null;
+            if (typeof window.updateHermitUI === 'function') window.updateHermitUI();
             if (window.crtOverlay) window.crtOverlay.loadForUser(null);
             document.getElementById('multiplayer-lobby').style.display = 'none';
             document.getElementById('auth-screen').style.display = 'block';
@@ -82,6 +94,12 @@
 
             // Store globally so all lobby functions use it without reading the DOM
             lobbyUsername = username;
+
+            // Expose the signed-in username globally (Supabase-derived, from auth
+            // metadata) so the developer/cheat tooling can gate itself to a single
+            // account — see window.isHermit() below. Refresh the Hermit-only menu.
+            window.currentUsername = username;
+            if (typeof window.updateHermitUI === 'function') window.updateHermitUI();
 
             // Keep the hidden input in sync (some code paths still read it as a fallback)
             const usernameInput = document.getElementById('username-input');

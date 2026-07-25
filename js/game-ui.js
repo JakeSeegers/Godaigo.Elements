@@ -5328,6 +5328,8 @@ document.getElementById('undo-move').onclick = function() {
 
             document.addEventListener('click', function(e) {
                 if (!e.target || !e.target.classList.contains('hud-ap-label')) return;
+                // Dev/cheat tooling is restricted to the TheHermit account.
+                if (typeof window.isHermit === 'function' && !window.isHermit()) return;
                 clickCount++;
                 clearTimeout(clickTimer);
                 if (clickCount >= 5) {
@@ -5337,6 +5339,10 @@ document.getElementById('undo-move').onclick = function() {
                     clickTimer = setTimeout(() => { clickCount = 0; }, 3000);
                 }
             });
+
+            // Bridge so the Hermit-only "TH" menu can open the cheat panel
+            // directly, without the secret 5x-click gesture.
+            window._openCheatPanel = openCheatPanel;
         })();
 
         // ─── Bot Training window ────────────────────────────────────────────
@@ -6339,6 +6345,8 @@ document.getElementById('undo-move').onclick = function() {
 
             document.addEventListener('click', function(e) {
                 if (!e.target || !e.target.classList.contains('gami-title')) return;
+                // Dev/cheat tooling is restricted to the TheHermit account.
+                if (typeof window.isHermit === 'function' && !window.isHermit()) return;
                 clickCount++;
                 clearTimeout(clickTimer);
                 if (clickCount >= 5) {
@@ -6353,5 +6361,115 @@ document.getElementById('undo-move').onclick = function() {
             // open the full modal without needing its own copy of the
             // 5x-click trigger — see showTrainingPopup()/ensureTrainingPopup().
             window._openBotTrainingPanel = openBotTrainingPanel;
+        })();
+
+        // ─── Hermit-only dev menu ("TH" icon, top-left) ─────────────────────
+        // Surfaces every hidden cheat/dev screen behind one visible button, but
+        // ONLY for the developer account (TheHermit — see window.isHermit() in
+        // lobby.js). The old secret gestures (AP-label ×5, Profile-title ×5)
+        // still work, but only for the same account; this menu is the primary
+        // entry point so the tools no longer depend on remembering a gesture.
+        (function initHermitMenu() {
+            let btn = null;      // the "TH" launcher
+            let menu = null;     // the dropdown
+
+            function buildMenu() {
+                if (btn) return;
+
+                btn = document.createElement('button');
+                btn.id = 'hermit-menu-btn';
+                btn.textContent = 'TH';
+                btn.title = 'Developer menu (TheHermit only)';
+                Object.assign(btn.style, {
+                    position: 'fixed',
+                    top: '12px',
+                    left: '12px',
+                    zIndex: '10000',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: '#1a1a2e',
+                    color: '#d9b08c',
+                    border: '1px solid #d9b08c',
+                    fontSize: '15px',
+                    fontWeight: 'bold',
+                    letterSpacing: '1px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                    display: 'none'
+                });
+
+                menu = document.createElement('div');
+                menu.id = 'hermit-menu';
+                Object.assign(menu.style, {
+                    position: 'fixed',
+                    top: '58px',
+                    left: '12px',
+                    zIndex: '10000',
+                    background: '#1a1a2e',
+                    border: '1px solid #444',
+                    borderRadius: '8px',
+                    padding: '8px',
+                    display: 'none',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    minWidth: '180px',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.6)'
+                });
+
+                function makeItem(label, action) {
+                    const item = document.createElement('button');
+                    item.textContent = label;
+                    Object.assign(item.style, {
+                        padding: '7px 10px',
+                        background: '#2d2d44',
+                        color: '#eee',
+                        border: '1px solid #555',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        textAlign: 'left'
+                    });
+                    item.onclick = () => {
+                        menu.style.display = 'none';
+                        action();
+                    };
+                    return item;
+                }
+
+                menu.appendChild(makeItem('Cheat Panel', () => {
+                    if (typeof window._openCheatPanel === 'function') window._openCheatPanel();
+                }));
+                menu.appendChild(makeItem('Bot Training', () => {
+                    if (typeof window._openBotTrainingPanel === 'function') window._openBotTrainingPanel();
+                }));
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    menu.style.display = (menu.style.display === 'none') ? 'flex' : 'none';
+                };
+                // Click elsewhere closes the menu.
+                document.addEventListener('click', (e) => {
+                    if (menu && menu.style.display !== 'none' &&
+                        e.target !== btn && !menu.contains(e.target)) {
+                        menu.style.display = 'none';
+                    }
+                });
+
+                document.body.appendChild(btn);
+                document.body.appendChild(menu);
+            }
+
+            // Show the launcher only for the developer account; hide (and close
+            // the menu) for everyone else. Called from onAuthSuccess/authSignOut.
+            window.updateHermitUI = function () {
+                const isDev = (typeof window.isHermit === 'function') && window.isHermit();
+                if (isDev) buildMenu();
+                if (btn) btn.style.display = isDev ? 'block' : 'none';
+                if (menu && !isDev) menu.style.display = 'none';
+            };
+
+            // Reflect any session already restored before this script ran.
+            window.updateHermitUI();
         })();
 
