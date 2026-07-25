@@ -6363,6 +6363,284 @@ document.getElementById('undo-move').onclick = function() {
             window._openBotTrainingPanel = openBotTrainingPanel;
         })();
 
+        // ─── Hermit-only live UI editor (Ctrl+Click) ───────────────────────
+        // TheHermit can Ctrl+Click any element to tweak its text/size/font/
+        // outline/colour live, then Download the collected overrides as JSON to
+        // hand off for baking into the real CSS. Session-only: overrides live in
+        // memory (no persistence), applied as !important inline styles. Uploading
+        // a previously-downloaded file re-applies it to the current page.
+        (function initUiEditor() {
+            let overrides = {};          // selector -> { styles:{prop:val}, text? }
+            const lastApplied = {};      // selector -> styles last written (for clean removal)
+            let panelEl = null;
+            let highlightEl = null;
+
+            // Unique-ish CSS selector: shortcut to #id when present, else a
+            // positional path (tag:nth-of-type) up to the nearest id or <body>.
+            function cssPath(el) {
+                if (!(el instanceof Element)) return null;
+                if (el.id) return '#' + CSS.escape(el.id);
+                const parts = [];
+                let node = el;
+                while (node && node.nodeType === 1 && node !== document.body && node !== document.documentElement) {
+                    let sel = node.nodeName.toLowerCase();
+                    if (node.id) { parts.unshift('#' + CSS.escape(node.id)); break; }
+                    let nth = 1, sib = node;
+                    while ((sib = sib.previousElementSibling)) {
+                        if (sib.nodeName.toLowerCase() === sel) nth++;
+                    }
+                    parts.unshift(sel + ':nth-of-type(' + nth + ')');
+                    node = node.parentElement;
+                }
+                return parts.length ? parts.join(' > ') : el.nodeName.toLowerCase();
+            }
+
+            function applyOne(sel, ov) {
+                let nodes;
+                try { nodes = document.querySelectorAll(sel); } catch (e) { return; }
+                const newStyles = (ov && ov.styles) || {};
+                const prev = lastApplied[sel] || {};
+                nodes.forEach((el) => {
+                    Object.keys(prev).forEach((p) => { if (!(p in newStyles)) el.style.removeProperty(p); });
+                    Object.entries(newStyles).forEach(([k, v]) => el.style.setProperty(k, v, 'important'));
+                    if (ov && ov.text != null && el.children.length === 0) el.textContent = ov.text;
+                });
+                if (Object.keys(newStyles).length || (ov && ov.text != null)) lastApplied[sel] = newStyles;
+                else delete lastApplied[sel];
+            }
+
+            function applyAll() { Object.keys(overrides).forEach((sel) => applyOne(sel, overrides[sel])); }
+
+            // ── Element editor popup ────────────────────────────────────────
+            function fieldRow(labelText, inputEl) {
+                const row = document.createElement('label');
+                Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#ccc' });
+                const span = document.createElement('span');
+                span.textContent = labelText;
+                Object.assign(span.style, { flex: '0 0 92px' });
+                row.appendChild(span);
+                row.appendChild(inputEl);
+                return row;
+            }
+            function txt(w) {
+                const i = document.createElement('input');
+                i.type = 'text';
+                Object.assign(i.style, { flex: '1', minWidth: '0', width: (w || 'auto'), background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '3px 5px', fontSize: '12px' });
+                return i;
+            }
+
+            function highlight(el) {
+                if (!highlightEl) {
+                    highlightEl = document.createElement('div');
+                    Object.assign(highlightEl.style, { position: 'fixed', zIndex: '10065', pointerEvents: 'none', border: '2px dashed #d9b08c', borderRadius: '2px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.15)' });
+                    document.body.appendChild(highlightEl);
+                }
+                const r = el.getBoundingClientRect();
+                Object.assign(highlightEl.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+            }
+            function clearHighlight() { if (highlightEl) highlightEl.style.display = 'none'; }
+
+            function openEditorFor(el) {
+                const sel = cssPath(el);
+                if (!sel) return;
+                if (panelEl) panelEl.remove();
+                highlight(el);
+
+                const cs = getComputedStyle(el);
+                const isLeaf = el.children.length === 0;
+                const originalText = isLeaf ? el.textContent : null;
+                const existing = overrides[sel] || {};
+                const es = existing.styles || {};
+
+                panelEl = document.createElement('div');
+                panelEl.id = 'ui-editor-panel';
+                Object.assign(panelEl.style, {
+                    position: 'fixed', top: '12px', right: '12px', zIndex: '10070',
+                    background: '#1a1a2e', border: '1px solid #d9b08c', borderRadius: '10px',
+                    padding: '12px', width: '300px', maxHeight: '88vh', overflowY: 'auto',
+                    display: 'flex', flexDirection: 'column', gap: '8px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.7)', color: '#eee'
+                });
+
+                const head = document.createElement('div');
+                Object.assign(head.style, { fontSize: '13px', fontWeight: 'bold', color: '#d9b08c', wordBreak: 'break-all' });
+                head.textContent = 'Edit: ' + sel;
+                panelEl.appendChild(head);
+
+                // Text
+                let textArea = null;
+                if (isLeaf) {
+                    textArea = document.createElement('textarea');
+                    Object.assign(textArea.style, { width: '100%', boxSizing: 'border-box', height: '46px', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '4px', fontSize: '12px', resize: 'vertical' });
+                    textArea.value = existing.text != null ? existing.text : (originalText || '');
+                    panelEl.appendChild(fieldRow('Text', textArea));
+                }
+
+                const fontSize = txt(); fontSize.placeholder = parseFloat(cs.fontSize) + ' (px)';
+                if (es['font-size']) fontSize.value = parseFloat(es['font-size']);
+                const fontFamily = txt(); fontFamily.placeholder = cs.fontFamily.split(',')[0];
+                if (es['font-family']) fontFamily.value = es['font-family'];
+                const fontWeight = txt(); fontWeight.placeholder = cs.fontWeight;
+                if (es['font-weight']) fontWeight.value = es['font-weight'];
+                const letterSpacing = txt(); letterSpacing.placeholder = 'px';
+                if (es['letter-spacing']) letterSpacing.value = parseFloat(es['letter-spacing']);
+
+                function colorField(prop) {
+                    const wrap = document.createElement('span');
+                    Object.assign(wrap.style, { display: 'flex', alignItems: 'center', gap: '6px', flex: '1' });
+                    const chk = document.createElement('input'); chk.type = 'checkbox';
+                    const col = document.createElement('input'); col.type = 'color';
+                    Object.assign(col.style, { width: '38px', height: '22px', background: 'none', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' });
+                    if (es[prop]) { chk.checked = true; if (/^#([0-9a-f]{6})$/i.test(es[prop])) col.value = es[prop]; }
+                    wrap.appendChild(chk); wrap.appendChild(col);
+                    wrap._enabled = () => chk.checked; wrap._value = () => col.value;
+                    chk.addEventListener('input', update); col.addEventListener('input', () => { chk.checked = true; update(); });
+                    return wrap;
+                }
+                const colorF = colorField('color');
+                const bgF = colorField('background-color');
+
+                const outlineWidth = txt(); outlineWidth.placeholder = '0 (px)';
+                if (es['-webkit-text-stroke']) outlineWidth.value = parseFloat(es['-webkit-text-stroke']);
+                const outlineColor = colorField('__outline'); // color read separately below
+                if (es['-webkit-text-stroke']) {
+                    const m = es['-webkit-text-stroke'].match(/(#[0-9a-f]{6})/i);
+                    if (m) { outlineColor.querySelector('input[type=color]').value = m[1]; outlineColor.querySelector('input[type=checkbox]').checked = true; }
+                }
+
+                const textShadow = txt(); textShadow.placeholder = 'e.g. 1px 1px 2px #000';
+                if (es['text-shadow']) textShadow.value = es['text-shadow'];
+
+                const customCss = document.createElement('textarea');
+                Object.assign(customCss.style, { width: '100%', boxSizing: 'border-box', height: '46px', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '4px', fontSize: '11px', resize: 'vertical' });
+                customCss.placeholder = 'extra css: prop: value; one per line';
+                // Pre-fill custom with any override props not covered by the fields above.
+                const covered = new Set(['font-size', 'font-family', 'font-weight', 'letter-spacing', 'color', 'background-color', '-webkit-text-stroke', 'paint-order', 'text-shadow']);
+                const extra = Object.entries(es).filter(([k]) => !covered.has(k)).map(([k, v]) => k + ': ' + v + ';');
+                if (extra.length) customCss.value = extra.join('\n');
+
+                panelEl.appendChild(fieldRow('Font size', fontSize));
+                panelEl.appendChild(fieldRow('Font', fontFamily));
+                panelEl.appendChild(fieldRow('Weight', fontWeight));
+                panelEl.appendChild(fieldRow('Letter sp.', letterSpacing));
+                panelEl.appendChild(fieldRow('Text color', colorF));
+                panelEl.appendChild(fieldRow('Background', bgF));
+                panelEl.appendChild(fieldRow('Outline w', outlineWidth));
+                panelEl.appendChild(fieldRow('Outline col', outlineColor));
+                panelEl.appendChild(fieldRow('Text shadow', textShadow));
+                panelEl.appendChild(fieldRow('Custom CSS', customCss));
+
+                function collect() {
+                    const styles = {};
+                    const fs = fontSize.value.trim(); if (fs) styles['font-size'] = /[a-z%]/i.test(fs) ? fs : fs + 'px';
+                    const ff = fontFamily.value.trim(); if (ff) styles['font-family'] = ff;
+                    const fw = fontWeight.value.trim(); if (fw) styles['font-weight'] = fw;
+                    const ls = letterSpacing.value.trim(); if (ls) styles['letter-spacing'] = /[a-z%]/i.test(ls) ? ls : ls + 'px';
+                    if (colorF._enabled()) styles['color'] = colorF._value();
+                    if (bgF._enabled()) styles['background-color'] = bgF._value();
+                    const ow = parseFloat(outlineWidth.value);
+                    if (ow > 0) {
+                        const oc = outlineColor._enabled() ? outlineColor._value() : '#000000';
+                        styles['-webkit-text-stroke'] = ow + 'px ' + oc;
+                        styles['paint-order'] = 'stroke fill';
+                    }
+                    const sh = textShadow.value.trim(); if (sh) styles['text-shadow'] = sh;
+                    customCss.value.split(/[\n;]/).forEach((line) => {
+                        const i = line.indexOf(':');
+                        if (i > 0) { const k = line.slice(0, i).trim(); const v = line.slice(i + 1).trim(); if (k && v) styles[k] = v; }
+                    });
+                    const ov = {};
+                    if (Object.keys(styles).length) ov.styles = styles;
+                    if (textArea && textArea.value !== originalText) ov.text = textArea.value;
+                    return ov;
+                }
+                function update() {
+                    const ov = collect();
+                    if (!ov.styles && ov.text == null) delete overrides[sel];
+                    else overrides[sel] = ov;
+                    applyOne(sel, overrides[sel] || {});
+                    highlight(el);
+                }
+                [fontSize, fontFamily, fontWeight, letterSpacing, outlineWidth, textShadow, customCss].forEach((i) => i.addEventListener('input', update));
+                if (textArea) textArea.addEventListener('input', update);
+
+                const btnRow = document.createElement('div');
+                Object.assign(btnRow.style, { display: 'flex', gap: '6px', marginTop: '4px' });
+                function mkBtn(label, bg, fn) {
+                    const b = document.createElement('button');
+                    b.textContent = label;
+                    Object.assign(b.style, { flex: '1', padding: '6px', borderRadius: '5px', cursor: 'pointer', fontSize: '12px', border: '1px solid #555', background: bg, color: '#eee' });
+                    b.onclick = fn;
+                    return b;
+                }
+                btnRow.appendChild(mkBtn('Reset', '#3a1f28', () => {
+                    delete overrides[sel];
+                    applyOne(sel, {});
+                    if (textArea && originalText != null) el.textContent = originalText;
+                    closeEditor();
+                }));
+                btnRow.appendChild(mkBtn('Close', '#2d2d44', closeEditor));
+                panelEl.appendChild(btnRow);
+
+                document.body.appendChild(panelEl);
+            }
+
+            function closeEditor() {
+                if (panelEl) { panelEl.remove(); panelEl = null; }
+                clearHighlight();
+            }
+
+            // ── Ctrl+Click to edit (capture phase so it beats game handlers) ──
+            document.addEventListener('click', function (e) {
+                if (!(e.ctrlKey || e.metaKey)) return;
+                if (typeof window.isHermit === 'function' && !window.isHermit()) return;
+                const t = e.target;
+                if (!t || (t.closest && t.closest('#ui-editor-panel, #hermit-menu, #hermit-menu-btn'))) return;
+                e.preventDefault();
+                e.stopPropagation();
+                openEditorFor(t);
+            }, true);
+
+            // ── Download / Upload / Clear (wired to the TH menu) ──────────────
+            function download() {
+                const blob = new Blob([JSON.stringify(overrides, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'godaigo-ui-settings.json';
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+            function upload() {
+                const inp = document.createElement('input');
+                inp.type = 'file'; inp.accept = 'application/json,.json';
+                inp.onchange = function () {
+                    const f = inp.files && inp.files[0];
+                    if (!f) return;
+                    const r = new FileReader();
+                    r.onload = function () {
+                        let parsed;
+                        try { parsed = JSON.parse(r.result); } catch (err) { updateStatus('Invalid UI settings file'); return; }
+                        if (!parsed || typeof parsed !== 'object') { updateStatus('Invalid UI settings file'); return; }
+                        Object.keys(lastApplied).forEach((sel) => applyOne(sel, {}));
+                        overrides = parsed;
+                        applyAll();
+                        updateStatus('UI settings applied');
+                    };
+                    r.readAsText(f);
+                };
+                inp.click();
+            }
+            function clearAll() {
+                if (!window.confirm('Remove ALL live UI overrides this session?')) return;
+                Object.keys(lastApplied).forEach((sel) => applyOne(sel, {}));
+                overrides = {};
+                closeEditor();
+                updateStatus('UI overrides cleared');
+            }
+
+            window._uiEditor = { download, upload, clearAll };
+        })();
+
         // ─── Hermit-only dev menu ("TH" icon, top-left) ─────────────────────
         // Surfaces every hidden cheat/dev screen behind one visible button, but
         // ONLY for the developer account (TheHermit — see window.isHermit() in
@@ -6600,6 +6878,18 @@ document.getElementById('undo-move').onclick = function() {
                     if (window.JoytoneBridge && typeof window.JoytoneBridge.togglePopup === 'function') window.JoytoneBridge.togglePopup();
                 }));
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
+                menu.appendChild(makeItem('Edit UI: Ctrl+Click an element', () => {
+                    updateStatus('UI edit mode — Ctrl+Click any element to edit its text/size/font/outline');
+                }));
+                menu.appendChild(makeItem('Download UI Settings', () => {
+                    if (window._uiEditor) window._uiEditor.download();
+                }));
+                menu.appendChild(makeItem('Upload UI Settings', () => {
+                    if (window._uiEditor) window._uiEditor.upload();
+                }));
+                menu.appendChild(makeItem('Clear UI Overrides', () => {
+                    if (window._uiEditor) window._uiEditor.clearAll();
+                }));
 
                 btn.onclick = (e) => {
                     e.stopPropagation();
