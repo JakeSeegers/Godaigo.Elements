@@ -6443,6 +6443,15 @@ document.getElementById('undo-move').onclick = function() {
                 menu.appendChild(makeItem('Bot Training', () => {
                     if (typeof window._openBotTrainingPanel === 'function') window._openBotTrainingPanel();
                 }));
+                menu.appendChild(makeItem('Bot: One Step (Shift+R)', () => {
+                    if (window.BotSystem && typeof window.BotSystem.step === 'function') window.BotSystem.step();
+                }));
+                menu.appendChild(makeItem('Bot: Play Turn (Shift+B)', () => {
+                    if (window.BotSystem && typeof window.BotSystem.turn === 'function') window.BotSystem.turn();
+                }));
+                menu.appendChild(makeItem('Joytone Sequencer (Shift+J+T)', () => {
+                    if (window.JoytoneBridge && typeof window.JoytoneBridge.togglePopup === 'function') window.JoytoneBridge.togglePopup();
+                }));
 
                 btn.onclick = (e) => {
                     e.stopPropagation();

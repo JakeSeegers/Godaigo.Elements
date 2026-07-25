@@ -247,6 +247,8 @@
         const k = e.key?.toLowerCase();
         if (k) held.add(k);
         if (e.shiftKey && held.has('j') && held.has('t')) {
+            // Dev/cheat tooling is restricted to the TheHermit account.
+            if (typeof window.isHermit === 'function' && !window.isHermit()) return;
             e.preventDefault();
             held.clear();
             togglePopup();

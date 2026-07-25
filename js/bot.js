@@ -1999,6 +1999,8 @@
         if (!e.shiftKey) return;
         const key = e.key.toUpperCase();
         if (key !== 'R' && key !== 'B') return;
+        // Dev/cheat tooling is restricted to the TheHermit account.
+        if (typeof window.isHermit === 'function' && !window.isHermit()) return;
 
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
