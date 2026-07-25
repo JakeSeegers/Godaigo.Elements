@@ -6412,21 +6412,20 @@ document.getElementById('undo-move').onclick = function() {
             function applyAll() { Object.keys(overrides).forEach((sel) => applyOne(sel, overrides[sel])); }
 
             // ── Element editor popup ────────────────────────────────────────
-            function fieldRow(labelText, inputEl) {
-                const row = document.createElement('label');
-                Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#ccc' });
-                const span = document.createElement('span');
-                span.textContent = labelText;
-                Object.assign(span.style, { flex: '0 0 92px' });
-                row.appendChild(span);
-                row.appendChild(inputEl);
-                return row;
+            function serializeCss(styles) {
+                return Object.entries(styles || {}).map(([k, v]) => k + ': ' + v + ';').join('\n');
             }
-            function txt(w) {
-                const i = document.createElement('input');
-                i.type = 'text';
-                Object.assign(i.style, { flex: '1', minWidth: '0', width: (w || 'auto'), background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '3px 5px', fontSize: '12px' });
-                return i;
+            function parseCss(text) {
+                const styles = {};
+                (text || '').split(/[\n;]/).forEach((line) => {
+                    const i = line.indexOf(':');
+                    if (i > 0) {
+                        const k = line.slice(0, i).trim();
+                        const v = line.slice(i + 1).trim().replace(/!important/i, '').trim();
+                        if (k && v) styles[k] = v;
+                    }
+                });
+                return styles;
             }
 
             function highlight(el) {
@@ -6450,7 +6449,6 @@ document.getElementById('undo-move').onclick = function() {
                 const isLeaf = el.children.length === 0;
                 const originalText = isLeaf ? el.textContent : null;
                 const existing = overrides[sel] || {};
-                const es = existing.styles || {};
 
                 panelEl = document.createElement('div');
                 panelEl.id = 'ui-editor-panel';
@@ -6467,112 +6465,91 @@ document.getElementById('undo-move').onclick = function() {
                 head.textContent = 'Edit: ' + sel;
                 panelEl.appendChild(head);
 
-                // Text
+                // Text content (leaf elements only)
                 let textArea = null;
                 if (isLeaf) {
+                    const tlbl = document.createElement('div');
+                    tlbl.textContent = 'Text';
+                    Object.assign(tlbl.style, { fontSize: '11px', color: '#999' });
                     textArea = document.createElement('textarea');
-                    Object.assign(textArea.style, { width: '100%', boxSizing: 'border-box', height: '46px', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '4px', fontSize: '12px', resize: 'vertical' });
+                    Object.assign(textArea.style, { width: '100%', boxSizing: 'border-box', height: '40px', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '4px', fontSize: '12px', resize: 'vertical' });
                     textArea.value = existing.text != null ? existing.text : (originalText || '');
-                    panelEl.appendChild(fieldRow('Text', textArea));
+                    panelEl.appendChild(tlbl);
+                    panelEl.appendChild(textArea);
                 }
 
-                const fontSize = txt(); fontSize.placeholder = parseFloat(cs.fontSize) + ' (px)';
-                if (es['font-size']) fontSize.value = parseFloat(es['font-size']);
-                const fontFamily = txt(); fontFamily.placeholder = cs.fontFamily.split(',')[0];
-                if (es['font-family']) fontFamily.value = es['font-family'];
-                const fontWeight = txt(); fontWeight.placeholder = cs.fontWeight;
-                if (es['font-weight']) fontWeight.value = es['font-weight'];
-                const letterSpacing = txt(); letterSpacing.placeholder = 'px';
-                if (es['letter-spacing']) letterSpacing.value = parseFloat(es['letter-spacing']);
+                // CSS box — the single source of truth. Shows this element's
+                // override CSS as plain text; edit it directly, or select-all +
+                // Ctrl+C to copy it and Ctrl+V it into another element's box.
+                const cssLbl = document.createElement('div');
+                cssLbl.textContent = 'CSS — edit directly, or copy/paste between elements';
+                Object.assign(cssLbl.style, { fontSize: '11px', color: '#999' });
+                const cssBox = document.createElement('textarea');
+                cssBox.spellcheck = false;
+                Object.assign(cssBox.style, { width: '100%', boxSizing: 'border-box', height: '180px', background: '#0f0f16', color: '#d7e0ff', border: '1px solid #444', borderRadius: '4px', padding: '6px', fontSize: '12px', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', lineHeight: '1.5', resize: 'vertical', whiteSpace: 'pre' });
+                cssBox.value = serializeCss(existing.styles || {});
+                cssBox.placeholder = 'font-size: 24px;\ncolor: #ffcc00;\n-webkit-text-stroke: 1px #000;\ntext-shadow: 1px 1px 2px #000;';
+                panelEl.appendChild(cssLbl);
+                panelEl.appendChild(cssBox);
 
-                function colorField(prop) {
-                    const wrap = document.createElement('span');
-                    Object.assign(wrap.style, { display: 'flex', alignItems: 'center', gap: '6px', flex: '1' });
-                    const chk = document.createElement('input'); chk.type = 'checkbox';
-                    const col = document.createElement('input'); col.type = 'color';
-                    Object.assign(col.style, { width: '38px', height: '22px', background: 'none', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' });
-                    if (es[prop]) { chk.checked = true; if (/^#([0-9a-f]{6})$/i.test(es[prop])) col.value = es[prop]; }
-                    wrap.appendChild(chk); wrap.appendChild(col);
-                    wrap._enabled = () => chk.checked; wrap._value = () => col.value;
-                    chk.addEventListener('input', update); col.addEventListener('input', () => { chk.checked = true; update(); });
-                    return wrap;
-                }
-                const colorF = colorField('color');
-                const bgF = colorField('background-color');
-
-                const outlineWidth = txt(); outlineWidth.placeholder = '0 (px)';
-                if (es['-webkit-text-stroke']) outlineWidth.value = parseFloat(es['-webkit-text-stroke']);
-                const outlineColor = colorField('__outline'); // color read separately below
-                if (es['-webkit-text-stroke']) {
-                    const m = es['-webkit-text-stroke'].match(/(#[0-9a-f]{6})/i);
-                    if (m) { outlineColor.querySelector('input[type=color]').value = m[1]; outlineColor.querySelector('input[type=checkbox]').checked = true; }
-                }
-
-                const textShadow = txt(); textShadow.placeholder = 'e.g. 1px 1px 2px #000';
-                if (es['text-shadow']) textShadow.value = es['text-shadow'];
-
-                const customCss = document.createElement('textarea');
-                Object.assign(customCss.style, { width: '100%', boxSizing: 'border-box', height: '46px', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '4px', fontSize: '11px', resize: 'vertical' });
-                customCss.placeholder = 'extra css: prop: value; one per line';
-                // Pre-fill custom with any override props not covered by the fields above.
-                const covered = new Set(['font-size', 'font-family', 'font-weight', 'letter-spacing', 'color', 'background-color', '-webkit-text-stroke', 'paint-order', 'text-shadow']);
-                const extra = Object.entries(es).filter(([k]) => !covered.has(k)).map(([k, v]) => k + ': ' + v + ';');
-                if (extra.length) customCss.value = extra.join('\n');
-
-                panelEl.appendChild(fieldRow('Font size', fontSize));
-                panelEl.appendChild(fieldRow('Font', fontFamily));
-                panelEl.appendChild(fieldRow('Weight', fontWeight));
-                panelEl.appendChild(fieldRow('Letter sp.', letterSpacing));
-                panelEl.appendChild(fieldRow('Text color', colorF));
-                panelEl.appendChild(fieldRow('Background', bgF));
-                panelEl.appendChild(fieldRow('Outline w', outlineWidth));
-                panelEl.appendChild(fieldRow('Outline col', outlineColor));
-                panelEl.appendChild(fieldRow('Text shadow', textShadow));
-                panelEl.appendChild(fieldRow('Custom CSS', customCss));
-
-                function collect() {
-                    const styles = {};
-                    const fs = fontSize.value.trim(); if (fs) styles['font-size'] = /[a-z%]/i.test(fs) ? fs : fs + 'px';
-                    const ff = fontFamily.value.trim(); if (ff) styles['font-family'] = ff;
-                    const fw = fontWeight.value.trim(); if (fw) styles['font-weight'] = fw;
-                    const ls = letterSpacing.value.trim(); if (ls) styles['letter-spacing'] = /[a-z%]/i.test(ls) ? ls : ls + 'px';
-                    if (colorF._enabled()) styles['color'] = colorF._value();
-                    if (bgF._enabled()) styles['background-color'] = bgF._value();
-                    const ow = parseFloat(outlineWidth.value);
-                    if (ow > 0) {
-                        const oc = outlineColor._enabled() ? outlineColor._value() : '#000000';
-                        styles['-webkit-text-stroke'] = ow + 'px ' + oc;
-                        styles['paint-order'] = 'stroke fill';
-                    }
-                    const sh = textShadow.value.trim(); if (sh) styles['text-shadow'] = sh;
-                    customCss.value.split(/[\n;]/).forEach((line) => {
-                        const i = line.indexOf(':');
-                        if (i > 0) { const k = line.slice(0, i).trim(); const v = line.slice(i + 1).trim(); if (k && v) styles[k] = v; }
-                    });
+                function apply() {
+                    const styles = parseCss(cssBox.value);
                     const ov = {};
                     if (Object.keys(styles).length) ov.styles = styles;
                     if (textArea && textArea.value !== originalText) ov.text = textArea.value;
-                    return ov;
-                }
-                function update() {
-                    const ov = collect();
                     if (!ov.styles && ov.text == null) delete overrides[sel];
                     else overrides[sel] = ov;
                     applyOne(sel, overrides[sel] || {});
                     highlight(el);
                 }
-                [fontSize, fontFamily, fontWeight, letterSpacing, outlineWidth, textShadow, customCss].forEach((i) => i.addEventListener('input', update));
-                if (textArea) textArea.addEventListener('input', update);
+                cssBox.addEventListener('input', apply);
+                if (textArea) textArea.addEventListener('input', apply);
+
+                // Quick-insert chips: add a common property (seeded from the
+                // element's current computed value) to the CSS box if missing.
+                const chips = document.createElement('div');
+                Object.assign(chips.style, { display: 'flex', flexWrap: 'wrap', gap: '4px' });
+                const quick = [
+                    ['font-size', cs.fontSize],
+                    ['color', cs.color],
+                    ['font-family', cs.fontFamily.split(',')[0]],
+                    ['font-weight', cs.fontWeight],
+                    ['-webkit-text-stroke', '1px #000000'],
+                    ['text-shadow', '1px 1px 2px #000000'],
+                    ['background-color', '#000000'],
+                    ['letter-spacing', '1px']
+                ];
+                quick.forEach(([prop, val]) => {
+                    const chip = document.createElement('button');
+                    chip.textContent = '+ ' + prop;
+                    Object.assign(chip.style, { padding: '3px 7px', fontSize: '11px', background: '#2d2d44', color: '#cbd', border: '1px solid #555', borderRadius: '10px', cursor: 'pointer' });
+                    chip.onclick = () => {
+                        const styles = parseCss(cssBox.value);
+                        if (!(prop in styles)) {
+                            styles[prop] = val;
+                            if (prop === '-webkit-text-stroke') styles['paint-order'] = 'stroke fill';
+                            cssBox.value = serializeCss(styles);
+                            apply();
+                        }
+                        cssBox.focus();
+                    };
+                    chips.appendChild(chip);
+                });
+                panelEl.appendChild(chips);
 
                 const btnRow = document.createElement('div');
-                Object.assign(btnRow.style, { display: 'flex', gap: '6px', marginTop: '4px' });
+                Object.assign(btnRow.style, { display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' });
                 function mkBtn(label, bg, fn) {
                     const b = document.createElement('button');
                     b.textContent = label;
-                    Object.assign(b.style, { flex: '1', padding: '6px', borderRadius: '5px', cursor: 'pointer', fontSize: '12px', border: '1px solid #555', background: bg, color: '#eee' });
+                    Object.assign(b.style, { flex: '1', minWidth: '90px', padding: '6px', borderRadius: '5px', cursor: 'pointer', fontSize: '12px', border: '1px solid #555', background: bg, color: '#eee' });
                     b.onclick = fn;
                     return b;
                 }
+                btnRow.appendChild(mkBtn('Load current styles', '#26304a', () => {
+                    cssBox.value = serializeCss(snapshotComputed(el));
+                    apply();
+                }));
                 btnRow.appendChild(mkBtn('Reset', '#3a1f28', () => {
                     delete overrides[sel];
                     applyOne(sel, {});
@@ -6590,44 +6567,24 @@ document.getElementById('undo-move').onclick = function() {
                 clearHighlight();
             }
 
-            // ── Style clipboard: Ctrl+C + click copies a style, Ctrl+V + click
-            //    pastes it onto another element (eyedropper-style transfer) ────
-            let styleClipboard = null;   // { prop: value } captured from a source
-            let clipMode = null;         // null | 'copy' | 'paste'
-            let clipTimer = null;
-            let bannerEl = null;
-
-            function setMode(mode) {
-                clipMode = mode;
-                clearTimeout(clipTimer);
-                if (!bannerEl) {
-                    bannerEl = document.createElement('div');
-                    Object.assign(bannerEl.style, {
-                        position: 'fixed', top: '10px', left: '50%', transform: 'translateX(-50%)',
-                        zIndex: '10075', pointerEvents: 'none', padding: '6px 14px', borderRadius: '6px',
-                        background: '#d9b08c', color: '#1a1a2e', fontWeight: 'bold', fontSize: '13px',
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
-                    });
-                    document.body.appendChild(bannerEl);
-                }
-                if (!mode) { bannerEl.style.display = 'none'; return; }
-                bannerEl.textContent = mode === 'copy'
-                    ? 'Copy style — click the element to copy from  (Esc to cancel)'
-                    : 'Paste style — click the element to paste onto  (Esc to cancel)';
-                bannerEl.style.display = 'block';
-                clipTimer = setTimeout(() => setMode(null), 8000); // auto-cancel
-            }
-
+            // Snapshot an element's key computed styles as a { prop: value }
+            // map — used by the editor's "Load current styles" button to seed
+            // the CSS box with the element's current look.
             function snapshotComputed(el) {
                 const cs = getComputedStyle(el);
                 const s = {
                     'font-size': cs.fontSize,
                     'font-family': cs.fontFamily,
                     'font-weight': cs.fontWeight,
-                    'color': cs.color
+                    'font-style': cs.fontStyle,
+                    'line-height': cs.lineHeight,
+                    'color': cs.color,
+                    'text-align': cs.textAlign
                 };
                 if (cs.letterSpacing && cs.letterSpacing !== 'normal') s['letter-spacing'] = cs.letterSpacing;
+                if (cs.textTransform && cs.textTransform !== 'none') s['text-transform'] = cs.textTransform;
                 if (cs.textShadow && cs.textShadow !== 'none') s['text-shadow'] = cs.textShadow;
+                if (cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') s['background-color'] = cs.backgroundColor;
                 if (parseFloat(cs.webkitTextStrokeWidth) > 0) {
                     s['-webkit-text-stroke'] = cs.webkitTextStrokeWidth + ' ' + cs.webkitTextStrokeColor;
                     s['paint-order'] = 'stroke fill';
@@ -6635,45 +6592,9 @@ document.getElementById('undo-move').onclick = function() {
                 return s;
             }
 
-            function copyFrom(el) {
-                const sel = cssPath(el);
-                if (!sel) return;
-                // Prefer the explicit overrides you set; else snapshot the live look.
-                styleClipboard = (overrides[sel] && overrides[sel].styles)
-                    ? Object.assign({}, overrides[sel].styles)
-                    : snapshotComputed(el);
-                updateStatus('Copied style (' + Object.keys(styleClipboard).length + ' props) — Ctrl+V then click a target');
-            }
-
-            function pasteTo(el) {
-                const sel = cssPath(el);
-                if (!sel || !styleClipboard) return;
-                const ov = overrides[sel] || {};
-                ov.styles = Object.assign({}, styleClipboard);
-                overrides[sel] = ov;
-                applyOne(sel, ov);
-                updateStatus('Pasted style onto ' + sel);
-            }
-
-            // Enter copy/paste mode. Not while typing in a field (so the editor's
-            // own inputs keep normal Ctrl+C/V). No preventDefault — native
-            // copy/paste stays available and harmless.
-            document.addEventListener('keydown', function (e) {
-                if (typeof window.isHermit === 'function' && !window.isHermit()) return;
-                if (e.key === 'Escape') { if (clipMode) setMode(null); return; }
-                if (!(e.ctrlKey || e.metaKey)) return;
-                const tag = document.activeElement && document.activeElement.tagName;
-                if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable)) return;
-                const k = e.key.toLowerCase();
-                if (k === 'c') setMode('copy');
-                else if (k === 'v') {
-                    if (!styleClipboard) { updateStatus('Nothing copied yet — Ctrl+C then click an element first'); return; }
-                    setMode('paste');
-                }
-            });
-
-            // ── Ctrl+Click: copy/paste if armed, else open the editor ─────────
-            // (capture phase so it beats game handlers)
+            // ── Ctrl+Click opens the editor (capture phase so it beats game
+            //    handlers). Copy/paste happens inside the CSS box with normal
+            //    Ctrl+C / Ctrl+V — no special gesture. ─────────────────────────
             document.addEventListener('click', function (e) {
                 if (!(e.ctrlKey || e.metaKey)) return;
                 if (typeof window.isHermit === 'function' && !window.isHermit()) return;
@@ -6681,8 +6602,6 @@ document.getElementById('undo-move').onclick = function() {
                 if (!t || (t.closest && t.closest('#ui-editor-panel, #hermit-menu, #hermit-menu-btn'))) return;
                 e.preventDefault();
                 e.stopPropagation();
-                if (clipMode === 'copy') { copyFrom(t); setMode(null); return; }
-                if (clipMode === 'paste') { pasteTo(t); setMode(null); return; }
                 openEditorFor(t);
             }, true);
 
@@ -6964,7 +6883,7 @@ document.getElementById('undo-move').onclick = function() {
                 }));
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
                 menu.appendChild(makeItem('Edit UI: Ctrl+Click an element', () => {
-                    updateStatus('Ctrl+Click = edit · Ctrl+C then click = copy style · Ctrl+V then click = paste style');
+                    updateStatus('Ctrl+Click any element to edit its text & CSS — copy/paste the CSS box to reuse a style');
                 }));
                 menu.appendChild(makeItem('Download UI Settings', () => {
                     if (window._uiEditor) window._uiEditor.download();
