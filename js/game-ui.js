@@ -6411,6 +6411,83 @@ document.getElementById('undo-move').onclick = function() {
 
             function applyAll() { Object.keys(overrides).forEach((sel) => applyOne(sel, overrides[sel])); }
 
+            // ── Universal font switcher ─────────────────────────────────────
+            // Remap every instance of one font-family to another, page-wide.
+            // Elements are tagged with their ORIGINAL font (data-fontswap-orig)
+            // so a swap can be re-derived, re-applied to late-built elements
+            // (via a scoped observer), and cleanly reverted.
+            let fontMap = {};            // originalPrimaryFamily -> targetFamily
+            let fontObserver = null;
+            let fontApplyScheduled = false;
+            const FONT_SKIP = '#ui-editor-panel, #hermit-menu, #hermit-menu-btn, #font-switcher-panel';
+
+            function primaryFont(ff) {
+                if (!ff) return '';
+                return ff.split(',')[0].trim().replace(/^["']|["']$/g, '');
+            }
+
+            function collectUsedFonts() {
+                const counts = new Map();
+                document.querySelectorAll('body *').forEach((el) => {
+                    if (el.closest(FONT_SKIP)) return;
+                    const orig = el.dataset.fontswapOrig || primaryFont(getComputedStyle(el).fontFamily);
+                    if (!orig) return;
+                    counts.set(orig, (counts.get(orig) || 0) + 1);
+                });
+                return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+            }
+
+            function restoreFont(el) {
+                // Restore the element's original inline font-family exactly (it may
+                // have had its own, e.g. from a per-element override), else clear.
+                const prev = el.dataset.fontswapPrev;
+                if (prev) el.style.setProperty('font-family', prev);
+                else el.style.removeProperty('font-family');
+                delete el.dataset.fontswapOrig;
+                delete el.dataset.fontswapPrev;
+            }
+
+            function applyFontMap() {
+                document.querySelectorAll('body *').forEach((el) => {
+                    if (el.closest(FONT_SKIP)) return;
+                    const orig = el.dataset.fontswapOrig || primaryFont(getComputedStyle(el).fontFamily);
+                    const target = fontMap[orig];
+                    if (target) {
+                        if (!el.dataset.fontswapOrig) {
+                            el.dataset.fontswapOrig = orig;
+                            el.dataset.fontswapPrev = el.style.fontFamily || '';
+                        }
+                        el.style.setProperty('font-family', target, 'important');
+                    } else if (el.dataset.fontswapOrig) {
+                        restoreFont(el);
+                    }
+                });
+                ensureFontObserver();
+            }
+
+            function ensureFontObserver() {
+                const active = Object.keys(fontMap).length > 0;
+                if (active && !fontObserver) {
+                    // childList/subtree only — our own inline style/dataset writes
+                    // are attribute changes, so they never re-trigger this (no loop).
+                    fontObserver = new MutationObserver(() => {
+                        if (fontApplyScheduled) return;
+                        fontApplyScheduled = true;
+                        setTimeout(() => { fontApplyScheduled = false; applyFontMap(); }, 300);
+                    });
+                    fontObserver.observe(document.body, { childList: true, subtree: true });
+                } else if (!active && fontObserver) {
+                    fontObserver.disconnect();
+                    fontObserver = null;
+                }
+            }
+
+            function revertAllFonts() {
+                fontMap = {};
+                document.querySelectorAll('[data-fontswap-orig]').forEach((el) => restoreFont(el));
+                ensureFontObserver();
+            }
+
             // ── Element editor popup ────────────────────────────────────────
             function serializeCss(styles) {
                 return Object.entries(styles || {}).map(([k, v]) => k + ': ' + v + ';').join('\n');
@@ -6680,7 +6757,7 @@ document.getElementById('undo-move').onclick = function() {
                 if (!(e.ctrlKey || e.metaKey)) return;
                 if (typeof window.isHermit === 'function' && !window.isHermit()) return;
                 const t = e.target;
-                if (!t || (t.closest && t.closest('#ui-editor-panel, #hermit-menu, #hermit-menu-btn'))) return;
+                if (!t || (t.closest && t.closest(FONT_SKIP))) return;
                 e.preventDefault();
                 e.stopPropagation();
                 openEditorFor(t);
@@ -6688,7 +6765,11 @@ document.getElementById('undo-move').onclick = function() {
 
             // ── Download / Upload / Clear (wired to the TH menu) ──────────────
             function download() {
-                const blob = new Blob([JSON.stringify(overrides, null, 2)], { type: 'application/json' });
+                // Per-element overrides plus, under a reserved key, the global
+                // font swaps — so a downloaded file carries the whole design.
+                const out = Object.assign({}, overrides);
+                if (Object.keys(fontMap).length) out.__fontSwaps = Object.assign({}, fontMap);
+                const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url; a.download = 'godaigo-ui-settings.json';
@@ -6707,8 +6788,13 @@ document.getElementById('undo-move').onclick = function() {
                         try { parsed = JSON.parse(r.result); } catch (err) { updateStatus('Invalid UI settings file'); return; }
                         if (!parsed || typeof parsed !== 'object') { updateStatus('Invalid UI settings file'); return; }
                         Object.keys(lastApplied).forEach((sel) => applyOne(sel, {}));
+                        // Pull the global font swaps out of the reserved key.
+                        revertAllFonts();
+                        const swaps = parsed.__fontSwaps;
+                        delete parsed.__fontSwaps;
                         overrides = parsed;
                         applyAll();
+                        if (swaps && typeof swaps === 'object') { fontMap = swaps; applyFontMap(); }
                         updateStatus('UI settings applied');
                     };
                     r.readAsText(f);
@@ -6716,14 +6802,124 @@ document.getElementById('undo-move').onclick = function() {
                 inp.click();
             }
             function clearAll() {
-                if (!window.confirm('Remove ALL live UI overrides this session?')) return;
+                if (!window.confirm('Remove ALL live UI overrides (and font swaps) this session?')) return;
                 Object.keys(lastApplied).forEach((sel) => applyOne(sel, {}));
                 overrides = {};
+                revertAllFonts();
                 closeEditor();
                 updateStatus('UI overrides cleared');
             }
 
-            window._uiEditor = { download, upload, clearAll };
+            // ── Universal font switcher panel ───────────────────────────────
+            function openFontSwitcher() {
+                const existing = document.getElementById('font-switcher-panel');
+                if (existing) { existing.remove(); return; }
+
+                const panel = document.createElement('div');
+                panel.id = 'font-switcher-panel';
+                Object.assign(panel.style, {
+                    position: 'fixed', top: '12px', left: '64px', zIndex: '10070',
+                    background: '#1a1a2e', border: '1px solid #d9b08c', borderRadius: '10px',
+                    padding: '12px', width: '340px', maxHeight: '88vh', overflowY: 'auto',
+                    display: 'flex', flexDirection: 'column', gap: '8px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.7)', color: '#eee'
+                });
+
+                const head = document.createElement('div');
+                Object.assign(head.style, { fontSize: '14px', fontWeight: 'bold', color: '#d9b08c' });
+                head.textContent = 'Universal Font Switcher';
+                panel.appendChild(head);
+
+                const hint = document.createElement('div');
+                Object.assign(hint.style, { fontSize: '11px', color: '#999' });
+                hint.textContent = 'Swap every instance of a font for another, page-wide. Pick a target from the list or type any loaded font name.';
+                panel.appendChild(hint);
+
+                // Suggestions: web-safe fonts + fonts already loaded on the page.
+                const websafe = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'Trebuchet MS', 'Tahoma', 'Impact', 'system-ui', 'serif', 'sans-serif', 'monospace'];
+                const datalist = document.createElement('datalist');
+                datalist.id = 'fontswap-suggestions';
+                panel.appendChild(datalist);
+
+                const body = document.createElement('div');
+                Object.assign(body.style, { display: 'flex', flexDirection: 'column', gap: '6px' });
+                panel.appendChild(body);
+
+                function targetInput(sourceName) {
+                    const inp = document.createElement('input');
+                    inp.type = 'text';
+                    inp.setAttribute('list', 'fontswap-suggestions');
+                    inp.placeholder = '(no change)';
+                    Object.assign(inp.style, { flex: '1', minWidth: '0', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '3px 5px', fontSize: '12px' });
+                    inp.value = fontMap[sourceName] || '';
+                    inp.addEventListener('change', () => {
+                        const v = inp.value.trim();
+                        if (v) fontMap[sourceName] = v; else delete fontMap[sourceName];
+                        applyFontMap();
+                    });
+                    return inp;
+                }
+
+                function render() {
+                    body.innerHTML = '';
+                    const used = collectUsedFonts();
+                    datalist.innerHTML = '';
+                    const suggest = Array.from(new Set(websafe.concat(used.map((u) => u[0]))));
+                    suggest.forEach((name) => { const o = document.createElement('option'); o.value = name; datalist.appendChild(o); });
+
+                    // Quick "replace ALL" row
+                    const allRow = document.createElement('div');
+                    Object.assign(allRow.style, { display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '6px', borderBottom: '1px solid #333' });
+                    const allLbl = document.createElement('span');
+                    allLbl.textContent = 'Replace ALL →';
+                    Object.assign(allLbl.style, { flex: '0 0 110px', fontSize: '12px', color: '#d9b08c' });
+                    const allInp = document.createElement('input');
+                    allInp.type = 'text'; allInp.setAttribute('list', 'fontswap-suggestions'); allInp.placeholder = 'font for everything';
+                    Object.assign(allInp.style, { flex: '1', minWidth: '0', background: '#111', color: '#eee', border: '1px solid #444', borderRadius: '4px', padding: '3px 5px', fontSize: '12px' });
+                    allInp.addEventListener('change', () => {
+                        const v = allInp.value.trim();
+                        if (!v) return;
+                        used.forEach(([name]) => { fontMap[name] = v; });
+                        applyFontMap();
+                        render();
+                    });
+                    allRow.appendChild(allLbl); allRow.appendChild(allInp);
+                    body.appendChild(allRow);
+
+                    if (!used.length) { const p = document.createElement('div'); p.textContent = 'No fonts detected.'; p.style.color = '#999'; body.appendChild(p); return; }
+
+                    used.forEach(([name, count]) => {
+                        const row = document.createElement('div');
+                        Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px' });
+                        const lbl = document.createElement('span');
+                        lbl.textContent = name + ' (' + count + ')';
+                        Object.assign(lbl.style, { flex: '0 0 110px', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: name });
+                        lbl.title = name;
+                        const arrow = document.createElement('span'); arrow.textContent = '→'; arrow.style.color = '#888';
+                        row.appendChild(lbl); row.appendChild(arrow); row.appendChild(targetInput(name));
+                        body.appendChild(row);
+                    });
+                }
+                render();
+
+                const btnRow = document.createElement('div');
+                Object.assign(btnRow.style, { display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' });
+                function mkBtn(label, bg, fn) {
+                    const b = document.createElement('button');
+                    b.textContent = label;
+                    Object.assign(b.style, { flex: '1', minWidth: '80px', padding: '6px', borderRadius: '5px', cursor: 'pointer', fontSize: '12px', border: '1px solid #555', background: bg, color: '#eee' });
+                    b.onclick = fn;
+                    return b;
+                }
+                btnRow.appendChild(mkBtn('Rescan', '#26304a', render));
+                btnRow.appendChild(mkBtn('Reset fonts', '#3a1f28', () => { revertAllFonts(); render(); }));
+                btnRow.appendChild(mkBtn('Close', '#2d2d44', () => panel.remove()));
+                panel.appendChild(btnRow);
+
+                document.body.appendChild(panel);
+            }
+
+            window._uiEditor = { download, upload, clearAll, openFontSwitcher };
         })();
 
         // ─── Hermit-only dev menu ("TH" icon, top-left) ─────────────────────
@@ -6965,6 +7161,9 @@ document.getElementById('undo-move').onclick = function() {
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
                 menu.appendChild(makeItem('Edit UI: Ctrl+Click an element', () => {
                     updateStatus('Ctrl+Click any element to edit its text & CSS — copy/paste the CSS box to reuse a style');
+                }));
+                menu.appendChild(makeItem('Universal Font Switcher', () => {
+                    if (window._uiEditor) window._uiEditor.openFontSwitcher();
                 }));
                 menu.appendChild(makeItem('Download UI Settings', () => {
                     if (window._uiEditor) window._uiEditor.download();
