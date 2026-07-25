@@ -6590,7 +6590,90 @@ document.getElementById('undo-move').onclick = function() {
                 clearHighlight();
             }
 
-            // ── Ctrl+Click to edit (capture phase so it beats game handlers) ──
+            // ── Style clipboard: Ctrl+C + click copies a style, Ctrl+V + click
+            //    pastes it onto another element (eyedropper-style transfer) ────
+            let styleClipboard = null;   // { prop: value } captured from a source
+            let clipMode = null;         // null | 'copy' | 'paste'
+            let clipTimer = null;
+            let bannerEl = null;
+
+            function setMode(mode) {
+                clipMode = mode;
+                clearTimeout(clipTimer);
+                if (!bannerEl) {
+                    bannerEl = document.createElement('div');
+                    Object.assign(bannerEl.style, {
+                        position: 'fixed', top: '10px', left: '50%', transform: 'translateX(-50%)',
+                        zIndex: '10075', pointerEvents: 'none', padding: '6px 14px', borderRadius: '6px',
+                        background: '#d9b08c', color: '#1a1a2e', fontWeight: 'bold', fontSize: '13px',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
+                    });
+                    document.body.appendChild(bannerEl);
+                }
+                if (!mode) { bannerEl.style.display = 'none'; return; }
+                bannerEl.textContent = mode === 'copy'
+                    ? 'Copy style — click the element to copy from  (Esc to cancel)'
+                    : 'Paste style — click the element to paste onto  (Esc to cancel)';
+                bannerEl.style.display = 'block';
+                clipTimer = setTimeout(() => setMode(null), 8000); // auto-cancel
+            }
+
+            function snapshotComputed(el) {
+                const cs = getComputedStyle(el);
+                const s = {
+                    'font-size': cs.fontSize,
+                    'font-family': cs.fontFamily,
+                    'font-weight': cs.fontWeight,
+                    'color': cs.color
+                };
+                if (cs.letterSpacing && cs.letterSpacing !== 'normal') s['letter-spacing'] = cs.letterSpacing;
+                if (cs.textShadow && cs.textShadow !== 'none') s['text-shadow'] = cs.textShadow;
+                if (parseFloat(cs.webkitTextStrokeWidth) > 0) {
+                    s['-webkit-text-stroke'] = cs.webkitTextStrokeWidth + ' ' + cs.webkitTextStrokeColor;
+                    s['paint-order'] = 'stroke fill';
+                }
+                return s;
+            }
+
+            function copyFrom(el) {
+                const sel = cssPath(el);
+                if (!sel) return;
+                // Prefer the explicit overrides you set; else snapshot the live look.
+                styleClipboard = (overrides[sel] && overrides[sel].styles)
+                    ? Object.assign({}, overrides[sel].styles)
+                    : snapshotComputed(el);
+                updateStatus('Copied style (' + Object.keys(styleClipboard).length + ' props) — Ctrl+V then click a target');
+            }
+
+            function pasteTo(el) {
+                const sel = cssPath(el);
+                if (!sel || !styleClipboard) return;
+                const ov = overrides[sel] || {};
+                ov.styles = Object.assign({}, styleClipboard);
+                overrides[sel] = ov;
+                applyOne(sel, ov);
+                updateStatus('Pasted style onto ' + sel);
+            }
+
+            // Enter copy/paste mode. Not while typing in a field (so the editor's
+            // own inputs keep normal Ctrl+C/V). No preventDefault — native
+            // copy/paste stays available and harmless.
+            document.addEventListener('keydown', function (e) {
+                if (typeof window.isHermit === 'function' && !window.isHermit()) return;
+                if (e.key === 'Escape') { if (clipMode) setMode(null); return; }
+                if (!(e.ctrlKey || e.metaKey)) return;
+                const tag = document.activeElement && document.activeElement.tagName;
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable)) return;
+                const k = e.key.toLowerCase();
+                if (k === 'c') setMode('copy');
+                else if (k === 'v') {
+                    if (!styleClipboard) { updateStatus('Nothing copied yet — Ctrl+C then click an element first'); return; }
+                    setMode('paste');
+                }
+            });
+
+            // ── Ctrl+Click: copy/paste if armed, else open the editor ─────────
+            // (capture phase so it beats game handlers)
             document.addEventListener('click', function (e) {
                 if (!(e.ctrlKey || e.metaKey)) return;
                 if (typeof window.isHermit === 'function' && !window.isHermit()) return;
@@ -6598,6 +6681,8 @@ document.getElementById('undo-move').onclick = function() {
                 if (!t || (t.closest && t.closest('#ui-editor-panel, #hermit-menu, #hermit-menu-btn'))) return;
                 e.preventDefault();
                 e.stopPropagation();
+                if (clipMode === 'copy') { copyFrom(t); setMode(null); return; }
+                if (clipMode === 'paste') { pasteTo(t); setMode(null); return; }
                 openEditorFor(t);
             }, true);
 
@@ -6879,7 +6964,7 @@ document.getElementById('undo-move').onclick = function() {
                 }));
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
                 menu.appendChild(makeItem('Edit UI: Ctrl+Click an element', () => {
-                    updateStatus('UI edit mode — Ctrl+Click any element to edit its text/size/font/outline');
+                    updateStatus('Ctrl+Click = edit · Ctrl+C then click = copy style · Ctrl+V then click = paste style');
                 }));
                 menu.appendChild(makeItem('Download UI Settings', () => {
                     if (window._uiEditor) window._uiEditor.download();
