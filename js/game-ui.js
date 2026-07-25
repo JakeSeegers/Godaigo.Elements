@@ -6373,6 +6373,153 @@ document.getElementById('undo-move').onclick = function() {
             let btn = null;      // the "TH" launcher
             let menu = null;     // the dropdown
 
+            // ── Admin: registered-profiles console ──────────────────────────
+            // Lists every account (via the TheHermit-gated admin_list_users RPC)
+            // and lets the developer permanently delete test accounts (auth login
+            // + profile + all their game data via admin_delete_user). Both RPCs
+            // self-verify the caller is TheHermit, so this is safe even though the
+            // button is only ever shown to that account.
+            function openProfileAdmin() {
+                const existing = document.getElementById('profile-admin-overlay');
+                if (existing) { existing.remove(); return; }
+
+                const overlay = document.createElement('div');
+                overlay.id = 'profile-admin-overlay';
+                Object.assign(overlay.style, {
+                    position: 'fixed', inset: '0', zIndex: '10060',
+                    background: 'rgba(0,0,0,0.7)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center'
+                });
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+                const panel = document.createElement('div');
+                Object.assign(panel.style, {
+                    background: '#1a1a2e', border: '1px solid #444', borderRadius: '10px',
+                    width: 'min(560px, 92vw)', maxHeight: '82vh', display: 'flex',
+                    flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+                    color: '#eee', fontSize: '13px'
+                });
+
+                const header = document.createElement('div');
+                Object.assign(header.style, {
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px', borderBottom: '1px solid #333'
+                });
+                const title = document.createElement('div');
+                title.textContent = 'Registered Profiles';
+                Object.assign(title.style, { fontSize: '16px', fontWeight: 'bold', color: '#d9b08c' });
+                const closeX = document.createElement('button');
+                closeX.textContent = '✕';
+                Object.assign(closeX.style, {
+                    background: 'none', border: '1px solid #444', borderRadius: '5px',
+                    color: '#ccc', cursor: 'pointer', padding: '2px 9px'
+                });
+                closeX.onclick = () => overlay.remove();
+                header.appendChild(title);
+                header.appendChild(closeX);
+
+                const list = document.createElement('div');
+                Object.assign(list.style, { overflowY: 'auto', padding: '8px', flex: '1' });
+                list.textContent = 'Loading…';
+
+                panel.appendChild(header);
+                panel.appendChild(list);
+                overlay.appendChild(panel);
+                document.body.appendChild(overlay);
+
+                function fmtDate(s) {
+                    if (!s) return '—';
+                    const d = new Date(s);
+                    return isNaN(d) ? '—' : d.toLocaleDateString();
+                }
+
+                async function load() {
+                    list.textContent = 'Loading…';
+                    const { data, error } = await supabase.rpc('admin_list_users');
+                    if (error) {
+                        list.textContent = 'Error: ' + (error.message || 'could not load profiles');
+                        return;
+                    }
+                    const rows = data || [];
+                    let count = rows.length;
+                    title.textContent = `Registered Profiles (${count})`;
+                    list.innerHTML = '';
+
+                    rows.forEach((u) => {
+                        const row = document.createElement('div');
+                        Object.assign(row.style, {
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            gap: '10px', padding: '8px 10px', borderBottom: '1px solid #2a2a3a'
+                        });
+
+                        const info = document.createElement('div');
+                        info.style.minWidth = '0';
+                        const nameLine = document.createElement('div');
+                        nameLine.style.fontWeight = 'bold';
+                        nameLine.textContent = u.username || '(unknown)';
+                        if (u.is_admin) {
+                            const badge = document.createElement('span');
+                            badge.textContent = ' admin';
+                            Object.assign(badge.style, {
+                                fontSize: '10px', color: '#1a1a2e', background: '#d9b08c',
+                                borderRadius: '3px', padding: '1px 5px', marginLeft: '6px',
+                                fontWeight: 'bold', verticalAlign: 'middle'
+                            });
+                            nameLine.appendChild(badge);
+                        }
+                        const meta = document.createElement('div');
+                        Object.assign(meta.style, { fontSize: '11px', color: '#999', marginTop: '2px' });
+                        meta.textContent =
+                            `Lv ${u.current_level ?? '?'} · ${u.total_xp ?? 0} XP · ${u.gold ?? 0}g · ` +
+                            `${u.games_played ?? 0} games · last seen ${fmtDate(u.last_sign_in_at)}`;
+                        info.appendChild(nameLine);
+                        info.appendChild(meta);
+
+                        const del = document.createElement('button');
+                        Object.assign(del.style, {
+                            flex: '0 0 auto', padding: '5px 10px', borderRadius: '5px',
+                            cursor: 'pointer', fontSize: '12px', border: '1px solid #a33',
+                            background: '#3a1f28', color: '#f2b8c0'
+                        });
+                        if (u.is_admin) {
+                            del.textContent = '—';
+                            del.disabled = true;
+                            del.title = 'The admin account cannot be deleted here';
+                            Object.assign(del.style, { opacity: '0.4', cursor: 'default', borderColor: '#555', color: '#888', background: '#222' });
+                        } else {
+                            del.textContent = 'Delete';
+                            del.onclick = async () => {
+                                const ok = window.confirm(
+                                    `Permanently delete "${u.username}" and ALL of their data ` +
+                                    `(login, profile, bots, activity)?\n\nThis cannot be undone.`);
+                                if (!ok) return;
+                                del.disabled = true;
+                                del.textContent = 'Deleting…';
+                                const { error: delErr } = await supabase.rpc('admin_delete_user', { p_user_id: u.user_id });
+                                if (delErr) {
+                                    del.disabled = false;
+                                    del.textContent = 'Delete';
+                                    updateStatus('Delete failed: ' + (delErr.message || 'unknown error'));
+                                    return;
+                                }
+                                row.remove();
+                                count = Math.max(0, count - 1);
+                                title.textContent = `Registered Profiles (${count})`;
+                                updateStatus(`Deleted "${u.username}"`);
+                            };
+                        }
+
+                        row.appendChild(info);
+                        row.appendChild(del);
+                        list.appendChild(row);
+                    });
+
+                    if (!rows.length) list.textContent = 'No profiles found.';
+                }
+
+                load();
+            }
+
             function buildMenu() {
                 if (btn) return;
 
@@ -6452,6 +6599,7 @@ document.getElementById('undo-move').onclick = function() {
                 menu.appendChild(makeItem('Joytone Sequencer (Shift+J+T)', () => {
                     if (window.JoytoneBridge && typeof window.JoytoneBridge.togglePopup === 'function') window.JoytoneBridge.togglePopup();
                 }));
+                menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
 
                 btn.onclick = (e) => {
                     e.stopPropagation();
