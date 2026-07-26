@@ -6,8 +6,10 @@
 //   Called from the "👤 Profile" button in the auth bar (index.html).
 // ============================================================
 
-/** Toggle the profile panel open / closed */
-function gami_openPanel() {
+/** Toggle the profile panel open / closed, optionally landing on a given tab
+ *  (defaults to 'profile'). Only ever renders once per open — no double
+ *  fetch from opening on 'profile' and immediately re-switching. */
+function gami_openPanel(tab = 'profile') {
     const existing = document.getElementById('gami-panel');
     if (existing) { existing.remove(); return; }
     if (!window.gami?.userId) return;
@@ -22,16 +24,16 @@ function gami_openPanel() {
                 <button class="gami-close" aria-label="Close" onclick="document.getElementById('gami-panel').remove()">×</button>
             </div>
             <div class="gami-tabs" role="tablist">
-                <button class="gami-tab active" role="tab" onclick="gami_switchTab('profile')">Stats</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('cosmetics')">Colours</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('emojis')">Emojis</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('badges')">Badges</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('shop')">Shop</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('stable')">Stable</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('leaderboard')">Board</button>
-                <button class="gami-tab"        role="tab" onclick="gami_switchTab('settings')">Settings</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('profile')">Stats</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('cosmetics')">Colours</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('emojis')">Emojis</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('badges')">Badges</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('shop')">Shop</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('stable')">Stable</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('leaderboard')">Board</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('settings')">Settings</button>
             </div>
-            <div id="gami-content" class="gami-content">
+            <div id="gami-content" class="gami-content pp-fresh-open">
                 <div class="gami-loading">Loading…</div>
             </div>
         </div>
@@ -42,7 +44,7 @@ function gami_openPanel() {
     });
 
     document.body.appendChild(overlay);
-    gami_switchTab('profile');
+    gami_switchTab(tab);
 }
 
 /** Open the panel directly on the Settings tab (usable from in-game HUD) */
@@ -66,9 +68,7 @@ function gami_openPanelOnTab(tab) {
         }
         return;
     }
-    // gami_openPanel() ends on 'profile'; immediately switch to the target tab
-    gami_openPanel();
-    gami_switchTab(tab);
+    gami_openPanel(tab);
 }
 
 /** Switch the active tab and load its content */
@@ -96,6 +96,11 @@ async function gami_switchTab(tab) {
         console.error('[gami-ui] render error:', err);
         content.innerHTML = '<div class="gami-loading">Failed to load. Please try again.</div>';
     }
+
+    // The fresh-open unfold + staggered reveal (see paper-ui-profile.css)
+    // should only ever play once, for the tab gami_openPanel() lands on
+    // when the modal is first created — not on every later tab click.
+    content.classList.remove('pp-fresh-open');
 }
 
 // ── Profile tab ──────────────────────────────────────────────

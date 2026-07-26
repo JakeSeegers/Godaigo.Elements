@@ -44,17 +44,22 @@
   /* base padding (20px) already comes from styles.css .gami-content; the
      parchment border makes that read as generous inset, no change needed */
 
-  /* Two-stage open, LITERALLY reproduced from the pack's own animation data
-     (art-source/paper-ui-menus/Aseprite/5 Settings Menu v1.3.aseprite,
-     "Pause Menu > Base" layer, frames 13-23 — see
-     docs/paper-ui-design-system.md "System 1"), not a guessed curve. Only
-     width/x-position animate in the source; real duration 1000ms (11
-     frames @ 100ms). Fires every time a tab is (re)rendered, since
-     gami_switchTab rebuilds #gami-content's innerHTML each time — so
-     switching tabs now replays the same unfold on every tab, not just
-     Settings. */
-  animation: pp-panel-unfold 1000ms steps(1, jump-end) both;
   transform-origin: left center;
+}
+
+/* Two-stage open, LITERALLY reproduced from the pack's own animation data
+   (art-source/paper-ui-menus/Aseprite/5 Settings Menu v1.3.aseprite,
+   "Pause Menu > Base" layer, frames 13-23 — see
+   docs/paper-ui-design-system.md "System 1"), not a guessed curve. Only
+   width/x-position animate in the source; real duration 1000ms (11 frames
+   @ 100ms). Gated to .pp-fresh-open, which gamification-ui.js adds only
+   when gami_openPanel() first builds the modal — every subsequent
+   gami_switchTab() call (clicking between tabs on an already-open panel)
+   does NOT get this class, so the frame doesn't re-unfold and rows don't
+   wait out the same 1000ms+ stagger on every click (previously it did,
+   which is what made tab switches feel like a slow reload each time). */
+#gami-content.pp-fresh-open {
+  animation: pp-panel-unfold 1000ms steps(1, jump-end) both;
 }
 
 /* Ornate corner flourishes (piece_54 outline frame) overlaid on top of the
@@ -99,30 +104,33 @@
   100%    { opacity: 1; width: 89.71%; transform: translateX(7.84%); }       /* f23 x=16/204 (settled) */
 }
 
-/* Content reveal, stage 2: each direct child of #gami-content fades/slides
-   in AFTER the frame's real 1000ms unfold, staggered ~35ms apart — the
-   "rows populate in after the frame pops open" look from the reference,
-   now universal to every tab's own top-level rows/sections/grids (this
-   stagger pattern is ours, not from the source file; only its start time
-   is keyed to the real unfold duration above). */
+/* Content reveal, default: a quick, un-delayed fade for ordinary tab
+   switches (panel already open, frame already unfolded — content should
+   feel instant, not like a fresh load). */
 #gami-content > * {
   opacity: 0;
-  animation: pp-row-in 260ms ease-out both;
+  animation: pp-row-in 120ms ease-out both;
 }
-#gami-content > *:nth-child(1)  { animation-delay: 1000ms; }
-#gami-content > *:nth-child(2)  { animation-delay: 1035ms; }
-#gami-content > *:nth-child(3)  { animation-delay: 1070ms; }
-#gami-content > *:nth-child(4)  { animation-delay: 1105ms; }
-#gami-content > *:nth-child(5)  { animation-delay: 1140ms; }
-#gami-content > *:nth-child(6)  { animation-delay: 1175ms; }
-#gami-content > *:nth-child(7)  { animation-delay: 1210ms; }
-#gami-content > *:nth-child(8)  { animation-delay: 1245ms; }
-#gami-content > *:nth-child(9)  { animation-delay: 1280ms; }
-#gami-content > *:nth-child(10) { animation-delay: 1315ms; }
-#gami-content > *:nth-child(11) { animation-delay: 1350ms; }
-#gami-content > *:nth-child(12) { animation-delay: 1385ms; }
-#gami-content > *:nth-child(13) { animation-delay: 1420ms; }
-#gami-content > *:nth-child(n+14) { animation-delay: 1455ms; } /* safety net */
+
+/* Content reveal, stage 2 (fresh open only): each direct child fades/slides
+   in AFTER the frame's real 1000ms unfold, staggered ~35ms apart — the
+   "rows populate in after the frame pops open" look from the reference.
+   Only applies the one time the modal is actually opening (.pp-fresh-open),
+   not on every subsequent tab click. */
+#gami-content.pp-fresh-open > *:nth-child(1)  { animation-delay: 1000ms; }
+#gami-content.pp-fresh-open > *:nth-child(2)  { animation-delay: 1035ms; }
+#gami-content.pp-fresh-open > *:nth-child(3)  { animation-delay: 1070ms; }
+#gami-content.pp-fresh-open > *:nth-child(4)  { animation-delay: 1105ms; }
+#gami-content.pp-fresh-open > *:nth-child(5)  { animation-delay: 1140ms; }
+#gami-content.pp-fresh-open > *:nth-child(6)  { animation-delay: 1175ms; }
+#gami-content.pp-fresh-open > *:nth-child(7)  { animation-delay: 1210ms; }
+#gami-content.pp-fresh-open > *:nth-child(8)  { animation-delay: 1245ms; }
+#gami-content.pp-fresh-open > *:nth-child(9)  { animation-delay: 1280ms; }
+#gami-content.pp-fresh-open > *:nth-child(10) { animation-delay: 1315ms; }
+#gami-content.pp-fresh-open > *:nth-child(11) { animation-delay: 1350ms; }
+#gami-content.pp-fresh-open > *:nth-child(12) { animation-delay: 1385ms; }
+#gami-content.pp-fresh-open > *:nth-child(13) { animation-delay: 1420ms; }
+#gami-content.pp-fresh-open > *:nth-child(n+14) { animation-delay: 1455ms; } /* safety net */
 
 @keyframes pp-row-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -134,7 +142,7 @@
 .gami-loading { opacity: 1 !important; animation: none !important; color: var(--pp-ink-soft) !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  #gami-content,
+  #gami-content.pp-fresh-open,
   #gami-content > * {
     animation: none !important;
     opacity: 1 !important;

@@ -1055,13 +1055,12 @@
                 return;
             }
             readyButton.style.display = '';
+            readyButton.classList.toggle('is-ready', isReady);
             if (isReady) {
                 readyButton.textContent = '✓ Ready';
-                readyButton.style.background = '#4CAF50';
                 readyButton.title = 'Click to cancel ready';
             } else {
                 readyButton.textContent = 'Not Ready';
-                readyButton.style.background = '#f44336';
                 readyButton.title = 'Click to mark yourself ready';
             }
         }
@@ -1317,26 +1316,26 @@
 
                 const container = document.getElementById('players-container');
                 if (!players || players.length === 0) {
-                    container.innerHTML = '<p style="color: #999; font-style: italic;">No players yet...</p>';
+                    container.innerHTML = '<p style="font-style: italic;">No players yet...</p>';
                     return;
                 }
 
                 container.innerHTML = players.map((p, index) => {
                     const isMe = p.id === myPlayerId;
                     const readyIcon = p.is_ready ? '✓' : '○';
-                    const readyColor = p.is_ready ? '#4CAF50' : '#999';
-                    const meLabel = isMe ? ' <span style="color: #ffd700;">(You)</span>' : '';
+                    const readyClass = p.is_ready ? 'pp-player-ready-yes' : 'pp-player-ready-no';
+                    const meLabel = isMe ? ' <span class="pp-player-you">(You)</span>' : '';
                     // First player in the list (index 0) is the host
-                    const hostLabel = index === 0 ? ' <span style="color: #FF9800;">Host</span>' : '';
+                    const hostLabel = index === 0 ? ' <span class="pp-player-host">Host</span>' : '';
                     // Apply local player's equipped name colour; other players keep default
                     const nameStyle = isMe
                         ? (window.cosmeticsSystem?.getNameColorStyle() || '')
                         : '';
 
                     return `
-                        <div style="padding: 10px; margin: 5px 0; background: ${isMe ? '#444' : '#3a3a3a'}; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+                        <div class="pp-player-row${isMe ? ' is-me' : ''}">
                             <span style="${nameStyle}">${p.username}${hostLabel}${meLabel}</span>
-                            <span style="color: ${readyColor}; font-size: 20px;">${readyIcon}</span>
+                            <span class="${readyClass}" style="font-size: 20px;">${readyIcon}</span>
                         </div>
                     `;
                 }).join('');

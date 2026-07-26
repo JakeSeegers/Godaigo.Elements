@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/paper-ui-profile.css">
+    <link rel="stylesheet" href="css/paper-ui-lobby.css">
 </head>
 <body>
     <!-- ============================================
@@ -58,21 +59,20 @@
     <div id="multiplayer-lobby" style="display:none;">
 
         <!-- Auth bar: shows signed-in username + sign-out button -->
-        <div id="auth-bar" style="display:none; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 12px; background:#333; border-radius:5px;">
-            <span id="auth-bar-name" style="color:#d9b08c; font-size:28px;"></span>
+        <div id="auth-bar" style="display:none; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 12px;">
+            <span id="auth-bar-name" style="font-size:28px;"></span>
             <div style="display:flex; gap:8px;">
-                <button onclick="gami_openPanel()" style="padding:5px 14px; font-size:14px; background:#555; color:#d9b08c; border:1px solid #888; border-radius:4px; cursor:pointer;">Profile</button>
-                <button onclick="gami_openPanelOnTab('shop')" style="padding:5px 14px; font-size:14px; background:#555; color:#d9b08c; border:1px solid #888; border-radius:4px; cursor:pointer;">Shop</button>
-                <button onclick="gami_openPanelOnTab('stable')" style="padding:5px 14px; font-size:14px; background:#555; color:#d9b08c; border:1px solid #888; border-radius:4px; cursor:pointer;">Stable</button>
-                <button onclick="authSignOut()" style="padding:5px 14px; font-size:14px; background:#555; color:#eee; border:1px solid #888; border-radius:4px; cursor:pointer;">Sign Out</button>
+                <button onclick="gami_openPanel()" style="padding:5px 14px;">Profile</button>
+                <button onclick="gami_openPanelOnTab('shop')" style="padding:5px 14px;">Shop</button>
+                <button onclick="gami_openPanelOnTab('stable')" style="padding:5px 14px;">Stable</button>
+                <button onclick="authSignOut()" style="padding:5px 14px;">Sign Out</button>
             </div>
         </div>
 
         <!-- Header row: title + hidden reset button -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h2 style="color: #d9b08c; margin: 0;">Multiplayer Lobby</h2>
-            <button id="reset-lobby-btn" onclick="resetLobby()"
-                    style="display: none; padding: 8px 15px; font-size: 14px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            <h2 style="margin: 0;">Multiplayer Lobby</h2>
+            <button id="reset-lobby-btn" onclick="resetLobby()" style="display: none; padding: 8px 15px;">
                 Reset Lobby
             </button>
         </div>
@@ -90,19 +90,17 @@
 
                     <!-- Room Name input -->
                     <div id="room-name-row" style="margin-bottom: 12px;">
-                        <label style="color: #999; font-size: 14px; display: block; margin-bottom: 4px;">Room Name</label>
+                        <label style="font-size: 14px; display: block; margin-bottom: 4px;">Room Name</label>
                         <input type="text" id="room-name-input" placeholder="" maxlength="30"
-                               style="padding: 10px; font-size: 15px; width: 100%; box-sizing: border-box; background: #333; color: #eee; border: 2px solid #666; border-radius: 5px;">
+                               style="padding: 10px; font-size: 15px; width: 100%; box-sizing: border-box;">
                     </div>
 
                     <!-- Host / create buttons -->
                     <div id="room-action-buttons" style="display: flex; gap: 10px; margin-bottom: 12px;">
-                        <button id="host-public-btn" onclick="hostPublicGame()"
-                                style="flex:1; padding: 10px; font-size: 15px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                        <button id="host-public-btn" onclick="hostPublicGame()" style="flex:1; padding: 10px; font-size: 15px;">
                             Host Public Game
                         </button>
-                        <button id="create-private-btn" onclick="createPrivateRoom()"
-                                style="flex:1; padding: 10px; font-size: 15px; background: #7B5EA7; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                        <button id="create-private-btn" onclick="createPrivateRoom()" style="flex:1; padding: 10px; font-size: 15px;">
                             Create Private Room
                         </button>
                     </div>
@@ -111,9 +109,8 @@
                     <div id="join-code-row" style="display: flex; gap: 8px; margin-bottom: 16px;">
                         <input type="text" id="join-code-input" placeholder="Room code (e.g. ABCDEF)" maxlength="6"
                                oninput="this.value = this.value.toUpperCase()"
-                               style="flex:1; padding: 10px; font-size: 16px; font-family: monospace; letter-spacing: 3px; text-transform: uppercase; background: #333; color: #eee; border: 2px solid #666; border-radius: 5px;">
-                        <button id="join-code-btn" onclick="joinByCode()"
-                                style="padding: 10px 18px; font-size: 15px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                               style="flex:1; padding: 10px; font-size: 16px; font-family: monospace; letter-spacing: 3px; text-transform: uppercase;">
+                        <button id="join-code-btn" onclick="joinByCode()" style="padding: 10px 18px; font-size: 15px;">
                             Join
                         </button>
                     </div>
@@ -121,31 +118,28 @@
                     <!-- Public game list -->
                     <div id="public-games-section" style="margin-bottom: 10px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <h3 style="margin: 0; color: #d9b08c; font-size: 17px;">Open Public Games</h3>
-                            <button id="refresh-browser-btn" onclick="refreshGameBrowser()"
-                                    style="padding: 5px 14px; font-size: 14px; background: #444; color: #eee; border: 1px solid #666; border-radius: 4px; cursor: pointer;">
+                            <h3 style="margin: 0; font-size: 17px;">Open Public Games</h3>
+                            <button id="refresh-browser-btn" onclick="refreshGameBrowser()" style="padding: 5px 14px; font-size: 14px;">
                                 Refresh
                             </button>
                         </div>
-                        <div id="public-games-list"
-                             style="background: #1a1a1a; border-radius: 5px; min-height: 80px; max-height: 220px; overflow-y: auto; padding: 4px;">
-                            <p style="color: #ccc; font-style: italic; text-align: center; padding: 20px 0; margin: 0;">Loading...</p>
+                        <div id="public-games-list" style="min-height: 80px; max-height: 220px; overflow-y: auto; padding: 4px;">
+                            <p style="font-style: italic; text-align: center; padding: 20px 0; margin: 0;">Loading...</p>
                         </div>
                     </div>
 
                     <!-- Browser status / error line -->
-                    <div id="browser-status" style="color: #ff6b6b; font-size: 14px; min-height: 18px; margin-top: 4px;"></div>
+                    <div id="browser-status" style="font-size: 14px; min-height: 18px; margin-top: 4px;"></div>
 
                 </div><!-- end left column -->
 
                 <!-- Right column: leaderboard -->
                 <div style="width: 320px; flex-shrink: 0;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <h3 style="margin: 0; color: #d9b08c;">Leaderboard</h3>
+                        <h3 style="margin: 0;">Leaderboard</h3>
                         <button onclick="window.loadMainLeaderboard()" title="Refresh">&#8635;</button>
                     </div>
-                    <div id="main-leaderboard-body"
-                         style="background: #1a1a1a; border: 2px solid #333; border-radius: 2px; overflow-y: auto; max-height: 360px; padding: 4px;">
+                    <div id="main-leaderboard-body" style="overflow-y: auto; max-height: 360px; padding: 4px;">
                         <div class="gami-loading" style="padding: 12px;">Sign in to view rankings.</div>
                     </div>
                 </div><!-- end right column -->
@@ -158,54 +152,50 @@
 
             <!-- Room name header (static once set) -->
             <div id="room-name-display" style="margin-bottom: 10px; padding: 6px 0;">
-                <span style="color: #999; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Room</span>
-                <span id="room-name-value" style="color: #d9b08c; font-size: 20px; font-weight: bold; margin-left: 10px;"></span>
+                <span style="font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Room</span>
+                <span id="room-name-value" style="font-size: 20px; font-weight: bold; margin-left: 10px;"></span>
             </div>
 
             <!-- Room info bar -->
-            <div id="room-info-bar" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #333; padding: 10px 14px; border-radius: 5px; margin-bottom: 14px;">
+            <div id="room-info-bar" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 14px;">
                 <!-- Private room code (hidden for public games) -->
                 <div id="room-code-display" style="display: none; flex-shrink: 0;">
-                    <span style="color: #999; font-size: 14px; display: block; margin-bottom: 2px;">Room Code</span>
+                    <span style="font-size: 14px; display: block; margin-bottom: 2px;">Room Code</span>
                     <span id="room-code-value" onclick="copyRoomCode()"
-                          style="font-family: monospace; font-size: 22px; font-weight: bold; color: #d9b08c; letter-spacing: 4px; cursor: pointer;" title="Click to copy">
+                          style="font-family: monospace; font-size: 22px; font-weight: bold; letter-spacing: 4px; cursor: pointer;" title="Click to copy">
                         ——————
                     </span>
                 </div>
                 <div style="flex:1; min-width: 60px;">
-                    <span style="color: #999; font-size: 14px; display: block;">Players</span>
-                    <span id="room-player-count" style="color: #eee; font-size: 18px; font-weight: bold;">0 / 5</span>
+                    <span style="font-size: 14px; display: block;">Players</span>
+                    <span id="room-player-count" style="font-size: 18px; font-weight: bold;">0 / 5</span>
                 </div>
-                <span id="room-type-badge"
-                      style="padding: 3px 10px; font-size: 13px; font-weight: bold; border-radius: 20px; background: #444; color: #aaa; letter-spacing: 1px;">
+                <span id="room-type-badge" style="padding: 3px 10px; font-size: 13px; font-weight: bold; border-radius: 20px; letter-spacing: 1px;">
                     PUBLIC
                 </span>
-                <button id="leave-room-btn" onclick="leaveRoom()"
-                        style="padding: 7px 16px; font-size: 14px; background: #c0392b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                <button id="leave-room-btn" onclick="leaveRoom()" style="padding: 7px 16px; font-size: 14px;">
                     Leave Room
                 </button>
             </div>
 
             <!-- Player List -->
-            <div id="player-list" style="background: #333; padding: 10px 14px; border-radius: 5px; margin-bottom: 8px; min-height: 50px;">
-                <div style="color: #d9b08c; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Players in Room</div>
-                <div id="players-container" style="color: #eee;"></div>
+            <div id="player-list" style="padding: 10px 14px; margin-bottom: 8px; min-height: 50px;">
+                <div style="font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Players in Room</div>
+                <div id="players-container"></div>
             </div>
 
             <!-- Ready Button (hidden until joined; shown by joinRoomAsPlayer) -->
             <div id="ready-controls" style="display: none; text-align: center;">
-                <button id="ready-button" onclick="toggleReady()"
-                        title="Click to mark yourself ready"
-                        style="padding: 8px 28px; font-size: 16px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                <button id="ready-button" onclick="toggleReady()" title="Click to mark yourself ready" style="padding: 8px 28px; font-size: 16px;">
                     Not Ready
                 </button>
 
                 <!-- Host-only Settings & Start Game -->
-                <div id="host-settings" style="display: none; margin-top: 10px; background: #333; padding: 10px 14px; border-radius: 5px; text-align: left;">
+                <div id="host-settings" style="display: none; margin-top: 10px; padding: 10px 14px; text-align: left;">
                     <!-- Turn limit + kick on one compact row -->
                     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap;">
-                        <label style="color: #eee; white-space: nowrap; font-size: 14px;">Turn limit:</label>
-                        <select id="timeout-setting" style="padding: 5px 8px; background: #444; color: #eee; border: 1px solid #666; border-radius: 5px; font-size: 14px;">
+                        <label style="white-space: nowrap; font-size: 14px;">Turn limit:</label>
+                        <select id="timeout-setting" style="padding: 5px 8px; font-size: 14px;">
                             <option value="0" selected>Disabled</option>
                             <option value="30">30 sec</option>
                             <option value="60">1 min</option>
@@ -213,14 +203,13 @@
                             <option value="180">3 min</option>
                             <option value="300">5 min</option>
                         </select>
-                        <label style="color: #eee; display: flex; align-items: center; gap: 6px; font-size: 14px;">
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 14px;">
                             <input type="checkbox" id="kick-on-timeout" checked>
                             Kick on timeout
                         </label>
                     </div>
 
-                    <button id="host-start-button" onclick="hostStartGame()"
-                            style="padding: 10px 24px; font-size: 16px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
+                    <button id="host-start-button" onclick="hostStartGame()" style="padding: 10px 24px; font-size: 16px; width: 100%;">
                         Start Game
                     </button>
                 </div>
@@ -232,25 +221,25 @@
                     <div style="display: flex; gap: 8px;">
                         <button id="add-bot-button" onclick="addBotPlayer()"
                                 title="Adds a computer player to the room. It counts as a normal player; your browser plays its turns using the current champion weights."
-                                style="flex: 1; padding: 8px 12px; font-size: 15px; background: #607D8B; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                style="flex: 1; padding: 8px 12px; font-size: 15px;">
                             🤖 Add Bot
                         </button>
                         <button id="remove-bot-button" onclick="removeBotPlayer()"
                                 title="Removes the most recently added bot."
-                                style="flex: 1; padding: 8px 12px; font-size: 15px; background: #455A64; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                style="flex: 1; padding: 8px 12px; font-size: 15px;">
                             ➖ Remove Bot
                         </button>
                     </div>
                 </div>
 
-                <p id="lobby-instruction" style="color: #999; margin-top: 8px; font-size: 14px;">
+                <p id="lobby-instruction" style="margin-top: 8px; font-size: 14px;">
                     The host can start the game when 2–5 players have joined
                 </p>
             </div>
         </div>
 
         <!-- Status line (always visible) -->
-        <div id="lobby-status" style="text-align: center; color: #999; margin-top: 15px;"></div>
+        <div id="lobby-status" style="text-align: center; margin-top: 15px;"></div>
     </div>
 
     <!-- Old player selection (hidden, for fallback/testing) -->

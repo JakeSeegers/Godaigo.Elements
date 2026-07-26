@@ -1,0 +1,185 @@
+/* ==========================================================================
+   paper-ui-lobby.css — Paper UI (v1.3) skin for the Multiplayer Lobby
+   (#multiplayer-lobby: auth bar, game browser, leaderboard sidebar, waiting
+   room). Same palette/vars/assets as css/paper-ui-profile.css (the Profile
+   modal) so the lobby you land on before a game and the panel you open
+   during one read as one system, not two.
+
+   Deliberately NOT using the profile modal's 1000ms literal unfold-on-open
+   animation here — the lobby is part of the page flow (always mounted,
+   just shown/hidden), not a toggled overlay, and that animation replaying
+   on every visit was exactly the "screens take too long to start loading"
+   complaint fixed in paper-ui-profile.css. Static frame only.
+   ========================================================================== */
+
+#multiplayer-lobby {
+  background: var(--pp-parch);
+  border-style: solid;
+  border-width: 16px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_37_185x282.png");
+  border-image-slice: 11 fill;
+  border-image-width: 16px;
+  border-image-repeat: stretch;
+  border-radius: 0;
+  box-shadow: none;
+  position: relative;
+}
+#multiplayer-lobby::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  pointer-events: none;
+  border-style: solid;
+  border-width: 26px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_54_226x253.png");
+  border-image-slice: 26;
+  border-image-width: 26px;
+  border-image-repeat: stretch;
+}
+
+#multiplayer-lobby h2,
+#multiplayer-lobby h3 {
+  color: var(--pp-maroon);
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.5);
+}
+
+/* ── Auth bar ─────────────────────────────────────────────────────────── */
+#auth-bar {
+  background: rgba(242, 228, 196, 0.55);
+  border: 1.5px solid rgba(109, 43, 43, 0.5);
+  border-radius: 3px;
+}
+#auth-bar-name { color: var(--pp-ink); }
+
+/* ── Text inputs / select ────────────────────────────────────────────── */
+/* styles.css has a pre-existing #multiplayer-lobby input/select rule with
+   !important (dark terminal look); match it with !important here too so
+   the parchment look actually wins. */
+#multiplayer-lobby input[type="text"],
+#multiplayer-lobby select {
+  background: var(--pp-parch-lt) !important;
+  color: var(--pp-ink) !important;
+  border: 2px solid var(--pp-maroon) !important;
+  border-radius: 3px !important;
+}
+#multiplayer-lobby input[type="text"]::placeholder { color: var(--pp-ink-soft); opacity: 0.8; }
+#multiplayer-lobby label { color: var(--pp-ink-soft); }
+
+/* ── Buttons: reuse the Profile modal's pill treatment ───────────────── */
+/* Font left as-is per site convention (var(--font-terminal) etc.) — only
+   colour/border/background move to the Paper UI look, not typeface. */
+#multiplayer-lobby button:not(.hud-toggle-btn) {
+  position: relative;
+  border-style: solid;
+  border-width: 10px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
+  border-image-slice: 12 fill;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  background: transparent;
+  color: var(--pp-ink);
+  cursor: pointer;
+  box-shadow: none;
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.4);
+  font-size: 12px;
+}
+#multiplayer-lobby button:active { transform: translate(2px, 2px); }
+#multiplayer-lobby button:hover  { filter: brightness(0.97); }
+
+/* Semantic accents kept as a thin ink tint, not a full colour swap, so
+   Ready/Leave/danger actions still read differently at a glance. */
+#create-private-btn,
+#host-public-btn      { color: var(--pp-gold); }
+#join-code-btn,
+#ready-button.is-ready { color: var(--pp-green); }
+#ready-button:not(.is-ready) { color: var(--pp-rust); }
+#leave-room-btn,
+#reset-lobby-btn,
+#remove-bot-button     { color: var(--pp-rust); }
+
+/* ── Public game browser rows ────────────────────────────────────────── */
+#public-games-list {
+  background: rgba(217, 189, 140, 0.35);
+  border: 1.5px solid rgba(109, 43, 43, 0.35);
+  border-radius: 3px;
+}
+.game-room-card {
+  background: rgba(242, 228, 196, 0.55);
+  border: 1.5px solid rgba(109, 43, 43, 0.5);
+  box-shadow: none;
+}
+.game-room-card:hover {
+  border-color: var(--pp-maroon);
+  background: rgba(242, 228, 196, 0.8);
+}
+.game-room-host  { color: var(--pp-ink); }
+.game-room-count { color: var(--pp-ink-soft); }
+.game-room-join-btn {
+  position: relative;
+  border-style: solid;
+  border-width: 7px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
+  border-image-slice: 12 fill;
+  border-image-width: 7px;
+  border-image-repeat: stretch;
+  background: transparent;
+  color: var(--pp-gold);
+  box-shadow: none;
+  font-size: 12px;
+}
+.game-room-join-btn:active { transform: translate(2px, 2px); }
+
+#browser-status { color: var(--pp-rust); }
+#public-games-list p,
+#players-container p { color: var(--pp-ink-soft); }
+
+/* ── Leaderboard sidebar ──────────────────────────────────────────────── */
+#main-leaderboard-body {
+  background: rgba(217, 189, 140, 0.35);
+  border: 1.5px solid rgba(109, 43, 43, 0.35);
+  border-radius: 3px;
+}
+
+/* ── Waiting room ─────────────────────────────────────────────────────── */
+#room-name-value,
+#room-code-value,
+#room-player-count { color: var(--pp-ink); }
+#room-name-display span:first-child,
+#room-info-bar > div > span:first-child { color: var(--pp-ink-soft); }
+
+#room-info-bar,
+#player-list,
+#host-settings {
+  background: rgba(242, 228, 196, 0.55);
+  border: 1.5px solid rgba(109, 43, 43, 0.5);
+  border-radius: 3px;
+}
+#room-type-badge {
+  background: var(--pp-maroon);
+  color: var(--pp-parch-lt);
+}
+#player-list > div:first-child { color: var(--pp-maroon); }
+
+.pp-player-row {
+  padding: 10px;
+  margin: 5px 0;
+  background: rgba(242, 228, 196, 0.55);
+  border: 1.5px solid rgba(109, 43, 43, 0.35);
+  border-radius: 3px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--pp-ink);
+}
+.pp-player-row.is-me { border-color: var(--pp-maroon); background: rgba(242, 228, 196, 0.85); }
+.pp-player-row .pp-player-you  { color: var(--pp-gold); }
+.pp-player-row .pp-player-host { color: var(--pp-rust); }
+.pp-player-row .pp-player-ready-yes { color: var(--pp-green); }
+.pp-player-row .pp-player-ready-no  { color: var(--pp-locked); }
+
+#lobby-status,
+#lobby-instruction { color: var(--pp-ink-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  #multiplayer-lobby button { transition: none; }
+}
