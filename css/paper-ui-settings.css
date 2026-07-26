@@ -1,0 +1,97 @@
+/* ==========================================================================
+   paper-ui-settings.css — Paper UI (v1.3) skin for the Settings tab ONLY.
+   ==========================================================================
+   First real integration of the Paper UI v1.3 menu pack. Everything here is
+   scoped under `.gami-settings-list` (the Settings tab's content wrapper in
+   gamification-ui.js `_renderSettings`), so no other tab/panel is touched.
+   Uses the sliced pieces in assets/paper-ui-menus/pieces/:
+     - piece_37 (filled parchment frame) as the panel background (border-image)
+     - piece_52 (small tan button)        as the ON/OFF toggle skin
+   The rest is parchment recolouring of the existing dark theme.
+   Loaded after css/styles.css so these rules win by source order + specificity.
+   Remove the <link> in index.html to fully revert.
+   ========================================================================== */
+
+:root {
+  --pp-parch:    #e7cfa1;   /* parchment fill */
+  --pp-parch-lt: #f2e4c4;   /* lighter parchment (keycaps) */
+  --pp-maroon:   #6d2b2b;   /* dark maroon border/ink */
+  --pp-ink:      #3c2c1c;   /* body text */
+  --pp-ink-soft: #6a563c;   /* secondary text */
+}
+
+/* The whole settings list becomes a framed parchment panel. border-image
+   'fill' paints the sprite's centre as the panel background; the 9-slice
+   edges give the maroon paper border. */
+.gami-settings-list {
+  border-style: solid;
+  border-width: 16px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_37_185x282.png");
+  border-image-slice: 11 fill;
+  border-image-width: 16px;
+  border-image-repeat: stretch;
+  padding: 14px 18px;
+  gap: 10px;
+}
+
+/* Section headers (— Audio —, — Display —, …) as centred maroon labels. */
+.gami-settings-list .gami-settings-section-label {
+  color: var(--pp-maroon);
+  font-weight: bold;
+  font-size: 18px;
+  text-align: center;
+  letter-spacing: 2px;
+  padding: 10px 0 2px;
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.5);
+}
+
+/* Each setting row: a translucent parchment card on the panel. */
+.gami-settings-list .gami-settings-row {
+  background: rgba(242, 228, 196, 0.55);
+  border: 1.5px solid rgba(109, 43, 43, 0.5);
+  border-radius: 3px;
+}
+.gami-settings-list .gami-settings-name { color: var(--pp-ink); }
+.gami-settings-list .gami-settings-desc { color: var(--pp-ink-soft); }
+
+/* ON/OFF toggles skinned with a paper button sprite (9-slice). Overrides the
+   dark theme's .on/.off backgrounds; state is now shown by ink colour. */
+.gami-settings-list .gami-toggle,
+.gami-settings-list .gami-toggle.on,
+.gami-settings-list .gami-toggle.off {
+  border-style: solid;
+  border-width: 8px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_52_59x22.png");
+  border-image-slice: 7 fill;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
+  background: transparent;
+  box-shadow: none;
+  color: var(--pp-ink);
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.4);
+}
+.gami-settings-list .gami-toggle.on  { color: #2f5d2f; }   /* green-ink = on  */
+.gami-settings-list .gami-toggle.off { color: #9a4a2a; }   /* rust-ink  = off */
+.gami-settings-list .gami-toggle:active { transform: translate(2px, 2px); }
+
+/* Volume slider tinted to the paper palette. */
+.gami-settings-list input[type="range"] {
+  accent-color: var(--pp-maroon) !important;
+}
+
+/* Keyboard guide groups + keycaps in parchment tones. */
+.gami-settings-list .gami-keybind-group {
+  background: rgba(231, 207, 161, 0.42);
+  border: 1px solid rgba(109, 43, 43, 0.4);
+}
+.gami-settings-list .gami-keybind-group-title {
+  color: var(--pp-maroon);
+  border-bottom-color: rgba(109, 43, 43, 0.35);
+}
+.gami-settings-list .gami-keybind-row { color: var(--pp-ink); }
+.gami-settings-list .gami-keybind-row kbd {
+  background: var(--pp-parch-lt);
+  border: 1px solid var(--pp-maroon);
+  border-bottom: 2px solid var(--pp-maroon);
+  color: var(--pp-ink);
+}
