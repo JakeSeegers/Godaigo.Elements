@@ -1,0 +1,188 @@
+/* ==========================================================================
+   paper-ui.css — STARTER integration stylesheet for assets/paper-ui/
+   ==========================================================================
+   Status: NOT wired into the game. Not imported by index.html or any other
+   stylesheet. This is a first draft of candidate classes for future use.
+
+   Reference: assets/paper-ui/INDEX.md (catalog), paper-ui-preview.html
+   (repo root — visual gallery of every sprite).
+
+   image-rendering note: unlike the game's existing pixel-art hex tiles,
+   these Paper UI sprites are soft painterly/paper-textured art (gradients,
+   torn edges, subtle shading) — NOT crisp pixel art. Default browser
+   smoothing (`image-rendering: auto`, the CSS default) is the correct
+   choice here. Do NOT apply `image-rendering: pixelated` to these sprites
+   the way the codebase might for hex-tile or icon pixel art — it will make
+   the paper texture look chunky and wrong.
+   ========================================================================== */
+
+
+/* --------------------------------------------------------------------------
+   1. BUTTONS — source: assets/paper-ui/Content/4 Buttons/*.png (80x32 native)
+   --------------------------------------------------------------------------
+   Each sprite is a composite: a decorative round "gem/rivet" cap on the
+   left, plain parchment body in the middle, and a green chevron cap on the
+   right. That asymmetric, detailed-at-both-ends design is exactly the case
+   9-slice scaling struggles with — the corner/edge tiles are not simple
+   repeating borders, they contain unique art (the gem, the chevron).
+
+   TWO variants are provided; pick based on how the button is sized:
+
+   .paper-btn           — CSS border-image 9-slice. Works well when the
+                           button's rendered size stays close to native
+                           80x32 (small deltas). At larger scale-ups the
+                           slice regions still hold their fixed pixel
+                           widths (see border-image-width below) so the caps
+                           stay a fixed size while the middle stretches —
+                           this is usually the better choice for a button
+                           whose WIDTH varies (e.g. label-driven width) but
+                           whose HEIGHT stays ~32px.
+
+   .paper-btn--fixed     — Sprite used as a plain stretched background
+                           (background-size: 100% 100%). Distorts the gem
+                           and chevron proportionally with the whole button,
+                           which looks wrong if the button's aspect ratio
+                           strays far from 80:32 (e.g. a tall square button).
+                           Use this ONLY when the button is rendered at (or
+                           very near) native 80x32, or a uniform multiple of
+                           it (160x64, etc.) — then there's no distortion at
+                           all and this is simpler/cheaper than 9-slice.
+
+   Swap the sprite index (0.png..9.png) for different button color/decor
+   variants — see paper-ui-preview.html to browse all 10.
+   -------------------------------------------------------------------------- */
+
+.paper-btn {
+  /* 9-slice: keep ~14px caps fixed, stretch the ~52px middle */
+  border-style: solid;
+  border-width: 14px;
+  border-image-source: url("../assets/paper-ui/Content/4 Buttons/0.png");
+  border-image-slice: 14 fill;
+  border-image-width: 14px;
+  border-image-repeat: stretch;
+  background: transparent;
+  min-width: 80px;
+  min-height: 32px;
+  padding: 0 12px;
+  color: #3d2f1f;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.paper-btn--fixed {
+  /* Stretched whole-sprite background — no slicing, no distortion of caps
+     as long as the element stays at native 80x32 (or a uniform multiple). */
+  background-image: url("../assets/paper-ui/Content/4 Buttons/0.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  border: none;
+  width: 80px;
+  height: 32px;
+  color: #3d2f1f;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Hand-built 9-slice alternative using the pre-cut pieces in
+   Content/4 Buttons/Sliced/ (16x16 / 32x32 corner+edge+center tiles) is
+   also possible for pixel-perfect corners, but requires picking the right
+   3x3 tile set per button skin — left as a follow-up, not drafted here. */
+
+
+/* --------------------------------------------------------------------------
+   2. BANNERS / HEADERS — source:
+   assets/paper-ui/Content/10 Banners & Headers/Plain/1.png (576x176 native,
+   the largest plain banner — good for a panel title strip or section header)
+   --------------------------------------------------------------------------
+   Stretched background (background-size: 100% 100%) rather than 9-slice:
+   banners in this pack read fine stretched since the parchment texture is
+   fairly uniform edge-to-edge (unlike buttons' gem/chevron caps). Padding
+   keeps text off the decorative border art.
+
+   Swap in a "Cutout/" banner (torn-paper edge) for a more dramatic look:
+   assets/paper-ui/Content/10 Banners & Headers/Cutout/1.png
+   -------------------------------------------------------------------------- */
+
+.paper-banner {
+  background-image: url("../assets/paper-ui/Content/10 Banners & Headers/Plain/1.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+  padding: 28px 64px;      /* keeps text clear of the banner's painted border */
+  min-height: 176px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #3d2f1f;
+  box-sizing: border-box;
+}
+
+/* Smaller banner variant for a compact panel title (112x192 asset, used
+   sideways/short) — adjust padding/min-height to taste before using. */
+.paper-banner--compact {
+  background-image: url("../assets/paper-ui/Content/10 Banners & Headers/Plain/5.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+  padding: 12px 24px;
+  min-height: 80px;
+  box-sizing: border-box;
+}
+
+
+/* --------------------------------------------------------------------------
+   3. HOLDERS (avatar / portrait / icon frames) — source:
+   assets/paper-ui/Content/5 Holders/1.png (224x224 native circular frame)
+   --------------------------------------------------------------------------
+   Used as a background with a centered content slot (an <img> or emoji/
+   initial) layered on top via a child element. Stretched at 100% 100% —
+   Holders are roughly square/circular so uniform scaling (equal width and
+   height) avoids visible distortion; do NOT stretch this non-uniformly.
+   -------------------------------------------------------------------------- */
+
+.paper-holder {
+  position: relative;
+  width: 112px;             /* scale down 2x from native 224x224 by default */
+  height: 112px;             /* keep width == height to avoid oval distortion */
+  background-image: url("../assets/paper-ui/Content/5 Holders/1.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Content slot sized to sit inside the frame's inner ring, not behind the
+   painted border. Tune this % once the frame's actual inner-circle size is
+   confirmed visually (see paper-ui-preview.html). */
+.paper-holder__content {
+  width: 62%;
+  height: 62%;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Smaller holder variant using the 112x112 asset (sharper at small sizes
+   than downscaling the 224x224 one, if a compact frame is needed). */
+.paper-holder--small {
+  width: 56px;
+  height: 56px;
+  background-image: url("../assets/paper-ui/Content/5 Holders/2.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+
+/* --------------------------------------------------------------------------
+   NOT INCLUDED HERE (candidates for a future pass, not drafted):
+   - Progress Bars (Content/3 Progress Bars/*) for AP/HP — needs the
+     fill-vs-track pieces identified visually first.
+   - Icons (Content/2 Icons/*) as a sprite-position utility class set.
+   - Highlighter (Content/6 Highlighter/*) as a hover/selection overlay.
+   None of the above are referenced by game CSS/JS; this file is a design
+   sketch only.
+   ========================================================================== */

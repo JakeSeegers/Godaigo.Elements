@@ -1,0 +1,1212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Paper UI Pack — Sprite Preview</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --parchment: #f3e6c8;
+    --parchment-dark: #e4d2a6;
+    --ink: #3d2f1f;
+    --accent: #4a7a3f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    background: var(--parchment);
+    color: var(--ink);
+  }
+  header {
+    background: var(--parchment-dark);
+    padding: 1.5rem 2rem;
+    border-bottom: 4px solid var(--accent);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
+  header p { margin: 0; font-size: .85rem; opacity: .8; }
+  nav {
+    margin-top: .75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  nav a {
+    font-size: .78rem;
+    color: var(--ink);
+    background: var(--parchment);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: .2rem .5rem;
+    text-decoration: none;
+  }
+  nav a:hover { background: var(--accent); color: var(--parchment); }
+  main { padding: 1rem 2rem 4rem; max-width: 1400px; margin: 0 auto; }
+  section { margin-bottom: 3rem; }
+  h2 {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: .3rem;
+    font-size: 1.2rem;
+  }
+  .count { font-size: .75rem; font-weight: normal; opacity: .65; margin-left: .5rem; }
+  .path { font-family: monospace; font-size: .75rem; opacity: .7; margin: .25rem 0 1rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 1rem;
+  }
+  .card {
+    margin: 0;
+    background: var(--parchment-dark);
+    border: 1px solid #c9b285;
+    border-radius: 6px;
+    padding: .5rem;
+    text-align: center;
+  }
+  .checker {
+    background-image:
+      linear-gradient(45deg, #ccc 25%, transparent 25%),
+      linear-gradient(-45deg, #ccc 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #ccc 75%),
+      linear-gradient(-45deg, transparent 75%, #ccc 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    background-color: #fff;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 96px;
+    padding: 6px;
+  }
+  .checker img {
+    max-width: 100%;
+    max-height: 140px;
+    image-rendering: auto;
+  }
+  figcaption {
+    font-size: .68rem;
+    margin-top: .4rem;
+    font-family: monospace;
+    word-break: break-all;
+  }
+  .dim { opacity: .6; }
+  footer {
+    text-align: center;
+    font-size: .75rem;
+    opacity: .6;
+    padding: 2rem;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Paper UI Pack — Sprite Preview</h1>
+  <p>Self-contained static gallery of assets/paper-ui/Content/. Generated for cataloging — not wired into the game.</p>
+  <nav>
+    <a href="#assets%2Fpaper-ui%2FContent%2F1%20Items">1 Items (27)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F2%20Icons">2 Icons (26)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F3%20Progress%20Bars">3 Progress Bars (15)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F4%20Buttons">4 Buttons (10)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F4%20Buttons%2FSliced">4 Buttons / Sliced (9-slice pieces) (33)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F5%20Holders">5 Holders (25)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F6%20Highlighter">6 Highlighter (8)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F7%20Day%20%26%20Night%20Cycle">7 Day &amp; Night Cycle (static content icons) (16)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F8%20Equipment">8 Equipment (18)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F9%20Stamp%2FStamp%20Mark">9 Stamp / Stamp Mark (1)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F9%20Stamp%2FStamp%2Fidle">9 Stamp / Stamp / idle (1)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F9%20Stamp%2FStamp%2FStamped">9 Stamp / Stamp / Stamped (20)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F10%20Banners%20%26%20Headers%2FPlain">10 Banners &amp; Headers / Plain (20)</a>
+    <a href="#assets%2Fpaper-ui%2FContent%2F10%20Banners%20%26%20Headers%2FCutout">10 Banners &amp; Headers / Cutout (20)</a>
+    <a href="#animations">Animation Samples</a>
+  </nav>
+</header>
+<main>
+    <section id="assets%2Fpaper-ui%2FContent%2F1%20Items">
+      <h2>1 Items <span class="count">27 files</span></h2>
+      <p class="path">assets/paper-ui/Content/1 Items</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/17.png" alt="17.png" loading="lazy"></div>
+          <figcaption>17.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/18.png" alt="18.png" loading="lazy"></div>
+          <figcaption>18.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/19.png" alt="19.png" loading="lazy"></div>
+          <figcaption>19.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/20.png" alt="20.png" loading="lazy"></div>
+          <figcaption>20.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/21.png" alt="21.png" loading="lazy"></div>
+          <figcaption>21.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/22.png" alt="22.png" loading="lazy"></div>
+          <figcaption>22.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/23.png" alt="23.png" loading="lazy"></div>
+          <figcaption>23.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/24.png" alt="24.png" loading="lazy"></div>
+          <figcaption>24.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/25.png" alt="25.png" loading="lazy"></div>
+          <figcaption>25.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/26.png" alt="26.png" loading="lazy"></div>
+          <figcaption>26.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/1%20Items/27.png" alt="27.png" loading="lazy"></div>
+          <figcaption>27.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F2%20Icons">
+      <h2>2 Icons <span class="count">26 files</span></h2>
+      <p class="path">assets/paper-ui/Content/2 Icons</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">112&times;112</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/17.png" alt="17.png" loading="lazy"></div>
+          <figcaption>17.png<br><span class="dim">112&times;112</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/18.png" alt="18.png" loading="lazy"></div>
+          <figcaption>18.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/19.png" alt="19.png" loading="lazy"></div>
+          <figcaption>19.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/20.png" alt="20.png" loading="lazy"></div>
+          <figcaption>20.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/21.png" alt="21.png" loading="lazy"></div>
+          <figcaption>21.png<br><span class="dim">64&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/22.png" alt="22.png" loading="lazy"></div>
+          <figcaption>22.png<br><span class="dim">64&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/23.png" alt="23.png" loading="lazy"></div>
+          <figcaption>23.png<br><span class="dim">64&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/24.png" alt="24.png" loading="lazy"></div>
+          <figcaption>24.png<br><span class="dim">64&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/25.png" alt="25.png" loading="lazy"></div>
+          <figcaption>25.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/2%20Icons/26.png" alt="26.png" loading="lazy"></div>
+          <figcaption>26.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F3%20Progress%20Bars">
+      <h2>3 Progress Bars <span class="count">15 files</span></h2>
+      <p class="path">assets/paper-ui/Content/3 Progress Bars</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/3%20Progress%20Bars/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F4%20Buttons">
+      <h2>4 Buttons <span class="count">10 files</span></h2>
+      <p class="path">assets/paper-ui/Content/4 Buttons</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/0.png" alt="0.png" loading="lazy"></div>
+          <figcaption>0.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">80&times;32</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F4%20Buttons%2FSliced">
+      <h2>4 Buttons / Sliced (9-slice pieces) <span class="count">33 files</span></h2>
+      <p class="path">assets/paper-ui/Content/4 Buttons/Sliced</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/17.png" alt="17.png" loading="lazy"></div>
+          <figcaption>17.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/18.png" alt="18.png" loading="lazy"></div>
+          <figcaption>18.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/19.png" alt="19.png" loading="lazy"></div>
+          <figcaption>19.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/20.png" alt="20.png" loading="lazy"></div>
+          <figcaption>20.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/21.png" alt="21.png" loading="lazy"></div>
+          <figcaption>21.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/22.png" alt="22.png" loading="lazy"></div>
+          <figcaption>22.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/23.png" alt="23.png" loading="lazy"></div>
+          <figcaption>23.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/24.png" alt="24.png" loading="lazy"></div>
+          <figcaption>24.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/25.png" alt="25.png" loading="lazy"></div>
+          <figcaption>25.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/26.png" alt="26.png" loading="lazy"></div>
+          <figcaption>26.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/27.png" alt="27.png" loading="lazy"></div>
+          <figcaption>27.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/28.png" alt="28.png" loading="lazy"></div>
+          <figcaption>28.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/29.png" alt="29.png" loading="lazy"></div>
+          <figcaption>29.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/30.png" alt="30.png" loading="lazy"></div>
+          <figcaption>30.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/31.png" alt="31.png" loading="lazy"></div>
+          <figcaption>31.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/32.png" alt="32.png" loading="lazy"></div>
+          <figcaption>32.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/4%20Buttons/Sliced/33.png" alt="33.png" loading="lazy"></div>
+          <figcaption>33.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F5%20Holders">
+      <h2>5 Holders <span class="count">25 files</span></h2>
+      <p class="path">assets/paper-ui/Content/5 Holders</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">224&times;224</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">112&times;112</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">80&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">16&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">16&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">16&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">16&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/17.png" alt="17.png" loading="lazy"></div>
+          <figcaption>17.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/18.png" alt="18.png" loading="lazy"></div>
+          <figcaption>18.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/19.png" alt="19.png" loading="lazy"></div>
+          <figcaption>19.png<br><span class="dim">80&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/20.png" alt="20.png" loading="lazy"></div>
+          <figcaption>20.png<br><span class="dim">80&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/21.png" alt="21.png" loading="lazy"></div>
+          <figcaption>21.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/22.png" alt="22.png" loading="lazy"></div>
+          <figcaption>22.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/23.png" alt="23.png" loading="lazy"></div>
+          <figcaption>23.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/24.png" alt="24.png" loading="lazy"></div>
+          <figcaption>24.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/5%20Holders/25.png" alt="25.png" loading="lazy"></div>
+          <figcaption>25.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F6%20Highlighter">
+      <h2>6 Highlighter <span class="count">8 files</span></h2>
+      <p class="path">assets/paper-ui/Content/6 Highlighter</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/6%20Highlighter/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/6%20Highlighter/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/6%20Highlighter/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/6%20Highlighter/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/6%20Highlighter/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/6%20Highlighter/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/6%20Highlighter/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/6%20Highlighter/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F7%20Day%20%26%20Night%20Cycle">
+      <h2>7 Day &amp; Night Cycle (static content icons) <span class="count">16 files</span></h2>
+      <p class="path">assets/paper-ui/Content/7 Day &amp; Night Cycle</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">48&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/7%20Day%20%26%20Night%20Cycle/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">80&times;48</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F8%20Equipment">
+      <h2>8 Equipment <span class="count">18 files</span></h2>
+      <p class="path">assets/paper-ui/Content/8 Equipment</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/17.png" alt="17.png" loading="lazy"></div>
+          <figcaption>17.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/8%20Equipment/18.png" alt="18.png" loading="lazy"></div>
+          <figcaption>18.png<br><span class="dim">16&times;16</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F9%20Stamp%2FStamp%20Mark">
+      <h2>9 Stamp / Stamp Mark <span class="count">1 files</span></h2>
+      <p class="path">assets/paper-ui/Content/9 Stamp/Stamp Mark</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp%20Mark/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">32&times;32</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F9%20Stamp%2FStamp%2Fidle">
+      <h2>9 Stamp / Stamp / idle <span class="count">1 files</span></h2>
+      <p class="path">assets/paper-ui/Content/9 Stamp/Stamp/idle</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/idle/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F9%20Stamp%2FStamp%2FStamped">
+      <h2>9 Stamp / Stamp / Stamped <span class="count">20 files</span></h2>
+      <p class="path">assets/paper-ui/Content/9 Stamp/Stamp/Stamped</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/17.png" alt="17.png" loading="lazy"></div>
+          <figcaption>17.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/18.png" alt="18.png" loading="lazy"></div>
+          <figcaption>18.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/19.png" alt="19.png" loading="lazy"></div>
+          <figcaption>19.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/9%20Stamp/Stamp/Stamped/20.png" alt="20.png" loading="lazy"></div>
+          <figcaption>20.png<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F10%20Banners%20%26%20Headers%2FPlain">
+      <h2>10 Banners &amp; Headers / Plain <span class="count">20 files</span></h2>
+      <p class="path">assets/paper-ui/Content/10 Banners &amp; Headers/Plain</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">576&times;176</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">416&times;144</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">112&times;192</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">112&times;192</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">112&times;192</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">112&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">112&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">112&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/17.png" alt="17.png" loading="lazy"></div>
+          <figcaption>17.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/18.png" alt="18.png" loading="lazy"></div>
+          <figcaption>18.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/19.png" alt="19.png" loading="lazy"></div>
+          <figcaption>19.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Plain/20.png" alt="20.png" loading="lazy"></div>
+          <figcaption>20.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="assets%2Fpaper-ui%2FContent%2F10%20Banners%20%26%20Headers%2FCutout">
+      <h2>10 Banners &amp; Headers / Cutout <span class="count">20 files</span></h2>
+      <p class="path">assets/paper-ui/Content/10 Banners &amp; Headers/Cutout</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/1.png" alt="1.png" loading="lazy"></div>
+          <figcaption>1.png<br><span class="dim">576&times;160</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/2.png" alt="2.png" loading="lazy"></div>
+          <figcaption>2.png<br><span class="dim">416&times;144</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/3.png" alt="3.png" loading="lazy"></div>
+          <figcaption>3.png<br><span class="dim">112&times;192</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/4.png" alt="4.png" loading="lazy"></div>
+          <figcaption>4.png<br><span class="dim">112&times;192</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/5.png" alt="5.png" loading="lazy"></div>
+          <figcaption>5.png<br><span class="dim">112&times;192</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/6.png" alt="6.png" loading="lazy"></div>
+          <figcaption>6.png<br><span class="dim">112&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/7.png" alt="7.png" loading="lazy"></div>
+          <figcaption>7.png<br><span class="dim">112&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/8.png" alt="8.png" loading="lazy"></div>
+          <figcaption>8.png<br><span class="dim">112&times;80</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/9.png" alt="9.png" loading="lazy"></div>
+          <figcaption>9.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/10.png" alt="10.png" loading="lazy"></div>
+          <figcaption>10.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/11.png" alt="11.png" loading="lazy"></div>
+          <figcaption>11.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/12.png" alt="12.png" loading="lazy"></div>
+          <figcaption>12.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/13.png" alt="13.png" loading="lazy"></div>
+          <figcaption>13.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/14.png" alt="14.png" loading="lazy"></div>
+          <figcaption>14.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/15.png" alt="15.png" loading="lazy"></div>
+          <figcaption>15.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/16.png" alt="16.png" loading="lazy"></div>
+          <figcaption>16.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/17.png" alt="17.png" loading="lazy"></div>
+          <figcaption>17.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/18.png" alt="18.png" loading="lazy"></div>
+          <figcaption>18.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/19.png" alt="19.png" loading="lazy"></div>
+          <figcaption>19.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Content/10%20Banners%20%26%20Headers/Cutout/20.png" alt="20.png" loading="lazy"></div>
+          <figcaption>20.png<br><span class="dim">64&times;64</span></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section id="animations">
+      <h2>Animation Frame Sequences <span class="count">not exhaustively rendered here</span></h2>
+      <p class="path">assets/paper-ui/Content Appear Animation/ and assets/paper-ui/Day &amp; Night Cycle/</p>
+      <p>These are numbered PNG frame sequences (fold/cutout reveal animations, and a full/half day-night cycle set),
+      too many frames to usefully thumbnail in a static gallery. See <code>assets/paper-ui/INDEX.md</code> for frame
+      counts and dimensions per sub-folder. Sample first frame of each Day &amp; Night Cycle "Full" state below.</p>
+      <div class="grid">
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Day%20%26%20Night%20Cycle/Full/1%20Dawn/1.png" alt="1 Dawn" loading="lazy"></div>
+          <figcaption>1 Dawn (frame 1/10)<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Day%20%26%20Night%20Cycle/Full/2%20Day/1.png" alt="2 Day" loading="lazy"></div>
+          <figcaption>2 Day (frame 1/10)<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Day%20%26%20Night%20Cycle/Full/3%20Noon/1.png" alt="3 Noon" loading="lazy"></div>
+          <figcaption>3 Noon (frame 1/10)<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Day%20%26%20Night%20Cycle/Full/4%20Night/1.png" alt="4 Night" loading="lazy"></div>
+          <figcaption>4 Night (frame 1/10)<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Day%20%26%20Night%20Cycle/Full/5%20Lightning%201/1.png" alt="5 Lightning 1" loading="lazy"></div>
+          <figcaption>5 Lightning 1 (frame 1/10)<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Day%20%26%20Night%20Cycle/Full/6%20Lightning%202/1.png" alt="6 Lightning 2" loading="lazy"></div>
+          <figcaption>6 Lightning 2 (frame 1/10)<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+        <figure class="card">
+          <div class="checker"><img src="assets/paper-ui/Day%20%26%20Night%20Cycle/Full/7%20Raining/1.png" alt="7 Raining" loading="lazy"></div>
+          <figcaption>7 Raining (frame 1/10)<br><span class="dim">96&times;96</span></figcaption>
+        </figure>
+      </div>
+    </section>
+</main>
+<footer>Godaigo Elements — assets/paper-ui/ preview. See assets/paper-ui/INDEX.md for the full catalog and art-source/paper-ui/ for Aseprite sources.</footer>
+</body>
+</html>
