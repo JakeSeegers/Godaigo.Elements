@@ -863,8 +863,30 @@ async function _gami_emojisBuy(id) {
 }
 
 // ── Settings tab ─────────────────────────────────────────────
+// Renders as a category MENU (Display / Audio / Controls) that opens into a
+// sub-panel per category — mirrors the Paper UI pack's own Pause/Settings
+// reference layout (see css/paper-ui-settings.css) rather than one long
+// scrolling list. _gamiSettingsCategory is module state, reset to the menu
+// every time the Settings tab is (re)opened; navigating between the menu
+// and a sub-panel re-renders in place without resetting it.
+let _gamiSettingsCategory = null;
 
 function _renderSettings(content) {
+    _gamiSettingsCategory = null;
+    _renderSettingsView(content);
+}
+
+function _gami_setSettingsCategory(cat) {
+    _gamiSettingsCategory = cat;
+    _renderSettingsView(document.getElementById('gami-content'));
+}
+
+function _gami_backToSettingsMenu() {
+    _gamiSettingsCategory = null;
+    _renderSettingsView(document.getElementById('gami-content'));
+}
+
+function _renderSettingsView(content) {
     const uiSound   = localStorage.getItem('godaigo_ui_sound')   !== 'false';
     const gameSound = localStorage.getItem('godaigo_game_sound') !== 'false';
     const music     = localStorage.getItem('godaigo_music')       !== 'false';
@@ -874,118 +896,142 @@ function _renderSettings(content) {
     const crt = window.crtOverlay ? window.crtOverlay.getOptions()
                                   : { scanlines: true, vignette: true, grain: true, flicker: true };
 
-    content.innerHTML = `
-        <div class="gami-settings-list">
-            <div class="gami-settings-section-label">— Audio —</div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">UI Sounds</div>
-                    <div class="gami-settings-desc">Button click sound effects</div>
-                </div>
-                <button class="gami-toggle ${uiSound ? 'on' : 'off'}"
-                        onclick="_gami_toggleSetting('ui_sound', this)">${uiSound ? 'ON' : 'OFF'}</button>
+    const audioHtml = `
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">UI Sounds</div>
+                <div class="gami-settings-desc">Button click sound effects</div>
             </div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">Game Sounds</div>
-                    <div class="gami-settings-desc">In-game audio effects</div>
-                </div>
-                <button class="gami-toggle ${gameSound ? 'on' : 'off'}"
-                        onclick="_gami_toggleSetting('game_sound', this)">${gameSound ? 'ON' : 'OFF'}</button>
+            <button class="gami-toggle ${uiSound ? 'on' : 'off'}"
+                    onclick="_gami_toggleSetting('ui_sound', this)">${uiSound ? 'ON' : 'OFF'}</button>
+        </div>
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">Game Sounds</div>
+                <div class="gami-settings-desc">In-game audio effects</div>
             </div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">Music</div>
-                    <div class="gami-settings-desc">Login screen background music</div>
-                </div>
-                <button class="gami-toggle ${music ? 'on' : 'off'}"
-                        onclick="_gami_toggleSetting('music', this)">${music ? 'ON' : 'OFF'}</button>
+            <button class="gami-toggle ${gameSound ? 'on' : 'off'}"
+                    onclick="_gami_toggleSetting('game_sound', this)">${gameSound ? 'ON' : 'OFF'}</button>
+        </div>
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">Music</div>
+                <div class="gami-settings-desc">Login screen background music</div>
             </div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">Adaptive Music</div>
-                    <div class="gami-settings-desc">In-game Joytone soundtrack (grows as tiles flip) — only affects you</div>
-                </div>
-                <button class="gami-toggle ${joytoneMuted ? 'off' : 'on'}"
-                        onclick="_gami_toggleJoytoneMute(this)">${joytoneMuted ? 'OFF' : 'ON'}</button>
+            <button class="gami-toggle ${music ? 'on' : 'off'}"
+                    onclick="_gami_toggleSetting('music', this)">${music ? 'ON' : 'OFF'}</button>
+        </div>
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">Adaptive Music</div>
+                <div class="gami-settings-desc">In-game Joytone soundtrack (grows as tiles flip) — only affects you</div>
             </div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">Adaptive Music Volume</div>
-                    <div class="gami-settings-desc">Your personal volume for the Joytone soundtrack</div>
-                </div>
-                <input type="range" min="0" max="100" step="1" value="${joytoneVol}"
-                       style="width:110px;accent-color:#5566cc;cursor:pointer"
-                       oninput="_gami_joytoneVolume(this)">
+            <button class="gami-toggle ${joytoneMuted ? 'off' : 'on'}"
+                    onclick="_gami_toggleJoytoneMute(this)">${joytoneMuted ? 'OFF' : 'ON'}</button>
+        </div>
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">Adaptive Music Volume</div>
+                <div class="gami-settings-desc">Your personal volume for the Joytone soundtrack</div>
             </div>
-            <div class="gami-settings-section-label">— Display —</div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">Scanlines</div>
-                    <div class="gami-settings-desc">Horizontal CRT scan-line overlay</div>
-                </div>
-                <button class="gami-toggle ${crt.scanlines ? 'on' : 'off'}"
-                        onclick="_gami_toggleCrt('scanlines', this)">${crt.scanlines ? 'ON' : 'OFF'}</button>
-            </div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">Vignette</div>
-                    <div class="gami-settings-desc">Dark edges around the screen</div>
-                </div>
-                <button class="gami-toggle ${crt.vignette ? 'on' : 'off'}"
-                        onclick="_gami_toggleCrt('vignette', this)">${crt.vignette ? 'ON' : 'OFF'}</button>
-            </div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">Film Grain</div>
-                    <div class="gami-settings-desc">Animated noise texture</div>
-                </div>
-                <button class="gami-toggle ${crt.grain ? 'on' : 'off'}"
-                        onclick="_gami_toggleCrt('grain', this)">${crt.grain ? 'ON' : 'OFF'}</button>
-            </div>
-            <div class="gami-settings-row">
-                <div class="gami-settings-label">
-                    <div class="gami-settings-name">Flicker</div>
-                    <div class="gami-settings-desc">Subtle screen brightness variation</div>
-                </div>
-                <button class="gami-toggle ${crt.flicker ? 'on' : 'off'}"
-                        onclick="_gami_toggleCrt('flicker', this)">${crt.flicker ? 'ON' : 'OFF'}</button>
-            </div>
+            <input type="range" min="0" max="100" step="1" value="${joytoneVol}"
+                   class="gami-pip-range"
+                   oninput="_gami_joytoneVolume(this)">
+        </div>
+    `;
 
-            <div class="gami-settings-section-label">— Keyboard Controls —</div>
-            <div class="gami-keybind-guide">
-                <div class="gami-keybind-group">
-                    <div class="gami-keybind-group-title">Board Actions</div>
-                    <div class="gami-keybind-row"><kbd>X</kbd><span>End turn</span></div>
-                    <div class="gami-keybind-row"><kbd>Enter</kbd><span>Place tile or move pawn (start / confirm)</span></div>
-                    <div class="gami-keybind-row"><kbd>1</kbd><span>Void stone preview</span></div>
-                    <div class="gami-keybind-row"><kbd>2</kbd><span>Wind stone preview</span></div>
-                    <div class="gami-keybind-row"><kbd>3</kbd><span>Fire stone preview</span></div>
-                    <div class="gami-keybind-row"><kbd>4</kbd><span>Water stone preview</span></div>
-                    <div class="gami-keybind-row"><kbd>5</kbd><span>Earth stone preview</span></div>
-                    <div class="gami-keybind-row"><kbd>T</kbd><span>Catacomb teleport preview (T again to confirm)</span></div>
-                    <div class="gami-keybind-row"><kbd>← →</kbd><span>Cycle positions or scroll cards</span></div>
-                    <div class="gami-keybind-row"><kbd>Esc</kbd><span>Cancel any active preview or navigation</span></div>
-                </div>
-                <div class="gami-keybind-group">
-                    <div class="gami-keybind-group-title">Panel Toggles</div>
-                    <div class="gami-keybind-row"><kbd>H</kbd><span>Toggle Hand panel</span></div>
-                    <div class="gami-keybind-row"><kbd>A</kbd><span>Toggle Active panel</span></div>
-                    <div class="gami-keybind-row"><kbd>C</kbd><span>Toggle Common panel</span></div>
-                    <div class="gami-keybind-row"><kbd>Shift+J+T</kbd><span>Toggle Joytone music sequencer</span></div>
-                </div>
-                <div class="gami-keybind-group">
-                    <div class="gami-keybind-group-title">Scroll Navigation</div>
-                    <div class="gami-keybind-row"><kbd>Q</kbd><span>Navigate Hand scrolls</span></div>
-                    <div class="gami-keybind-row"><kbd>W</kbd><span>Navigate Active scrolls</span></div>
-                    <div class="gami-keybind-row"><kbd>E</kbd><span>Navigate Common scrolls</span></div>
-                    <div class="gami-keybind-row"><kbd>← →</kbd><span>Cycle cards while in nav mode</span></div>
-                    <div class="gami-keybind-row"><kbd>Enter</kbd><span>Move Hand card → Active</span></div>
-                    <div class="gami-keybind-row"><kbd>Tab</kbd><span>Move card → Common Area</span></div>
-                    <div class="gami-keybind-row"><kbd>Space</kbd><span>Activate selected scroll</span></div>
-                    <div class="gami-keybind-row"><kbd>Esc</kbd><span>Exit navigation</span></div>
-                </div>
+    const displayHtml = `
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">Scanlines</div>
+                <div class="gami-settings-desc">Horizontal CRT scan-line overlay</div>
             </div>
+            <button class="gami-toggle ${crt.scanlines ? 'on' : 'off'}"
+                    onclick="_gami_toggleCrt('scanlines', this)">${crt.scanlines ? 'ON' : 'OFF'}</button>
+        </div>
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">Vignette</div>
+                <div class="gami-settings-desc">Dark edges around the screen</div>
+            </div>
+            <button class="gami-toggle ${crt.vignette ? 'on' : 'off'}"
+                    onclick="_gami_toggleCrt('vignette', this)">${crt.vignette ? 'ON' : 'OFF'}</button>
+        </div>
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">Film Grain</div>
+                <div class="gami-settings-desc">Animated noise texture</div>
+            </div>
+            <button class="gami-toggle ${crt.grain ? 'on' : 'off'}"
+                    onclick="_gami_toggleCrt('grain', this)">${crt.grain ? 'ON' : 'OFF'}</button>
+        </div>
+        <div class="gami-settings-row">
+            <div class="gami-settings-label">
+                <div class="gami-settings-name">Flicker</div>
+                <div class="gami-settings-desc">Subtle screen brightness variation</div>
+            </div>
+            <button class="gami-toggle ${crt.flicker ? 'on' : 'off'}"
+                    onclick="_gami_toggleCrt('flicker', this)">${crt.flicker ? 'ON' : 'OFF'}</button>
+        </div>
+    `;
+
+    const controlsHtml = `
+        <div class="gami-keybind-guide">
+            <div class="gami-keybind-group">
+                <div class="gami-keybind-group-title">Board Actions</div>
+                <div class="gami-keybind-row"><kbd>X</kbd><span>End turn</span></div>
+                <div class="gami-keybind-row"><kbd>Enter</kbd><span>Place tile or move pawn (start / confirm)</span></div>
+                <div class="gami-keybind-row"><kbd>1</kbd><span>Void stone preview</span></div>
+                <div class="gami-keybind-row"><kbd>2</kbd><span>Wind stone preview</span></div>
+                <div class="gami-keybind-row"><kbd>3</kbd><span>Fire stone preview</span></div>
+                <div class="gami-keybind-row"><kbd>4</kbd><span>Water stone preview</span></div>
+                <div class="gami-keybind-row"><kbd>5</kbd><span>Earth stone preview</span></div>
+                <div class="gami-keybind-row"><kbd>T</kbd><span>Catacomb teleport preview (T again to confirm)</span></div>
+                <div class="gami-keybind-row"><kbd>← →</kbd><span>Cycle positions or scroll cards</span></div>
+                <div class="gami-keybind-row"><kbd>Esc</kbd><span>Cancel any active preview or navigation</span></div>
+            </div>
+            <div class="gami-keybind-group">
+                <div class="gami-keybind-group-title">Panel Toggles</div>
+                <div class="gami-keybind-row"><kbd>H</kbd><span>Toggle Hand panel</span></div>
+                <div class="gami-keybind-row"><kbd>A</kbd><span>Toggle Active panel</span></div>
+                <div class="gami-keybind-row"><kbd>C</kbd><span>Toggle Common panel</span></div>
+                <div class="gami-keybind-row"><kbd>Shift+J+T</kbd><span>Toggle Joytone music sequencer</span></div>
+            </div>
+            <div class="gami-keybind-group">
+                <div class="gami-keybind-group-title">Scroll Navigation</div>
+                <div class="gami-keybind-row"><kbd>Q</kbd><span>Navigate Hand scrolls</span></div>
+                <div class="gami-keybind-row"><kbd>W</kbd><span>Navigate Active scrolls</span></div>
+                <div class="gami-keybind-row"><kbd>E</kbd><span>Navigate Common scrolls</span></div>
+                <div class="gami-keybind-row"><kbd>← →</kbd><span>Cycle cards while in nav mode</span></div>
+                <div class="gami-keybind-row"><kbd>Enter</kbd><span>Move Hand card → Active</span></div>
+                <div class="gami-keybind-row"><kbd>Tab</kbd><span>Move card → Common Area</span></div>
+                <div class="gami-keybind-row"><kbd>Space</kbd><span>Activate selected scroll</span></div>
+                <div class="gami-keybind-row"><kbd>Esc</kbd><span>Exit navigation</span></div>
+            </div>
+        </div>
+    `;
+
+    if (!_gamiSettingsCategory) {
+        content.innerHTML = `
+            <div class="gami-settings-list gami-settings-menu">
+                <div class="pp-flanked-label"><span>Settings</span></div>
+                <button class="pp-menu-btn" onclick="_gami_setSettingsCategory('display')">Display</button>
+                <button class="pp-menu-btn" onclick="_gami_setSettingsCategory('audio')">Audio</button>
+                <button class="pp-menu-btn" onclick="_gami_setSettingsCategory('controls')">Controls</button>
+            </div>
+        `;
+        return;
+    }
+
+    const titles = { display: 'Display', audio: 'Audio', controls: 'Controls' };
+    const bodies  = { display: displayHtml, audio: audioHtml, controls: controlsHtml };
+    content.innerHTML = `
+        <div class="gami-settings-list gami-settings-detail">
+            <div class="pp-flanked-label pp-flanked-label--back">
+                <button class="pp-back-btn" onclick="_gami_backToSettingsMenu()" aria-label="Back to Settings menu"></button>
+                <span>${titles[_gamiSettingsCategory]}</span>
+            </div>
+            ${bodies[_gamiSettingsCategory]}
         </div>
     `;
 }

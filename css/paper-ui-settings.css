@@ -105,6 +105,161 @@
   }
 }
 
+/* ==========================================================================
+   Category menu + sub-panels — closer match to the pack's own reference
+   layout (a Pause-style menu of Display/Audio/Controls opening a dedicated
+   panel each), plus pixel type, a flanked-label header, and a pip-style
+   slider. Pixel font is Press Start 2P, already loaded in index.html's
+   Google Fonts link (used elsewhere for nothing yet, so no new request).
+   ========================================================================== */
+
+.gami-settings-list .gami-toggle,
+.pp-menu-btn,
+.pp-flanked-label span {
+  font-family: 'Press Start 2P', var(--font-terminal), monospace;
+}
+
+/* Flanked label: a CSS-drawn dashed rule either side of the title, echoing
+   the reference's "⋄┄┄TITLE┄┄┄" header style. (piece_50, which looked like
+   a usable flourish in the contact sheet, turned out on close inspection to
+   be an auto-slice artifact fusing an artist-credit micro-text with two
+   unrelated divider lines — not something to display in the game, so this
+   is drawn instead of using that sprite.) */
+.pp-flanked-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.pp-flanked-label::before,
+.pp-flanked-label::after {
+  content: "";
+  flex: 1 1 0;
+  max-width: 64px;
+  border-top: 2px dashed var(--pp-maroon);
+  opacity: .55;
+}
+.pp-flanked-label span {
+  font-size: 13px;
+  color: var(--pp-maroon);
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+/* Back button (detail-view header): a plain drawn chevron rather than the
+   sprite arrows, which read as illegible blobs at this small a size — a
+   crisp CSS triangle stays legible at any resolution/zoom. */
+.pp-flanked-label--back {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  padding-left: 4px;
+  margin-bottom: 14px;
+}
+.pp-flanked-label--back::before,
+.pp-flanked-label--back::after { display: none; }
+.pp-back-btn {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--pp-maroon);
+  border-radius: 50%;
+  background: var(--pp-parch-lt);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+}
+.pp-back-btn::before {
+  content: "";
+  position: absolute;
+  top: 50%; left: 55%;
+  width: 8px; height: 8px;
+  border-left: 2.5px solid var(--pp-maroon);
+  border-bottom: 2.5px solid var(--pp-maroon);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.pp-back-btn:active { transform: translate(1px, 1px); }
+.pp-flanked-label--back span {
+  font-size: 15px;
+}
+
+/* Category menu buttons: piece_44 (wide pill bar) as a 9-slice border,
+   stacked full-width like the reference's Display/Audio/Video/Controls
+   list. */
+.gami-settings-menu {
+  align-items: stretch;
+  gap: 14px;
+  padding: 26px 30px;
+}
+.pp-menu-btn {
+  border-style: solid;
+  border-width: 12px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
+  border-image-slice: 12 fill;
+  border-image-width: 12px;
+  border-image-repeat: stretch;
+  background: transparent;
+  min-height: 44px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--pp-ink);
+  cursor: pointer;
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.4);
+}
+.pp-menu-btn:active { transform: translate(2px, 2px); }
+
+/* Pip-style segmented slider (CSS-only — restyles the existing native
+   <input type=range>, no DOM/behaviour change): a row of small filled/empty
+   squares standing in for the pack's segmented progress-bar look, with a
+   square thumb. WebKit + Firefox both styled since this runs in Chromium
+   (webkit) today but keeps Firefox users from seeing an unstyled slider. */
+.gami-pip-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 130px;
+  height: 16px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      #4a7a9c 0, #4a7a9c 9px,
+      transparent 9px, transparent 11px
+    ),
+    var(--pp-parch-lt);
+  border: 1.5px solid var(--pp-maroon);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.gami-pip-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 20px;
+  margin-top: -3px;
+  background: var(--pp-maroon);
+  border: 1px solid var(--pp-ink);
+  border-radius: 1px;
+  cursor: pointer;
+}
+.gami-pip-range::-moz-range-track {
+  height: 16px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      #4a7a9c 0, #4a7a9c 9px,
+      transparent 9px, transparent 11px
+    ),
+    var(--pp-parch-lt);
+  border: 1.5px solid var(--pp-maroon);
+  border-radius: 2px;
+}
+.gami-pip-range::-moz-range-thumb {
+  width: 10px;
+  height: 20px;
+  background: var(--pp-maroon);
+  border: 1px solid var(--pp-ink);
+  border-radius: 1px;
+  cursor: pointer;
+}
+
 /* Section headers (— Audio —, — Display —, …) as centred maroon labels. */
 .gami-settings-list .gami-settings-section-label {
   color: var(--pp-maroon);
