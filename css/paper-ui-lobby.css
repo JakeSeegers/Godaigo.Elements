@@ -88,14 +88,19 @@
 
 /* Semantic accents kept as a thin ink tint, not a full colour swap, so
    Ready/Leave/danger actions still read differently at a glance. */
-#create-private-btn,
-#host-public-btn      { color: var(--pp-gold); }
-#join-code-btn,
 #ready-button.is-ready { color: var(--pp-green); }
 #ready-button:not(.is-ready) { color: var(--pp-rust); }
 #leave-room-btn,
 #reset-lobby-btn,
 #remove-bot-button     { color: var(--pp-rust); }
+
+/* Bigger stroked ink text on host-public-btn/create-private-btn/
+   join-code-btn/refresh-browser-btn, the public-games-list empty message,
+   the Room Name label, and the auth-bar buttons' font-size are all owned
+   by TheHermit's designer export in css/styles.css ("Lobby design — from
+   TheHermit's designer export") — kept there, not duplicated here, since
+   that block already needs !important to beat this file's generic button
+   rule above and the pre-existing #multiplayer-lobby input/select rule. */
 
 /* ── Public game browser rows ────────────────────────────────────────── */
 #public-games-list {

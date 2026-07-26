@@ -4102,40 +4102,46 @@ label, .hud-ap-label, .hud-ap-value {
 
 
 /* ============================================================
-   Lobby design — from TheHermit's designer export (v3).
-   Exported selectors, !important so they win over inline styles.
-   text-shadow "5" -> a subtle drop shadow. The exported
-   font-family "21"/"22" were invalid (not font names) and were
-   left out pending clarification.
+   Lobby design — from TheHermit's designer export (v6).
+   Exported selectors, !important so they win over inline styles
+   and over the generic #multiplayer-lobby button rule in
+   css/paper-ui-lobby.css. Supersedes the earlier v3 export (that
+   one's black stroke + orange host-btn fill + bold weight are
+   gone; v6 is normal-weight ink-red text with a light parchment
+   stroke instead).
    ============================================================ */
 
-#create-private-btn {
-    font-weight: 700 !important;
-    -webkit-text-stroke: 3px #000000 !important;
-    paint-order: stroke fill !important;
-    text-shadow: 1px 1px 2px #000000 !important;
-}
-
-#host-public-btn {
-    font-weight: 700 !important;
-    -webkit-text-stroke: 3px #000000 !important;
-    paint-order: stroke fill !important;
-    text-shadow: 1px 1px 2px #000000 !important;
-    background-color: #ce8346 !important;
-}
-
-#join-code-btn {
-    font-weight: 700 !important;
-    -webkit-text-stroke: 2px #000000 !important;
-    paint-order: stroke fill !important;
-    text-shadow: 1px 1px 2px #000000 !important;
-}
-
+#host-public-btn,
+#create-private-btn,
+#join-code-btn,
 #refresh-browser-btn {
-    -webkit-text-stroke: 2px #000000 !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    -webkit-text-stroke: 2px #e0d2af !important;
     paint-order: stroke fill !important;
+    font-size: 19px !important;
+    color: #4b0d0d !important;
+}
+
+#public-games-list > p:nth-of-type(1) {
+    font-style: normal !important;
+    font-weight: normal !important;
+    -webkit-text-stroke: 2px #e4d8c9 !important;
+    paint-order: stroke fill !important;
+    font-size: 19px !important;
+    color: #000000 !important;
 }
 
 #room-name-row > label:nth-of-type(1) {
-    color: #fffafa !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    font-size: 19px !important;
+    color: #4c0d0d !important;
+}
+
+#auth-bar > div:nth-of-type(1) > button:nth-of-type(1),
+#auth-bar > div:nth-of-type(1) > button:nth-of-type(2),
+#auth-bar > div:nth-of-type(1) > button:nth-of-type(3),
+#auth-bar > div:nth-of-type(1) > button:nth-of-type(4) {
+    font-size: 18px !important;
 }
