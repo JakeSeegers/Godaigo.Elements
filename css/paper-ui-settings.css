@@ -36,24 +36,17 @@
   /* Two-stage open. Stage 1 (pp-panel-unfold) is a LITERAL reproduction of
      the pack's own animation, not a guessed easing curve: extracted directly
      from art-source/paper-ui-menus/Aseprite/5 Settings Menu v1.3.aseprite's
-     binary frame data (the "Pause Menu > Base" layer, frames 13-19) by
+     binary frame data (the "Pause Menu > Base" layer, frames 13-23) by
      decoding its per-frame Cel chunks (position/size/timing) — see the
-     keyframe comments below for the exact source values. Only WIDTH
-     animates in the source (height is constant throughout — my first,
-     guessed version incorrectly animated height too); real duration is
-     600ms (7 frames @ 100ms), not the 380ms guessed earlier.
-     NOT reproduced: frames 19-23 in the source add a few px of horizontal
-     settle-bounce (the panel briefly nudges sideways after reaching full
-     width). In the source canvas there's empty margin around the panel for
-     that to move into; here the panel is deliberately sized to fill 100% of
-     its container, so that nudge has nowhere to go but past the edge —
-     tried it, and it clips against .gami-modal's overflow:hidden instead of
-     reading as a bounce. Dropped rather than shipping a clipping glitch;
-     the width-unfold (the dominant, visually-important motion) is still a
-     faithful frame-accurate reproduction. Stage 2 (content stagger, below)
-     starts once this real duration elapses. Fires each time the Settings
-     tab is (re)rendered, since the element is rebuilt by _renderSettings. */
-  animation: pp-panel-unfold 600ms steps(1, jump-end) both;
+     keyframe comments below for the exact source values and the rescaling
+     used to fit the settle-bounce (frames 19-23) without clipping. Only
+     WIDTH/X-POSITION animate in the source (height is constant throughout
+     — my first, guessed version incorrectly animated height too); real
+     duration is 1000ms (11 frames @ 100ms), not the 380ms guessed
+     originally. Stage 2 (content stagger, below) starts once this real
+     duration elapses. Fires each time the Settings tab is (re)rendered,
+     since the element is rebuilt by _renderSettings. */
+  animation: pp-panel-unfold 1000ms steps(1, jump-end) both;
   transform-origin: left center;
 }
 
@@ -77,50 +70,70 @@
    these stops HOLD the earlier value, then jump — reproducing the source's
    real flipbook-style frame holds (each real frame is a static image shown
    for ~100ms, not smoothly tweened into the next) rather than a smooth
-   tween. Animates the real `width` property (not transform:scaleX) so
-   border-image keeps recalculating a crisp border at each actual size — a
-   transform would instead just visually stretch/squash the already-rendered
-   16px border pixels, thin and distorted at small widths, which the
-   source's real per-frame art never shows (each of ITS frames is
-   native-resolution art at that width). Values are each real frame's width
-   divided by its final width (183px in the source). Width only — the
-   source's height never changes. */
+   tween. Animates the real `width` property (not transform:scaleX) for the
+   growth phase so border-image keeps recalculating a crisp border at each
+   actual size — a transform would instead just visually stretch/squash the
+   already-rendered 16px border pixels, thin and distorted at small widths,
+   which the source's real per-frame art never shows (each of ITS frames is
+   native-resolution art at that width). translateX is used only once width
+   has already reached its rest value, for the settle-bounce — nothing is
+   being stretched there, only shifted, so a transform is fine.
+
+   RESCALING: the source's own numbers are width=37..183px, then (once at
+   full width) a settle-bounce of x=+9..+18px. Mapping 183px alone to our
+   100% (as the first version of this did) leaves zero room for that
+   +18px bounce, which then has nowhere to go but past our container's
+   edge — tried it, it clipped against .gami-modal's overflow:hidden.
+   Fix: map the bounce's PEAK REACH (183+18=201px, plus a few px of safety
+   margin against rounding -> 204px) to 100% instead of the width alone, so
+   every real value (both phases) becomes value÷204 and the peak stays
+   just under 100% by construction. This also happens to be MORE faithful
+   to the source, not less: its own rest frame (23) sits at x=16, a small
+   permanent inset from the true left edge, not flush against it — the
+   small persistent margin this rescaling leaves at rest matches that,
+   rather than the flush-left/full-width assumption the first version
+   made. */
 @keyframes pp-panel-unfold {
-  0%      { opacity: 1; width: 20.22%; }   /* f13 w=37/183  */
-  16.67%  { opacity: 1; width: 37.70%; }   /* f14 w=69/183  */
-  33.33%  { opacity: 1; width: 55.19%; }   /* f15 w=101/183 */
-  50%     { opacity: 1; width: 81.42%; }   /* f16 w=149/183 */
-  66.67%  { opacity: 1; width: 90.16%; }   /* f17 w=165/183 */
-  83.33%  { opacity: 1; width: 98.91%; }   /* f18 w=181/183 */
-  100%    { opacity: 1; width: 100%;   }   /* f19 w=183/183 (full width) */
+  0%      { opacity: 1; width: 18.14%; transform: none; }                    /* f13 w=37/204          */
+  10%     { opacity: 1; width: 33.82%; transform: none; }                    /* f14 w=69/204          */
+  20%     { opacity: 1; width: 49.51%; transform: none; }                    /* f15 w=101/204         */
+  30%     { opacity: 1; width: 73.04%; transform: none; }                    /* f16 w=149/204         */
+  40%     { opacity: 1; width: 80.88%; transform: none; }                    /* f17 w=165/204         */
+  50%     { opacity: 1; width: 88.73%; transform: none; }                    /* f18 w=181/204         */
+  60%     { opacity: 1; width: 89.71%; transform: translateX(4.41%); }       /* f19 w=183/204 x=9/204 */
+  70%     { opacity: 1; width: 89.71%; transform: translateX(7.35%); }       /* f20 x=15/204          */
+  80%     { opacity: 1; width: 89.71%; transform: translateX(8.82%); }       /* f21 x=18/204 (peak)   */
+  90%     { opacity: 1; width: 89.71%; transform: translateX(8.33%); }       /* f22 x=17/204          */
+  100%    { opacity: 1; width: 89.71%; transform: translateX(7.84%); }       /* f23 x=16/204 (settled) */
 }
 
 /* Content reveal, stage 2: each direct child (section labels, rows, the
-   keybind guide) fades/slides in AFTER the frame has finished its now-real
-   600ms unfold, staggered ~35ms apart — the "rows populate in after the
-   frame pops open" look from the reference. (This stagger itself is ours,
-   not from the source file — our row content has no equivalent in their
-   scene — only its start time is keyed to the real unfold duration above.)
-   Written out per nth-child rather than a CSS counter/preprocessor,
-   matching this codebase's plain-CSS style. */
+   keybind guide) fades/slides in AFTER the frame has finished its real
+   1000ms unfold (now including the settle-bounce), staggered ~35ms apart —
+   the "rows populate in after the frame pops open" look from the
+   reference. (This stagger itself is ours, not from the source file — our
+   row content has no equivalent in their scene — only its start time is
+   keyed to the real unfold duration above.) Written out per nth-child
+   rather than a CSS counter/preprocessor, matching this codebase's
+   plain-CSS style. */
 .gami-settings-list > * {
   opacity: 0;
   animation: pp-row-in 260ms ease-out both;
 }
-.gami-settings-list > *:nth-child(1)  { animation-delay: 600ms; }
-.gami-settings-list > *:nth-child(2)  { animation-delay: 635ms; }
-.gami-settings-list > *:nth-child(3)  { animation-delay: 670ms; }
-.gami-settings-list > *:nth-child(4)  { animation-delay: 705ms; }
-.gami-settings-list > *:nth-child(5)  { animation-delay: 740ms; }
-.gami-settings-list > *:nth-child(6)  { animation-delay: 775ms; }
-.gami-settings-list > *:nth-child(7)  { animation-delay: 810ms; }
-.gami-settings-list > *:nth-child(8)  { animation-delay: 845ms; }
-.gami-settings-list > *:nth-child(9)  { animation-delay: 880ms; }
-.gami-settings-list > *:nth-child(10) { animation-delay: 915ms; }
-.gami-settings-list > *:nth-child(11) { animation-delay: 950ms; }
-.gami-settings-list > *:nth-child(12) { animation-delay: 985ms; }
-.gami-settings-list > *:nth-child(13) { animation-delay: 1020ms; }
-.gami-settings-list > *:nth-child(n+14) { animation-delay: 1055ms; } /* safety net */
+.gami-settings-list > *:nth-child(1)  { animation-delay: 1000ms; }
+.gami-settings-list > *:nth-child(2)  { animation-delay: 1035ms; }
+.gami-settings-list > *:nth-child(3)  { animation-delay: 1070ms; }
+.gami-settings-list > *:nth-child(4)  { animation-delay: 1105ms; }
+.gami-settings-list > *:nth-child(5)  { animation-delay: 1140ms; }
+.gami-settings-list > *:nth-child(6)  { animation-delay: 1175ms; }
+.gami-settings-list > *:nth-child(7)  { animation-delay: 1210ms; }
+.gami-settings-list > *:nth-child(8)  { animation-delay: 1245ms; }
+.gami-settings-list > *:nth-child(9)  { animation-delay: 1280ms; }
+.gami-settings-list > *:nth-child(10) { animation-delay: 1315ms; }
+.gami-settings-list > *:nth-child(11) { animation-delay: 1350ms; }
+.gami-settings-list > *:nth-child(12) { animation-delay: 1385ms; }
+.gami-settings-list > *:nth-child(13) { animation-delay: 1420ms; }
+.gami-settings-list > *:nth-child(n+14) { animation-delay: 1455ms; } /* safety net */
 
 @keyframes pp-row-in {
   from { opacity: 0; transform: translateY(6px); }
