@@ -33,11 +33,14 @@
   border-image-repeat: stretch;
   padding: 18px 22px;
   gap: 10px;
-  /* Opens with a small paper "unfold" — approximates the pack's appear anim.
-     Fires each time the Settings tab is (re)rendered, since the element is
-     rebuilt by _renderSettings. */
-  animation: pp-panel-in 340ms cubic-bezier(.2, .9, .3, 1.2) both;
-  transform-origin: top center;
+  /* Two-stage open, matching the pack's reference GIF: the frame unfolds
+     from a small folded tab (fast vertical snap, then widening) BEFORE any
+     content is visible, then the rows/labels stagger in afterward (below) —
+     rather than the whole panel (text included) scaling up at once, which
+     would visibly squash the text. Fires each time the Settings tab is
+     (re)rendered, since the element is rebuilt by _renderSettings. */
+  animation: pp-panel-unfold 380ms cubic-bezier(.22, .85, .25, 1) both;
+  transform-origin: 16% 0%;
 }
 
 /* Ornate corner flourishes (piece_54 outline frame) overlaid on top of the
@@ -56,9 +59,50 @@
   border-image-repeat: stretch;
 }
 
-@keyframes pp-panel-in {
-  from { opacity: 0; transform: scale(.94) translateY(8px); }
+@keyframes pp-panel-unfold {
+  0%   { opacity: 0; transform: scale(.24, .14); }   /* folded tab */
+  50%  { opacity: 1; transform: scale(.24, 1); }     /* snaps open vertically */
+  100% { opacity: 1; transform: scale(1, 1); }        /* widens to full frame */
+}
+
+/* Content reveal, stage 2: each direct child (section labels, rows, the
+   keybind guide) fades/slides in AFTER the frame has finished unfolding
+   (380ms), staggered ~35ms apart — the "rows populate in after the frame
+   pops open" look from the reference. Written out per nth-child rather than
+   a CSS counter/preprocessor, matching this codebase's plain-CSS style. */
+.gami-settings-list > * {
+  opacity: 0;
+  animation: pp-row-in 260ms ease-out both;
+}
+.gami-settings-list > *:nth-child(1)  { animation-delay: 380ms; }
+.gami-settings-list > *:nth-child(2)  { animation-delay: 415ms; }
+.gami-settings-list > *:nth-child(3)  { animation-delay: 450ms; }
+.gami-settings-list > *:nth-child(4)  { animation-delay: 485ms; }
+.gami-settings-list > *:nth-child(5)  { animation-delay: 520ms; }
+.gami-settings-list > *:nth-child(6)  { animation-delay: 555ms; }
+.gami-settings-list > *:nth-child(7)  { animation-delay: 590ms; }
+.gami-settings-list > *:nth-child(8)  { animation-delay: 625ms; }
+.gami-settings-list > *:nth-child(9)  { animation-delay: 660ms; }
+.gami-settings-list > *:nth-child(10) { animation-delay: 695ms; }
+.gami-settings-list > *:nth-child(11) { animation-delay: 730ms; }
+.gami-settings-list > *:nth-child(12) { animation-delay: 765ms; }
+.gami-settings-list > *:nth-child(13) { animation-delay: 800ms; }
+.gami-settings-list > *:nth-child(n+14) { animation-delay: 835ms; } /* safety net */
+
+@keyframes pp-row-in {
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
+}
+
+/* Respect reduced-motion: skip both animation stages, show the finished
+   state immediately. */
+@media (prefers-reduced-motion: reduce) {
+  .gami-settings-list,
+  .gami-settings-list > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 /* Section headers (— Audio —, — Display —, …) as centred maroon labels. */
