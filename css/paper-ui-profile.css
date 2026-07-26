@@ -1,0 +1,499 @@
+/* ==========================================================================
+   paper-ui-profile.css — Paper UI (v1.3) skin for the WHOLE Profile modal.
+   ==========================================================================
+   Supersedes paper-ui-settings.css: what was a Settings-tab-only skin is now
+   universal — every tab (Stats/Colours/Emojis/Badges/Shop/Stable/Board/
+   Settings) shares the same parchment-panel frame, open animation, row/card
+   look, and button treatment. The frame + open animation moved from
+   `.gami-settings-list` to `#gami-content` itself, since that's the one
+   element every tab actually renders into — Settings no longer needs (or
+   has) its own separate frame nested inside it.
+   Uses assets/paper-ui-menus/pieces/ (sliced from the v1.3 master sheet) and
+   assets/paper-ui-menus/decoded/ (extracted straight from the pack's own
+   .aseprite animation data — see docs/paper-ui-design-system.md for how and
+   why). Loaded after css/styles.css so these rules win by source order +
+   specificity. Remove the <link> in index.html to fully revert.
+   ========================================================================== */
+
+:root {
+  --pp-parch:    #e7cfa1;   /* parchment fill */
+  --pp-parch-lt: #f2e4c4;   /* lighter parchment (keycaps, previews) */
+  --pp-parch-dk: #d9bd8c;   /* slightly deeper parchment (recessed wells) */
+  --pp-maroon:   #6d2b2b;   /* dark maroon border/ink */
+  --pp-ink:      #3c2c1c;   /* body text */
+  --pp-ink-soft: #6a563c;   /* secondary text */
+  --pp-gold:     #8a5a1f;   /* currency / XP / stat-value emphasis */
+  --pp-green:    #2f5d2f;   /* success / equipped / active / on */
+  --pp-rust:     #9a4a2a;   /* off / not-equipped / warn */
+  --pp-locked:   #8c7a5c;   /* locked / disabled */
+}
+
+/* ==========================================================================
+   1. UNIVERSAL FRAME — every tab's content area, all 8 of them, since they
+   all render into #gami-content.
+   ========================================================================== */
+
+#gami-content {
+  position: relative;
+  border-style: solid;
+  border-width: 16px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_37_185x282.png");
+  border-image-slice: 11 fill;
+  border-image-width: 16px;
+  border-image-repeat: stretch;
+  /* base padding (20px) already comes from styles.css .gami-content; the
+     parchment border makes that read as generous inset, no change needed */
+
+  /* Two-stage open, LITERALLY reproduced from the pack's own animation data
+     (art-source/paper-ui-menus/Aseprite/5 Settings Menu v1.3.aseprite,
+     "Pause Menu > Base" layer, frames 13-23 — see
+     docs/paper-ui-design-system.md "System 1"), not a guessed curve. Only
+     width/x-position animate in the source; real duration 1000ms (11
+     frames @ 100ms). Fires every time a tab is (re)rendered, since
+     gami_switchTab rebuilds #gami-content's innerHTML each time — so
+     switching tabs now replays the same unfold on every tab, not just
+     Settings. */
+  animation: pp-panel-unfold 1000ms steps(1, jump-end) both;
+  transform-origin: left center;
+}
+
+/* Ornate corner flourishes (piece_54 outline frame) overlaid on top of the
+   filled frame — decorated corners without losing the thick parchment
+   border. Transparent centre + no pointer events = purely visual. */
+#gami-content::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  pointer-events: none;
+  border-style: solid;
+  border-width: 26px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_54_226x253.png");
+  border-image-slice: 26;
+  border-image-width: 26px;
+  border-image-repeat: stretch;
+}
+
+/* steps(1, jump-end) makes each segment HOLD the earlier value then jump —
+   reproducing the source's real flipbook-style frame holds rather than a
+   smooth tween. Animates real `width` (not transform:scaleX) for the growth
+   phase so border-image keeps recalculating a crisp border at each actual
+   size. RESCALING: the source's numbers are width=37..183px, then (once at
+   full width) a settle-bounce of x=+9..+18px; mapping 183px alone to our
+   100% leaves zero room for that bounce (tried it — it clipped against
+   .gami-modal's overflow:hidden). Fix: map the bounce's PEAK REACH
+   (183+18=201px, +margin -> 204px) to 100% instead, so every value becomes
+   value÷204 and the peak stays just under 100% by construction. This is
+   also MORE faithful to the source, not less — its own rest frame sits at
+   x=16, a small permanent inset from the true edge, not flush against it. */
+@keyframes pp-panel-unfold {
+  0%      { opacity: 1; width: 18.14%; transform: none; }                    /* f13 w=37/204          */
+  10%     { opacity: 1; width: 33.82%; transform: none; }                    /* f14 w=69/204          */
+  20%     { opacity: 1; width: 49.51%; transform: none; }                    /* f15 w=101/204         */
+  30%     { opacity: 1; width: 73.04%; transform: none; }                    /* f16 w=149/204         */
+  40%     { opacity: 1; width: 80.88%; transform: none; }                    /* f17 w=165/204         */
+  50%     { opacity: 1; width: 88.73%; transform: none; }                    /* f18 w=181/204         */
+  60%     { opacity: 1; width: 89.71%; transform: translateX(4.41%); }       /* f19 w=183/204 x=9/204 */
+  70%     { opacity: 1; width: 89.71%; transform: translateX(7.35%); }       /* f20 x=15/204          */
+  80%     { opacity: 1; width: 89.71%; transform: translateX(8.82%); }       /* f21 x=18/204 (peak)   */
+  90%     { opacity: 1; width: 89.71%; transform: translateX(8.33%); }       /* f22 x=17/204          */
+  100%    { opacity: 1; width: 89.71%; transform: translateX(7.84%); }       /* f23 x=16/204 (settled) */
+}
+
+/* Content reveal, stage 2: each direct child of #gami-content fades/slides
+   in AFTER the frame's real 1000ms unfold, staggered ~35ms apart — the
+   "rows populate in after the frame pops open" look from the reference,
+   now universal to every tab's own top-level rows/sections/grids (this
+   stagger pattern is ours, not from the source file; only its start time
+   is keyed to the real unfold duration above). */
+#gami-content > * {
+  opacity: 0;
+  animation: pp-row-in 260ms ease-out both;
+}
+#gami-content > *:nth-child(1)  { animation-delay: 1000ms; }
+#gami-content > *:nth-child(2)  { animation-delay: 1035ms; }
+#gami-content > *:nth-child(3)  { animation-delay: 1070ms; }
+#gami-content > *:nth-child(4)  { animation-delay: 1105ms; }
+#gami-content > *:nth-child(5)  { animation-delay: 1140ms; }
+#gami-content > *:nth-child(6)  { animation-delay: 1175ms; }
+#gami-content > *:nth-child(7)  { animation-delay: 1210ms; }
+#gami-content > *:nth-child(8)  { animation-delay: 1245ms; }
+#gami-content > *:nth-child(9)  { animation-delay: 1280ms; }
+#gami-content > *:nth-child(10) { animation-delay: 1315ms; }
+#gami-content > *:nth-child(11) { animation-delay: 1350ms; }
+#gami-content > *:nth-child(12) { animation-delay: 1385ms; }
+#gami-content > *:nth-child(13) { animation-delay: 1420ms; }
+#gami-content > *:nth-child(n+14) { animation-delay: 1455ms; } /* safety net */
+
+@keyframes pp-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Loading/error state: no frame-children to stagger, and shouldn't be
+   invisible while the animation delay elapses. */
+.gami-loading { opacity: 1 !important; animation: none !important; color: var(--pp-ink-soft) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  #gami-content,
+  #gami-content > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Settings tab's own sub-views (menu / detail) are now plain flex
+   containers — the frame they used to carry themselves lives on
+   #gami-content above, so no double-framing. */
+.gami-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gami-settings-menu { align-items: stretch; gap: 14px; padding: 6px 4px; }
+.gami-settings-detail { padding: 0 2px; }
+
+/* ==========================================================================
+   2. MODAL CHROME — header, tab bar. Stays dark (the outer "desk" the
+   parchment card sits on), but retinted to the same maroon/gold family
+   instead of the old teal-tan accent, so it reads as one connected system
+   with the parchment content below it.
+   ========================================================================== */
+
+.gami-modal {
+  background: #14100d;
+  border: 2px solid #3a2a1f;
+  box-shadow: 6px 6px 0 #000, 0 0 0 1px rgba(109, 43, 43, 0.3);
+}
+.gami-header { border-bottom: 2px solid #3a2a1f; }
+.gami-title  { color: #d9b98c; text-shadow: 2px 2px 0 #000; }
+.gami-close  {
+  border-color: var(--pp-maroon);
+  color: #d9b98c;
+  background: #241a14;
+}
+.gami-close:hover { color: #fff; border-color: #a85a5a; }
+
+.gami-tabs { border-bottom: 2px solid #3a2a1f; }
+.gami-tab  { color: #a89078; }
+.gami-tab:hover  { color: #d9b98c; }
+.gami-tab.active { color: #e8c9a0; border-bottom-color: var(--pp-maroon); }
+
+/* ==========================================================================
+   3. SHARED "ROW CARD" LOOK — every tab has some version of a list of
+   translucent-parchment cards on the panel (settings rows, stat tiles,
+   badge cards, leaderboard rows, stable rows, cosmetic items, shop items).
+   One rule set for all of them; per-tab layout (grid vs flex, sizes) is
+   untouched from styles.css, only colour/border/background changes.
+   ========================================================================== */
+
+.gami-settings-row,
+.gami-stat,
+.gami-badge-card,
+.gami-lb-row,
+.gami-stable-row,
+.gami-cos-item,
+.gami-shop-item {
+  background: rgba(242, 228, 196, 0.55);
+  border: 1.5px solid rgba(109, 43, 43, 0.5);
+  border-radius: 3px;
+}
+.gami-lb-row.gami-lb-me { border-color: var(--pp-maroon); background: rgba(242, 228, 196, 0.8); }
+.gami-badge-card.earned { border-color: var(--pp-maroon); }
+.gami-badge-card.locked { opacity: 0.55; }
+.gami-cos-item.active   { border-color: var(--pp-maroon); background: rgba(242, 228, 196, 0.8); }
+.gami-shop-item.owned   { opacity: 0.65; }
+
+/* Text inside those cards */
+.gami-settings-name, .gami-settings-desc,
+.gami-stat-val, .gami-stat-lbl,
+.gami-badge-name, .gami-badge-desc,
+.gami-lb-name, .gami-lb-rank, .gami-lb-level,
+.gami-stable-name, .gami-stable-record,
+.gami-cos-name,
+.gami-shop-name,
+.gami-display-name, .gami-xp-text,
+.gami-emoji-shop-grid, .gami-tier-header span {
+  color: var(--pp-ink);
+}
+.gami-settings-desc, .gami-stat-lbl, .gami-badge-desc,
+.gami-lb-level, .gami-stable-record, .gami-shop-name {
+  color: var(--pp-ink-soft);
+}
+.gami-stat-val, .gami-lb-xp, .gami-badge-reward, .gami-cos-header span + span {
+  color: var(--pp-gold) !important;
+}
+.gami-shop-owned { color: var(--pp-green); }
+
+/* Level badge (Stats tab) + XP bar */
+.gami-level-badge { background: var(--pp-maroon); color: var(--pp-parch-lt); }
+.gami-xp-bar-wrap { background: rgba(60, 44, 28, 0.25); }
+.gami-xp-bar      { background: var(--pp-gold); }
+
+/* ==========================================================================
+   4. SECTION HEADERS — Audio/Display-style labels (Settings), "My Emojis" /
+   "Shop" (Emojis), "My Deployed Bots" (Stable), "Ladder" (Leaderboard).
+   ========================================================================== */
+
+.gami-settings-section-label,
+.gami-section-title,
+.section-label {
+  color: var(--pp-maroon) !important;
+  border-bottom-color: rgba(109, 43, 43, 0.35) !important;
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.5);
+}
+.gami-settings-section-label {
+  text-align: center;
+  letter-spacing: 2px;
+  padding: 10px 0 2px;
+}
+.gami-tier-header { background: rgba(231, 207, 161, 0.35); border-left-color: var(--pp-maroon) !important; }
+
+/* ==========================================================================
+   5. BUTTONS — the pill/paper-button look (piece_44 / piece_52) applied to
+   every actionable button across tabs, not just Settings' category menu.
+   Sizing/padding/font-size stay per-class (from styles.css); only the
+   border art + ink colour are shared.
+   ========================================================================== */
+
+.pp-menu-btn,
+.gami-cos-btn,
+.gami-stable-btn,
+.gami-toggle {
+  font-family: 'Press Start 2P', var(--font-terminal), monospace;
+}
+
+.pp-menu-btn {
+  position: relative;
+  border-style: solid;
+  border-width: 12px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
+  border-image-slice: 12 fill;
+  border-image-width: 12px;
+  border-image-repeat: stretch;
+  background: transparent;
+  min-height: 44px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--pp-ink);
+  cursor: pointer;
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.4);
+}
+.pp-menu-btn:active { transform: translate(2px, 2px); }
+
+/* Smaller pill button, for the many inline action buttons across tabs
+   (Equip/Buy, Train/Active/Retired, Deploy, Challenge...) — same asset,
+   thinner border so it doesn't overwhelm compact rows. */
+.gami-cos-btn,
+.gami-stable-btn {
+  position: relative;
+  border-style: solid;
+  border-width: 7px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
+  border-image-slice: 12 fill;
+  border-image-width: 7px;
+  border-image-repeat: stretch;
+  background: transparent;
+  color: var(--pp-ink);
+  box-shadow: none;
+  cursor: pointer;
+}
+.gami-cos-btn:hover, .gami-stable-btn:hover { filter: brightness(0.97); }
+.gami-cos-btn:active, .gami-stable-btn:active { transform: translate(2px, 2px); }
+.gami-cos-btn.equipped  { color: var(--pp-green); }
+.gami-cos-btn.buy       { color: var(--pp-gold); }
+.gami-cos-btn.cant-afford { opacity: 0.5; cursor: default; }
+.gami-stable-btn.off    { color: var(--pp-rust); }
+
+.gami-shop-buy-btn { border-color: var(--pp-maroon) !important; color: var(--pp-gold) !important; }
+.gami-shop-buy-btn:hover { background: rgba(109, 43, 43, 0.08) !important; }
+
+.gami-emoji-btn, .gami-shop-emoji {
+  background: rgba(242, 228, 196, 0.55);
+  border-color: rgba(109, 43, 43, 0.5);
+}
+.gami-emoji-btn:hover:not(.inactive) { background: rgba(242, 228, 196, 0.85); border-color: var(--pp-maroon); }
+.gami-emoji-btn.text-emoji, .gami-shop-emoji.text-emoji { color: var(--pp-ink); }
+.gami-emoji-btn.inactive { opacity: 0.5; }
+
+/* Hover/focus indicator — a LITERAL asset decoded from the pack's own
+   HighLighter layer (see docs/paper-ui-design-system.md "System 2"), the
+   same corner-bracket ornament used on the static frame borders, at button
+   scale. The source shows it land with one briefly-thicker "pulse" frame
+   before settling — reproduced as a 2-step discrete swap (not a fade,
+   since the source itself doesn't fade). Now shared by every pill button,
+   not just Settings' category menu. */
+.pp-menu-btn::after,
+.gami-cos-btn::after,
+.gami-stable-btn::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  pointer-events: none;
+  opacity: 0;
+  border-style: solid;
+  border-width: 14px;
+  border-image-source: url("../assets/paper-ui-menus/decoded/highlighter_button_steady_42x45.png");
+  border-image-slice: 14 fill;
+  border-image-width: 14px;
+  border-image-repeat: stretch;
+}
+.pp-menu-btn:hover::after, .pp-menu-btn:focus-visible::after,
+.gami-cos-btn:hover::after, .gami-cos-btn:focus-visible::after,
+.gami-stable-btn:hover::after, .gami-stable-btn:focus-visible::after {
+  opacity: 1;
+  animation: pp-highlight-land 220ms steps(1, jump-end) both;
+}
+@keyframes pp-highlight-land {
+  0%   { border-image-source: url("../assets/paper-ui-menus/decoded/highlighter_button_pulse_42x46.png"); }
+  45%  { border-image-source: url("../assets/paper-ui-menus/decoded/highlighter_button_steady_42x45.png"); }
+  100% { border-image-source: url("../assets/paper-ui-menus/decoded/highlighter_button_steady_42x45.png"); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pp-menu-btn::after, .gami-cos-btn::after, .gami-stable-btn::after { animation: none !important; }
+}
+
+/* ON/OFF toggle (Settings tab) — paper button sprite, state shown by ink
+   colour rather than the dark theme's fill swap. */
+.gami-toggle,
+.gami-toggle.on,
+.gami-toggle.off {
+  border-style: solid;
+  border-width: 8px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_52_59x22.png");
+  border-image-slice: 7 fill;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
+  background: transparent;
+  box-shadow: none;
+  color: var(--pp-ink);
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.4);
+}
+.gami-toggle.on  { color: var(--pp-green); }
+.gami-toggle.off { color: var(--pp-rust); }
+.gami-toggle:active { transform: translate(2px, 2px); }
+
+/* Native range sliders (Settings' CRT volume) tinted maroon. */
+#gami-content input[type="range"]:not(.gami-pip-range) {
+  accent-color: var(--pp-maroon) !important;
+}
+
+/* ==========================================================================
+   6. FLANKED LABEL + BACK BUTTON — Settings' internal category header
+   ("┄┄ Audio ┄┄") and its back-chevron. Settings-specific, kept as-is.
+   ========================================================================== */
+
+.pp-flanked-label span { font-family: 'Press Start 2P', var(--font-terminal), monospace; }
+.pp-flanked-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.pp-flanked-label::before,
+.pp-flanked-label::after {
+  content: "";
+  flex: 1 1 0;
+  max-width: 64px;
+  border-top: 2px dashed var(--pp-maroon);
+  opacity: .55;
+}
+.pp-flanked-label span {
+  font-size: 13px;
+  color: var(--pp-maroon);
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.pp-flanked-label--back {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  padding-left: 4px;
+  margin-bottom: 14px;
+}
+.pp-flanked-label--back::before,
+.pp-flanked-label--back::after { display: none; }
+.pp-back-btn {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--pp-maroon);
+  border-radius: 50%;
+  background: var(--pp-parch-lt);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+}
+.pp-back-btn::before {
+  content: "";
+  position: absolute;
+  top: 50%; left: 55%;
+  width: 8px; height: 8px;
+  border-left: 2.5px solid var(--pp-maroon);
+  border-bottom: 2.5px solid var(--pp-maroon);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.pp-back-btn:active { transform: translate(1px, 1px); }
+.pp-flanked-label--back span { font-size: 15px; }
+
+/* ==========================================================================
+   7. PIP-STYLE SEGMENTED SLIDER — CSS-only restyle of the native
+   <input type=range> used for Adaptive Music Volume. No markup change.
+   ========================================================================== */
+
+.gami-pip-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 130px;
+  height: 16px;
+  background:
+    repeating-linear-gradient(to right, #4a7a9c 0, #4a7a9c 9px, transparent 9px, transparent 11px),
+    var(--pp-parch-lt);
+  border: 1.5px solid var(--pp-maroon);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.gami-pip-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px; height: 20px;
+  margin-top: -3px;
+  background: var(--pp-maroon);
+  border: 1px solid var(--pp-ink);
+  border-radius: 1px;
+  cursor: pointer;
+}
+.gami-pip-range::-moz-range-track {
+  height: 16px;
+  background:
+    repeating-linear-gradient(to right, #4a7a9c 0, #4a7a9c 9px, transparent 9px, transparent 11px),
+    var(--pp-parch-lt);
+  border: 1.5px solid var(--pp-maroon);
+  border-radius: 2px;
+}
+.gami-pip-range::-moz-range-thumb {
+  width: 10px; height: 20px;
+  background: var(--pp-maroon);
+  border: 1px solid var(--pp-ink);
+  border-radius: 1px;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   8. KEYBOARD GUIDE (Settings > Controls) — parchment recolour.
+   ========================================================================== */
+
+.gami-keybind-group {
+  background: rgba(231, 207, 161, 0.42);
+  border: 1px solid rgba(109, 43, 43, 0.4);
+}
+.gami-keybind-group-title {
+  color: var(--pp-maroon);
+  border-bottom-color: rgba(109, 43, 43, 0.35);
+}
+.gami-keybind-row { color: var(--pp-ink); }
+.gami-keybind-row kbd {
+  background: var(--pp-parch-lt);
+  border: 1px solid var(--pp-maroon);
+  border-bottom: 2px solid var(--pp-maroon);
+  color: var(--pp-ink);
+}

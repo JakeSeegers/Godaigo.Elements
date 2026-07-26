@@ -173,8 +173,8 @@ function _renderCosmetics(content) {
 
     content.innerHTML = `
         <div class="gami-cos-header">
-            <span style="color:#eee;font-size:15px;font-weight:bold;">Name Colours</span>
-            <span style="color:#d9b08c;font-size:14px;">${gold}g</span>
+            <span style="color:var(--pp-ink);font-size:15px;font-weight:bold;">Name Colours</span>
+            <span style="color:var(--pp-gold);font-size:14px;">${gold}g</span>
         </div>
         <div class="gami-cos-list">
             ${items.map(item => {
@@ -227,7 +227,7 @@ function _renderEmojis(content) {
     let html = '<div class="gami-section-title">My Emojis</div>';
 
     if (owned.length === 0) {
-        html += `<div style="color:#ccc;font-style:italic;padding:8px 0 16px;">No emojis yet — buy some below!</div>`;
+        html += `<div style="color:var(--pp-ink-soft);font-style:italic;padding:8px 0 16px;">No emojis yet — buy some below!</div>`;
     } else {
         html += `<div class="gami-emoji-grid">`;
         for (const item of owned) {
@@ -239,10 +239,10 @@ function _renderEmojis(content) {
             }
         }
         html += `</div>`;
-        if (!inGame) html += `<div style="color:#ccc;font-size:12px;padding:4px 0 14px;">Join a game to use emojis</div>`;
+        if (!inGame) html += `<div style="color:var(--pp-ink-soft);font-size:12px;padding:4px 0 14px;">Join a game to use emojis</div>`;
     }
 
-    html += `<div class="gami-section-title" style="margin-top:4px;">Shop <span style="color:#d9b08c;float:right;">${gold}g</span></div>`;
+    html += `<div class="gami-section-title" style="margin-top:4px;">Shop <span style="color:var(--pp-gold);float:right;">${gold}g</span></div>`;
 
     for (const tier of tiers) {
         const tierItems = items.filter(e => e.tier === tier.id);
@@ -250,7 +250,7 @@ function _renderEmojis(content) {
             <div class="gami-tier-section">
                 <div class="gami-tier-header" style="border-left-color:${tier.color};">
                     <span style="color:${tier.color};font-weight:bold;font-size:11px;">${tier.badge}</span>
-                    <span style="color:#ccc;margin-left:6px;font-size:13px;">${tier.name}</span>
+                    <span style="color:var(--pp-ink-soft);margin-left:6px;font-size:13px;">${tier.name}</span>
                     <span style="color:${tier.color};margin-left:auto;font-size:12px;">${tier.cost}g</span>
                 </div>
                 <div class="gami-emoji-shop-grid">`;
@@ -324,18 +324,18 @@ async function _renderShop(content) {
 
     content.innerHTML = `
         <div class="gami-cos-header">
-            <span style="color:#eee;font-size:15px;font-weight:bold;">Shop</span>
-            <span style="color:#d9b08c;font-size:14px;">${gold}g</span>
+            <span style="color:var(--pp-ink);font-size:15px;font-weight:bold;">Shop</span>
+            <span style="color:var(--pp-gold);font-size:14px;">${gold}g</span>
         </div>
         <div class="gami-section-title" style="margin-top:8px;">Capture Stones</div>
-        <div style="color:#999;font-size:12px;margin-bottom:10px;">
+        <div style="color:var(--pp-ink-soft);font-size:12px;margin-bottom:10px;">
             Use a stone after challenging a bot, or right on the win screen after
             a game with real bots, to try copying it into your Stable. The closer
             the fight, the better your odds — consumed whether the attempt
             succeeds or not.
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
-            <span style="color:#ddd;font-size:13px;">You have <b>${stones}</b> Capture Stone${stones === 1 ? '' : 's'}.</span>
+            <span style="color:var(--pp-ink);font-size:13px;">You have <b>${stones}</b> Capture Stone${stones === 1 ? '' : 's'}.</span>
             <button id="gami-shop-buy-stone" class="gami-cos-btn buy${canAfford ? '' : ' cant-afford'}">${GAMI_STONE_COST}g</button>
         </div>
     `;
@@ -572,7 +572,7 @@ function _gami_ladderRowsHTML(rows, hideBots) {
     return shown.map(r => `
         <div class="gami-lb-row ${r.isMe ? 'gami-lb-me' : ''}"${r.isBot ? ` style="cursor:pointer;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${r.botId})"` : ''}>
             <span class="gami-lb-rank">#${r.rank}</span>
-            <span class="gami-lb-name">${_esc(r.name)}${r.isBot ? ` <span style="font-size:11px;color:#888;font-weight:normal;">bot by ${_esc(r.ownerName)}</span>` : ''}</span>
+            <span class="gami-lb-name">${_esc(r.name)}${r.isBot ? ` <span style="font-size:11px;color:var(--pp-ink-soft);font-weight:normal;">bot by ${_esc(r.ownerName)}</span>` : ''}</span>
         </div>`).join('');
 }
 
@@ -613,23 +613,23 @@ async function _renderLeaderboard(content) {
         <div class="section-label" style="margin-bottom:6px;">The Void Knight</div>
         <div class="gami-leaderboard" style="margin-bottom:4px;">
             <div class="gami-lb-row">
-                <span class="gami-lb-name">The Void Knight <span style="font-size:11px;color:#888;font-weight:normal;">public leader bot</span></span>
+                <span class="gami-lb-name">The Void Knight <span style="font-size:11px;color:var(--pp-ink-soft);font-weight:normal;">public leader bot</span></span>
                 <button class="gami-stable-btn" onclick="_gami_challengeLeader()" title="Your active deployed bot plays it head-to-head — win decisively to dethrone it">Challenge</button>
                 <button class="gami-stable-btn" onclick="_gami_trainLeader()" title="Improve the Knight's own weights for everyone — a confirmed improvement pays 25 gold">Train</button>
             </div>
         </div>
-        <div style="font-size:11px;color:#999;margin-bottom:14px;">${vkChampLine}</div>` : '';
+        <div style="font-size:11px;color:var(--pp-ink-soft);margin-bottom:14px;">${vkChampLine}</div>` : '';
 
     content.innerHTML = `
         ${hideBots ? '' : vkHTML}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
             <span class="section-label" style="margin:0;">Ladder</span>
-            <label style="font-size:11px;color:#999;cursor:pointer;user-select:none;">
+            <label style="font-size:11px;color:var(--pp-ink-soft);cursor:pointer;user-select:none;">
                 <input type="checkbox" id="gami-hide-bots"${hideBots ? ' checked' : ''}> Hide bots
             </label>
         </div>
         <div class="gami-leaderboard">${_gami_ladderRowsHTML(ladderRows, hideBots)}</div>
-        <div style="font-size:10px;color:#777;margin-top:6px;">Players and bots share one ladder. Positions move only through challenges — beat someone ranked above you and take their spot.</div>
+        <div style="font-size:10px;color:var(--pp-ink-soft);margin-top:6px;">Players and bots share one ladder. Positions move only through challenges — beat someone ranked above you and take their spot.</div>
     `;
     const hideToggle = document.getElementById('gami-hide-bots');
     if (hideToggle) hideToggle.onchange = () => {
@@ -798,15 +798,15 @@ async function _gami_showBotPetals(botId) {
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10001;display:flex;align-items:center;justify-content:center;';
     overlay.innerHTML = `
         <div style="background:#1a1a2e;border:1px solid #444;border-radius:10px;padding:16px 20px;max-width:320px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.7);">
-            <div style="font-weight:bold;color:#eee;font-size:14px;margin-bottom:2px;">${_esc(bot.nickname)}</div>
-            <div style="font-size:11px;color:#999;margin-bottom:6px;">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%) · ${bot.is_active ? 'Active on the leaderboard' : 'Benched'}</div>
+            <div style="font-weight:bold;color:var(--pp-ink);font-size:14px;margin-bottom:2px;">${_esc(bot.nickname)}</div>
+            <div style="font-size:11px;color:var(--pp-ink-soft);margin-bottom:6px;">${bot.wins}-${bot.losses}${bot.draws ? `-${bot.draws}` : ''} (${pct}%) · ${bot.is_active ? 'Active on the leaderboard' : 'Benched'}</div>
             <svg viewBox="0 0 220 224" width="240" height="244" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="${cx}" cy="${cy}" r="${rMax}" fill="none" stroke="#333" stroke-dasharray="3 3"/>
                 ${petals}
                 <circle cx="${cx}" cy="${cy}" r="10" fill="#1a1a2e" stroke="#666"/>
                 ${labels}
             </svg>
-            <div style="font-size:10px;color:#777;margin-top:4px;">50 = stock weights. Petals show how this bot's tuning leans across the five elements.</div>
+            <div style="font-size:10px;color:var(--pp-ink-soft);margin-top:4px;">50 = stock weights. Petals show how this bot's tuning leans across the five elements.</div>
             <button class="gami-stable-btn" style="margin-top:10px;" onclick="document.getElementById('gami-petals-overlay').remove()">Close</button>
         </div>`;
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
@@ -834,7 +834,7 @@ async function loadMainLeaderboard() {
     el.innerHTML = shown.map(r => `
         <div class="gami-lb-row ${r.isMe ? 'gami-lb-me' : ''}"${r.isBot ? ` style="cursor:pointer;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${r.botId})"` : ''}>
             <span class="gami-lb-rank">#${r.rank}</span>
-            <span class="gami-lb-name">${_esc(r.name)}${r.isBot ? ` <span style="font-size:11px;color:#888;font-weight:normal;">bot by ${_esc(r.ownerName)}</span>` : ''}</span>
+            <span class="gami-lb-name">${_esc(r.name)}${r.isBot ? ` <span style="font-size:11px;color:var(--pp-ink-soft);font-weight:normal;">bot by ${_esc(r.ownerName)}</span>` : ''}</span>
         </div>`).join('');
 }
 
@@ -865,7 +865,7 @@ async function _gami_emojisBuy(id) {
 // ── Settings tab ─────────────────────────────────────────────
 // Renders as a category MENU (Display / Audio / Controls) that opens into a
 // sub-panel per category — mirrors the Paper UI pack's own Pause/Settings
-// reference layout (see css/paper-ui-settings.css) rather than one long
+// reference layout (see css/paper-ui-profile.css) rather than one long
 // scrolling list. _gamiSettingsCategory is module state, reset to the menu
 // every time the Settings tab is (re)opened; navigating between the menu
 // and a sub-panel re-renders in place without resetting it.
