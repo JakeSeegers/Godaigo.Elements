@@ -24,14 +24,41 @@
    'fill' paints the sprite's centre as the panel background; the 9-slice
    edges give the maroon paper border. */
 .gami-settings-list {
+  position: relative;
   border-style: solid;
   border-width: 16px;
   border-image-source: url("../assets/paper-ui-menus/pieces/piece_37_185x282.png");
   border-image-slice: 11 fill;
   border-image-width: 16px;
   border-image-repeat: stretch;
-  padding: 14px 18px;
+  padding: 18px 22px;
   gap: 10px;
+  /* Opens with a small paper "unfold" — approximates the pack's appear anim.
+     Fires each time the Settings tab is (re)rendered, since the element is
+     rebuilt by _renderSettings. */
+  animation: pp-panel-in 340ms cubic-bezier(.2, .9, .3, 1.2) both;
+  transform-origin: top center;
+}
+
+/* Ornate corner flourishes (piece_54 outline frame) overlaid on top of the
+   filled frame, so the panel keeps its thick parchment border AND gets the
+   decorated corners. Transparent centre + no pointer events = purely visual. */
+.gami-settings-list::before {
+  content: "";
+  position: absolute;
+  inset: -14px;                 /* reach out over the parchment border */
+  pointer-events: none;
+  border-style: solid;
+  border-width: 26px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_54_226x253.png");
+  border-image-slice: 26;
+  border-image-width: 26px;
+  border-image-repeat: stretch;
+}
+
+@keyframes pp-panel-in {
+  from { opacity: 0; transform: scale(.94) translateY(8px); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* Section headers (— Audio —, — Display —, …) as centred maroon labels. */
