@@ -1,0 +1,118 @@
+
+====================================================================================================
+paperui/Humble Gift - Paper UI System v1.1/Aseprite/Animated/Folding & Cutout Paper UI.aseprite
+====================================================================================================
+frames=49 canvas=2544x3532 depth=32bpp total=3675ms
+TAGS: (none)
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(2544, 3532)]  (+48 linked)
+[  1] GROUP Paper                          no real cels  (+0 linked)
+  [  2] layer Back Paper                     real cels: 1 spanning frames 0-0; sizes seen: [(1827, 1213)]  (+48 linked)
+  [  3] layer Front Paper                    real cels: 1 spanning frames 0-0; sizes seen: [(2416, 3376)]  (+48 linked)
+  [  4] layer Decoration 1                   real cels: 1 spanning frames 0-0; sizes seen: [(2400, 3361)]  (+48 linked)
+  [  5] layer Decoration 2                   real cels: 1 spanning frames 0-0; sizes seen: [(1306, 625)]  (+48 linked)
+[  6] GROUP Content                        no real cels  (+0 linked)
+  [  7] layer Dialogue Box                   real cels: 1 spanning frames 0-0; sizes seen: [(175, 143)]  (+48 linked)
+  [  8] layer Holder                         real cels: 1 spanning frames 0-0; sizes seen: [(1717, 1095)]  (+48 linked)
+  [  9] layer Buttons                        real cels: 1 spanning frames 0-0; sizes seen: [(1815, 1132)]  (+48 linked)
+  [ 10] layer Progress Bars                  real cels: 1 spanning frames 0-0; sizes seen: [(1561, 509)]  (+48 linked)
+  [ 11] layer Map                            no real cels  (+0 linked)
+  [ 12] layer icons                          real cels: 1 spanning frames 0-0; sizes seen: [(1470, 1065)]  (+48 linked)
+  [ 13] layer items                          real cels: 1 spanning frames 0-0; sizes seen: [(1219, 521)]  (+48 linked)
+  [ 14] layer Highlighter                    real cels: 1 spanning frames 0-0; sizes seen: [(633, 769)]  (+48 linked)
+  [ 15] layer Text                           real cels: 1 spanning frames 0-0; sizes seen: [(1973, 1215)]  (+48 linked)
+  [ 16] layer Stamp                          real cels: 1 spanning frames 0-0; sizes seen: [(1647, 85)]  (+48 linked)
+[ 17] GROUP Day & Night                    no real cels  (+0 linked)
+  [ 18] layer Scene                          real cels: 1 spanning frames 0-0; sizes seen: [(59, 38)]  (+48 linked)
+  [ 19] layer Sun                            real cels: 1 spanning frames 0-0; sizes seen: [(23, 23)]  (+48 linked)
+  [ 20] layer Clouds                         real cels: 1 spanning frames 0-0; sizes seen: [(64, 18)]  (+48 linked)
+  [ 21] layer Clock                          real cels: 1 spanning frames 0-0; sizes seen: [(75, 46)]  (+48 linked)
+[ 22] GROUP Stamp                          no real cels  (+0 linked)
+  [ 23] layer Stamp Mark                     real cels: 1 spanning frames 35-35; sizes seen: [(30, 30)]  (+13 linked)
+  [ 24] layer Stamp Animated                 real cels: 20 spanning frames 21-40; sizes seen: [(48, 49), (49, 50), (50, 51), (52, 53)]...  (+0 linked)
+[ 25] GROUP Content Appear Animation       no real cels  (+0 linked)
+  [ 26] layer Appear Animation               real cels: 49 spanning frames 0-48; sizes seen: [(560, 163), (560, 341), (560, 432), (1784, 1115)]...  (+0 linked)
+
+====================================================================================================
+paperui/Humble Gift - Paper UI System v1.1/Aseprite/Animated/Items Holder Day & Night Cycle.aseprite
+====================================================================================================
+frames=156 canvas=96x96 depth=32bpp total=26400ms
+TAGS:
+  'Dawn'  frames 0-9  dir=0
+  'Day'  frames 11-20  dir=0
+  'Noon'  frames 22-31  dir=0
+  'Night'  frames 33-42  dir=0
+  'Lightning 1'  frames 44-53  dir=0
+  'Lightning 2'  frames 55-64  dir=0
+  'Raining'  frames 66-75  dir=0
+  'items Holder'  frames 77-77  dir=0
+  'Dawn'  frames 79-88  dir=0
+  'Day'  frames 90-99  dir=0
+  'Noon'  frames 101-110  dir=0
+  'Night'  frames 112-121  dir=0
+  'Lightning 1'  frames 123-132  dir=0
+  'Lightning 2'  frames 134-143  dir=0
+  'Raining'  frames 145-154  dir=0
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(96, 96)]  (+155 linked)
+[  1] GROUP Day & Night                    no real cels  (+0 linked)
+  [  2] layer Scene                          real cels: 14 spanning frames 0-145; sizes seen: [(59, 38), (59, 59)]  (+126 linked)
+  [  3] layer Sun                            real cels: 140 spanning frames 0-154; sizes seen: [(23, 23), (35, 30), (41, 29), (41, 31)]  (+0 linked)
+  [  4] layer Cloud                          real cels: 140 spanning frames 0-154; sizes seen: [(64, 18)]  (+0 linked)
+  [  5] layer Clock                          real cels: 14 spanning frames 0-145; sizes seen: [(75, 46), (75, 75)]  (+126 linked)
+  [  6] layer Lighting                       real cels: 8 spanning frames 49-140; sizes seen: [(10, 9), (13, 9), (13, 23), (19, 22)]...  (+0 linked)
+  [  7] layer Rain                           real cels: 20 spanning frames 66-154; sizes seen: [(15, 2), (19, 3), (19, 12), (21, 9)]...  (+0 linked)
+
+====================================================================================================
+paperui/Humble Gift - Paper UI System v1.1/Aseprite/Animated/Plain Paper UI.aseprite
+====================================================================================================
+frames=50 canvas=2528x3536 depth=32bpp total=3285ms
+TAGS: (none)
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(2528, 3536)]  (+49 linked)
+[  1] GROUP Paper UI                       no real cels  (+0 linked)
+  [  2] layer Back Paper                     real cels: 1 spanning frames 0-0; sizes seen: [(1827, 1213)]  (+49 linked)
+  [  3] layer Front Paper                    real cels: 1 spanning frames 0-0; sizes seen: [(2400, 3376)]  (+49 linked)
+  [  4] layer Decoration 1                   real cels: 1 spanning frames 0-0; sizes seen: [(2400, 3361)]  (+49 linked)
+  [  5] layer Decoration 2                   real cels: 1 spanning frames 0-0; sizes seen: [(1306, 625)]  (+49 linked)
+[  6] GROUP Content                        no real cels  (+0 linked)
+  [  7] layer Dialogue Box                   real cels: 1 spanning frames 0-0; sizes seen: [(175, 143)]  (+49 linked)
+  [  8] layer Holder                         real cels: 1 spanning frames 0-0; sizes seen: [(1717, 1095)]  (+49 linked)
+  [  9] layer Buttons                        real cels: 1 spanning frames 0-0; sizes seen: [(1815, 1132)]  (+49 linked)
+  [ 10] layer Progress bar                   real cels: 1 spanning frames 0-0; sizes seen: [(1561, 509)]  (+49 linked)
+  [ 11] layer Map                            no real cels  (+0 linked)
+  [ 12] layer icons                          real cels: 1 spanning frames 0-0; sizes seen: [(1470, 1065)]  (+49 linked)
+  [ 13] layer items                          real cels: 1 spanning frames 0-0; sizes seen: [(1219, 521)]  (+49 linked)
+  [ 14] layer Highlighter                    real cels: 1 spanning frames 0-0; sizes seen: [(633, 769)]  (+49 linked)
+  [ 15] layer Text                           real cels: 1 spanning frames 0-0; sizes seen: [(1973, 1215)]  (+49 linked)
+  [ 16] layer Stamp                          real cels: 1 spanning frames 0-0; sizes seen: [(1647, 85)]  (+49 linked)
+[ 17] GROUP Day & Night                    no real cels  (+0 linked)
+  [ 18] layer Scene                          real cels: 1 spanning frames 0-0; sizes seen: [(59, 38)]  (+49 linked)
+  [ 19] layer Sun                            real cels: 1 spanning frames 0-0; sizes seen: [(23, 23)]  (+49 linked)
+  [ 20] layer Clouds                         real cels: 1 spanning frames 0-0; sizes seen: [(64, 18)]  (+49 linked)
+  [ 21] layer Clock                          real cels: 1 spanning frames 0-0; sizes seen: [(75, 46)]  (+49 linked)
+[ 22] GROUP Stamp                          no real cels  (+0 linked)
+  [ 23] layer Stamp Mark                     real cels: 1 spanning frames 35-35; sizes seen: [(30, 30)]  (+14 linked)
+  [ 24] layer Stamp Animated                 real cels: 20 spanning frames 21-40; sizes seen: [(48, 49), (49, 50), (50, 51), (52, 53)]...  (+0 linked)
+[ 25] GROUP Content Appear Animation       no real cels  (+0 linked)
+  [ 26] layer Appear Animation               real cels: 49 spanning frames 0-48; sizes seen: [(560, 163), (560, 341), (560, 432), (1784, 1115)]...  (+0 linked)
+
+====================================================================================================
+paperui/Humble Gift - Paper UI System v1.1/Aseprite/Folding & Cutout Paper UI SpriteSheet.aseprite
+====================================================================================================
+frames=1 canvas=4560x4224 depth=32bpp total=100ms
+TAGS: (none)
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(4560, 4224)]  (+0 linked)
+[  1] layer Sprites                        real cels: 1 spanning frames 0-0; sizes seen: [(4447, 4090)]  (+0 linked)
+[  2] layer Text                           real cels: 1 spanning frames 0-0; sizes seen: [(3800, 583)]  (+0 linked)
+
+====================================================================================================
+paperui/Humble Gift - Paper UI System v1.1/Aseprite/Plain Paper UI SpriteSheet.aseprite
+====================================================================================================
+frames=1 canvas=3984x4224 depth=32bpp total=65ms
+TAGS: (none)
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(3984, 4224)]  (+0 linked)
+[  1] layer Sprites                        real cels: 1 spanning frames 0-0; sizes seen: [(3871, 4053)]  (+0 linked)
+[  2] layer Text                           real cels: 1 spanning frames 0-0; sizes seen: [(3224, 583)]  (+0 linked)

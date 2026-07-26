@@ -1,0 +1,186 @@
+
+====================================================================================================
+v13/Humble Gift - v1.3/Aseprite/0 Player HUD v1.0.aseprite
+====================================================================================================
+frames=83 canvas=672x480 depth=32bpp total=8300ms
+TAGS:
+  'Using Inventory Bar'  frames 0-82  dir=0
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(672, 480)]  (+82 linked)
+[  1] GROUP Paper HUD                      no real cels  (+0 linked)
+  [  2] layer Base                           real cels: 1 spanning frames 0-0; sizes seen: [(604, 310)]  (+82 linked)
+  [  3] layer Holder                         real cels: 1 spanning frames 0-0; sizes seen: [(584, 281)]  (+82 linked)
+  [  4] layer Progress Bars                  real cels: 45 spanning frames 0-74; sizes seen: [(55, 22), (56, 22)]  (+38 linked)
+  [  5] layer Buttons                        real cels: 28 spanning frames 0-81; sizes seen: [(416, 42), (420, 42)]  (+55 linked)
+  [  6] layer items                          real cels: 1 spanning frames 0-0; sizes seen: [(254, 16)]  (+82 linked)
+  [  7] layer Icons                          real cels: 83 spanning frames 0-82; sizes seen: [(579, 119)]  (+0 linked)
+  [  8] layer Text                           real cels: 45 spanning frames 0-74; sizes seen: [(574, 285)]  (+38 linked)
+  [  9] layer HighLighter                    real cels: 83 spanning frames 0-82; sizes seen: [(42, 45), (292, 262), (293, 262)]  (+0 linked)
+[ 10] GROUP Branding                       no real cels  (+0 linked)
+  [ 11] layer Brand Link                     real cels: 1 spanning frames 0-0; sizes seen: [(141, 10)]  (+82 linked)
+  [ 12] layer Border                         real cels: 1 spanning frames 0-0; sizes seen: [(759, 591)]  (+82 linked)
+  [ 13] layer Version                        real cels: 1 spanning frames 0-0; sizes seen: [(436, 76)]  (+82 linked)
+
+====================================================================================================
+v13/Humble Gift - v1.3/Aseprite/1 Dialogue Box v1.1.aseprite
+====================================================================================================
+frames=83 canvas=672x480 depth=32bpp total=8300ms
+TAGS:
+  'Using Inventory Bar'  frames 0-82  dir=0
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(672, 480)]  (+82 linked)
+[  1] GROUP Paper HUD                      no real cels  (+0 linked)
+  [  2] layer Base                           real cels: 43 spanning frames 0-82; sizes seen: [(18, 65), (34, 65), (604, 308), (604, 309)]...  (+0 linked)
+  [  3] layer Holder                         real cels: 43 spanning frames 0-82; sizes seen: [(15, 32), (31, 32), (79, 32), (580, 322)]...  (+0 linked)
+  [  4] layer Progress Bars                  real cels: 39 spanning frames 0-82; sizes seen: [(38, 22), (55, 22), (56, 22)]  (+0 linked)
+  [  5] layer Buttons                        real cels: 29 spanning frames 0-82; sizes seen: [(416, 21), (416, 42), (420, 37), (420, 42)]  (+0 linked)
+  [  6] layer items                          real cels: 29 spanning frames 0-82; sizes seen: [(254, 6), (254, 16)]  (+0 linked)
+  [  7] layer Icons                          real cels: 37 spanning frames 0-82; sizes seen: [(573, 45), (578, 119), (579, 119), (585, 45)]...  (+0 linked)
+  [  8] layer Text                           real cels: 43 spanning frames 0-82; sizes seen: [(1, 18), (17, 20), (26, 20), (574, 283)]...  (+0 linked)
+  [  9] layer HighLighter                    real cels: 35 spanning frames 0-82; sizes seen: [(11, 11), (42, 33), (42, 44), (42, 45)]...  (+0 linked)
+[ 10] GROUP Dialogue System                no real cels  (+0 linked)
+  [ 11] layer Base                           real cels: 40 spanning frames 20-59; sizes seen: [(410, 22), (410, 38), (410, 70), (410, 84)]  (+0 linked)
+  [ 12] layer Holder                         real cels: 36 spanning frames 22-57; sizes seen: [(251, 17)]  (+0 linked)
+  [ 13] layer Icon                           real cels: 40 spanning frames 20-59; sizes seen: [(65, 25), (65, 41), (65, 73), (65, 82)]  (+0 linked)
+  [ 14] layer Button                         real cels: 36 spanning frames 22-57; sizes seen: [(19, 19), (19, 20), (19, 21), (293, 50)]  (+0 linked)
+  [ 15] layer Text                           real cels: 40 spanning frames 20-59; sizes seen: [(69, 11), (69, 13), (76, 33), (85, 33)]...  (+0 linked)
+[ 16] GROUP Branding                       no real cels  (+0 linked)
+  [ 17] layer Brand Link                     real cels: 1 spanning frames 0-0; sizes seen: [(141, 10)]  (+82 linked)
+  [ 18] layer Border                         real cels: 1 spanning frames 0-0; sizes seen: [(759, 591)]  (+82 linked)
+  [ 19] layer Version                        real cels: 1 spanning frames 0-0; sizes seen: [(436, 76)]  (+82 linked)
+
+====================================================================================================
+v13/Humble Gift - v1.3/Aseprite/2 Text Popup v1.1.aseprite
+====================================================================================================
+frames=83 canvas=672x480 depth=32bpp total=8500ms
+TAGS:
+  'Using Inventory Bar'  frames 0-82  dir=0
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(672, 480)]  (+82 linked)
+[  1] GROUP Paper HUD                      no real cels  (+0 linked)
+  [  2] layer Base                           real cels: 1 spanning frames 0-0; sizes seen: [(604, 310)]  (+82 linked)
+  [  3] layer Holder                         real cels: 1 spanning frames 0-0; sizes seen: [(584, 281)]  (+82 linked)
+  [  4] layer Progress Bars                  real cels: 45 spanning frames 0-74; sizes seen: [(55, 22), (56, 22)]  (+38 linked)
+  [  5] layer Buttons                        real cels: 28 spanning frames 0-81; sizes seen: [(416, 42), (420, 42)]  (+55 linked)
+  [  6] layer items                          real cels: 1 spanning frames 0-0; sizes seen: [(254, 16)]  (+82 linked)
+  [  7] layer Icons                          real cels: 83 spanning frames 0-82; sizes seen: [(579, 119)]  (+0 linked)
+  [  8] layer Text                           real cels: 45 spanning frames 0-74; sizes seen: [(574, 285)]  (+38 linked)
+  [  9] layer HighLighter                    real cels: 83 spanning frames 0-82; sizes seen: [(42, 45), (292, 262), (293, 262)]  (+0 linked)
+[ 10] GROUP Text Popup                     no real cels  (+0 linked)
+  [ 11] layer Base                           real cels: 18 spanning frames 12-40; sizes seen: [(52, 34), (109, 34)]  (+18 linked)
+  [ 12] layer Text                           real cels: 11 spanning frames 19-41; sizes seen: [(6, 4), (7, 4), (13, 4), (14, 4)]...  (+11 linked)
+[ 13] GROUP Branding                       no real cels  (+0 linked)
+  [ 14] layer Brand Link                     real cels: 1 spanning frames 0-0; sizes seen: [(141, 10)]  (+82 linked)
+  [ 15] layer Border                         real cels: 1 spanning frames 0-0; sizes seen: [(672, 480)]  (+82 linked)
+  [ 16] layer Version                        real cels: 1 spanning frames 0-0; sizes seen: [(436, 76)]  (+82 linked)
+
+====================================================================================================
+v13/Humble Gift - v1.3/Aseprite/3 Pause Menu v1.2.aseprite
+====================================================================================================
+frames=81 canvas=672x480 depth=32bpp total=9700ms
+TAGS:
+  'Using Inventory Bar'  frames 0-80  dir=0
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(672, 480)]  (+80 linked)
+[  1] GROUP Paper HUD                      no real cels  (+0 linked)
+  [  2] layer Base                           real cels: 41 spanning frames 0-80; sizes seen: [(18, 65), (34, 65), (604, 308), (604, 309)]...  (+0 linked)
+  [  3] layer Holder                         real cels: 41 spanning frames 0-80; sizes seen: [(15, 32), (31, 32), (79, 32), (580, 322)]...  (+0 linked)
+  [  4] layer Progress Bars                  real cels: 38 spanning frames 0-80; sizes seen: [(38, 22), (55, 22), (56, 22)]  (+0 linked)
+  [  5] layer Buttons                        real cels: 28 spanning frames 0-80; sizes seen: [(416, 21), (416, 42), (420, 37), (420, 42)]  (+0 linked)
+  [  6] layer items                          real cels: 28 spanning frames 0-80; sizes seen: [(254, 6), (254, 16)]  (+0 linked)
+  [  7] layer Icons                          real cels: 36 spanning frames 0-80; sizes seen: [(573, 45), (578, 119), (579, 119), (585, 45)]...  (+0 linked)
+  [  8] layer Text                           real cels: 41 spanning frames 0-80; sizes seen: [(1, 18), (17, 20), (26, 20), (574, 283)]...  (+0 linked)
+  [  9] layer HighLighter                    real cels: 34 spanning frames 0-80; sizes seen: [(11, 11), (42, 33), (42, 45), (42, 46)]...  (+0 linked)
+[ 10] layer Pause Fade Effect              real cels: 5 spanning frames 13-63; sizes seen: [(672, 480)]  (+46 linked)
+[ 11] GROUP Dialogue System                no real cels  (+0 linked)
+  [ 12] layer Base                           real cels: 51 spanning frames 13-63; sizes seen: [(37, 280), (69, 280), (101, 280), (149, 280)]...  (+0 linked)
+  [ 13] layer Page Line                      real cels: 51 spanning frames 13-63; sizes seen: [(25, 249), (57, 251), (89, 251), (137, 251)]...  (+0 linked)
+  [ 14] layer Holder                         no real cels  (+0 linked)
+  [ 15] layer Icon                           no real cels  (+0 linked)
+  [ 16] layer Button                         real cels: 19 spanning frames 29-47; sizes seen: [(25, 22), (39, 22), (49, 22), (57, 96)]...  (+0 linked)
+  [ 17] layer Settings                       real cels: 10 spanning frames 27-49; sizes seen: [(25, 22), (39, 22), (49, 22), (55, 22)]...  (+0 linked)
+  [ 18] layer Exit                           real cels: 14 spanning frames 25-51; sizes seen: [(25, 22), (39, 22), (49, 22), (55, 22)]...  (+0 linked)
+  [ 19] layer Text                           real cels: 49 spanning frames 14-62; sizes seen: [(9, 16), (41, 16), (64, 16), (64, 66)]...  (+0 linked)
+  [ 20] layer HighLighter                    no real cels  (+0 linked)
+[ 21] GROUP Branding                       no real cels  (+0 linked)
+  [ 22] layer Brand Link                     real cels: 1 spanning frames 0-0; sizes seen: [(141, 10)]  (+80 linked)
+  [ 23] layer Border                         real cels: 1 spanning frames 0-0; sizes seen: [(759, 591)]  (+80 linked)
+  [ 24] layer Version                        real cels: 1 spanning frames 0-0; sizes seen: [(436, 76)]  (+80 linked)
+
+====================================================================================================
+v13/Humble Gift - v1.3/Aseprite/4 Mini Dialogue Box v1.2.aseprite
+====================================================================================================
+frames=59 canvas=672x480 depth=32bpp total=6100ms
+TAGS:
+  'Using Inventory Bar'  frames 0-58  dir=0
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(672, 480)]  (+58 linked)
+[  1] GROUP Paper HUD                      no real cels  (+0 linked)
+  [  2] layer Base                           real cels: 1 spanning frames 0-0; sizes seen: [(604, 310)]  (+58 linked)
+  [  3] layer Holder                         real cels: 1 spanning frames 0-0; sizes seen: [(584, 281)]  (+58 linked)
+  [  4] layer Progress Bars                  real cels: 34 spanning frames 0-54; sizes seen: [(55, 22), (56, 22)]  (+25 linked)
+  [  5] layer Buttons                        real cels: 20 spanning frames 0-57; sizes seen: [(416, 42), (420, 42)]  (+39 linked)
+  [  6] layer items                          real cels: 1 spanning frames 0-0; sizes seen: [(254, 16)]  (+58 linked)
+  [  7] layer Icons                          real cels: 59 spanning frames 0-58; sizes seen: [(579, 119), (579, 120)]  (+0 linked)
+  [  8] layer Text                           real cels: 34 spanning frames 0-54; sizes seen: [(574, 285)]  (+25 linked)
+  [  9] layer HighLighter                    real cels: 59 spanning frames 0-58; sizes seen: [(42, 45), (292, 262), (293, 262)]  (+0 linked)
+[ 10] GROUP Text Popup                     no real cels  (+0 linked)
+  [ 11] layer Base                           real cels: 15 spanning frames 12-46; sizes seen: [(173, 49)]  (+20 linked)
+  [ 12] layer Holder                         real cels: 15 spanning frames 12-46; sizes seen: [(166, 36)]  (+20 linked)
+  [ 13] layer Icons                          real cels: 21 spanning frames 19-39; sizes seen: [(24, 26), (24, 27)]  (+0 linked)
+  [ 14] layer Buttons                        real cels: 21 spanning frames 19-39; sizes seen: [(7, 5)]  (+0 linked)
+  [ 15] layer Text                           real cels: 12 spanning frames 19-35; sizes seen: [(90, 23)]  (+9 linked)
+[ 16] GROUP Branding                       no real cels  (+0 linked)
+  [ 17] layer Brand Link                     real cels: 1 spanning frames 0-0; sizes seen: [(141, 10)]  (+58 linked)
+  [ 18] layer Border                         real cels: 1 spanning frames 0-0; sizes seen: [(672, 480)]  (+58 linked)
+  [ 19] layer Version                        real cels: 1 spanning frames 0-0; sizes seen: [(436, 76)]  (+58 linked)
+
+====================================================================================================
+v13/Humble Gift - v1.3/Aseprite/5 Settings Menu v1.3.aseprite
+====================================================================================================
+frames=136 canvas=672x480 depth=32bpp total=15300ms
+TAGS:
+  'Using Inventory Bar'  frames 0-135  dir=0
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Background                     real cels: 1 spanning frames 0-0; sizes seen: [(672, 480)]  (+135 linked)
+[  1] GROUP Paper HUD                      no real cels  (+0 linked)
+  [  2] layer Base                           real cels: 36 spanning frames 0-135; sizes seen: [(34, 65), (604, 308), (604, 309), (604, 310)]...  (+0 linked)
+  [  3] layer Holder                         real cels: 36 spanning frames 0-135; sizes seen: [(31, 32), (79, 32), (580, 322), (582, 306)]...  (+0 linked)
+  [  4] layer Progress Bars                  real cels: 34 spanning frames 0-135; sizes seen: [(38, 22), (55, 22), (56, 22)]  (+0 linked)
+  [  5] layer Buttons                        real cels: 24 spanning frames 0-135; sizes seen: [(416, 21), (416, 42), (420, 37), (420, 42)]  (+0 linked)
+  [  6] layer items                          real cels: 24 spanning frames 0-135; sizes seen: [(254, 6), (254, 16)]  (+0 linked)
+  [  7] layer Icons                          real cels: 32 spanning frames 0-135; sizes seen: [(573, 45), (578, 119), (579, 119), (585, 45)]...  (+0 linked)
+  [  8] layer Text                           real cels: 36 spanning frames 0-135; sizes seen: [(17, 20), (26, 20), (574, 283), (574, 284)]...  (+0 linked)
+  [  9] layer HighLighter                    real cels: 29 spanning frames 0-135; sizes seen: [(11, 11), (42, 33), (42, 45), (42, 46)]...  (+0 linked)
+[ 10] layer Pause Fade Effect              real cels: 56 spanning frames 13-122; sizes seen: [(672, 480)]  (+54 linked)
+[ 11] GROUP Settings                       no real cels  (+0 linked)
+  [ 12] layer Base                           real cels: 41 spanning frames 67-107; sizes seen: [(248, 280)]  (+0 linked)
+  [ 13] layer Page Line                      real cels: 41 spanning frames 67-107; sizes seen: [(224, 251)]  (+0 linked)
+  [ 14] layer Button                         real cels: 41 spanning frames 67-107; sizes seen: [(138, 22)]  (+0 linked)
+  [ 15] layer Text                           real cels: 41 spanning frames 67-107; sizes seen: [(158, 232), (183, 232)]  (+0 linked)
+[ 16] GROUP Pause Menu                     no real cels  (+0 linked)
+  [ 17] layer Base                           real cels: 102 spanning frames 13-122; sizes seen: [(37, 280), (69, 280), (101, 280), (149, 280)]...  (+8 linked)
+  [ 18] layer Page Line                      real cels: 102 spanning frames 13-122; sizes seen: [(25, 249), (57, 251), (89, 251), (137, 251)]...  (+8 linked)
+  [ 19] layer Holder                         no real cels  (+0 linked)
+  [ 20] layer Icon                           no real cels  (+0 linked)
+  [ 21] layer Button                         real cels: 57 spanning frames 29-101; sizes seen: [(25, 22), (39, 22), (49, 22), (57, 96)]...  (+0 linked)
+  [ 22] layer Controls                       real cels: 10 spanning frames 53-111; sizes seen: [(25, 22), (39, 22), (49, 22), (55, 22)]...  (+14 linked)
+  [ 23] layer Video                          real cels: 10 spanning frames 55-109; sizes seen: [(25, 22), (39, 22), (49, 22), (55, 22)]...  (+10 linked)
+  [ 24] layer Audio                          real cels: 10 spanning frames 57-107; sizes seen: [(25, 22), (39, 22), (49, 22), (55, 22)]...  (+6 linked)
+  [ 25] layer Display                        real cels: 10 spanning frames 59-105; sizes seen: [(25, 22), (39, 22), (49, 22), (55, 22)]...  (+2 linked)
+  [ 26] layer Settings                       real cels: 10 spanning frames 27-48; sizes seen: [(25, 22), (39, 22), (49, 22), (55, 22)]...  (+0 linked)
+  [ 27] layer Exit                           real cels: 14 spanning frames 25-50; sizes seen: [(25, 22), (39, 22), (49, 22), (55, 22)]...  (+0 linked)
+  [ 28] layer Text                           real cels: 108 spanning frames 14-121; sizes seen: [(9, 16), (41, 16), (64, 16), (64, 50)]...  (+0 linked)
+  [ 29] layer HighLighter                    no real cels  (+0 linked)
+[ 30] GROUP Branding                       no real cels  (+0 linked)
+  [ 31] layer Brand Link                     real cels: 1 spanning frames 0-0; sizes seen: [(141, 10)]  (+135 linked)
+  [ 32] layer Border                         real cels: 1 spanning frames 0-0; sizes seen: [(759, 591)]  (+135 linked)
+  [ 33] layer Version                        real cels: 1 spanning frames 0-0; sizes seen: [(436, 76)]  (+135 linked)
+
+====================================================================================================
+v13/Humble Gift - v1.3/Aseprite/SpriteSheet.aseprite
+====================================================================================================
+frames=1 canvas=704x2160 depth=32bpp total=400ms
+TAGS: (none)
+LAYER TREE (+ real-cel frame range / count, linked-cel count):
+[  0] layer Sprites                        real cels: 1 spanning frames 0-0; sizes seen: [(640, 2091)]  (+0 linked)
