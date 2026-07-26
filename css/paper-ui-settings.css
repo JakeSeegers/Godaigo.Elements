@@ -238,6 +238,7 @@
   padding: 26px 30px;
 }
 .pp-menu-btn {
+  position: relative;
   border-style: solid;
   border-width: 12px;
   border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
@@ -253,6 +254,43 @@
   text-shadow: 0 1px 0 rgba(255, 250, 235, 0.4);
 }
 .pp-menu-btn:active { transform: translate(2px, 2px); }
+
+/* Hover/focus indicator — this is a LITERAL asset, not a drawn CSS effect:
+   decoded straight out of the pack's own HighLighter layer (see
+   docs/paper-ui-design-system.md "System 2"), the same corner-bracket
+   ornament used on the static frame borders, at button scale. The source
+   shows it land with one briefly-thicker "pulse" frame before settling to
+   its steady width — reproduced here as a 2-step discrete swap (matching
+   how System 1's unfold uses steps(), not a smooth fade, since that's
+   what the source itself does) rather than invented from scratch. Overlay,
+   not a background swap, so it works on any button width without
+   redrawing the button itself. */
+.pp-menu-btn::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  pointer-events: none;
+  opacity: 0;
+  border-style: solid;
+  border-width: 14px;
+  border-image-source: url("../assets/paper-ui-menus/decoded/highlighter_button_steady_42x45.png");
+  border-image-slice: 14 fill;
+  border-image-width: 14px;
+  border-image-repeat: stretch;
+}
+.pp-menu-btn:hover::after,
+.pp-menu-btn:focus-visible::after {
+  opacity: 1;
+  animation: pp-highlight-land 220ms steps(1, jump-end) both;
+}
+@keyframes pp-highlight-land {
+  0%   { border-image-source: url("../assets/paper-ui-menus/decoded/highlighter_button_pulse_42x46.png"); }
+  45%  { border-image-source: url("../assets/paper-ui-menus/decoded/highlighter_button_steady_42x45.png"); }
+  100% { border-image-source: url("../assets/paper-ui-menus/decoded/highlighter_button_steady_42x45.png"); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pp-menu-btn::after { animation: none !important; }
+}
 
 /* Pip-style segmented slider (CSS-only — restyles the existing native
    <input type=range>, no DOM/behaviour change): a row of small filled/empty
