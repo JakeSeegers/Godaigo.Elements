@@ -189,3 +189,73 @@
 @media (prefers-reduced-motion: reduce) {
   #multiplayer-lobby button { transition: none; }
 }
+
+/* ── Pre-login Sign In screen — same frame/palette as the lobby it leads
+   into, so the two screens read as one system instead of a jump cut. ── */
+#auth-screen.auth-screen {
+  background: var(--pp-parch);
+  border-style: solid;
+  border-width: 16px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_37_185x282.png");
+  border-image-slice: 11;
+  border-image-width: 16px;
+  border-image-repeat: stretch;
+  border-radius: 0;
+  box-shadow: none;
+  position: relative;
+  color: var(--pp-ink);
+}
+#auth-screen.auth-screen::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  pointer-events: none;
+  border-style: solid;
+  border-width: 26px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_54_226x253.png");
+  border-image-slice: 26;
+  border-image-width: 26px;
+  border-image-repeat: stretch;
+}
+
+.auth-title { color: var(--pp-maroon) !important; text-shadow: 0 1px 0 rgba(255, 250, 235, 0.5); }
+
+.auth-input {
+  background: var(--pp-parch-dk) !important;
+  color: var(--pp-ink) !important;
+  border: 2px solid var(--pp-maroon) !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+.auth-input::placeholder { color: var(--pp-ink-soft) !important; opacity: 0.8; }
+.auth-input:focus { border-color: var(--pp-gold) !important; }
+
+.auth-btn-primary,
+.auth-btn-secondary,
+.auth-btn-tutorial {
+  position: relative;
+  border-style: solid;
+  border-width: 10px;
+  border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
+  border-image-slice: 12;
+  border-image-width: 10px;
+  border-image-repeat: stretch;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.auth-btn-primary   { color: var(--pp-gold) !important; }
+.auth-btn-secondary { color: var(--pp-ink) !important; }
+.auth-btn-secondary:hover { filter: brightness(0.97); border-color: transparent !important; }
+.auth-btn-tutorial  { color: var(--pp-green) !important; border-color: transparent !important; }
+.auth-btn-tutorial:hover { filter: brightness(1.15); }
+.auth-btn-primary:active,
+.auth-btn-secondary:active,
+.auth-btn-tutorial:active { transform: translate(2px, 2px); }
+
+.auth-tutorial-divider { color: var(--pp-ink-soft); }
+.auth-tutorial-divider::before,
+.auth-tutorial-divider::after { background: rgba(148, 88, 244, 0.35); }
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-btn-primary, .auth-btn-secondary, .auth-btn-tutorial { transition: none; }
+}
