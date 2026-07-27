@@ -18,7 +18,7 @@
   border-style: solid;
   border-width: 16px;
   border-image-source: url("../assets/paper-ui-menus/pieces/piece_37_185x282.png");
-  border-image-slice: 11 fill;
+  border-image-slice: 11;
   border-image-width: 16px;
   border-image-repeat: stretch;
   border-radius: 0;
@@ -74,7 +74,7 @@
   border-style: solid;
   border-width: 10px;
   border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
-  border-image-slice: 12 fill;
+  border-image-slice: 12;
   border-image-width: 10px;
   border-image-repeat: stretch;
   background: transparent;
@@ -125,7 +125,7 @@
   border-style: solid;
   border-width: 7px;
   border-image-source: url("../assets/paper-ui-menus/pieces/piece_44_175x51.png");
-  border-image-slice: 12 fill;
+  border-image-slice: 12;
   border-image-width: 7px;
   border-image-repeat: stretch;
   background: transparent;
