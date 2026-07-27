@@ -14,6 +14,7 @@
 
 #multiplayer-lobby {
   background: var(--pp-parch);
+  color: var(--pp-ink);
   border-style: solid;
   border-width: 16px;
   border-image-source: url("../assets/paper-ui-menus/pieces/piece_37_185x282.png");
@@ -45,8 +46,8 @@
 
 /* ── Auth bar ─────────────────────────────────────────────────────────── */
 #auth-bar {
-  background: rgba(242, 228, 196, 0.55);
-  border: 1.5px solid rgba(109, 43, 43, 0.5);
+  background: rgba(42, 42, 42, 0.55);
+  border: 1.5px solid rgba(148, 88, 244, 0.5);
   border-radius: 3px;
 }
 #auth-bar-name { color: var(--pp-ink); }
@@ -104,18 +105,18 @@
 
 /* ── Public game browser rows ────────────────────────────────────────── */
 #public-games-list {
-  background: rgba(217, 189, 140, 0.35);
-  border: 1.5px solid rgba(109, 43, 43, 0.35);
+  background: rgba(13, 13, 13, 0.35);
+  border: 1.5px solid rgba(148, 88, 244, 0.35);
   border-radius: 3px;
 }
 .game-room-card {
-  background: rgba(242, 228, 196, 0.55);
-  border: 1.5px solid rgba(109, 43, 43, 0.5);
+  background: rgba(42, 42, 42, 0.55);
+  border: 1.5px solid rgba(148, 88, 244, 0.5);
   box-shadow: none;
 }
 .game-room-card:hover {
   border-color: var(--pp-maroon);
-  background: rgba(242, 228, 196, 0.8);
+  background: rgba(42, 42, 42, 0.8);
 }
 .game-room-host  { color: var(--pp-ink); }
 .game-room-count { color: var(--pp-ink-soft); }
@@ -140,8 +141,8 @@
 
 /* ── Leaderboard sidebar ──────────────────────────────────────────────── */
 #main-leaderboard-body {
-  background: rgba(217, 189, 140, 0.35);
-  border: 1.5px solid rgba(109, 43, 43, 0.35);
+  background: rgba(13, 13, 13, 0.35);
+  border: 1.5px solid rgba(148, 88, 244, 0.35);
   border-radius: 3px;
 }
 
@@ -155,8 +156,8 @@
 #room-info-bar,
 #player-list,
 #host-settings {
-  background: rgba(242, 228, 196, 0.55);
-  border: 1.5px solid rgba(109, 43, 43, 0.5);
+  background: rgba(42, 42, 42, 0.55);
+  border: 1.5px solid rgba(148, 88, 244, 0.5);
   border-radius: 3px;
 }
 #room-type-badge {
@@ -168,15 +169,15 @@
 .pp-player-row {
   padding: 10px;
   margin: 5px 0;
-  background: rgba(242, 228, 196, 0.55);
-  border: 1.5px solid rgba(109, 43, 43, 0.35);
+  background: rgba(42, 42, 42, 0.55);
+  border: 1.5px solid rgba(148, 88, 244, 0.35);
   border-radius: 3px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   color: var(--pp-ink);
 }
-.pp-player-row.is-me { border-color: var(--pp-maroon); background: rgba(242, 228, 196, 0.85); }
+.pp-player-row.is-me { border-color: var(--pp-maroon); background: rgba(42, 42, 42, 0.85); }
 .pp-player-row .pp-player-you  { color: var(--pp-gold); }
 .pp-player-row .pp-player-host { color: var(--pp-rust); }
 .pp-player-row .pp-player-ready-yes { color: var(--pp-green); }
