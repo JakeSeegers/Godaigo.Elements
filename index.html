@@ -702,7 +702,7 @@
         `;
         const titleEl = document.createElement('div');
         titleEl.textContent = 'Elemental Reference';
-        titleEl.style.cssText = `font-family: var(--font-pixel); font-size: 12px; color: #e8dcc8; letter-spacing: 1px;`;
+        titleEl.style.cssText = `font-family: var(--font-pixel); font-size: 14px; color: #e8dcc8; letter-spacing: 1px;`;
         const closeBtn = document.createElement('button');
         closeBtn.textContent = '×';
         closeBtn.className = 'retro-dlg-btn';
@@ -753,7 +753,7 @@
 
             const rank = document.createElement('span');
             rank.textContent = `Rank ${s.rank}  ·  ${s.cost} AP`;
-            rank.style.cssText = `font-family: var(--font-pixel); font-size: 8px; color: #ccc; letter-spacing: 1px;`;
+            rank.style.cssText = `font-family: var(--font-pixel); font-size: 10px; color: #ccc; letter-spacing: 1px;`;
 
             nameRow.appendChild(name);
             nameRow.appendChild(rank);
@@ -768,7 +768,7 @@
                 const note = document.createElement('div');
                 note.textContent = s.interaction;
                 note.style.cssText = `
-                    font-family: var(--font-pixel); font-size: 8px;
+                    font-family: var(--font-pixel); font-size: 10px;
                     color: ${s.color}99; margin-top: 5px; letter-spacing: 1px;
                 `;
                 info.appendChild(note);

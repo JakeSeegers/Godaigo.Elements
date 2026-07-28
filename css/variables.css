@@ -6,14 +6,14 @@
 }
 
 @font-face {
-    font-family: 'Eroika Slab Medium Italic';
-    src: url('../assets/fonts/eroika-slab-medium-italic.otf') format('opentype');
+    font-family: 'Immortal';
+    src: url('../assets/fonts/immortal.ttf') format('truetype');
     font-display: swap;
 }
 
 @font-face {
-    font-family: 'Eroika Slab Light';
-    src: url('../assets/fonts/Fontspring-DEMO-eroikaslab-light.otf') format('opentype');
+    font-family: 'Immortal Light';
+    src: url('../assets/fonts/immortal-light.ttf') format('truetype');
     font-display: swap;
 }
 
@@ -36,7 +36,7 @@
 
     /* Fonts */
     --font-pixel: 'BoldBrush', 'Press Start 2P', 'Courier New', monospace;
-    --font-terminal: 'Eroika Slab Medium Italic', 'VT323', 'Courier New', monospace;
+    --font-terminal: 'Immortal', 'VT323', 'Courier New', monospace;
     --font-mono: 'Courier New', monospace;
 
     /* Element colors */

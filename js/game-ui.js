@@ -239,7 +239,7 @@
             const headerText = document.createElement('div');
             headerText.style.cssText = 'flex:1;';
             const line1 = document.createElement('div');
-            line1.style.cssText = `font-family:var(--font-pixel);font-size:11px;color:${elementColor};letter-spacing:2px;text-transform:uppercase;`;
+            line1.style.cssText = `font-family:var(--font-pixel);font-size:13px;color:${elementColor};letter-spacing:2px;text-transform:uppercase;`;
             line1.textContent = elementLabel + (levelText ? ' · ' + levelText : '');
             headerText.appendChild(line1);
             const line2 = document.createElement('div');
@@ -276,7 +276,7 @@
                 const patternLabel = document.createElement('div');
                 patternLabel.style.cssText = `
                     font-family: var(--font-pixel);
-                    font-size: 10px;
+                    font-size: 12px;
                     color: ${elementColor};
                     letter-spacing: 2px;
                     text-transform: uppercase;
@@ -3768,7 +3768,7 @@ document.getElementById('undo-move').onclick = function() {
             `;
             const titleEl = document.createElement('div');
             titleEl.textContent = 'Scroll Reference';
-            titleEl.style.cssText = `font-family: var(--font-pixel); font-size: 12px; color: #e8dcc8; letter-spacing: 1px;`;
+            titleEl.style.cssText = `font-family: var(--font-pixel); font-size: 14px; color: #e8dcc8; letter-spacing: 1px;`;
             const closeX = document.createElement('button');
             closeX.textContent = '×';
             closeX.className = 'retro-dlg-btn';
@@ -3791,7 +3791,7 @@ document.getElementById('undo-move').onclick = function() {
                 tab.dataset.element = el;
                 tab.textContent = el.charAt(0).toUpperCase() + el.slice(1);
                 tab.style.cssText = `
-                    font-family: var(--font-pixel); font-size: 9px;
+                    font-family: var(--font-pixel); font-size: 11px;
                     padding: 6px 11px; border: 1px solid ${c}44;
                     background: transparent; color: ${c}88; cursor: pointer;
                     border-radius: 3px 3px 0 0; letter-spacing: 1px;
@@ -3805,7 +3805,7 @@ document.getElementById('undo-move').onclick = function() {
             rulingsTab.dataset.element = 'rulings';
             rulingsTab.textContent = 'Rulings';
             rulingsTab.style.cssText = `
-                font-family: var(--font-pixel); font-size: 9px;
+                font-family: var(--font-pixel); font-size: 11px;
                 padding: 6px 11px; border: 1px solid #aaa4;
                 background: transparent; color: #aaa8; cursor: pointer;
                 border-radius: 3px 3px 0 0; letter-spacing: 1px;
@@ -3847,7 +3847,7 @@ document.getElementById('undo-move').onclick = function() {
                     }
                     const sectionLabel = document.createElement('div');
                     sectionLabel.textContent = 'Official Scroll Rulings';
-                    sectionLabel.style.cssText = `font-family:var(--font-pixel);font-size:9px;color:#aaa;letter-spacing:2px;margin-bottom:12px;text-transform:uppercase;`;
+                    sectionLabel.style.cssText = `font-family:var(--font-pixel);font-size:11px;color:#aaa;letter-spacing:2px;margin-bottom:12px;text-transform:uppercase;`;
                     content.appendChild(sectionLabel);
 
                     scrollIds.forEach(scrollId => {
@@ -3870,7 +3870,7 @@ document.getElementById('undo-move').onclick = function() {
                         nameEl.style.cssText = `font-family:var(--font-terminal);font-size:17px;color:${rc};`;
                         const lvl = document.createElement('span');
                         lvl.textContent = `${pattern.element.charAt(0).toUpperCase() + pattern.element.slice(1)} Lv ${pattern.level}`;
-                        lvl.style.cssText = `font-family:var(--font-pixel);font-size:8px;color:#ccc;letter-spacing:1px;`;
+                        lvl.style.cssText = `font-family:var(--font-pixel);font-size:10px;color:#ccc;letter-spacing:1px;`;
                         nameRow.appendChild(nameEl);
                         nameRow.appendChild(lvl);
                         card.appendChild(nameRow);
@@ -3925,7 +3925,7 @@ document.getElementById('undo-move').onclick = function() {
 
                     const lvl = document.createElement('span');
                     lvl.textContent = `Lv ${pattern.level}`;
-                    lvl.style.cssText = `font-family: var(--font-pixel); font-size: 8px; color: #ccc; letter-spacing: 1px;`;
+                    lvl.style.cssText = `font-family: var(--font-pixel); font-size: 10px; color: #ccc; letter-spacing: 1px;`;
 
                     nameRow.appendChild(nameEl);
                     nameRow.appendChild(lvl);
@@ -3938,7 +3938,7 @@ document.getElementById('undo-move').onclick = function() {
 
                     const hint = document.createElement('div');
                     hint.textContent = 'click for pattern';
-                    hint.style.cssText = `font-family: var(--font-pixel); font-size: 7px; color: ${c}55; margin-top: 5px; letter-spacing: 1px;`;
+                    hint.style.cssText = `font-family: var(--font-pixel); font-size: 9px; color: ${c}55; margin-top: 5px; letter-spacing: 1px;`;
                     card.appendChild(hint);
 
                     content.appendChild(card);

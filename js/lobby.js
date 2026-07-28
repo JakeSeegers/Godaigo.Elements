@@ -993,7 +993,7 @@
             const xpLine = document.createElement('div');
             xpLine.id = 'game-over-xp-line';
             xpLine.style.cssText = `
-                font-family: var(--font-pixel, monospace); font-size: 9px;
+                font-family: var(--font-pixel, monospace); font-size: 11px;
                 color: #f0c040; letter-spacing: 1px; margin: 8px 0 4px;
                 min-height: 16px;
             `;

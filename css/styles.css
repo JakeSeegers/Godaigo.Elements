@@ -25,9 +25,9 @@
     --catacomb-color: #9b59b6;
 
     /* Font stacks */
-    --font-sans: 'Eroika Slab Light', 'Space Grotesk', 'Segoe UI', sans-serif;
+    --font-sans: 'Immortal Light', 'Space Grotesk', 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'Courier New', monospace;
-    --font-terminal: 'Eroika Slab Medium Italic', 'VT323', 'Courier New', monospace;
+    --font-terminal: 'Immortal', 'VT323', 'Courier New', monospace;
     --font-pixel: 'BoldBrush', 'Press Start 2P', monospace;
 
     /* Layout dimensions */
@@ -502,7 +502,7 @@ body {
 
 .panel-title {
     font-family: var(--font-pixel);
-    font-size: 11px;
+    font-size: 13px;
     color: #d9b08c;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -571,7 +571,7 @@ body {
 
 .section-label {
     font-family: var(--font-pixel);
-    font-size: 9px;
+    font-size: 11px;
     color: #d9b08c;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -627,7 +627,7 @@ body {
 
 .scroll-deck-card .deck-icon span {
     font-family: var(--font-pixel);
-    font-size: 11px;
+    font-size: 13px;
     font-weight: bold;
     color: #fff;
     text-shadow: 1px 1px 0 #000;
@@ -1972,7 +1972,7 @@ svg {
     flex: 1;
     color: var(--accent-gold);
     font-family: var(--font-pixel);
-    font-size: 15px;
+    font-size: 17px;
 }
 
 .tutorial-step-label {
@@ -2145,7 +2145,7 @@ svg {
     padding: 14px 18px;
     border-bottom: 2px solid #333;
 }
-.gami-title { color: #d9b08c; margin: 0; font-size: 22px; font-family: var(--font-pixel); text-shadow: 2px 2px 0 #000; }
+.gami-title { color: #d9b08c; margin: 0; font-size: 24px; font-family: var(--font-pixel); text-shadow: 2px 2px 0 #000; }
 .gami-close {
     background: none;
     border: 2px solid #555;
@@ -2216,7 +2216,7 @@ svg {
     justify-content: center;
     flex-shrink: 0;
 }
-.gami-level-num   { font-size: 26px; font-weight: bold; line-height: 1; font-family: var(--font-pixel); }
+.gami-level-num   { font-size: 28px; font-weight: bold; line-height: 1; font-family: var(--font-pixel); }
 .gami-level-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; font-family: var(--font-terminal); }
 
 .gami-profile-info { flex: 1; min-width: 0; }
@@ -3055,7 +3055,7 @@ svg {
 }
 .cos-title {
     font-family: var(--font-pixel);
-    font-size: 11px;
+    font-size: 13px;
     color: #d9b08c;
     text-shadow: 1px 1px 0 #000;
     text-transform: uppercase;
@@ -3172,11 +3172,11 @@ svg {
 }
 #multiplayer-lobby h2 {
     font-family: var(--font-pixel) !important;
-    font-size: 1.1rem !important;
+    font-size: 1.225rem !important;
 }
 #multiplayer-lobby h3 {
     font-family: var(--font-pixel) !important;
-    font-size: 0.7rem !important;
+    font-size: 0.825rem !important;
 }
 #multiplayer-lobby input,
 #multiplayer-lobby select {
@@ -3362,7 +3362,7 @@ label, .hud-ap-label, .hud-ap-value {
 
 .retro-dlg-title {
     font-family: var(--font-pixel);
-    font-size: 16px;
+    font-size: 18px;
     color: #d9b08c;
     text-shadow: 2px 2px 0 #000;
     text-align: center;
@@ -3448,7 +3448,7 @@ label, .hud-ap-label, .hud-ap-value {
 }
 .game-over-title {
     font-family: var(--font-pixel);
-    font-size: 36px;
+    font-size: 38px;
     color: #d9b08c;
     text-shadow: 4px 4px 0 #000;
     letter-spacing: 4px;
@@ -3497,7 +3497,7 @@ label, .hud-ap-label, .hud-ap-value {
 }
 .game-over-capture-title {
     font-family: var(--font-pixel);
-    font-size: 13px;
+    font-size: 15px;
     color: #b98cd9;
     letter-spacing: 1px;
 }

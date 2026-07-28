@@ -281,7 +281,7 @@
   border-image-repeat: stretch;
   background: transparent;
   min-height: 44px;
-  font-size: 13px;
+  font-size: 15px;
   letter-spacing: 1px;
   color: var(--pp-ink);
   cursor: pointer;
@@ -408,7 +408,7 @@
   opacity: .55;
 }
 .pp-flanked-label span {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--pp-maroon);
   letter-spacing: 1px;
   white-space: nowrap;
