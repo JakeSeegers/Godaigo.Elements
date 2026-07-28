@@ -5,6 +5,12 @@
     font-display: swap;
 }
 
+@font-face {
+    font-family: 'Eroika Slab Medium Italic';
+    src: url('../assets/fonts/eroika-slab-medium-italic.otf') format('opentype');
+    font-display: swap;
+}
+
 /* ============================================
    DESIGN TOKENS (CSS Custom Properties)
    ============================================ */
@@ -24,7 +30,7 @@
 
     /* Fonts */
     --font-pixel: 'BoldBrush', 'Press Start 2P', 'Courier New', monospace;
-    --font-terminal: 'VT323', 'Courier New', monospace;
+    --font-terminal: 'Eroika Slab Medium Italic', 'VT323', 'Courier New', monospace;
     --font-mono: 'Courier New', monospace;
 
     /* Element colors */
