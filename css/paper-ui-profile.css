@@ -268,7 +268,7 @@
 .gami-cos-btn,
 .gami-stable-btn,
 .gami-toggle {
-  font-family: 'Press Start 2P', var(--font-terminal), monospace;
+  font-family: var(--font-pixel), var(--font-terminal), monospace;
 }
 
 .pp-menu-btn {
@@ -391,7 +391,7 @@
    ("┄┄ Audio ┄┄") and its back-chevron. Settings-specific, kept as-is.
    ========================================================================== */
 
-.pp-flanked-label span { font-family: 'Press Start 2P', var(--font-terminal), monospace; }
+.pp-flanked-label span { font-family: var(--font-pixel), var(--font-terminal), monospace; }
 .pp-flanked-label {
   display: flex;
   align-items: center;

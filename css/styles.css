@@ -28,7 +28,7 @@
     --font-sans: 'Space Grotesk', 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'Courier New', monospace;
     --font-terminal: 'VT323', 'Courier New', monospace;
-    --font-pixel: 'Press Start 2P', monospace;
+    --font-pixel: 'BoldBrush', 'Press Start 2P', monospace;
 
     /* Layout dimensions */
     --panel-width: 240px;
