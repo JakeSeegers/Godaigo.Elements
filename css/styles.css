@@ -25,7 +25,7 @@
     --catacomb-color: #9b59b6;
 
     /* Font stacks */
-    --font-sans: 'Immortal Light', 'Space Grotesk', 'Segoe UI', sans-serif;
+    --font-sans: 'Space Grotesk', 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'Courier New', monospace;
     --font-terminal: 'Immortal', 'VT323', 'Courier New', monospace;
     --font-pixel: 'BoldBrush', 'Press Start 2P', monospace;
@@ -70,9 +70,6 @@ body {
     color: var(--text-primary);
     user-select: none;
     overflow: hidden;
-    /* Immortal/Immortal Light render ff/fi/fl ligatures as broken, doubled-up glyphs */
-    font-variant-ligatures: none;
-    font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;
 }
 
 /* Hide scrollbars but allow scrolling */
