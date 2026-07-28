@@ -11,6 +11,12 @@
     font-display: swap;
 }
 
+@font-face {
+    font-family: 'Eroika Slab Light';
+    src: url('../assets/fonts/Fontspring-DEMO-eroikaslab-light.otf') format('opentype');
+    font-display: swap;
+}
+
 /* ============================================
    DESIGN TOKENS (CSS Custom Properties)
    ============================================ */
