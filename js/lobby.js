@@ -1030,7 +1030,22 @@
                     if (roomId) {
                         const { data: allP } = await supabase.from('players').select('id').eq('game_id', roomId);
                         if (allP && allP.length > 0) {
-                            await supabase.rpc('remove_players', { p_player_ids: allP.map(p => p.id) });
+                            const ids = allP.map(p => p.id);
+                            // remove_players resolves with {error} rather than throwing on an
+                            // RPC-level failure (RLS denial, etc.) — this table has hit that
+                            // exact silent-failure shape before (see git history: "route player
+                            // deletes through RPC to bypass RLS"). If we don't verify the delete
+                            // actually happened, a failure here still flips status to 'waiting'
+                            // below, so the room LOOKS clean while stale player rows linger —
+                            // and the next join attempt from any of those usernames gets wrongly
+                            // blocked as "already in this room" by joinRoomAsPlayer's staleness
+                            // check (which only auto-cleans rows older than ~90s).
+                            let { error: removeErr } = await supabase.rpc('remove_players', { p_player_ids: ids });
+                            if (removeErr) {
+                                console.warn('⚠️ remove_players failed, retrying once:', removeErr);
+                                ({ error: removeErr } = await supabase.rpc('remove_players', { p_player_ids: ids }));
+                            }
+                            if (removeErr) console.error('❌ Post-game player cleanup failed twice — stale rows may remain:', removeErr);
                         }
                         await supabase.from('game_room').update({ status: 'waiting', current_turn_index: 0 }).eq('id', roomId);
                     }
