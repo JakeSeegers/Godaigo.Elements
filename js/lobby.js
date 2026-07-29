@@ -1919,11 +1919,16 @@
         }
 
 
-        // Secret keyboard sequence "reset" to reveal the Reset Lobby button
-        // Secret keyboard sequence "nuke" to wipe ALL rooms from the DB
+        // Secret keyboard sequence "reset" to reveal the Reset Lobby button.
+        // (The old unguarded "nuke" secret sequence lived here too — it had no
+        // isHermit() check at all, so any player who happened to type "nuke"
+        // while the lobby was visible could wipe every room/player in the DB.
+        // It's now the hermit-only "☢️ Nuke All Rooms" button in the TH dev
+        // menu — see game-ui.js's initHermitMenu — and nuke_all_rooms() itself
+        // is now gated server-side with is_hermit() too, so it's safe even if
+        // someone calls the RPC directly from devtools.)
         (function() {
             const SECRET = 'reset';
-            const NUKE = 'nuke';
             let buffer = '';
             document.addEventListener('keydown', (e) => {
                 // Only listen while lobby is visible
@@ -1933,8 +1938,7 @@
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
                 buffer += e.key.toLowerCase();
-                const maxLen = Math.max(SECRET.length, NUKE.length);
-                if (buffer.length > maxLen) buffer = buffer.slice(-maxLen);
+                if (buffer.length > SECRET.length) buffer = buffer.slice(-SECRET.length);
 
                 if (buffer.endsWith(SECRET)) {
                     const btn = document.getElementById('reset-lobby-btn');
@@ -1942,15 +1946,6 @@
                         btn.style.display = btn.style.display === 'none' ? '' : 'none';
                         buffer = '';
                     }
-                }
-
-                if (buffer.endsWith(NUKE)) {
-                    buffer = '';
-                    if (!confirm('Nuke ALL rooms and players from the database?')) return;
-                    supabase.rpc('nuke_all_rooms').then(() => {
-                        console.log('💥 All rooms nuked.');
-                        window.location.reload();
-                    });
                 }
             });
         })();

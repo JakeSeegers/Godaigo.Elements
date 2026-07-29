@@ -7171,6 +7171,19 @@ document.getElementById('undo-move').onclick = function() {
                     if (window.JoytoneBridge && typeof window.JoytoneBridge.togglePopup === 'function') window.JoytoneBridge.togglePopup();
                 }));
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
+                menu.appendChild(makeItem('☢️ Nuke All Rooms', async () => {
+                    const ok = window.confirm('Nuke ALL rooms and players from the database?\n\nThis cannot be undone.');
+                    if (!ok) return;
+                    const { error } = await supabase.rpc('nuke_all_rooms');
+                    if (error) {
+                        console.error('💥 Nuke failed:', error);
+                        updateStatus('Nuke failed: ' + (error.message || 'unknown error'));
+                        alert('Nuke failed: ' + (error.message || 'unknown error'));
+                        return;
+                    }
+                    console.log('💥 All rooms nuked.');
+                    window.location.reload();
+                }));
                 menu.appendChild(makeItem('Edit UI: Ctrl+Click an element', () => {
                     updateStatus('Ctrl+Click any element to edit its text & CSS — copy/paste the CSS box to reuse a style');
                 }));
