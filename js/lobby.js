@@ -1542,6 +1542,36 @@
                 const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
                 const shuffledIndices = [...Array(players.length).keys()].sort(() => Math.random() - 0.5);
 
+                // Assign colors and indices to players BEFORE flipping game_room.status
+                // to 'playing'. The status flip fires the game_room Realtime subscription
+                // immediately — including on the HOST'S OWN tab, which races its own direct
+                // handleGameStart() call below (see the _gameStartInFlight comment). That
+                // racing call only waits for the LOCAL player's own player_index, not
+                // everyone else's, so if indices were still being assigned when it read
+                // `allPlayers`, bot rows not yet updated got frozen into allPlayersData
+                // with player_index=null for the rest of the game — bot-driver.js's
+                // botIndexSet() then silently never drives them (the reported "bots
+                // appear gray and never act" bug). Assigning indices first guarantees no
+                // subscriber can ever observe status='playing' while a row is unassigned.
+                for (let i = 0; i < players.length; i++) {
+                    const player = players[i];
+                    const assignedIndex = shuffledIndices[i];
+                    const assignedColor = colorRankOrder[assignedIndex];
+
+                    const { error: assignError } = await supabase
+                        .from('players')
+                        .update({
+                            player_index: assignedIndex,
+                            color: assignedColor
+                        })
+                        .eq('id', player.id);
+
+                    if (assignError) {
+                        console.error(`❌ Failed to assign player_index/color to player ${player.id}:`, assignError);
+                        throw assignError;
+                    }
+                }
+
                 // Update game room status to trigger game start and store turn-timer settings
                 const startedAtIso = new Date().toISOString();
 
@@ -1590,21 +1620,6 @@
                 gameInactivityTimeout = turnTimeLimit;
                 kickOnTurnTimeout = kickMode;
                 turnStartedAtMs = Date.now();
-
-                // Assign colors and indices to players
-                for (let i = 0; i < players.length; i++) {
-                    const player = players[i];
-                    const assignedIndex = shuffledIndices[i];
-                    const assignedColor = colorRankOrder[assignedIndex];
-
-                    await supabase
-                        .from('players')
-                        .update({
-                            player_index: assignedIndex,
-                            color: assignedColor
-                        })
-                        .eq('id', player.id);
-                }
 
                 console.log('✅ Game started by host!');
 
@@ -1671,14 +1686,33 @@
                 }
                 
                 myPlayerIndex = myPlayer.player_index;
-                
-                // Get all players in this room
-                const { data: allPlayers } = await supabase
-                    .from('players')
-                    .select('*')
-                    .eq('game_id', currentGameId)
-                    .order('player_index', { ascending: true });
-                
+
+                // Get all players in this room. This snapshot is frozen into
+                // allPlayersData for the rest of the game (see startMultiplayerGame),
+                // so retry if any row's player_index hasn't landed yet — reading it
+                // early (e.g. this call racing the host's own index-assignment loop
+                // in hostStartGame) used to permanently freeze bot rows as
+                // player_index=null, leaving them undriven for the whole game.
+                let allPlayers = null;
+                for (let attempt = 0; attempt < 10; attempt++) {
+                    const { data, error: allPlayersError } = await supabase
+                        .from('players')
+                        .select('*')
+                        .eq('game_id', currentGameId)
+                        .order('player_index', { ascending: true });
+
+                    if (allPlayersError) throw allPlayersError;
+
+                    if (data && data.every(p => p.player_index !== null && p.player_index !== undefined)) {
+                        allPlayers = data;
+                        break;
+                    }
+
+                    console.log(`⏳ Waiting for all players' index assignment (attempt ${attempt + 1}/10)...`);
+                    allPlayers = data; // keep the latest snapshot in case we exhaust retries
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
                 console.log('🎮 Starting multiplayer game!');
                 console.log('My index:', myPlayerIndex);
                 console.log('My color:', myPlayer.color);
