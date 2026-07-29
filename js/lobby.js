@@ -66,6 +66,18 @@
             return (window.currentUsername || '').trim().toLowerCase() === 'thehermit';
         };
 
+        // Host is "the oldest player row in the room" — but bots have no client
+        // of their own to ever act as host, so a bot row must never be picked.
+        // If the original human host leaves and a bot happens to be the oldest
+        // surviving row, every client's naive `players[0]` check would compute
+        // the bot as host, and since nobody's isHost flag ever matches a bot's
+        // id, the room gets stuck forever (no one can click Start). Callers
+        // must pass `players` already ordered by created_at ascending.
+        function determineHostRow(players) {
+            if (!Array.isArray(players) || !players.length) return null;
+            return players.find(p => !window.isBotUsername?.(p.username)) || players[0];
+        }
+
         async function authSignOut() {
             await supabase.auth.signOut();
             window.currentUsername = null;
@@ -364,13 +376,13 @@
             updateReadyButton(false);
             currentGameId = gameId;  // must be set BEFORE subscribeToLobby so filters use the correct room ID
             isMultiplayer = true;
-            // Determine host: first player by creation time
+            // Determine host: oldest non-bot player by creation time
             const { data: all } = await supabase
                 .from('players')
                 .select('*')
                 .eq('game_id', gameId)
                 .order('created_at', { ascending: true });
-            isHost = all?.[0]?.id === myPlayerId;
+            isHost = determineHostRow(all)?.id === myPlayerId;
             // Host is implicitly ready — their action is clicking Start, not toggling ready
             if (isHost) {
                 localReadyState = true;
@@ -654,14 +666,14 @@
                 updateReadyButton(false);
 
                 // After insertion, check if we're the first player (host)
-                // The host is simply the player with the oldest created_at timestamp
+                // The host is the oldest non-bot player by created_at timestamp
                 const { data: allPlayersAfterInsert } = await supabase
                     .from('players')
                     .select('*')
                     .order('created_at', { ascending: true });
 
-                // We're host if we're the first player (by creation time)
-                isHost = allPlayersAfterInsert && allPlayersAfterInsert[0].id === myPlayerId;
+                // We're host if we're the oldest non-bot player (by creation time)
+                isHost = determineHostRow(allPlayersAfterInsert)?.id === myPlayerId;
 
                 // Host is implicitly ready — their action is clicking Start, not toggling ready
                 if (isHost) {
@@ -1249,7 +1261,7 @@
                         }
 
                         // Update our local isHost status when players change
-                        // Check if we're now the first player (host) within this room
+                        // Check if we're now the oldest non-bot player (host) within this room
                         if (myPlayerId) {
                             const { data: allPlayers } = await supabase
                                 .from('players')
@@ -1259,7 +1271,7 @@
 
                             if (allPlayers && allPlayers.length > 0) {
                                 const wasHost = isHost;
-                                isHost = allPlayers[0].id === myPlayerId;
+                                isHost = determineHostRow(allPlayers)?.id === myPlayerId;
 
                                 // Notify if we became host
                                 if (!wasHost && isHost) {
@@ -1335,13 +1347,14 @@
                     return;
                 }
 
-                container.innerHTML = players.map((p, index) => {
+                const hostRow = determineHostRow(players);
+                container.innerHTML = players.map((p) => {
                     const isMe = p.id === myPlayerId;
                     const readyIcon = p.is_ready ? '✓' : '○';
                     const readyClass = p.is_ready ? 'pp-player-ready-yes' : 'pp-player-ready-no';
                     const meLabel = isMe ? ' <span class="pp-player-you">(You)</span>' : '';
-                    // First player in the list (index 0) is the host
-                    const hostLabel = index === 0 ? ' <span class="pp-player-host">Host</span>' : '';
+                    // Oldest non-bot player is the host (bots can never be host — no client to drive it)
+                    const hostLabel = hostRow && p.id === hostRow.id ? ' <span class="pp-player-host">Host</span>' : '';
                     // Apply local player's equipped name colour; other players keep default
                     const nameStyle = isMe
                         ? (window.cosmeticsSystem?.getNameColorStyle() || '')
