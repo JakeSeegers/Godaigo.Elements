@@ -1352,11 +1352,18 @@
                     // reveal it, so ending there is illegal.
                     const onFlipped = destPos && typeof isPositionOnFlippedTile === 'function' &&
                         isPositionOnFlippedTile(destPos.x, destPos.y, getAllHexagonPositions());
+                    // Same rule ordinary movement enforces (canPlayerMoveToHex's
+                    // isOpponentTileCenter): a teleport may not land on the origin
+                    // hex of another player's tile either — only reachable by its
+                    // own owner (required for the win condition).
+                    const onOpponentTile = destPos && typeof isOpponentTileCenter === 'function' &&
+                        isOpponentTileCenter(destPos.x, destPos.y, targetIndex);
 
-                    if (!destPos || hasStone || hasPlayer || onFlipped) {
+                    if (!destPos || hasStone || hasPlayer || onFlipped || onOpponentTile) {
                         if (hasStone) updateStatus('Take Flight: cannot teleport onto a stone.');
                         else if (hasPlayer) updateStatus('Take Flight: another player is in the way.');
                         else if (onFlipped) updateStatus('Take Flight: cannot teleport onto a face-down tile.');
+                        else if (onOpponentTile) updateStatus('Take Flight: cannot teleport onto another player\'s tile.');
                         else updateStatus('Take Flight: invalid destination.');
 
                         if (origin) {
