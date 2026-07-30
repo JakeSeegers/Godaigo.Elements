@@ -71,20 +71,38 @@
     // While impersonating a bot, the host's own player index + response AP are
     // preserved here so the response window can still let the host react to the
     // bot's spells AS THEMSELVES (see response-window.js localResponderIndex /
-    // getPlayerAP). Null whenever no bot is being driven.
+    // getPlayerAP). driverRealIndex is null whenever no bot is being driven.
+    //
+    // hostAP is the host's true spendable response AP. It must survive ACROSS
+    // consecutive bot turns, not just a single asBot() call: when bot A's turn
+    // ends and bot B's starts next (no human turn in between), driveBotTurn()
+    // resets the shared `currentAP` to 5 for bot B and lets bot B spend it
+    // down — so if we re-snapshotted from `currentAP` at the start of EVERY
+    // asBot() call, bot B's turn would inherit bot A's post-spend leftover AP
+    // as if it were the host's own, instead of the host's real AP. That
+    // silently starved the host of response AP (e.g. couldn't afford a 2-AP
+    // Iron Stance counter) any time two bot turns ran back-to-back. Instead,
+    // hostAP is captured ONCE when the host stops being the active player and
+    // reused (only decremented via spendDriverAP) through however many bot
+    // turns follow, until it's the host's own turn again (see driveBotTurn's
+    // post-turn fixup below, which clears it).
     let driverRealIndex = null;
-    let driverAP = null; // { currentAP, voidAP } — the host's spendable response AP
+    let hostAP = null; // { currentAP, voidAP } — persists across consecutive bot turns
+    let driverAP = null; // alias of hostAP while a bot is being driven; null otherwise
 
     async function asBot(botIndex, fn) {
         const realIndex = myPlayerIndex;
         const realColor = playerColor;
-        // Snapshot the host's identity + leftover AP BEFORE driveBotTurn clobbers
-        // currentAP with the bot's fresh 5 AP.
         driverRealIndex = realIndex;
-        driverAP = {
-            currentAP: (typeof currentAP === 'number') ? currentAP : 0,
-            voidAP:    (typeof voidAP === 'number') ? voidAP : 0,
-        };
+        // Only capture a fresh snapshot the FIRST time we leave the host's own
+        // turn — reuse the running total for any further consecutive bot turns.
+        if (!hostAP) {
+            hostAP = {
+                currentAP: (typeof currentAP === 'number') ? currentAP : 0,
+                voidAP:    (typeof voidAP === 'number') ? voidAP : 0,
+            };
+        }
+        driverAP = hostAP;
         myPlayerIndex = botIndex;
         const row = (typeof allPlayersData !== 'undefined')
             ? allPlayersData.find(p => p.player_index === botIndex) : null;
@@ -114,7 +132,7 @@
             playerColor = realColor;
             if (savedWeights) window.BotArena.applyWeights(savedWeights);
             driverRealIndex = null;
-            driverAP = null;
+            driverAP = null; // not hostAP — the running total survives until it's the host's own turn again
             if (typeof updateEndTurnButtonVisibility === 'function') updateEndTurnButtonVisibility();
             if (typeof updateTurnDisplay === 'function') updateTurnDisplay();
         }
@@ -194,6 +212,11 @@
             if (typeof refreshVoidAP === 'function') refreshVoidAP();
             if (typeof syncPlayerState === 'function') syncPlayerState();
             if (typeof updateStatus === 'function') updateStatus('Your turn!');
+            // It's genuinely my own turn now — currentAP/voidAP are live and
+            // authoritative again, so drop the carried-over response-AP
+            // snapshot. The next bot-driving stretch (after my turn ends)
+            // will recapture it fresh in asBot().
+            hostAP = null;
         } else if (typeof refreshVoidAP === 'function') {
             // Not my turn next — still restore void AP to MY pool's baseline
             refreshVoidAP();
