@@ -2238,8 +2238,15 @@
 
                 gameChannel.on('broadcast', { event: 'reflect-triggered' }, ({ payload }) => {
                     console.log('📄 Received reflect-triggered:', payload);
-                    const { playerIndex, scrollName } = payload;
+                    const { playerIndex, scrollName, eventId } = payload;
                     if (typeof spellSystem === 'undefined') return;
+
+                    // The consuming client replayed this entry — drop our local copy so
+                    // it can't be replayed again if this client later processes the
+                    // pending queue (e.g. after a disconnect changes turn handling)
+                    if (spellSystem.scrollEffects?.removePendingBuff) {
+                        spellSystem.scrollEffects.removePendingBuff('reflect', playerIndex, scrollName, eventId || null);
+                    }
 
                     // Enqueue and start processing if not already running
                     reflectQueue.push({ playerIndex, scrollName });
@@ -2321,8 +2328,15 @@
 
                 gameChannel.on('broadcast', { event: 'psychic-triggered' }, ({ payload }) => {
                     console.log('📄 Received psychic-triggered:', payload);
-                    const { playerIndex, scrollName } = payload;
+                    const { playerIndex, scrollName, eventId } = payload;
                     if (typeof spellSystem === 'undefined') return;
+
+                    // The consuming client replayed this entry — drop our local copy so
+                    // it can't be replayed again if this client later processes the
+                    // pending queue (e.g. after a disconnect changes turn handling)
+                    if (spellSystem.scrollEffects?.removePendingBuff) {
+                        spellSystem.scrollEffects.removePendingBuff('psychic', playerIndex, scrollName, eventId || null);
+                    }
 
                     // Enqueue and start processing if not already running
                     psychicQueue.push({ playerIndex, scrollName });
@@ -2692,7 +2706,8 @@
                                 // call handleScrollDisposition for the triggering scroll below.
                                 spellSystem.scrollEffects.execute(result.scrollName, result.casterIndex, {
                                     spell: scrollDef,
-                                    triggeringScroll: trigScroll
+                                    triggeringScroll: trigScroll,
+                                    eventId: result.eventId || null
                                 });
 
                                 // Element tracking + broadcast only on the responder's own client
@@ -2746,6 +2761,23 @@
                                 if (myScrolls.active.has(result.scrollName)) {
                                     myScrolls.active.delete(result.scrollName);
                                     console.log(`📜 Removed ${result.scrollName} from my active scrolls (counter sent to common area)`);
+                                }
+                                spellSystem.updateScrollCount();
+                            }
+                        } else if (result.result === 'counter-negated') {
+                            // Psychic ransom paid: the counter fizzled (no steal) and the
+                            // original scroll resolves on its caster's client. Psychic
+                            // reaches the common area via the common-area-update broadcast.
+                            const ransomAP = spellSystem.responseWindow?.PSYCHIC_RANSOM_AP || 2;
+                            const victimName = getPlayerColorName(payload.triggeringScroll.casterIndex);
+                            updateStatus(`💰 ${victimName} paid ${ransomAP} AP — Psychic negated!`);
+                            // If this is MY Psychic, remove it from my active scrolls
+                            if (result.casterIndex === myPlayerIndex) {
+                                spellSystem.ensurePlayerScrollsStructure(myPlayerIndex);
+                                const myScrolls = spellSystem.playerScrolls[myPlayerIndex];
+                                if (myScrolls.active.has(result.scrollName)) {
+                                    myScrolls.active.delete(result.scrollName);
+                                    console.log(`📜 Removed ${result.scrollName} from my active scrolls (Psychic negated, sent to common area)`);
                                 }
                                 spellSystem.updateScrollCount();
                             }
@@ -3068,18 +3100,12 @@
             // Listen for Reflect buff applied (passive buff for next turn)
             gameChannel.on('broadcast', { event: 'reflect-buff-applied' }, ({ payload }) => {
                 console.log('📄 Received reflect-buff-applied:', payload);
-                const { playerIndex, scrollName, scrollDefinition } = payload;
+                const { playerIndex, scrollName, scrollDefinition, eventId } = payload;
 
-                // Apply the Reflect buff to the spell system (push to array)
+                // Queue via the central helper — dedups if this client already queued
+                // the same entry (same eventId) through another path
                 if (typeof spellSystem !== 'undefined' && spellSystem.scrollEffects) {
-                    if (!Array.isArray(spellSystem.scrollEffects.activeBuffs.reflectPending)) {
-                        spellSystem.scrollEffects.activeBuffs.reflectPending = [];
-                    }
-                    spellSystem.scrollEffects.activeBuffs.reflectPending.push({
-                        playerIndex: playerIndex,
-                        scrollName: scrollName,
-                        definition: scrollDefinition
-                    });
+                    spellSystem.scrollEffects.addPendingBuff('reflect', playerIndex, scrollName, scrollDefinition, eventId || null);
                     console.log(`🛡️ Reflect buff applied to player ${playerIndex}: will reflect "${scrollName}" on their next turn`);
                 }
             });
@@ -3087,18 +3113,12 @@
             // Listen for Psychic buff applied (passive buff for next turn)
             gameChannel.on('broadcast', { event: 'psychic-buff-applied' }, ({ payload }) => {
                 console.log('📄 Received psychic-buff-applied:', payload);
-                const { playerIndex, scrollName, scrollDefinition } = payload;
+                const { playerIndex, scrollName, scrollDefinition, eventId } = payload;
 
-                // Apply the Psychic buff to the spell system (push to array)
+                // Queue via the central helper — dedups if this client already queued
+                // the same entry (same eventId) through another path
                 if (typeof spellSystem !== 'undefined' && spellSystem.scrollEffects) {
-                    if (!Array.isArray(spellSystem.scrollEffects.activeBuffs.psychicPending)) {
-                        spellSystem.scrollEffects.activeBuffs.psychicPending = [];
-                    }
-                    spellSystem.scrollEffects.activeBuffs.psychicPending.push({
-                        playerIndex: playerIndex,
-                        scrollName: scrollName,
-                        definition: scrollDefinition
-                    });
+                    spellSystem.scrollEffects.addPendingBuff('psychic', playerIndex, scrollName, scrollDefinition, eventId || null);
                     console.log(`🔮 Psychic buff applied to player ${playerIndex}: will activate "${scrollName}" at start of their next turn`);
                 }
             });

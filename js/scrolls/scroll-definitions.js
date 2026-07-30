@@ -86,7 +86,7 @@ const FIRE_SCROLL_EFFECTS = {
 
 // Void scroll effect definitions
 const VOID_SCROLL_EFFECTS = {
-    1: { name: 'Psychic', description: 'Counter the previous scroll, then play it during your turn. Move Psychic to the common area.', isCounter: true },
+    1: { name: 'Psychic', description: 'Counter the previous scroll, then play it during your turn — unless its caster pays 2 AP to negate Psychic. Move Psychic to the common area.', isCounter: true },
     2: { name: "Scholar's Insight", description: 'Search through a Scroll Deck and add a scroll of your choice to your hand. Shuffle that deck afterwards.' },
     3: { name: 'Simplify', description: 'Scrolls cost 1 AP for you to cast until the beginning of your next turn.' },
     4: { name: 'Telekinesis', description: 'Move a tile unoccupied by stones or players. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.' },
