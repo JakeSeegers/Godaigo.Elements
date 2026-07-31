@@ -2957,12 +2957,18 @@
         };
 
         // Hermit-only board tilt ("angle") tool (js/game-ui.js's
-        // openBoardTiltPanel): a purely visual CSS 3D perspective tilt on the
-        // board container, like tipping a table up to look at it from an
-        // angle rather than straight top-down. This is layered on top of the
-        // SVG's own coordinate system (rather than folded into viewportRotation/
-        // screenToWorld above) so it doesn't skew click/drag hit-testing —
-        // it's a camera preview effect, not a board-space transform.
+        // openBoardTiltPanel): a CSS 3D perspective tilt on the board
+        // container, like tipping a table up to look at it from an angle
+        // rather than straight top-down. It's a camera effect layered on top
+        // of the SVG's own coordinate system rather than folded into
+        // viewportRotation/screenToWorld above — but unlike a plain 2D
+        // rotation, a 3D perspective transform makes the browser's own
+        // boardSvg.getBoundingClientRect() return the foreshortened,
+        // trapezoidal projected box instead of the board's true layout rect.
+        // getBoardScreenXY() below un-projects click/drag coordinates back
+        // through this exact transform so every existing hit-testing call
+        // site (which assumes a plain untransformed rect) keeps working.
+        const BOARD_TILT_PERSPECTIVE_PX = 1400; // must match getBoardScreenXY's inverse below
         window.getBoardTilt = function () {
             return window._boardTiltDegrees || 0;
         };
@@ -2972,10 +2978,39 @@
             const el = document.getElementById('new-board-container');
             if (el) {
                 el.style.transformOrigin = '50% 50%';
-                el.style.transform = clamped === 0 ? '' : `perspective(1400px) rotateX(${clamped}deg)`;
+                el.style.transform = clamped === 0 ? '' : `perspective(${BOARD_TILT_PERSPECTIVE_PX}px) rotateX(${clamped}deg)`;
             }
             return clamped;
         };
+
+        // Drop-in replacement for the old `rect = boardSvg.getBoundingClientRect();
+        // x = clientX - rect.left` pattern used at every drag/click hit-testing
+        // call site. Reads the untransformed rect from .board-area (the board
+        // container's parent, which is never itself transformed) and, if a
+        // tilt is active, inverts the perspective(P) rotateX(θ) projection
+        // CSS applied when rendering: forward projection puts a local offset
+        // (dx, dy) from center at screen offset (dx/w, dy·cosθ/w) where
+        // w = 1 - dy·sinθ/P; solving that pair for (dx, dy) given the click's
+        // screen offset (sx, sy) yields the inverse used here. With no tilt
+        // this reduces to the exact same math the old pattern did.
+        function getBoardScreenXY(clientX, clientY) {
+            const area = boardSvg.closest('.board-area');
+            const rect = area ? area.getBoundingClientRect() : boardSvg.getBoundingClientRect();
+            const tiltDeg = window._boardTiltDegrees || 0;
+            if (!tiltDeg) {
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            }
+            const W = rect.width, H = rect.height;
+            const theta = tiltDeg * Math.PI / 180;
+            const sx = (clientX - rect.left) - W / 2;
+            const sy = (clientY - rect.top) - H / 2;
+            let denom = 1 + (sy * Math.tan(theta)) / BOARD_TILT_PERSPECTIVE_PX;
+            if (Math.abs(denom) < 0.01) denom = denom < 0 ? -0.01 : 0.01;
+            const w = 1 / denom;
+            const dx = sx * w;
+            const dy = (sy * w) / Math.cos(theta);
+            return { x: W / 2 + dx, y: H / 2 + dy };
+        }
 
         // Fit all placed tiles into view, centered
         function fitBoardToView() {
@@ -2999,8 +3034,10 @@
             const boardCenterX = (minX + maxX) / 2;
             const boardCenterY = (minY + maxY) / 2;
 
-            // Get available screen space
-            const svgRect = boardSvg.getBoundingClientRect();
+            // Get available screen space. Read from .board-area, not boardSvg
+            // directly — when a board tilt is active, boardSvg's own rect is
+            // the foreshortened/trapezoidal projected box, not its true size.
+            const svgRect = (boardSvg.closest('.board-area') || boardSvg).getBoundingClientRect();
             const screenWidth = svgRect.width;
             const screenHeight = svgRect.height;
 
@@ -3292,10 +3329,8 @@
             draggedTileShrineType = 'player'; // Mark as player tile
             draggedTileOriginalPos = null;
 
-            const rect = boardSvg.getBoundingClientRect();
             const coords = getEventCoords(e);
-            const screenX = coords.x - rect.left;
-            const screenY = coords.y - rect.top;
+            const { x: screenX, y: screenY } = getBoardScreenXY(coords.x, coords.y);
             const world = screenToWorld(screenX, screenY);
 
             ghostTile = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -4975,9 +5010,7 @@
                 placedTiles = placedTiles.filter(t => t.id !== tileId);
             }
 
-            const rect = boardSvg.getBoundingClientRect();
-            const screenX = e.clientX - rect.left;
-            const screenY = e.clientY - rect.top;
+            const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
             const world = screenToWorld(screenX, screenY);
 
             ghostTile = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -6135,9 +6168,7 @@ function clearPlayerPath() {
             lastAttemptedHex = null; // Reset logging state
             draggedPlayer.element.remove();
 
-            const rect = boardSvg.getBoundingClientRect();
-            const screenX = e.clientX - rect.left;
-            const screenY = e.clientY - rect.top;
+            const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
             const world = screenToWorld(screenX, screenY);
 
             ghostPlayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -7567,9 +7598,7 @@ function clearPlayerPath() {
             // Update void nullification indicators
             updateAllVoidNullificationVisuals();
 
-            const rect = boardSvg.getBoundingClientRect();
-            const screenX = e.clientX - rect.left;
-            const screenY = e.clientY - rect.top;
+            const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
             const world = screenToWorld(screenX, screenY);
 
             ghostStone = document.createElementNS('http://www.w3.org/2000/svg', 'g');

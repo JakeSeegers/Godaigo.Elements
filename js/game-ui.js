@@ -624,10 +624,8 @@
             draggedStoneType = type;
 
             // Create ghost stone at cursor position
-            const rect = boardSvg.getBoundingClientRect();
             const coords = getEventCoords(e);
-            const screenX = coords.x - rect.left;
-            const screenY = coords.y - rect.top;
+            const { x: screenX, y: screenY } = getBoardScreenXY(coords.x, coords.y);
             const world = screenToWorld(screenX, screenY);
 
             ghostStone = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -987,9 +985,7 @@
             draggedTileRotation = currentRotation;
             draggedTileFlipped = currentFlipped;
             draggedTileShrineType = null; // Draw from deck
-            const rect = boardSvg.getBoundingClientRect();
-            const screenX = e.clientX - rect.left;
-            const screenY = e.clientY - rect.top;
+            const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
             const world = screenToWorld(screenX, screenY);
 
             ghostTile = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -1014,10 +1010,8 @@
                 draggedStoneId = null;
                 draggedStoneType = type;
 
-                const rect = boardSvg.getBoundingClientRect();
                 const coords = getEventCoords(e);
-                const screenX = coords.x - rect.left;
-                const screenY = coords.y - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(coords.x, coords.y);
                 const world = screenToWorld(screenX, screenY);
 
                 ghostStone = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -1055,10 +1049,8 @@
                 draggedStoneId = null;
                 draggedStoneType = type;
 
-                const rect = boardSvg.getBoundingClientRect();
                 const coords = getEventCoords(e);
-                const screenX = coords.x - rect.left;
-                const screenY = coords.y - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(coords.x, coords.y);
                 const world = screenToWorld(screenX, screenY);
 
                 ghostStone = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -1099,9 +1091,7 @@
                 pendingBoardMove = false;
                 if (!lastBoardMove) return;
 
-                const rect = boardSvg.getBoundingClientRect();
-                const screenX = lastBoardMove.clientX - rect.left;
-                const screenY = lastBoardMove.clientY - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(lastBoardMove.clientX, lastBoardMove.clientY);
                 const world = screenToWorld(screenX, screenY);
 
                 if (isDraggingTile && ghostTile) {
@@ -1184,9 +1174,7 @@
             if (e.button === 2) rightButtonDown = false;
 
             if (isDraggingTile && ghostTile) {
-                const rect = boardSvg.getBoundingClientRect();
-                const screenX = e.clientX - rect.left;
-                const screenY = e.clientY - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
                 const world = screenToWorld(screenX, screenY);
 
                 const isPlayerTile = (draggedTileShrineType === 'player');
@@ -1280,9 +1268,7 @@
                 draggedTileOriginalPos = null;
                 snapIndicator.classList.remove('active');
             } else if (isDraggingStone && ghostStone) {
-                const rect = boardSvg.getBoundingClientRect();
-                const screenX = e.clientX - rect.left;
-                const screenY = e.clientY - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
                 const world = screenToWorld(screenX, screenY);
 
                 // Remove ghost FIRST — prevents orphaned ghost stamps if anything below throws
@@ -1351,9 +1337,7 @@
                 }
             } else if (isDraggingPlayer && ghostPlayer) {
                 const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
-                const rect = boardSvg.getBoundingClientRect();
-                const screenX = e.clientX - rect.left;
-                const screenY = e.clientY - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
                 const world = screenToWorld(screenX, screenY);
 
                 const playerPos = findNearestHexPosition(world.x, world.y);
@@ -1604,9 +1588,7 @@
 
             // Store world position for potential tap-to-move
             if (e.touches.length === 1) {
-                const rect = boardSvg.getBoundingClientRect();
-                const screenX = coords.x - rect.left;
-                const screenY = coords.y - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(coords.x, coords.y);
                 touchStartWorldPos = screenToWorld(screenX, screenY);
             }
 
@@ -1700,9 +1682,7 @@
                     return;
                 }
                 // Single touch - handle drag
-                const rect = boardSvg.getBoundingClientRect();
-                const screenX = e.touches[0].clientX - rect.left;
-                const screenY = e.touches[0].clientY - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(e.touches[0].clientX, e.touches[0].clientY);
                 const world = screenToWorld(screenX, screenY);
 
                 if (isDraggingTile && ghostTile) {
@@ -1776,9 +1756,7 @@
         function handleBoardTouchEnd(e) {
             const touchDuration = Date.now() - touchStartTime;
             const coords = e.changedTouches[0];
-            const rect = boardSvg.getBoundingClientRect();
-            const screenX = coords.clientX - rect.left;
-            const screenY = coords.clientY - rect.top;
+            const { x: screenX, y: screenY } = getBoardScreenXY(coords.clientX, coords.clientY);
 
             // Check if this was a tap (short touch without much movement)
             const distMoved = Math.sqrt(
@@ -2183,9 +2161,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
 
             // Check for scroll effect selection mode (tile swap, tile flip, etc.)
             if (e.button === 0 && spellSystem && spellSystem.scrollEffects && spellSystem.scrollEffects.selectionMode) {
-                const rect = boardSvg.getBoundingClientRect();
-                const screenX = e.clientX - rect.left;
-                const screenY = e.clientY - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
                 const world = screenToWorld(screenX, screenY);
 
                 if (handleSelectionModeClick(world.x, world.y)) {
@@ -2202,11 +2178,9 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }
                 e.preventDefault();
                 e.stopPropagation();
-                const rect = boardSvg.getBoundingClientRect();
-                const screenX = e.clientX - rect.left;
-                const screenY = e.clientY - rect.top;
+                const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
                 const world = screenToWorld(screenX, screenY);
-                
+
                 if (window.shouldDebugLog ? window.shouldDebugLog('shiftClickPos', 500) : true) {
                     console.log(`📍 DEBUG: Shift+Click at screen (${screenX.toFixed(1)}, ${screenY.toFixed(1)})`);
                 }
@@ -3099,9 +3073,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
 
         boardSvg.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const rect = boardSvg.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+            const { x: mouseX, y: mouseY } = getBoardScreenXY(e.clientX, e.clientY);
             const worldBefore = screenToWorld(mouseX, mouseY);
             const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
             viewportScale = Math.max(0.1, Math.min(10, viewportScale * zoomFactor));
