@@ -72,6 +72,7 @@ const ScrollPanelSystem = (() => {
                 <button class="fsp-btn fsp-close-btn"    title="Close">✕</button>
             </div>
             <div class="fsp-body" id="fsp-body-${id}"></div>
+            <div class="fsp-compact" id="fsp-compact-${id}" style="display:none;"></div>
             <div class="fsp-resize-handle" title="Drag to resize"></div>
         `;
 
@@ -173,21 +174,28 @@ const ScrollPanelSystem = (() => {
     }
 
     // ---- Collapse ----
+    // Collapsed no longer just hides everything down to a bare title bar —
+    // it swaps the full card grid for a compact Name / Type / Level list
+    // (fsp-compact), so the button actually has a purpose: a quick glance at
+    // what's in hand/active/common without the full card real estate.
     function _applyCollapsed(id, collapsed) {
         const { el, state } = panels[id];
         state.collapsed = collapsed;
-        const body   = document.getElementById('fsp-body-' + id);
-        const handle = el.querySelector('.fsp-resize-handle');
-        const btn    = el.querySelector('.fsp-collapse-btn');
+        const body    = document.getElementById('fsp-body-' + id);
+        const compact = document.getElementById('fsp-compact-' + id);
+        const handle  = el.querySelector('.fsp-resize-handle');
+        const btn     = el.querySelector('.fsp-collapse-btn');
         if (collapsed) {
-            if (body)   body.style.display   = 'none';
-            if (handle) handle.style.display = 'none';
-            if (btn)    btn.textContent       = '+';
+            if (body)    body.style.display    = 'none';
+            if (compact) compact.style.display = '';
+            if (handle)  handle.style.display  = 'none';
+            if (btn)     btn.textContent        = '+';
             el.style.height = '';
         } else {
-            if (body)   body.style.display   = '';
-            if (handle) handle.style.display = (state.autofit !== false) ? 'none' : '';
-            if (btn)    btn.textContent       = '−';
+            if (body)    body.style.display    = '';
+            if (compact) compact.style.display = 'none';
+            if (handle)  handle.style.display  = (state.autofit !== false) ? 'none' : '';
+            if (btn)     btn.textContent        = '−';
             if (state.h) el.style.height = state.h + 'px';
         }
     }
@@ -237,19 +245,76 @@ const ScrollPanelSystem = (() => {
     // ---- Scroll card builder ----
     const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 
+    // Shared name/type/level lookup — used by both the full card and the
+    // collapsed compact-list row so they never disagree.
+    function _scrollMeta(scrollName) {
+        const sp = window.spellSystem;
+        if (!sp) return null;
+        const def = sp.patterns?.[scrollName] || window.SCROLL_DEFINITIONS?.[scrollName];
+        if (!def) return null;
+        const element = typeof sp.getScrollElement === 'function'
+            ? sp.getScrollElement(scrollName) : 'earth';
+        const color   = EL_COLORS[element] || '#aaa';
+        const elLabel = element ? element.charAt(0).toUpperCase() + element.slice(1) : '';
+        const lvLabel = def.level ? 'Lv. ' + (ROMAN[def.level] || def.level) : '';
+        return { def, element, color, elLabel, lvLabel, name: def.name || scrollName };
+    }
+
+    // ---- Compact list row (shown in place of the cards while collapsed) ----
+    function _buildCompactRow(scrollName) {
+        const meta = _scrollMeta(scrollName);
+        if (!meta) return null;
+
+        const row = document.createElement('div');
+        row.className = 'fsp-compact-row';
+        row.dataset.scrollName = scrollName;
+
+        const dot = document.createElement('span');
+        dot.className = 'fsp-compact-dot';
+        dot.style.background = meta.color;
+        row.appendChild(dot);
+
+        const name = document.createElement('span');
+        name.className = 'fsp-compact-name';
+        name.textContent = meta.name;
+        row.appendChild(name);
+
+        const meta_ = document.createElement('span');
+        meta_.className = 'fsp-compact-meta';
+        meta_.textContent = [meta.elLabel, meta.lvLabel].filter(Boolean).join(' · ');
+        row.appendChild(meta_);
+
+        // Same detail popup as clicking a full card's header
+        row.addEventListener('click', () => {
+            if (typeof window.showScrollInfoPopup === 'function') {
+                window.showScrollInfoPopup(scrollName, meta.def, meta.element);
+            }
+        });
+
+        return row;
+    }
+
+    function _renderCompactList(id, scrollNames) {
+        const compact = document.getElementById('fsp-compact-' + id);
+        if (!compact) return;
+        compact.innerHTML = '';
+        if (!scrollNames.length) {
+            compact.innerHTML = '<div class="fsp-compact-empty">Empty</div>';
+            return;
+        }
+        const frag = document.createDocumentFragment();
+        scrollNames.forEach(n => { const r = _buildCompactRow(n); if (r) frag.appendChild(r); });
+        compact.appendChild(frag);
+    }
+
     function _buildCard(scrollName, area) {
         const sp = window.spellSystem;
         if (!sp) return null;
 
-        const def = sp.patterns?.[scrollName] || window.SCROLL_DEFINITIONS?.[scrollName];
-        if (!def) return null;
-
-        const element  = typeof sp.getScrollElement === 'function'
-            ? sp.getScrollElement(scrollName) : 'earth';
-        const color    = EL_COLORS[element] || '#aaa';
+        const meta = _scrollMeta(scrollName);
+        if (!meta) return null;
+        const { def, element, color, elLabel, lvLabel } = meta;
         const iconSrc  = window.STONE_TYPES?.[element]?.img || '';
-        const elLabel  = element ? element.charAt(0).toUpperCase() + element.slice(1) : '';
-        const lvLabel  = def.level ? 'Lv. ' + (ROMAN[def.level] || def.level) : '';
 
         const canModify = (typeof isMultiplayer === 'undefined' || !isMultiplayer)
             || (typeof myPlayerIndex !== 'undefined' && typeof activePlayerIndex !== 'undefined'
@@ -477,27 +542,33 @@ const ScrollPanelSystem = (() => {
         body.innerHTML = '';
         const frag  = document.createDocumentFragment();
         let   empty = false;
+        let   scrolls = [];
 
         if (id === 'hand') {
-            const scrolls = [...(sp.handScrolls || [])];
+            scrolls = [...(sp.handScrolls || [])];
             _updateBadge('hand', scrolls.length, CAPACITY.hand);
             if (!scrolls.length) { empty = true; body.innerHTML = '<div class="fsp-empty">Hand is empty</div>'; }
             else scrolls.forEach(n => { const c = _buildCard(n, 'hand');   if (c) frag.appendChild(c); });
 
         } else if (id === 'active') {
-            const scrolls = [...(sp.activeScrolls || [])];
+            scrolls = [...(sp.activeScrolls || [])];
             _updateBadge('active', scrolls.length, CAPACITY.active);
             if (!scrolls.length) { empty = true; body.innerHTML = '<div class="fsp-empty">No active scrolls</div>'; }
             else scrolls.forEach(n => { const c = _buildCard(n, 'active'); if (c) frag.appendChild(c); });
 
         } else if (id === 'common') {
-            const scrolls = typeof sp.getCommonAreaScrolls === 'function' ? sp.getCommonAreaScrolls() : [];
+            scrolls = typeof sp.getCommonAreaScrolls === 'function' ? sp.getCommonAreaScrolls() : [];
             _updateBadge('common', scrolls.length, CAPACITY.common);
             if (!scrolls.length) { empty = true; body.innerHTML = '<div class="fsp-empty">Common area is empty</div>'; }
             else scrolls.forEach(n => { const c = _buildCard(n, 'common'); if (c) frag.appendChild(c); });
         }
 
         if (!empty) body.appendChild(frag);
+
+        // Keep the collapsed compact list in sync too, whether or not it's
+        // currently visible — cheap, and means toggling collapse never shows
+        // stale content from before the last change.
+        _renderCompactList(id, scrolls);
 
         // Autofit: snap height to content after rendering
         if (panels[id]?.state?.autofit !== false) fitPanel(id);

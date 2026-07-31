@@ -790,72 +790,6 @@ body {
     pointer-events: none;
 }
 
-/* Common Area Section */
-.common-area-container {
-    background: #0e0e1a;
-    border: 2px solid #333;
-    border-radius: 2px;
-    padding: var(--space-sm);
-    min-height: 60px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-xs);
-    align-items: center;
-    justify-content: center;
-}
-
-.common-area-container.common-area-expanded {
-    align-items: flex-start;
-    justify-content: flex-start;
-}
-
-.common-area-container.common-area-expanded .common-area-scroll {
-    min-width: 140px;
-}
-
-.common-area-container.common-area-expanded .common-area-pattern svg {
-    max-width: 180px;
-}
-
-.common-area-empty {
-    font-family: var(--font-terminal);
-    font-size: 16px;
-    color: #ccc;
-}
-
-.common-area-scroll {
-    background: #111;
-    border-radius: 2px;
-    padding: 4px 8px;
-    font-family: var(--font-terminal);
-    font-size: 17px;
-    cursor: pointer;
-    transition: box-shadow 0.05s;
-    border: 2px solid #333;
-    box-shadow: 2px 2px 0 #000;
-}
-
-.common-area-scroll:hover {
-    border-color: #d9b08c;
-    box-shadow: 3px 3px 0 #000;
-}
-
-.common-area-scroll.earth { border-left: 4px solid #69d83a; }
-.common-area-scroll.water { border-left: 4px solid #5894f4; }
-.common-area-scroll.fire  { border-left: 4px solid #ed1b43; }
-.common-area-scroll.wind  { border-left: 4px solid #ffce00; }
-.common-area-scroll.void  { border-left: 4px solid #9458f4; }
-.common-area-scroll.catacomb { border-left: 4px solid #888; }
-
-/* Stone formation display inside common area list */
-.common-area-scroll .common-area-pattern {
-    display: flex;
-    justify-content: center;
-}
-.common-area-scroll .common-area-pattern svg {
-    max-width: 100px;
-    height: auto;
-}
 
 /* Scroll Browse Modal */
 .scroll-browse-modal {
@@ -1341,6 +1275,42 @@ body {
     background: rgba(192,57,43,0.15);
     border-color: #e74c3c;
 }
+
+/* Scroll deck pips — compact stand-in for the Scroll Decks section, sitting
+   left of the Hand/Active/Common Area buttons. Same small-dot idea as
+   .hud-shrine-progress's shrine-dot, but each pip carries its own remaining
+   count instead of a plain on/off state. */
+.hud-scroll-decks-pips {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 6px;
+    padding-right: 10px;
+    border-right: 1px solid var(--border-subtle);
+}
+.scrolldeck-pip {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-terminal);
+    font-size: 10px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 1px 1px 0 #000;
+    border: 2px solid rgba(255,255,255,0.15);
+    flex-shrink: 0;
+    transition: opacity 0.2s;
+}
+.scrolldeck-pip[data-element="earth"]    { background: #69d83a; }
+.scrolldeck-pip[data-element="water"]    { background: #5894f4; }
+.scrolldeck-pip[data-element="fire"]     { background: #ed1b43; }
+.scrolldeck-pip[data-element="wind"]     { background: #ffce00; }
+.scrolldeck-pip[data-element="void"]     { background: #9458f4; }
+.scrolldeck-pip[data-element="catacomb"] { background: #444; }
+.scrolldeck-pip.empty { opacity: 0.35; }
 
 /* Button styles */
 button {
@@ -3802,6 +3772,47 @@ label, .hud-ap-label, .hud-ap-value {
     font-size: 12px;
     text-align: center;
     padding: 20px 8px;
+    font-style: italic;
+}
+
+/* ---- Collapsed compact list: Name / Type / Level, one line each ---- */
+.fsp-compact {
+    padding: 4px 2px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+.fsp-compact-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+    border-radius: 2px;
+}
+.fsp-compact-row:hover { background: rgba(255,255,255,0.06); }
+.fsp-compact-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.fsp-compact-name {
+    font-family: var(--font-terminal);
+    font-size: 14px;
+    color: #eee;
+    white-space: nowrap;
+}
+.fsp-compact-meta {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    color: #999;
+    white-space: nowrap;
+}
+.fsp-compact-empty {
+    color: #ccc;
+    font-size: 12px;
+    text-align: center;
+    padding: 8px;
     font-style: italic;
 }
 

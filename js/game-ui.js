@@ -38,25 +38,6 @@
             // Setup scroll deck UI
             initializeScrollDeckUI();
 
-            // Common area popout: expanded = show stone patterns, minimized = names only
-            let commonAreaExpanded = false;
-            const toggleCommonAreaBtn = document.getElementById('toggle-common-area');
-            const commonAreaContainer = document.getElementById('common-area-container');
-            if (toggleCommonAreaBtn && commonAreaContainer) {
-                function setCommonAreaToggleLabel() {
-                    toggleCommonAreaBtn.textContent = commonAreaExpanded ? '\u25C0' : '\u25B6';
-                    toggleCommonAreaBtn.title = commonAreaExpanded ? 'Minimize common area (hide patterns)' : 'Expand common area (show stone patterns)';
-                    commonAreaContainer.classList.toggle('common-area-expanded', commonAreaExpanded);
-                    commonAreaContainer.dataset.expanded = commonAreaExpanded ? 'true' : 'false';
-                }
-                toggleCommonAreaBtn.addEventListener('click', () => {
-                    commonAreaExpanded = !commonAreaExpanded;
-                    setCommonAreaToggleLabel();
-                    updateCommonAreaUI();
-                });
-                setCommonAreaToggleLabel();
-            }
-
             // Elemental Stones popout: same slide-up mechanism as the Colours panel
             const elementalStonesBtn = document.getElementById('elemental-stones-btn');
             const elementalStonesClose = document.getElementById('elemental-stones-close');
@@ -164,6 +145,12 @@
                     if (cardEl) {
                         cardEl.classList.toggle('empty', count === 0);
                     }
+
+                    // Dock pip mirrors the same count
+                    const pipEl = document.getElementById(`scrolldeck-pip-${element}`);
+                    const pipCountEl = document.getElementById(`scrolldeck-pip-${element}-count`);
+                    if (pipCountEl) pipCountEl.textContent = count;
+                    if (pipEl) pipEl.classList.toggle('empty', count === 0);
                 }
             });
 

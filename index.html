@@ -365,15 +365,6 @@
                         </div>
                     </div>
 
-                    <!-- Common Area Section -->
-                    <div class="common-area-header" style="margin-top: 12px; display: flex; align-items: center; gap: 8px;">
-                        <span class="section-label" style="margin: 0;">Common Area</span>
-                        <button class="hud-toggle-btn" id="toggle-common-area" title="Toggle common area (show/hide stone patterns)">&#9654;</button>
-                    </div>
-                    <div class="common-area-container" id="common-area-container">
-                        <!-- Common area scrolls will be shown here dynamically -->
-                        <div class="common-area-empty">No scrolls in common area</div>
-                    </div>
                 </div>
 
             </div>
@@ -408,6 +399,14 @@
         <div class="dock-bar">
             <!-- Center zone: action buttons -->
             <div class="dock-actions">
+                <div class="hud-scroll-decks-pips" id="hud-scroll-decks-pips" title="Scroll decks remaining">
+                    <span class="scrolldeck-pip" id="scrolldeck-pip-earth" data-element="earth" title="Earth scrolls remaining"><span id="scrolldeck-pip-earth-count">0</span></span>
+                    <span class="scrolldeck-pip" id="scrolldeck-pip-water" data-element="water" title="Water scrolls remaining"><span id="scrolldeck-pip-water-count">0</span></span>
+                    <span class="scrolldeck-pip" id="scrolldeck-pip-fire" data-element="fire" title="Fire scrolls remaining"><span id="scrolldeck-pip-fire-count">0</span></span>
+                    <span class="scrolldeck-pip" id="scrolldeck-pip-wind" data-element="wind" title="Wind scrolls remaining"><span id="scrolldeck-pip-wind-count">0</span></span>
+                    <span class="scrolldeck-pip" id="scrolldeck-pip-void" data-element="void" title="Void scrolls remaining"><span id="scrolldeck-pip-void-count">0</span></span>
+                    <span class="scrolldeck-pip" id="scrolldeck-pip-catacomb" data-element="catacomb" title="Catacomb scrolls remaining"><span id="scrolldeck-pip-catacomb-count">0</span></span>
+                </div>
                 <button id="panel-btn-hand">Hand&thinsp;(<span id="hand-count">0</span>)</button>
                 <button id="panel-btn-active">Active&thinsp;(<span id="active-count">0</span>)</button>
                 <button id="panel-btn-common">Common Area</button>
