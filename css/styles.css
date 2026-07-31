@@ -1190,39 +1190,37 @@ body {
 }
 
 /* Scroll deck pips — compact stand-in for the Scroll Decks section, sitting
-   left of the Hand/Active/Common Area buttons. Same small-dot idea as
-   .hud-shrine-progress's shrine-dot, but each pip carries its own remaining
-   count instead of a plain on/off state. */
+   left of the Hand/Active/Common Area buttons: each element's scroll icon
+   with its remaining count beside it. */
 .hud-scroll-decks-pips {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 10px;
     margin-right: 6px;
     padding-right: 10px;
     border-right: 1px solid var(--border-subtle);
 }
 .scrolldeck-pip {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-family: var(--font-terminal);
-    font-size: 10px;
-    font-weight: bold;
-    color: #fff;
-    text-shadow: 1px 1px 0 #000;
-    border: 2px solid rgba(255,255,255,0.15);
+    gap: 3px;
     flex-shrink: 0;
+    cursor: pointer;
     transition: opacity 0.2s;
 }
-.scrolldeck-pip[data-element="earth"]    { background: #69d83a; }
-.scrolldeck-pip[data-element="water"]    { background: #5894f4; }
-.scrolldeck-pip[data-element="fire"]     { background: #ed1b43; }
-.scrolldeck-pip[data-element="wind"]     { background: #ffce00; }
-.scrolldeck-pip[data-element="void"]     { background: #9458f4; }
-.scrolldeck-pip[data-element="catacomb"] { background: #444; }
+.scrolldeck-pip-icon {
+    width: 22px;
+    height: 22px;
+    image-rendering: pixelated;
+    flex-shrink: 0;
+}
+.scrolldeck-pip-count {
+    font-family: var(--font-terminal);
+    font-size: 14px;
+    font-weight: bold;
+    color: #eee;
+    text-shadow: 1px 1px 0 #000;
+}
 .scrolldeck-pip.empty { opacity: 0.35; }
 
 /* Button styles */
