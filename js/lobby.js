@@ -417,11 +417,12 @@
 
             // If the host leaves, delete the game_room entirely so it disappears from
             // other players' browser lists immediately rather than lingering as an empty room.
+            // Must go through an RPC — game_room/players both have "no client delete" RLS
+            // policies (qual: false), so a direct .from(...).delete() silently deletes 0
+            // rows and returns no error, leaving the room stuck forever.
             if (leavingAsHost && leavingRoomId) {
                 const { error: roomDeleteErr } = await supabase
-                    .from('game_room')
-                    .delete()
-                    .eq('id', leavingRoomId);
+                    .rpc('delete_game_room', { p_room_id: leavingRoomId });
                 if (roomDeleteErr) {
                     console.warn('⚠️ Could not delete game_room on host leave:', roomDeleteErr.message);
                 } else {
@@ -786,20 +787,14 @@
             try {
                 console.log('📄 Resetting lobby...');
 
-                // Delete all players in the current room
-                const { data: allPlayers } = await supabase
-                    .from('players')
-                    .select('id')
-                    .eq('game_id', currentGameId);
+                // Delete all players in the current room. Must go through an RPC —
+                // players has a "no client delete" RLS policy (qual: false), so a
+                // direct .from('players').delete() silently deletes 0 rows and
+                // returns no error, leaving stale players behind.
+                const { error: playersError } = await supabase
+                    .rpc('clear_room_players', { p_room_id: currentGameId });
 
-                if (allPlayers && allPlayers.length > 0) {
-                    const { error: playersError } = await supabase
-                        .from('players')
-                        .delete()
-                        .in('id', allPlayers.map(p => p.id));
-
-                    if (playersError) throw playersError;
-                }
+                if (playersError) throw playersError;
 
                 // Reset game room status
                 const { error: roomError } = await supabase
