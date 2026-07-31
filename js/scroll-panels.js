@@ -293,13 +293,8 @@ const ScrollPanelSystem = (() => {
         meta_.textContent = [meta.elLabel, meta.lvLabel].filter(Boolean).join(' · ');
         row.appendChild(meta_);
 
-        // Same detail popup as clicking a full card's header
-        row.addEventListener('click', () => {
-            if (typeof window.showScrollInfoPopup === 'function') {
-                window.showScrollInfoPopup(scrollName, meta.def, meta.element);
-            }
-        });
-
+        // No click handler — hovering shows the same preview a full card
+        // gets (see _initCardHoverPreview's delegated listeners below).
         return row;
     }
 
@@ -492,13 +487,8 @@ const ScrollPanelSystem = (() => {
             if (acts.children.length) card.appendChild(acts);
         }
 
-        // Click header area → open detail popup
-        hdr.addEventListener('click', (e) => {
-            if (e.target.closest('.fsp-card-btn')) return;
-            if (typeof window.showScrollInfoPopup === 'function') {
-                window.showScrollInfoPopup(scrollName, def, element);
-            }
-        });
+        // No click-to-popup — hovering the card already shows the enlarged
+        // preview (see _initCardHoverPreview).
 
         return card;
     }
@@ -709,6 +699,13 @@ const ScrollPanelSystem = (() => {
     }
 
     // ---- Hover preview panel ----
+    // Shared by three surfaces: full .fsp-card grids, the collapsed
+    // .fsp-compact-row list, and the Players panel's .opponent-scroll-card
+    // icons — all three used to open a click-triggered popup; now hovering
+    // any of them shows this same enlarged preview instead. Built fresh from
+    // scrollName via _buildCard() each time (minus action buttons, since
+    // 'preview' isn't a real area) rather than cloning the hovered element,
+    // so it works the same regardless of which of the three triggered it.
     function _initCardHoverPreview() {
         const preview = document.createElement('div');
         preview.className = 'fsp-card-preview';
@@ -718,27 +715,32 @@ const ScrollPanelSystem = (() => {
         let hideTimer = null;
         let showTimer = null;
         let throbberEl = null;
-        let currentCard = null; // track which card we're hovering so child mouseover events don't restart the timer
+        let currentScrollName = null; // which scroll we're hovering, so child mouseover events don't restart the timer
 
         function clearThrobber() {
             if (throbberEl) { throbberEl.remove(); throbberEl = null; }
         }
 
-        function showPreview(card) {
-            if (card === currentCard) return; // already tracking this card — don't restart the timer
-            currentCard = card;
+        // anchorEl: the hovered element (for positioning + the spinner).
+        function showPreview(scrollName, anchorEl) {
+            if (scrollName === currentScrollName) return; // already tracking this scroll — don't restart the timer
+            currentScrollName = scrollName;
             clearTimeout(hideTimer);
             clearTimeout(showTimer);
             clearThrobber();
 
-            // Show a small spinner on the card for 500ms before the preview appears
-            const elColor = card.style.getPropertyValue('--el-color') || '#888';
-            const cardRect = card.getBoundingClientRect();
+            const sp = window.spellSystem;
+            const element = (sp && typeof sp.getScrollElement === 'function')
+                ? sp.getScrollElement(scrollName) : 'earth';
+            const elColor = EL_COLORS[element] || '#888';
+
+            // Show a small spinner near the hovered element for 500ms before the preview appears
+            const anchorRect = anchorEl.getBoundingClientRect();
             const dot = document.createElement('div');
             dot.style.cssText = `
                 position: fixed;
-                left: ${cardRect.right - 18}px;
-                top: ${cardRect.top + 6}px;
+                left: ${anchorRect.right - 18}px;
+                top: ${anchorRect.top + 6}px;
                 width: 12px; height: 12px;
                 border: 2px solid ${elColor}55;
                 border-top-color: ${elColor};
@@ -753,77 +755,70 @@ const ScrollPanelSystem = (() => {
             showTimer = setTimeout(() => {
                 clearThrobber();
 
-            // Clone the card DOM (fast) then replace the pattern with a fresh
-            // animated instance — cloneNode gives a static snapshot, not live animation
-            const clone = card.cloneNode(true);
-            clone.style.height = 'auto';   // preview is not height-constrained
-            clone.querySelector('.fsp-card-actions')?.remove();
-            const elColor = card.style.getPropertyValue('--el-color');
-            if (elColor) clone.style.setProperty('--el-color', elColor);
+                // 'preview' isn't hand/active/common, so _buildCard() adds no action buttons
+                const card = _buildCard(scrollName, 'preview');
+                if (!card) return;
+                card.style.height = 'auto'; // preview is not height-constrained
 
-            // Rebuild pattern visual so cycling animations run properly
-            const scrollName = card.dataset.scrollName;
-            const sp = window.spellSystem;
-            if (scrollName && sp) {
-                const def = sp.patterns?.[scrollName] || window.SCROLL_DEFINITIONS?.[scrollName];
-                const element = typeof sp.getScrollElement === 'function'
-                    ? sp.getScrollElement(scrollName) : 'earth';
-                const patWrap = clone.querySelector('.fsp-card-pattern');
-                if (patWrap && def?.patterns && typeof sp.createPatternVisual === 'function') {
-                    patWrap.innerHTML = '';
-                    try {
-                        const freshVisual = sp.createPatternVisual(def, element);
-                        patWrap.appendChild(freshVisual);
-                    } catch (e) {}
+                preview.innerHTML = '';
+                preview.appendChild(card);
+                preview.style.display = 'block';
+                preview.style.setProperty('--el-color', elColor);
+
+                // Position: prefer to the right of the containing panel; fall back to left
+                const anchorRect2 = anchorEl.getBoundingClientRect();
+                const panelEl   = anchorEl.closest('.fsp') || anchorEl.closest('#right-panel');
+                const panelRect = panelEl ? panelEl.getBoundingClientRect() : anchorRect2;
+
+                const previewW = 480;
+                const gap      = 14;
+                let left = panelRect.right + gap;
+                if (left + previewW > window.innerWidth - 8) {
+                    left = panelRect.left - previewW - gap;
                 }
-            }
+                let top = anchorRect2.top;
+                // Keep preview within viewport vertically
+                const maxTop = window.innerHeight - preview.offsetHeight - 8;
+                if (top > maxTop) top = Math.max(8, maxTop);
 
-            preview.innerHTML = '';
-            preview.appendChild(clone);
-            preview.style.display = 'block';
-            preview.style.setProperty('--el-color', elColor || '#888');
-
-            // Position: prefer to the right of the parent panel; fall back to left
-            const cardRect  = card.getBoundingClientRect();
-            const panelEl   = card.closest('.fsp');
-            const panelRect = panelEl ? panelEl.getBoundingClientRect() : cardRect;
-
-            const previewW = 480;
-            const gap      = 14;
-            let left = panelRect.right + gap;
-            if (left + previewW > window.innerWidth - 8) {
-                left = panelRect.left - previewW - gap;
-            }
-            let top = cardRect.top;
-            // Keep preview within viewport vertically
-            const maxTop = window.innerHeight - preview.offsetHeight - 8;
-            if (top > maxTop) top = Math.max(8, maxTop);
-
-            preview.style.left = left + 'px';
-            preview.style.top  = top  + 'px';
+                preview.style.left = left + 'px';
+                preview.style.top  = top  + 'px';
             }, 500); // 500ms hover delay
         }
 
         function hidePreview() {
-            currentCard = null;
+            currentScrollName = null;
             clearTimeout(showTimer);
             clearThrobber();
             hideTimer = setTimeout(() => { preview.style.display = 'none'; }, 80);
         }
 
-        // Delegation — works for dynamically rendered cards
-        document.addEventListener('mouseover', e => {
-            const card = e.target.closest('.fsp-card');
-            if (card && card.closest('.fsp')) {   // only cards inside a panel (not the preview itself)
-                showPreview(card);
+        // Find the nearest hoverable ancestor of any of the three kinds, if any.
+        function findHoverable(target) {
+            const fspCard = target.closest('.fsp-card');
+            if (fspCard && fspCard.closest('.fsp') && fspCard.dataset.scrollName) {
+                return { el: fspCard, scrollName: fspCard.dataset.scrollName };
             }
+            const compactRow = target.closest('.fsp-compact-row');
+            if (compactRow && compactRow.closest('.fsp') && compactRow.dataset.scrollName) {
+                return { el: compactRow, scrollName: compactRow.dataset.scrollName };
+            }
+            const oppCard = target.closest('.opponent-scroll-card[data-scroll-name]');
+            if (oppCard) return { el: oppCard, scrollName: oppCard.dataset.scrollName };
+            return null;
+        }
+
+        // Delegation — works for dynamically rendered cards/rows
+        document.addEventListener('mouseover', e => {
+            const hit = findHoverable(e.target);
+            if (hit) showPreview(hit.scrollName, hit.el);
         });
         document.addEventListener('mouseout', e => {
-            const card = e.target.closest('.fsp-card');
-            if (card && card.closest('.fsp')) {
-                // Only hide when the mouse truly leaves the card, not when moving between child elements
+            const hit = findHoverable(e.target);
+            if (hit) {
+                // Only hide when the mouse truly leaves the element, not when moving between child elements
                 const related = e.relatedTarget;
-                if (!related || !card.contains(related)) {
+                if (!related || !hit.el.contains(related)) {
                     hidePreview();
                 }
             }

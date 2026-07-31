@@ -6,17 +6,8 @@
             console.log('🎨 Initializing new UI...');
 
             // Setup panel toggle buttons
-            const toggleLeftBtn = document.getElementById('toggle-left-panel');
             const toggleRightBtn = document.getElementById('toggle-right-panel');
             const gameLayout = document.getElementById('game-layout');
-
-            if (toggleLeftBtn) {
-                toggleLeftBtn.addEventListener('click', () => {
-                    gameLayout.classList.toggle('left-collapsed');
-                    toggleLeftBtn.textContent = gameLayout.classList.contains('left-collapsed') ? '\u25B6' : '\u25C0';
-                });
-                toggleLeftBtn.textContent = gameLayout.classList.contains('left-collapsed') ? '\u25B6' : '\u25C0';
-            }
 
             if (toggleRightBtn) {
                 toggleRightBtn.addEventListener('click', () => {
@@ -53,22 +44,6 @@
                 });
             }
 
-            // Scroll decks: rarely used, collapsed by default to save space in the Resources panel
-            let scrollDecksExpanded = false;
-            const toggleScrollDecksBtn = document.getElementById('toggle-scroll-decks');
-            const scrollDecksSection = document.getElementById('scroll-decks-section');
-            if (toggleScrollDecksBtn && scrollDecksSection) {
-                function setScrollDecksToggleLabel() {
-                    toggleScrollDecksBtn.textContent = scrollDecksExpanded ? '◀' : '▶';
-                    toggleScrollDecksBtn.title = scrollDecksExpanded ? 'Hide scroll decks' : 'Show scroll decks';
-                    scrollDecksSection.classList.toggle('collapsed', !scrollDecksExpanded);
-                }
-                toggleScrollDecksBtn.addEventListener('click', () => {
-                    scrollDecksExpanded = !scrollDecksExpanded;
-                    setScrollDecksToggleLabel();
-                });
-                setScrollDecksToggleLabel();
-            }
 
             // Opponent active scrolls: show/hide stone patterns (same idea as common area popout)
             let opponentPatternsExpanded = false;
@@ -90,6 +65,24 @@
 
             // Initial HUD update
             updateHUD();
+
+            // Placement-tile overlay: no button, so poll rather than hook
+            // every code path that could change phase/turn state.
+            setInterval(updatePlacementTileOverlay, 300);
+        }
+
+        // Placement-tile overlay: auto-shown only during the local player's
+        // own placement-phase turn — no button, since it's only ever
+        // relevant briefly at game start. isMyTurn() explicitly excludes
+        // placement (it's for in-game actions), so check activePlayerIndex
+        // directly instead.
+        function updatePlacementTileOverlay() {
+            const overlay = document.getElementById('placement-tile-overlay');
+            if (!overlay) return;
+            const myPlacementTurn = typeof isPlacementPhase !== 'undefined' && isPlacementPhase &&
+                (typeof isMultiplayer === 'undefined' || !isMultiplayer || myPlayerIndex === activePlayerIndex);
+            const hasTiles = typeof playerTilesAvailable !== 'undefined' && playerTilesAvailable > 0;
+            overlay.style.display = (myPlacementTurn && hasTiles) ? '' : 'none';
         }
 
         // Play n footstep sounds spaced ~160ms apart (for multi-hex moves).
@@ -104,7 +97,7 @@
 
         // Initialize scroll deck UI with right-click handlers
         function initializeScrollDeckUI() {
-            const deckCards = document.querySelectorAll('.scroll-deck-card');
+            const deckCards = document.querySelectorAll('.scrolldeck-pip');
             deckCards.forEach(card => {
                 const element = card.dataset.element;
                 if (element) {
@@ -129,29 +122,17 @@
             updateScrollDeckUI();
         }
 
-        // Update scroll deck UI to show current deck counts and common area
+        // Update the dock's scroll-deck pips with current deck counts
         function updateScrollDeckUI() {
-            if (!spellSystem) return;
+            if (!spellSystem || !spellSystem.scrollDecks) return;
 
             const elements = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
             elements.forEach(element => {
-                const countEl = document.getElementById(`${element}-deck-count`);
-                const cardEl = document.getElementById(`${element}-scroll-deck`);
-                if (countEl && spellSystem.scrollDecks) {
-                    const count = spellSystem.scrollDecks[element]?.length || 0;
-                    countEl.textContent = count;
-
-                    // Add empty class if deck is empty
-                    if (cardEl) {
-                        cardEl.classList.toggle('empty', count === 0);
-                    }
-
-                    // Dock pip mirrors the same count
-                    const pipEl = document.getElementById(`scrolldeck-pip-${element}`);
-                    const pipCountEl = document.getElementById(`scrolldeck-pip-${element}-count`);
-                    if (pipCountEl) pipCountEl.textContent = count;
-                    if (pipEl) pipEl.classList.toggle('empty', count === 0);
-                }
+                const count = spellSystem.scrollDecks[element]?.length || 0;
+                const pipEl = document.getElementById(`scrolldeck-pip-${element}`);
+                const pipCountEl = document.getElementById(`scrolldeck-pip-${element}-count`);
+                if (pipCountEl) pipCountEl.textContent = count;
+                if (pipEl) pipEl.classList.toggle('empty', count === 0);
             });
 
             // Update common area display
@@ -852,21 +833,10 @@
             if (cardsContainer) cardsContainer.innerHTML = '';
             if (newCardsContainer) newCardsContainer.innerHTML = '';
 
-            // Delegated click handler for scroll card popups — added once per container.
-            // innerHTML = '' only clears children, not listeners on the container itself,
-            // so we guard with a data flag to avoid stacking listeners on re-calls.
-            const attachScrollDelegate = (container) => {
-                if (!container || container.dataset.scrollDelegated) return;
-                container.dataset.scrollDelegated = 'true';
-                container.addEventListener('click', (e) => {
-                    const sc = e.target.closest('.opponent-scroll-card[data-scroll-name]');
-                    if (!sc) return;
-                    const sName = sc.dataset.scrollName;
-                    showScrollInfoPopup(sName, spellSystem.patterns[sName], spellSystem.getScrollElement(sName));
-                });
-            };
-            attachScrollDelegate(cardsContainer);
-            attachScrollDelegate(newCardsContainer);
+            // No click delegate here — hovering an .opponent-scroll-card shows
+            // the same enlarged preview as the floating Hand/Active/Common
+            // panels (see js/scroll-panels.js's _initCardHoverPreview, which
+            // delegates from document level so this needs no wiring here).
 
             // Build ordered list: self first, then others
             const playerOrder = [];

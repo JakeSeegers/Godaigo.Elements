@@ -266,7 +266,6 @@
         <!-- TOP HUD BAR -->
         <div class="hud-bar">
             <div class="hud-section left">
-                <button class="hud-toggle-btn" id="toggle-left-panel" title="Toggle resources panel">◀</button>
                 <div class="hud-player">
                     <button id="leave-game" class="danger" style="display: none;">Leave</button>
                     <button class="hud-stone-info-btn" onclick="showStoneInfoPopup()" title="Stone types &amp; abilities">Elemental Reference</button>
@@ -307,66 +306,13 @@
             </div>
         </div>
 
-        <!-- LEFT PANEL (Resources) -->
-        <div class="left-panel" id="left-panel">
-            <div class="panel-header">
-                <span class="panel-title">Resources</span>
-            </div>
-            <div class="panel-content">
-                <!-- Player Tiles Section — shown during placement phase; sits at top so it's immediately visible -->
-                <div class="tiles-section">
-                    <div id="new-player-tile-deck" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
-                        <!-- Player tiles will be added here dynamically -->
-                    </div>
-                </div>
-
-                <!-- Scroll Decks Section -->
-                <div class="scroll-decks-section" id="scroll-decks-section">
-                    <div class="section-label-row">
-                        <div class="section-label">Scroll Decks</div>
-                        <button class="hud-toggle-btn" id="toggle-scroll-decks" title="Show scroll decks">&#9654;</button>
-                    </div>
-                    <div class="scroll-decks-container" id="scroll-decks-container">
-                        <div class="scroll-deck-card" id="earth-scroll-deck" data-element="earth" title="Right-click to browse Earth scrolls">
-                            <div class="deck-icon" style="background: linear-gradient(135deg, #69d83a, #4a9e28);">
-                                <span>E</span>
-                            </div>
-                            <div class="deck-count" id="earth-deck-count">5</div>
-                        </div>
-                        <div class="scroll-deck-card" id="water-scroll-deck" data-element="water" title="Right-click to browse Water scrolls">
-                            <div class="deck-icon" style="background: linear-gradient(135deg, #5894f4, #3a6bc2);">
-                                <span>W</span>
-                            </div>
-                            <div class="deck-count" id="water-deck-count">5</div>
-                        </div>
-                        <div class="scroll-deck-card" id="fire-scroll-deck" data-element="fire" title="Right-click to browse Fire scrolls">
-                            <div class="deck-icon" style="background: linear-gradient(135deg, #ed1b43, #b51232);">
-                                <span>F</span>
-                            </div>
-                            <div class="deck-count" id="fire-deck-count">5</div>
-                        </div>
-                        <div class="scroll-deck-card" id="wind-scroll-deck" data-element="wind" title="Right-click to browse Wind scrolls">
-                            <div class="deck-icon" style="background: linear-gradient(135deg, #ffce00, #c9a200);">
-                                <span>A</span>
-                            </div>
-                            <div class="deck-count" id="wind-deck-count">5</div>
-                        </div>
-                        <div class="scroll-deck-card" id="void-scroll-deck" data-element="void" title="Right-click to browse Void scrolls">
-                            <div class="deck-icon" style="background: linear-gradient(135deg, #9458f4, #6b3ab8);">
-                                <span>V</span>
-                            </div>
-                            <div class="deck-count" id="void-deck-count">5</div>
-                        </div>
-                        <div class="scroll-deck-card" id="catacomb-scroll-deck" data-element="catacomb" title="Right-click to browse Catacomb scrolls">
-                            <div class="deck-icon" style="background: linear-gradient(135deg, #444, #222);">
-                                <span>C</span>
-                            </div>
-                            <div class="deck-count" id="catacomb-deck-count">10</div>
-                        </div>
-                    </div>
-
-                </div>
-
+        <!-- PLACEMENT TILE OVERLAY — auto-shown only during the local player's own
+             placement-phase turn (see updatePlacementTileOverlay() in game-ui.js);
+             hidden the rest of the game, no button needed. -->
+        <div class="placement-tile-overlay" id="placement-tile-overlay" style="display: none;">
+            <div class="placement-tile-label">Place your starting tile</div>
+            <div id="new-player-tile-deck">
+                <!-- Player tiles will be added here dynamically -->
             </div>
         </div>
 

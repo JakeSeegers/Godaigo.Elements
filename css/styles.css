@@ -137,12 +137,12 @@ body {
 .game-layout {
     display: none; /* Hidden until game starts */
     grid-template-rows: var(--hud-height) auto 1fr 68px;
-    grid-template-columns: var(--panel-width) 1fr var(--panel-width);
+    grid-template-columns: 1fr var(--panel-width);
     grid-template-areas:
-        "hud    hud    hud"
-        "status status status"
-        "left   board  right"
-        "dock   dock   dock";
+        "hud    hud"
+        "status status"
+        "board  right"
+        "dock   dock";
     height: 100vh;
     width: 100vw;
     gap: 0;
@@ -153,15 +153,9 @@ body {
     display: grid;
 }
 
-/* Collapse states for panels */
-.game-layout.left-collapsed {
-    grid-template-columns: 0 1fr var(--panel-width);
-}
+/* Collapse state for the opponents panel (the only panel left to collapse) */
 .game-layout.right-collapsed {
-    grid-template-columns: var(--panel-width) 1fr 0;
-}
-.game-layout.both-collapsed {
-    grid-template-columns: 0 1fr 0;
+    grid-template-columns: 1fr 0;
 }
 
 /* ============================================
@@ -382,6 +376,38 @@ body {
     gap: 8px;
 }
 
+/* Placement-phase tile overlay — auto-shown only during the local player's
+   own placement turn (see the setInterval in initializeNewUI(), game-ui.js);
+   no toggle button since it's only ever relevant briefly at game start. */
+.placement-tile-overlay {
+    position: fixed;
+    top: calc(var(--hud-height) + 16px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 500;
+    background: var(--bg-panel, #1d1831);
+    border: 2px solid #d9b08c;
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+    text-align: center;
+}
+.placement-tile-label {
+    font-family: var(--font-pixel);
+    font-size: 12px;
+    color: #d9b08c;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-shadow: 1px 1px 0 #000;
+    margin-bottom: 10px;
+}
+#new-player-tile-deck {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+}
+
 .shrine-dot {
     width: 14px;
     height: 14px;
@@ -488,25 +514,6 @@ body {
     background: var(--bg-card);
     color: var(--text-primary);
     border-color: var(--accent-gold);
-}
-
-/* ============================================
-   LEFT PANEL (Resources)
-   ============================================ */
-.left-panel {
-    grid-area: left;
-    background: var(--bg-panel);
-    border-right: 1px solid var(--border-subtle);
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    transition: width 0.3s, opacity 0.3s;
-}
-
-.game-layout.left-collapsed .left-panel {
-    width: 0;
-    opacity: 0;
-    overflow: hidden;
 }
 
 .panel-header {
@@ -687,13 +694,6 @@ body {
     color: #ccc;
 }
 
-/* Player tiles section */
-.tiles-section {
-    margin-top: var(--space-lg);
-    padding-top: var(--space-lg);
-    border-top: 2px solid #333;
-}
-
 .section-label {
     font-family: var(--font-pixel);
     font-size: 11px;
@@ -703,93 +703,6 @@ body {
     margin-bottom: var(--space-sm);
     text-shadow: 1px 1px 0 #000;
 }
-
-/* Scroll Decks Section */
-.scroll-decks-section {
-    margin-top: var(--space-lg);
-    padding-top: var(--space-lg);
-    border-top: 2px solid #333;
-}
-
-.section-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-sm);
-}
-.section-label-row .section-label {
-    margin-bottom: 0;
-}
-.section-label-row .hud-toggle-btn {
-    padding: 2px 8px;
-    font-size: 11px;
-}
-
-.scroll-decks-container {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-sm);
-}
-
-/* Collapsed: rarely-used section tucked away behind the toggle above */
-.scroll-decks-section.collapsed .scroll-decks-container {
-    display: none;
-}
-
-.scroll-deck-card {
-    background: #0e0e1a;
-    border: 2px solid #333;
-    border-radius: 2px;
-    padding: var(--space-sm);
-    text-align: center;
-    cursor: context-menu;
-    transition: box-shadow 0.05s, border-color 0.05s;
-    box-shadow: 2px 2px 0 #000;
-    position: relative;
-}
-
-.scroll-deck-card:hover {
-    border-color: #d9b08c;
-    box-shadow: 3px 3px 0 #000;
-}
-
-.scroll-deck-card:active {
-    box-shadow: none;
-    transform: translate(2px, 2px);
-}
-
-.scroll-deck-card .deck-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 2px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto var(--space-xs);
-    border: 2px solid rgba(255,255,255,0.15);
-}
-
-.scroll-deck-card .deck-icon span {
-    font-family: var(--font-pixel);
-    font-size: 13px;
-    font-weight: bold;
-    color: #fff;
-    text-shadow: 1px 1px 0 #000;
-}
-
-.scroll-deck-card .deck-count {
-    font-family: var(--font-terminal);
-    font-size: 18px;
-    font-weight: bold;
-    color: #eee;
-    line-height: 1;
-}
-
-.scroll-deck-card.empty {
-    opacity: 0.4;
-    pointer-events: none;
-}
-
 
 /* Scroll Browse Modal */
 .scroll-browse-modal {
@@ -1697,21 +1610,13 @@ svg {
             "dock";
     }
 
-    .left-panel, .right-panel {
+    .right-panel {
         position: fixed;
         top: var(--hud-height);
         bottom: var(--action-bar-height);
         width: 260px;
         z-index: var(--z-overlay);
-        transform: translateX(-100%);
         transition: transform 0.3s ease;
-    }
-
-    .left-panel.mobile-open {
-        transform: translateX(0);
-    }
-
-    .right-panel {
         right: 0;
         left: auto;
         transform: translateX(100%);
