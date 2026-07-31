@@ -604,10 +604,29 @@ body {
     border-top: 2px solid #333;
 }
 
+.section-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+}
+.section-label-row .section-label {
+    margin-bottom: 0;
+}
+.section-label-row .hud-toggle-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
 .scroll-decks-container {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: var(--space-sm);
+}
+
+/* Collapsed: rarely-used section tucked away behind the toggle above */
+.scroll-decks-section.collapsed .scroll-decks-container {
+    display: none;
 }
 
 .scroll-deck-card {

@@ -57,6 +57,23 @@
                 setCommonAreaToggleLabel();
             }
 
+            // Scroll decks: rarely used, collapsed by default to save space in the Resources panel
+            let scrollDecksExpanded = false;
+            const toggleScrollDecksBtn = document.getElementById('toggle-scroll-decks');
+            const scrollDecksSection = document.getElementById('scroll-decks-section');
+            if (toggleScrollDecksBtn && scrollDecksSection) {
+                function setScrollDecksToggleLabel() {
+                    toggleScrollDecksBtn.textContent = scrollDecksExpanded ? '◀' : '▶';
+                    toggleScrollDecksBtn.title = scrollDecksExpanded ? 'Hide scroll decks' : 'Show scroll decks';
+                    scrollDecksSection.classList.toggle('collapsed', !scrollDecksExpanded);
+                }
+                toggleScrollDecksBtn.addEventListener('click', () => {
+                    scrollDecksExpanded = !scrollDecksExpanded;
+                    setScrollDecksToggleLabel();
+                });
+                setScrollDecksToggleLabel();
+            }
+
             // Opponent active scrolls: show/hide stone patterns (same idea as common area popout)
             let opponentPatternsExpanded = false;
             const toggleOpponentPatternsBtn = document.getElementById('toggle-opponent-patterns');
