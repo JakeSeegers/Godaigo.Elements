@@ -158,6 +158,15 @@ body {
     grid-template-columns: 1fr 0;
 }
 
+/* Opponent Status collapsed (see toggle-opponent-patterns in game-ui.js):
+   the column shrinks to fit just the header (title + arrow) once
+   .panel-content is display:none — hidden elements don't contribute to
+   intrinsic sizing, so "auto" naturally settles on the header's own width
+   instead of leaving the full --panel-width as empty background. */
+.game-layout.opponent-collapsed {
+    grid-template-columns: 1fr auto;
+}
+
 /* ============================================
    TOP HUD BAR
    ============================================ */
@@ -855,6 +864,17 @@ body {
     width: 0;
     opacity: 0;
     overflow: hidden;
+}
+
+/* Opponent Status collapsed: shrinking the column (see .opponent-collapsed
+   above) still leaves the panel stretched to the row's full height by
+   default grid stretch — drop that stretch and its background/border so
+   only the header pill remains, instead of an empty colored column
+   hanging below it. */
+.game-layout.opponent-collapsed .right-panel {
+    align-self: start;
+    background: transparent;
+    border-left: none;
 }
 
 .opponent-card {

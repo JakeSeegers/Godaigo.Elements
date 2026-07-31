@@ -52,6 +52,10 @@
                     toggleOpponentPatternsBtn.textContent = opponentPanelExpanded ? '\u25C0' : '\u25B6';
                     toggleOpponentPatternsBtn.title = opponentPanelExpanded ? 'Collapse opponent status' : 'Expand opponent status';
                     opponentPanelContent.style.display = opponentPanelExpanded ? '' : 'none';
+                    // Shrink the whole column (not just hide the cards) so
+                    // collapsing doesn't leave a wide empty panel behind \u2014
+                    // only the header (title + arrow) should remain.
+                    if (gameLayout) gameLayout.classList.toggle('opponent-collapsed', !opponentPanelExpanded);
                 }
                 toggleOpponentPatternsBtn.addEventListener('click', () => {
                     opponentPanelExpanded = !opponentPanelExpanded;
