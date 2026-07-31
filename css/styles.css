@@ -216,6 +216,24 @@ body {
     transition: color 0.2s;
 }
 
+/* Turn indicator in the bottom dock, next to End Turn — same pill
+   treatment as .hud-end-turn (border/shadow/bg) but not clickable, and a
+   little larger since it's standing in for a whole sentence, not a label. */
+.dock-turn-indicator {
+    padding: 6px 16px;
+    background: #2a1a06;
+    border: 2px solid #d9b08c;
+    border-radius: 2px;
+    box-shadow: 3px 3px 0 #000;
+}
+.dock-turn-indicator .hud-player-name {
+    font-size: 16px;
+}
+.dock-turn-indicator .player-dot {
+    width: 16px;
+    height: 16px;
+}
+
 /* Highlight the whole player section when it's YOUR turn */
 .hud-player.your-turn .hud-player-name {
     color: var(--accent-gold);

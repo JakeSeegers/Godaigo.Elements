@@ -520,8 +520,19 @@
                 const hudPlayerDot  = document.getElementById('hud-player-dot');
                 const hudPlayer     = hudPlayerName?.closest('.hud-player');
                 if (hudPlayerName && typeof activePlayerIndex !== 'undefined') {
+                    // While the host is impersonating a bot (see bot-driver.js's
+                    // asBot()), myPlayerIndex is temporarily swapped to the BOT's
+                    // own index, so activePlayerIndex === myPlayerIndex is true
+                    // for the bot's own turn too — which wrongly showed "Your
+                    // Turn" on the host's screen while a bot was acting. Compare
+                    // against the host's real identity instead, same as
+                    // response-window.js's localResponderIndex().
+                    const driverIdx = (typeof window !== 'undefined' && window.BotDriver
+                        && typeof window.BotDriver.driverRealIndex === 'function')
+                        ? window.BotDriver.driverRealIndex() : null;
+                    const realMyIndex = driverIdx != null ? driverIdx : myPlayerIndex;
                     const isMyTurnNow = typeof isMultiplayer !== 'undefined' && isMultiplayer
-                        && myPlayerIndex === activePlayerIndex;
+                        && realMyIndex === activePlayerIndex;
                     if (isMyTurnNow) {
                         hudPlayerName.textContent = 'Your Turn';
                     } else {
