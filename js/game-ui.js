@@ -7138,6 +7138,117 @@ document.getElementById('undo-move').onclick = function() {
                 load();
             }
 
+            // ── Board Angle tool ─────────────────────────────────────────────
+            // Lets the developer rotate the whole board (viewport) live, with a
+            // readout of the exact degree value so it can be reported back.
+            // Backed by window.getBoardAngle/setBoardAngle in game-core.js —
+            // viewportRotation already drives the render transform and
+            // screenToWorld()'s inverse, so this was just missing a UI.
+            function openBoardAnglePanel() {
+                const existing = document.getElementById('board-angle-panel');
+                if (existing) { existing.remove(); return; }
+
+                if (typeof window.getBoardAngle !== 'function' || typeof window.setBoardAngle !== 'function') {
+                    updateStatus('Board angle tool unavailable — start a game first');
+                    return;
+                }
+
+                const panel = document.createElement('div');
+                panel.id = 'board-angle-panel';
+                Object.assign(panel.style, {
+                    position: 'fixed', top: '12px', right: '12px', zIndex: '10060',
+                    background: '#1a1a2e', border: '1px solid #444', borderRadius: '8px',
+                    padding: '12px 14px', width: '220px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+                    color: '#eee', fontSize: '13px'
+                });
+
+                const header = document.createElement('div');
+                Object.assign(header.style, {
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px'
+                });
+                const title = document.createElement('div');
+                title.textContent = 'Board Angle';
+                Object.assign(title.style, { fontWeight: 'bold', color: '#d9b08c' });
+                const closeX = document.createElement('button');
+                closeX.textContent = '✕';
+                Object.assign(closeX.style, {
+                    background: 'none', border: '1px solid #444', borderRadius: '5px',
+                    color: '#ccc', cursor: 'pointer', padding: '1px 7px'
+                });
+                closeX.onclick = () => panel.remove();
+                header.appendChild(title);
+                header.appendChild(closeX);
+
+                const readout = document.createElement('div');
+                Object.assign(readout.style, {
+                    fontSize: '22px', fontWeight: 'bold', textAlign: 'center',
+                    margin: '4px 0 10px', color: '#fff'
+                });
+
+                const slider = document.createElement('input');
+                slider.type = 'range'; slider.min = '0'; slider.max = '359'; slider.step = '1';
+                slider.style.width = '100%';
+
+                const numberRow = document.createElement('div');
+                Object.assign(numberRow.style, { display: 'flex', gap: '6px', marginTop: '8px', alignItems: 'center' });
+                const numInput = document.createElement('input');
+                numInput.type = 'number'; numInput.min = '0'; numInput.max = '359';
+                Object.assign(numInput.style, {
+                    width: '64px', background: '#111', color: '#eee',
+                    border: '1px solid #555', borderRadius: '4px', padding: '4px 6px'
+                });
+                const degLabel = document.createElement('span');
+                degLabel.textContent = '°';
+                numberRow.appendChild(numInput);
+                numberRow.appendChild(degLabel);
+
+                function apply(deg) {
+                    const applied = window.setBoardAngle(deg);
+                    slider.value = String(applied);
+                    numInput.value = String(applied);
+                    readout.textContent = `${applied}°`;
+                }
+
+                function makeStepBtn(label, delta) {
+                    const b = document.createElement('button');
+                    b.textContent = label;
+                    Object.assign(b.style, {
+                        flex: '1', padding: '5px 0', background: '#2d2d44', color: '#eee',
+                        border: '1px solid #555', borderRadius: '5px', cursor: 'pointer'
+                    });
+                    b.onclick = () => apply(window.getBoardAngle() + delta);
+                    return b;
+                }
+
+                const stepRow = document.createElement('div');
+                Object.assign(stepRow.style, { display: 'flex', gap: '6px', marginTop: '8px' });
+                stepRow.appendChild(makeStepBtn('-15°', -15));
+                stepRow.appendChild(makeStepBtn('-1°', -1));
+                stepRow.appendChild(makeStepBtn('+1°', 1));
+                stepRow.appendChild(makeStepBtn('+15°', 15));
+
+                const resetBtn = document.createElement('button');
+                resetBtn.textContent = 'Reset to 0°';
+                Object.assign(resetBtn.style, {
+                    width: '100%', marginTop: '8px', padding: '6px 0', background: '#2d2d44',
+                    color: '#eee', border: '1px solid #555', borderRadius: '5px', cursor: 'pointer'
+                });
+                resetBtn.onclick = () => apply(0);
+
+                slider.addEventListener('input', () => apply(Number(slider.value)));
+                numInput.addEventListener('change', () => apply(Number(numInput.value) || 0));
+
+                panel.appendChild(header);
+                panel.appendChild(readout);
+                panel.appendChild(slider);
+                panel.appendChild(numberRow);
+                panel.appendChild(stepRow);
+                panel.appendChild(resetBtn);
+                document.body.appendChild(panel);
+
+                apply(window.getBoardAngle());
+            }
+
             function buildMenu() {
                 if (btn) return;
 
@@ -7218,6 +7329,7 @@ document.getElementById('undo-move').onclick = function() {
                     if (window.JoytoneBridge && typeof window.JoytoneBridge.togglePopup === 'function') window.JoytoneBridge.togglePopup();
                 }));
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
+                menu.appendChild(makeItem('Board Angle', openBoardAnglePanel));
                 menu.appendChild(makeItem('☢️ Nuke All Rooms', async () => {
                     const ok = window.confirm('Nuke ALL rooms and players from the database?\n\nThis cannot be undone.');
                     if (!ok) return;

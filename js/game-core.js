@@ -2941,6 +2941,19 @@
                 `translate(${centerX}, ${centerY}) rotate(${viewportRotation}) translate(${viewportX - centerX}, ${viewportY - centerY}) scale(${viewportScale})`);
         }
 
+        // Hermit-only board angle tool (js/game-ui.js's openBoardAnglePanel):
+        // viewportRotation already drives both the render transform above and
+        // screenToWorld()'s inverse, so setting it and re-rendering is enough
+        // to rotate the whole board — hit-testing/placement stay correct.
+        window.getBoardAngle = function () {
+            return ((viewportRotation % 360) + 360) % 360;
+        };
+        window.setBoardAngle = function (degrees) {
+            viewportRotation = ((degrees % 360) + 360) % 360;
+            updateViewport();
+            return viewportRotation;
+        };
+
         // Fit all placed tiles into view, centered
         function fitBoardToView() {
             if (placedTiles.length === 0) return;
