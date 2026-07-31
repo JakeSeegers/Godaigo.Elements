@@ -2981,7 +2981,7 @@
             return window._boardTiltDegrees || 0;
         };
         window.setBoardTilt = function (degrees) {
-            const clamped = Math.max(0, Math.min(80, degrees)); // only positive tilt is supported by this pivot
+            const clamped = Math.max(-80, Math.min(80, degrees));
             window._boardTiltDegrees = clamped;
             const el = document.getElementById('new-board-container');
             if (el) {

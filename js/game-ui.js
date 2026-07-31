@@ -7273,13 +7273,13 @@ document.getElementById('undo-move').onclick = function() {
                 });
 
                 const slider = document.createElement('input');
-                slider.type = 'range'; slider.min = '0'; slider.max = '80'; slider.step = '1';
+                slider.type = 'range'; slider.min = '-80'; slider.max = '80'; slider.step = '1';
                 slider.style.width = '100%';
 
                 const numberRow = document.createElement('div');
                 Object.assign(numberRow.style, { display: 'flex', gap: '6px', marginTop: '8px', alignItems: 'center' });
                 const numInput = document.createElement('input');
-                numInput.type = 'number'; numInput.min = '0'; numInput.max = '80';
+                numInput.type = 'number'; numInput.min = '-80'; numInput.max = '80';
                 Object.assign(numInput.style, {
                     width: '64px', background: '#111', color: '#eee',
                     border: '1px solid #555', borderRadius: '4px', padding: '4px 6px'
