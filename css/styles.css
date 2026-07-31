@@ -591,7 +591,11 @@ body {
     background: #0e0e1a;
     border: 2px solid #d9b08c;
     z-index: 9999;
-    transform: translateY(100%);
+    /* translateY(100%) alone only clears the panel's OWN height — with a
+       72px bottom offset (not 0) that left it still overlapping the dock
+       bar when "closed". Push it the extra 72px too so it fully clears
+       the dock before disappearing off-screen. */
+    transform: translateY(calc(100% + 72px));
     transition: transform 0.28s ease;
     box-shadow: 0 -4px 0 #000, 4px 0 0 #000, -4px 0 0 #000;
 }
