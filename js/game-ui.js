@@ -29,18 +29,13 @@
             // Setup scroll deck UI
             initializeScrollDeckUI();
 
-            // Elemental Stones popout: same slide-up mechanism as the Colours panel
+            // Elemental Stones popout: same slide-up mechanism as the Colours panel.
+            // No header/close button — the dock button is the only open/close control.
             const elementalStonesBtn = document.getElementById('elemental-stones-btn');
-            const elementalStonesClose = document.getElementById('elemental-stones-close');
             const elementalStonesPanel = document.getElementById('elemental-stones-panel');
             if (elementalStonesBtn && elementalStonesPanel) {
                 elementalStonesBtn.addEventListener('click', () => {
                     elementalStonesPanel.classList.toggle('open');
-                });
-            }
-            if (elementalStonesClose && elementalStonesPanel) {
-                elementalStonesClose.addEventListener('click', () => {
-                    elementalStonesPanel.classList.remove('open');
                 });
             }
 
