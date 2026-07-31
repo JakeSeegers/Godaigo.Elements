@@ -2978,6 +2978,15 @@
         // half was fine, but the near half's rows got perspective-magnified
         // outward past the container's edges). This also reads as the more
         // natural "table hinged at the edge closest to you" camera metaphor.
+        //
+        // rotateX by itself also flattens the whole board by a factor of
+        // cos(θ) even before perspective divide gets involved (basic
+        // orthographic foreshortening along the tilted axis), which on its
+        // own left the tilted board looking shrunken and adrift in a big
+        // empty gap above it rather than filling the frame the way it does
+        // flat. scale(1/cosθ) below cancels exactly that flattening — the
+        // board reads as full-size again — while leaving the perspective
+        // divide's depth-dependent size falloff (the actual "3D" cue) alone.
         const BOARD_TILT_PERSPECTIVE_PX = 1400; // must match getBoardScreenXY's inverse below
         window.getBoardTilt = function () {
             return window._boardTiltDegrees || 0;
@@ -2988,7 +2997,12 @@
             const el = document.getElementById('new-board-container');
             if (el) {
                 el.style.transformOrigin = '50% 100%';
-                el.style.transform = clamped === 0 ? '' : `perspective(${BOARD_TILT_PERSPECTIVE_PX}px) rotateX(${clamped}deg)`;
+                if (clamped === 0) {
+                    el.style.transform = '';
+                } else {
+                    const scale = 1 / Math.cos(clamped * Math.PI / 180);
+                    el.style.transform = `perspective(${BOARD_TILT_PERSPECTIVE_PX}px) rotateX(${clamped}deg) scale(${scale})`;
+                }
             }
             return clamped;
         };
@@ -2998,13 +3012,13 @@
         // x = clientX - rect.left` pattern used at every drag/click hit-testing
         // call site. Reads the untransformed rect from .board-area (the board
         // container's parent, which is never itself transformed) and, if a
-        // tilt is active, inverts the perspective(P) rotateX(θ) projection
-        // CSS applied when rendering (pivoting at bottom-center, per above):
-        // forward projection puts a local offset (dx, dy) from that pivot at
-        // screen offset (dx/w, dy·cosθ/w) where w = 1 - dy·sinθ/P; solving
-        // that pair for (dx, dy) given the click's screen offset (sx, sy)
-        // yields the inverse used here. With no tilt this reduces to the
-        // exact same math the old pattern did.
+        // tilt is active, inverts the scale(1/cosθ) perspective(P) rotateX(θ)
+        // transform applied when rendering (pivoting at bottom-center, per
+        // above): forward projection scales a local offset (dx, dy) from that
+        // pivot by 1/cosθ, then puts it at screen offset (dx'/w, dy'·cosθ/w)
+        // where w = 1 - dy'·sinθ/P; solving that pair for (dx, dy) given the
+        // click's screen offset (sx, sy) yields the inverse used here. With no
+        // tilt this reduces to the exact same math the old pattern did.
         function getBoardScreenXY(clientX, clientY) {
             const area = boardSvg.closest('.board-area');
             const rect = area ? area.getBoundingClientRect() : boardSvg.getBoundingClientRect();
@@ -3014,13 +3028,15 @@
             }
             const W = rect.width, H = rect.height;
             const theta = tiltDeg * Math.PI / 180;
+            const cosTheta = Math.cos(theta);
+            const scale = 1 / cosTheta; // must match setBoardTilt's compensating scale
             const sx = (clientX - rect.left) - W / 2;
             const sy = (clientY - rect.top) - H; // pivot is at the bottom edge, not center
             let denom = 1 + (sy * Math.tan(theta)) / BOARD_TILT_PERSPECTIVE_PX;
             if (Math.abs(denom) < 0.01) denom = denom < 0 ? -0.01 : 0.01;
             const w = 1 / denom;
-            const dx = sx * w;
-            const dy = (sy * w) / Math.cos(theta);
+            const dx = (sx * w) / scale;
+            const dy = (sy * w) / (scale * cosTheta);
             return { x: W / 2 + dx, y: H + dy };
         }
 
