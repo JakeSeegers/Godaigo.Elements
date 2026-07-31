@@ -580,18 +580,20 @@ body {
    ================================================================ */
 #elemental-stones-panel {
     position: fixed;
-    bottom: 0;
+    /* Anchored above the dock bar (72px tall — see .dock-bar) so the panel
+       emerges from the dock itself instead of sliding up from the bottom of
+       the screen and covering the dock's other buttons. */
+    bottom: 72px;
     left: 50%;
     width: 480px;
     max-width: calc(100vw - 24px);
     margin-left: -240px;
     background: #0e0e1a;
     border: 2px solid #d9b08c;
-    border-bottom: none;
     z-index: 9999;
     transform: translateY(100%);
     transition: transform 0.28s ease;
-    box-shadow: 0 -4px 0 #000;
+    box-shadow: 0 -4px 0 #000, 4px 0 0 #000, -4px 0 0 #000;
 }
 #elemental-stones-panel.open { transform: translateY(0); }
 
