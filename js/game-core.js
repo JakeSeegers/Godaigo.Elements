@@ -5677,7 +5677,8 @@ function clearPlayerPath() {
                         return;
                     }
 
-                    updateStatus(`⏰ ${activePlayer.username} was kicked (turn timer expired)`);
+                    const kickedName = typeof displayUsername === 'function' ? displayUsername(activePlayer.username) : activePlayer.username;
+                    updateStatus(`⏰ ${kickedName} was kicked (turn timer expired)`);
                 } else {
                     console.warn('⚠️ Turn timeout expired but active player not found in DB');
                 }

@@ -4788,7 +4788,7 @@ document.getElementById('undo-move').onclick = function() {
                 // also apply it live so no reload is needed.
                 const BRAIN_ORDER = ['dumb', 'smart', 'hybrid'];
                 const BRAIN_UI = {
-                    dumb:   { label: '🤖 Bot Brain: Dumb (greedy)',    color: '#eee' },
+                    dumb:   { label: 'Bot Brain: Dumb (greedy)',        color: '#eee' },
                     smart:  { label: '🧠 Bot Brain: Smart (lookahead)', color: '#6ef' },
                     hybrid: { label: '🧠 Bot Brain: Hybrid',            color: '#fc6' },
                 };
@@ -4870,7 +4870,7 @@ document.getElementById('undo-move').onclick = function() {
                 const matchRow = document.createElement('div');
                 matchRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
                 const matchLabel = document.createElement('span');
-                matchLabel.textContent = '🤖 Bot match:';
+                matchLabel.textContent = 'Bot match:';
                 matchLabel.style.cssText = 'font-size:12px;color:#aaa;';
                 matchRow.appendChild(matchLabel);
                 [2, 3, 4, 5].forEach(n => {

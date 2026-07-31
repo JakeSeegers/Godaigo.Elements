@@ -1362,7 +1362,7 @@
 
                     return `
                         <div class="pp-player-row${isMe ? ' is-me' : ''}">
-                            <span style="${nameStyle}">${p.username}${hostLabel}${meLabel}</span>
+                            <span style="${nameStyle}">${typeof displayUsername === 'function' ? displayUsername(p.username) : p.username}${hostLabel}${meLabel}</span>
                             <span class="${readyClass}" style="font-size: 20px;">${readyIcon}</span>
                         </div>
                     `;
@@ -1396,7 +1396,7 @@
                     botControls.style.display = (isHost && (botCount > 0 || totalCount < 5)) ? 'block' : 'none';
                     addBotBtn.style.display = totalCount < 5 ? 'inline-block' : 'none';
                     removeBotBtn.style.display = botCount > 0 ? 'inline-block' : 'none';
-                    addBotBtn.textContent = botCount > 0 ? `🤖 Add Bot (${botCount})` : '🤖 Add Bot';
+                    addBotBtn.textContent = botCount > 0 ? `Add Bot (${botCount})` : 'Add Bot';
                 }
 
                 // Update status

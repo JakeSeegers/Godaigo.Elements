@@ -178,7 +178,7 @@
         lastDrivenTurnKey = key;
 
         log(`Driving turn for bot player ${botIndex} (turn #${turnNo})`);
-        if (typeof updateStatus === 'function') updateStatus('🤖 Bot is thinking...');
+        if (typeof updateStatus === 'function') updateStatus('Bot is thinking...');
         await new Promise(r => setTimeout(r, 900)); // let turn-change effects settle
 
         await asBot(botIndex, async () => {

@@ -1346,7 +1346,8 @@ class ResponseWindowSystem {
 
     getPlayerName(playerIndex) {
         if (typeof playerPositions !== 'undefined' && playerPositions[playerIndex]?.username) {
-            return playerPositions[playerIndex].username;
+            const raw = playerPositions[playerIndex].username;
+            return typeof displayUsername === 'function' ? displayUsername(raw) : raw;
         }
         return `Player ${playerIndex + 1}`;
     }

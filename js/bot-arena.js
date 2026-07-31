@@ -1173,14 +1173,14 @@
         if (rw) rw.isBotPlayer = () => true;
 
         const roster = Array.from({ length: nPlayers }, (_, i) =>
-            ({ index: i, username: `🤖 Bot ${i + 1}`, isBot: true }));
+            ({ index: i, username: `Bot ${i + 1}`, isBot: true }));
         window.ActionLog?.clear?.();
         window.ActionLog?.setRoster?.(roster);
 
         let result;
         try {
             if (typeof updateStatus === 'function') {
-                updateStatus(`🤖 Bot match: ${nPlayers} bots playing. Open the cheat panel to stop or download the log.`);
+                updateStatus(`Bot match: ${nPlayers} bots playing. Open the cheat panel to stop or download the log.`);
             }
             result = await playMatch(Array(nPlayers).fill(undefined), { ...opts, visual: true, turnCap: opts.turnCap ?? 300 });
         } finally {

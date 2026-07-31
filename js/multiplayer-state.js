@@ -23,6 +23,18 @@ let currentJoinCode = null;  // 6-char code for private rooms, null for public g
 let currentTurnNumber = 0; // Increments with each turn change (for desync detection)
 let lastReceivedTurnNumber = 0; // Last turn number received from broadcast
 
+// Strip the bot marker prefix (window.BOT_USERNAME_PREFIX, e.g. "🤖 ", set by
+// js/bot-driver.js) from a username for DISPLAY only. The raw prefixed value
+// must stay in the actual username field/DB — window.isBotUsername() and
+// bot-driver.js's botIndexSet() depend on that prefix to identify which
+// player rows are bot-controlled.
+function displayUsername(username) {
+    if (typeof username !== 'string') return username;
+    const prefix = (typeof window !== 'undefined' && typeof window.BOT_USERNAME_PREFIX === 'string')
+        ? window.BOT_USERNAME_PREFIX : '🤖';
+    return username.startsWith(prefix) ? username.slice(prefix.length).trim() : username;
+}
+
 // Helper function to get player display name (Username (Color))
 function getPlayerColorName(playerIndex) {
     const colorNames = {
@@ -40,7 +52,7 @@ function getPlayerColorName(playerIndex) {
     if (allPlayersData.length > 0) {
         const player = allPlayersData.find(p => p.player_index === playerIndex);
         if (player) {
-            username = player.username;
+            username = displayUsername(player.username);
             if (player.color) {
                 colorName = colorNames[player.color] || player.color;
             }
