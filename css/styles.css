@@ -574,6 +574,96 @@ body {
     line-height: 1;
 }
 
+/* ================================================================
+   ELEMENTAL STONES PANEL — slide-up popout, mirrors #cosmetics-panel's
+   open/close animation (position:fixed + transform translateY + transition)
+   ================================================================ */
+#elemental-stones-panel {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    width: 480px;
+    max-width: calc(100vw - 24px);
+    margin-left: -240px;
+    background: #0e0e1a;
+    border: 2px solid #d9b08c;
+    border-bottom: none;
+    z-index: 9999;
+    transform: translateY(100%);
+    transition: transform 0.28s ease;
+    box-shadow: 0 -4px 0 #000;
+}
+#elemental-stones-panel.open { transform: translateY(0); }
+
+.es-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #111;
+    border-bottom: 2px solid #d9b08c;
+}
+.es-title {
+    font-family: var(--font-pixel);
+    font-size: 13px;
+    color: #d9b08c;
+    text-shadow: 1px 1px 0 #000;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.es-close {
+    font-family: var(--font-terminal);
+    font-size: 22px;
+    background: #1a1a1a;
+    border: 2px solid #444;
+    border-radius: 2px;
+    color: #888;
+    cursor: pointer;
+    padding: 0 6px;
+    box-shadow: 2px 2px 0 #000;
+}
+.es-close:hover { border-color: #c05050; color: #c05050; }
+
+.es-body {
+    display: flex;
+    gap: var(--space-sm);
+    padding: 14px;
+}
+.es-body .stone-card {
+    flex: 1;
+    position: relative;
+}
+
+/* "Return Stone" glow + label — shown only on the card matching the stone
+   type currently being dragged, while the drag is over this open panel
+   (see updateStoneReturnHighlight() in game-ui.js). Releasing there sends
+   the stone back to the player's own pool. */
+.es-return-label {
+    display: none;
+    position: absolute;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: rgba(0,0,0,0.55);
+    text-shadow: 1px 1px 0 #000;
+    border-radius: 2px;
+    pointer-events: none;
+}
+.stone-card.drag-return-target .es-return-label { display: flex; }
+.stone-card.drag-return-target {
+    border-color: currentColor;
+    box-shadow: 0 0 14px currentColor;
+}
+.stone-card[data-element="earth"].drag-return-target { color: #69d83a; }
+.stone-card[data-element="water"].drag-return-target { color: #5894f4; }
+.stone-card[data-element="fire"].drag-return-target  { color: #ed1b43; }
+.stone-card[data-element="wind"].drag-return-target  { color: #ffce00; }
+.stone-card[data-element="void"].drag-return-target  { color: #9458f4; }
+
 .stone-card .source {
     font-family: var(--font-terminal);
     font-size: 14px;

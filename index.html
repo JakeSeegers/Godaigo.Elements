@@ -320,50 +320,6 @@
                     </div>
                 </div>
 
-                <!-- Stone Grid -->
-                <div class="stone-grid" id="stone-grid">
-                    <div class="stone-card" id="new-earth-deck" data-element="earth">
-                        <svg width="36" height="36">
-                            <circle cx="18" cy="18" r="14" fill="#69d83a" class="stone-piece"/>
-                            <image href="images/mountainsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
-                        </svg>
-                        <div class="count" id="new-earth-count">0/5</div>
-                        <div class="source" id="new-earth-source">20</div>
-                    </div>
-                    <div class="stone-card" id="new-water-deck" data-element="water">
-                        <svg width="36" height="36">
-                            <circle cx="18" cy="18" r="14" fill="#5894f4" class="stone-piece"/>
-                            <image href="images/watersymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
-                        </svg>
-                        <div class="count" id="new-water-count">0/5</div>
-                        <div class="source" id="new-water-source">20</div>
-                    </div>
-                    <div class="stone-card" id="new-fire-deck" data-element="fire">
-                        <svg width="36" height="36">
-                            <circle cx="18" cy="18" r="14" fill="#ed1b43" class="stone-piece"/>
-                            <image href="images/firesymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
-                        </svg>
-                        <div class="count" id="new-fire-count">0/5</div>
-                        <div class="source" id="new-fire-source">20</div>
-                    </div>
-                    <div class="stone-card" id="new-wind-deck" data-element="wind">
-                        <svg width="36" height="36">
-                            <circle cx="18" cy="18" r="14" fill="#ffce00" class="stone-piece"/>
-                            <image href="images/windsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
-                        </svg>
-                        <div class="count" id="new-wind-count">0/5</div>
-                        <div class="source" id="new-wind-source">20</div>
-                    </div>
-                    <div class="stone-card" id="new-void-deck" data-element="void">
-                        <svg width="36" height="36">
-                            <circle cx="18" cy="18" r="14" fill="#9458f4" class="stone-piece"/>
-                            <image href="images/voidsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
-                        </svg>
-                        <div class="count" id="new-void-count">0/5</div>
-                        <div class="source" id="new-void-source">20</div>
-                    </div>
-                </div>
-
                 <!-- Scroll Decks Section -->
                 <div class="scroll-decks-section" id="scroll-decks-section">
                     <div class="section-label-row">
@@ -462,8 +418,64 @@
                     <span class="hud-player-name" id="hud-player-name">Your Turn</span>
                 </div>
                 <button id="end-turn" class="hud-end-turn" style="display: none;">End Turn</button>
+                <button id="elemental-stones-btn" title="Elemental Stones">Elemental Stones</button>
             </div>
 
+        </div>
+
+        <!-- ELEMENTAL STONES PANEL (slide-up, same mechanism as the Colours panel) -->
+        <div id="elemental-stones-panel">
+            <div class="es-header">
+                <span class="es-title">Elemental Stones</span>
+                <button class="es-close" id="elemental-stones-close">✕</button>
+            </div>
+            <div class="es-body">
+                <div class="stone-card" id="new-earth-deck" data-element="earth">
+                    <svg width="36" height="36">
+                        <circle cx="18" cy="18" r="14" fill="#69d83a" class="stone-piece"/>
+                        <image href="images/mountainsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
+                    </svg>
+                    <div class="count" id="new-earth-count">0/5</div>
+                    <div class="source" id="new-earth-source">20</div>
+                    <div class="es-return-label">Return Stone</div>
+                </div>
+                <div class="stone-card" id="new-water-deck" data-element="water">
+                    <svg width="36" height="36">
+                        <circle cx="18" cy="18" r="14" fill="#5894f4" class="stone-piece"/>
+                        <image href="images/watersymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
+                    </svg>
+                    <div class="count" id="new-water-count">0/5</div>
+                    <div class="source" id="new-water-source">20</div>
+                    <div class="es-return-label">Return Stone</div>
+                </div>
+                <div class="stone-card" id="new-fire-deck" data-element="fire">
+                    <svg width="36" height="36">
+                        <circle cx="18" cy="18" r="14" fill="#ed1b43" class="stone-piece"/>
+                        <image href="images/firesymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
+                    </svg>
+                    <div class="count" id="new-fire-count">0/5</div>
+                    <div class="source" id="new-fire-source">20</div>
+                    <div class="es-return-label">Return Stone</div>
+                </div>
+                <div class="stone-card" id="new-wind-deck" data-element="wind">
+                    <svg width="36" height="36">
+                        <circle cx="18" cy="18" r="14" fill="#ffce00" class="stone-piece"/>
+                        <image href="images/windsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
+                    </svg>
+                    <div class="count" id="new-wind-count">0/5</div>
+                    <div class="source" id="new-wind-source">20</div>
+                    <div class="es-return-label">Return Stone</div>
+                </div>
+                <div class="stone-card" id="new-void-deck" data-element="void">
+                    <svg width="36" height="36">
+                        <circle cx="18" cy="18" r="14" fill="#9458f4" class="stone-piece"/>
+                        <image href="images/voidsymbol.png" x="4" y="4" width="28" height="28" style="mix-blend-mode:screen"/>
+                    </svg>
+                    <div class="count" id="new-void-count">0/5</div>
+                    <div class="source" id="new-void-source">20</div>
+                    <div class="es-return-label">Return Stone</div>
+                </div>
+            </div>
         </div>
     </div>
 
