@@ -302,7 +302,6 @@
                 <button id="emoji-panel-btn" onclick="window.emojiSystem?.togglePanel()" title="Emojis">E</button>
                 <button id="cosmetics-panel-btn" onclick="window.cosmeticsSystem?.togglePanel()" title="Colours">C</button>
                 <button id="settings-panel-btn" onclick="gami_openSettings()" title="Settings">S</button>
-                <button class="hud-toggle-btn" id="toggle-right-panel" title="Toggle opponents panel">▶</button>
             </div>
         </div>
 
@@ -330,11 +329,12 @@
             </div>
         </div>
 
-        <!-- RIGHT PANEL (Opponents/Players) -->
+        <!-- RIGHT PANEL (Opponents/Players) — a floating panel like Hand/Active/Common
+             (js/scroll-panels.js), toggled by #panel-btn-opponents in the dock. Defaults
+             open (unlike those, which default closed) since it's ambient status info. -->
         <div class="right-panel" id="right-panel">
-            <div class="panel-header" style="display: flex; align-items: center; gap: 8px;">
+            <div class="panel-header">
                 <span class="panel-title">Opponent Status</span>
-                <button class="hud-toggle-btn" id="toggle-opponent-patterns" title="Collapse opponent status">&#9664;</button>
             </div>
             <div class="panel-content" id="new-opponent-cards">
                 <!-- Player cards will be populated dynamically -->
@@ -356,6 +356,7 @@
                 <button id="panel-btn-hand">Hand&thinsp;(<span id="hand-count">0</span>)</button>
                 <button id="panel-btn-active">Active&thinsp;(<span id="active-count">0</span>)</button>
                 <button id="panel-btn-common">Common Area</button>
+                <button id="panel-btn-opponents">Opponents</button>
                 <button id="cast-spell" class="primary">Activate Scroll</button>
                 <button id="undo-move">Undo Step</button>
                 <div class="hud-player dock-turn-indicator">

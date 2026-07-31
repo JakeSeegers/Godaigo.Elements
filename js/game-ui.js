@@ -5,18 +5,6 @@
         function initializeNewUI() {
             console.log('🎨 Initializing new UI...');
 
-            // Setup panel toggle buttons
-            const toggleRightBtn = document.getElementById('toggle-right-panel');
-            const gameLayout = document.getElementById('game-layout');
-
-            if (toggleRightBtn) {
-                toggleRightBtn.addEventListener('click', () => {
-                    gameLayout.classList.toggle('right-collapsed');
-                    toggleRightBtn.textContent = gameLayout.classList.contains('right-collapsed') ? '\u25C0' : '\u25B6';
-                });
-                toggleRightBtn.textContent = gameLayout.classList.contains('right-collapsed') ? '\u25C0' : '\u25B6';
-            }
-
             // Setup stone card drag handlers for new UI
             const stoneCards = document.querySelectorAll('.stone-card');
             stoneCards.forEach(card => {
@@ -40,28 +28,21 @@
             }
 
 
-            // Opponent Status panel: collapse to just the header (title + arrow),
-            // hiding every player card \u2014 not a "show patterns inline" toggle
-            // (patterns are always available via hover preview instead, see
-            // js/scroll-panels.js's _initCardHoverPreview).
-            let opponentPanelExpanded = true;
-            const toggleOpponentPatternsBtn = document.getElementById('toggle-opponent-patterns');
-            const opponentPanelContent = document.getElementById('new-opponent-cards');
-            if (toggleOpponentPatternsBtn && opponentPanelContent) {
-                function setOpponentPanelToggleLabel() {
-                    toggleOpponentPatternsBtn.textContent = opponentPanelExpanded ? '\u25C0' : '\u25B6';
-                    toggleOpponentPatternsBtn.title = opponentPanelExpanded ? 'Collapse opponent status' : 'Expand opponent status';
-                    opponentPanelContent.style.display = opponentPanelExpanded ? '' : 'none';
-                    // Shrink the whole column (not just hide the cards) so
-                    // collapsing doesn't leave a wide empty panel behind \u2014
-                    // only the header (title + arrow) should remain.
-                    if (gameLayout) gameLayout.classList.toggle('opponent-collapsed', !opponentPanelExpanded);
-                }
-                toggleOpponentPatternsBtn.addEventListener('click', () => {
-                    opponentPanelExpanded = !opponentPanelExpanded;
-                    setOpponentPanelToggleLabel();
+            // Opponent Status panel: a dock-button-driven floating panel, same
+            // open/close model as Hand/Active/Common (js/scroll-panels.js) \u2014
+            // style.display toggling so it has zero layout footprint when
+            // closed. Unlike those it defaults to OPEN since it's ambient
+            // status info, not an inventory opened on demand.
+            const opponentPanelBtn = document.getElementById('panel-btn-opponents');
+            const opponentPanel = document.getElementById('right-panel');
+            if (opponentPanelBtn && opponentPanel) {
+                opponentPanelBtn.addEventListener('click', () => {
+                    const isOpen = opponentPanel.style.display !== 'none';
+                    opponentPanel.style.display = isOpen ? 'none' : 'flex';
+                    opponentPanelBtn.classList.toggle('fsp-dock-btn-open', !isOpen);
                 });
-                setOpponentPanelToggleLabel();
+                opponentPanel.style.display = 'flex';
+                opponentPanelBtn.classList.add('fsp-dock-btn-open');
             }
 
             // Initial HUD update
