@@ -2969,40 +2969,24 @@
         // through this exact transform so every existing hit-testing call
         // site (which assumes a plain untransformed rect) keeps working.
         //
-        // The pivot (transform-origin) flips with the sign of the tilt: bottom
-        // edge for positive degrees, top edge for negative. A FIXED pivot is
-        // inherently asymmetric — one rotation direction sends the far edge
-        // away from the camera (shrinks, never overflows) while the other
-        // sends it toward the camera (perspective magnifies it, which combined
-        // with .board-area's overflow:hidden clips it past the container's
-        // edges) — so +35° and −35° around a fixed pivot are NOT mirror images
-        // of each other, and the magnifying direction gets worse the further
-        // you push the angle (previous attempts anchored at a single fixed
-        // edge, or added a compensating scale() that itself grew unbounded
-        // with angle — both reproduced this). Flipping the pivot with the sign
-        // keeps every row at-or-behind the pivot in depth for BOTH directions,
-        // so the perspective divide only ever shrinks toward whichever edge is
-        // "near" for the current sign — never magnifies, never clips, and
-        // +35°/−35° become true mirror images (just reflected around the
-        // opposite edges). No compensating scale is applied, so the board
-        // naturally recedes more at steeper angles rather than being
-        // re-inflated — that's the expected look of a steeper camera tilt, not
-        // an anomaly.
+        // The pivot (transform-origin) is fixed at the bottom edge. Pivoting
+        // there means every row is at-or-behind the pivot in depth, so the
+        // perspective divide only ever shrinks the board back toward that
+        // edge as you tilt — never magnifies it past .board-area's bounds.
+        // Only intended for positive degrees (the only range actually used —
+        // see js/game-ui.js's openBoardTiltPanel); negative values aren't
+        // supported by this pivot choice and will look wrong if ever used.
         const BOARD_TILT_PERSPECTIVE_PX = 1400; // must match getBoardScreenXY's inverse below
         window.getBoardTilt = function () {
             return window._boardTiltDegrees || 0;
         };
         window.setBoardTilt = function (degrees) {
-            const clamped = Math.max(-80, Math.min(80, degrees));
+            const clamped = Math.max(0, Math.min(80, degrees)); // only positive tilt is supported by this pivot
             window._boardTiltDegrees = clamped;
             const el = document.getElementById('new-board-container');
             if (el) {
-                if (clamped === 0) {
-                    el.style.transform = '';
-                } else {
-                    el.style.transformOrigin = clamped > 0 ? '50% 100%' : '50% 0%';
-                    el.style.transform = `perspective(${BOARD_TILT_PERSPECTIVE_PX}px) rotateX(${clamped}deg)`;
-                }
+                el.style.transformOrigin = '50% 100%';
+                el.style.transform = clamped === 0 ? '' : `perspective(${BOARD_TILT_PERSPECTIVE_PX}px) rotateX(${clamped}deg)`;
             }
             return clamped;
         };
@@ -3013,12 +2997,12 @@
         // call site. Reads the untransformed rect from .board-area (the board
         // container's parent, which is never itself transformed) and, if a
         // tilt is active, inverts the perspective(P) rotateX(θ) projection CSS
-        // applied when rendering, pivoting at whichever edge setBoardTilt used
-        // for this sign: forward projection puts a local offset (dx, dy) from
-        // that pivot at screen offset (dx/w, dy·cosθ/w) where w = 1 - dy·sinθ/P;
-        // solving that pair for (dx, dy) given the click's screen offset
-        // (sx, sy) yields the inverse used here. With no tilt this reduces to
-        // the exact same math the old pattern did.
+        // applied when rendering, pivoting at the bottom edge (per above):
+        // forward projection puts a local offset (dx, dy) from that pivot at
+        // screen offset (dx/w, dy·cosθ/w) where w = 1 - dy·sinθ/P; solving
+        // that pair for (dx, dy) given the click's screen offset (sx, sy)
+        // yields the inverse used here. With no tilt this reduces to the
+        // exact same math the old pattern did.
         function getBoardScreenXY(clientX, clientY) {
             const area = boardSvg.closest('.board-area');
             const rect = area ? area.getBoundingClientRect() : boardSvg.getBoundingClientRect();
@@ -3028,15 +3012,14 @@
             }
             const W = rect.width, H = rect.height;
             const theta = tiltDeg * Math.PI / 180;
-            const pivotY = tiltDeg > 0 ? H : 0; // must match setBoardTilt's transform-origin choice
             const sx = (clientX - rect.left) - W / 2;
-            const sy = (clientY - rect.top) - pivotY;
+            const sy = (clientY - rect.top) - H; // pivot is at the bottom edge
             let denom = 1 + (sy * Math.tan(theta)) / BOARD_TILT_PERSPECTIVE_PX;
             if (Math.abs(denom) < 0.01) denom = denom < 0 ? -0.01 : 0.01;
             const w = 1 / denom;
             const dx = sx * w;
             const dy = (sy * w) / Math.cos(theta);
-            return { x: W / 2 + dx, y: pivotY + dy };
+            return { x: W / 2 + dx, y: H + dy };
         }
 
         // Fit all placed tiles into view, centered
