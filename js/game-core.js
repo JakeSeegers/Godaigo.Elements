@@ -2968,6 +2968,16 @@
         // getBoardScreenXY() below un-projects click/drag coordinates back
         // through this exact transform so every existing hit-testing call
         // site (which assumes a plain untransformed rect) keeps working.
+        //
+        // transform-origin is bottom-center (50% 100%), not center — pivoting
+        // at the near/bottom edge means every row is at or "behind" the pivot
+        // in depth, so the perspective divide only ever shrinks content back
+        // toward that edge and never magnifies it past .board-area's original
+        // bounds (which, combined with .board-area's overflow:hidden, was
+        // clipping the top of the board at a center-anchored tilt — the far
+        // half was fine, but the near half's rows got perspective-magnified
+        // outward past the container's edges). This also reads as the more
+        // natural "table hinged at the edge closest to you" camera metaphor.
         const BOARD_TILT_PERSPECTIVE_PX = 1400; // must match getBoardScreenXY's inverse below
         window.getBoardTilt = function () {
             return window._boardTiltDegrees || 0;
@@ -2977,22 +2987,24 @@
             window._boardTiltDegrees = clamped;
             const el = document.getElementById('new-board-container');
             if (el) {
-                el.style.transformOrigin = '50% 50%';
+                el.style.transformOrigin = '50% 100%';
                 el.style.transform = clamped === 0 ? '' : `perspective(${BOARD_TILT_PERSPECTIVE_PX}px) rotateX(${clamped}deg)`;
             }
             return clamped;
         };
+        window.setBoardTilt(35); // default camera angle
 
         // Drop-in replacement for the old `rect = boardSvg.getBoundingClientRect();
         // x = clientX - rect.left` pattern used at every drag/click hit-testing
         // call site. Reads the untransformed rect from .board-area (the board
         // container's parent, which is never itself transformed) and, if a
         // tilt is active, inverts the perspective(P) rotateX(θ) projection
-        // CSS applied when rendering: forward projection puts a local offset
-        // (dx, dy) from center at screen offset (dx/w, dy·cosθ/w) where
-        // w = 1 - dy·sinθ/P; solving that pair for (dx, dy) given the click's
-        // screen offset (sx, sy) yields the inverse used here. With no tilt
-        // this reduces to the exact same math the old pattern did.
+        // CSS applied when rendering (pivoting at bottom-center, per above):
+        // forward projection puts a local offset (dx, dy) from that pivot at
+        // screen offset (dx/w, dy·cosθ/w) where w = 1 - dy·sinθ/P; solving
+        // that pair for (dx, dy) given the click's screen offset (sx, sy)
+        // yields the inverse used here. With no tilt this reduces to the
+        // exact same math the old pattern did.
         function getBoardScreenXY(clientX, clientY) {
             const area = boardSvg.closest('.board-area');
             const rect = area ? area.getBoundingClientRect() : boardSvg.getBoundingClientRect();
@@ -3003,13 +3015,13 @@
             const W = rect.width, H = rect.height;
             const theta = tiltDeg * Math.PI / 180;
             const sx = (clientX - rect.left) - W / 2;
-            const sy = (clientY - rect.top) - H / 2;
+            const sy = (clientY - rect.top) - H; // pivot is at the bottom edge, not center
             let denom = 1 + (sy * Math.tan(theta)) / BOARD_TILT_PERSPECTIVE_PX;
             if (Math.abs(denom) < 0.01) denom = denom < 0 ? -0.01 : 0.01;
             const w = 1 / denom;
             const dx = sx * w;
             const dy = (sy * w) / Math.cos(theta);
-            return { x: W / 2 + dx, y: H / 2 + dy };
+            return { x: W / 2 + dx, y: H + dy };
         }
 
         // Fit all placed tiles into view, centered
