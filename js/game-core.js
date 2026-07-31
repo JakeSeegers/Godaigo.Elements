@@ -2969,24 +2969,25 @@
         // through this exact transform so every existing hit-testing call
         // site (which assumes a plain untransformed rect) keeps working.
         //
-        // transform-origin is bottom-center (50% 100%), not center — pivoting
-        // at the near/bottom edge means every row is at or "behind" the pivot
-        // in depth, so the perspective divide only ever shrinks content back
-        // toward that edge and never magnifies it past .board-area's original
-        // bounds (which, combined with .board-area's overflow:hidden, was
-        // clipping the top of the board at a center-anchored tilt — the far
-        // half was fine, but the near half's rows got perspective-magnified
-        // outward past the container's edges). This also reads as the more
-        // natural "table hinged at the edge closest to you" camera metaphor.
-        //
-        // rotateX by itself also flattens the whole board by a factor of
-        // cos(θ) even before perspective divide gets involved (basic
-        // orthographic foreshortening along the tilted axis), which on its
-        // own left the tilted board looking shrunken and adrift in a big
-        // empty gap above it rather than filling the frame the way it does
-        // flat. scale(1/cosθ) below cancels exactly that flattening — the
-        // board reads as full-size again — while leaving the perspective
-        // divide's depth-dependent size falloff (the actual "3D" cue) alone.
+        // The pivot (transform-origin) flips with the sign of the tilt: bottom
+        // edge for positive degrees, top edge for negative. A FIXED pivot is
+        // inherently asymmetric — one rotation direction sends the far edge
+        // away from the camera (shrinks, never overflows) while the other
+        // sends it toward the camera (perspective magnifies it, which combined
+        // with .board-area's overflow:hidden clips it past the container's
+        // edges) — so +35° and −35° around a fixed pivot are NOT mirror images
+        // of each other, and the magnifying direction gets worse the further
+        // you push the angle (previous attempts anchored at a single fixed
+        // edge, or added a compensating scale() that itself grew unbounded
+        // with angle — both reproduced this). Flipping the pivot with the sign
+        // keeps every row at-or-behind the pivot in depth for BOTH directions,
+        // so the perspective divide only ever shrinks toward whichever edge is
+        // "near" for the current sign — never magnifies, never clips, and
+        // +35°/−35° become true mirror images (just reflected around the
+        // opposite edges). No compensating scale is applied, so the board
+        // naturally recedes more at steeper angles rather than being
+        // re-inflated — that's the expected look of a steeper camera tilt, not
+        // an anomaly.
         const BOARD_TILT_PERSPECTIVE_PX = 1400; // must match getBoardScreenXY's inverse below
         window.getBoardTilt = function () {
             return window._boardTiltDegrees || 0;
@@ -2996,12 +2997,11 @@
             window._boardTiltDegrees = clamped;
             const el = document.getElementById('new-board-container');
             if (el) {
-                el.style.transformOrigin = '50% 100%';
                 if (clamped === 0) {
                     el.style.transform = '';
                 } else {
-                    const scale = 1 / Math.cos(clamped * Math.PI / 180);
-                    el.style.transform = `perspective(${BOARD_TILT_PERSPECTIVE_PX}px) rotateX(${clamped}deg) scale(${scale})`;
+                    el.style.transformOrigin = clamped > 0 ? '50% 100%' : '50% 0%';
+                    el.style.transform = `perspective(${BOARD_TILT_PERSPECTIVE_PX}px) rotateX(${clamped}deg)`;
                 }
             }
             return clamped;
@@ -3012,13 +3012,13 @@
         // x = clientX - rect.left` pattern used at every drag/click hit-testing
         // call site. Reads the untransformed rect from .board-area (the board
         // container's parent, which is never itself transformed) and, if a
-        // tilt is active, inverts the scale(1/cosθ) perspective(P) rotateX(θ)
-        // transform applied when rendering (pivoting at bottom-center, per
-        // above): forward projection scales a local offset (dx, dy) from that
-        // pivot by 1/cosθ, then puts it at screen offset (dx'/w, dy'·cosθ/w)
-        // where w = 1 - dy'·sinθ/P; solving that pair for (dx, dy) given the
-        // click's screen offset (sx, sy) yields the inverse used here. With no
-        // tilt this reduces to the exact same math the old pattern did.
+        // tilt is active, inverts the perspective(P) rotateX(θ) projection CSS
+        // applied when rendering, pivoting at whichever edge setBoardTilt used
+        // for this sign: forward projection puts a local offset (dx, dy) from
+        // that pivot at screen offset (dx/w, dy·cosθ/w) where w = 1 - dy·sinθ/P;
+        // solving that pair for (dx, dy) given the click's screen offset
+        // (sx, sy) yields the inverse used here. With no tilt this reduces to
+        // the exact same math the old pattern did.
         function getBoardScreenXY(clientX, clientY) {
             const area = boardSvg.closest('.board-area');
             const rect = area ? area.getBoundingClientRect() : boardSvg.getBoundingClientRect();
@@ -3028,16 +3028,15 @@
             }
             const W = rect.width, H = rect.height;
             const theta = tiltDeg * Math.PI / 180;
-            const cosTheta = Math.cos(theta);
-            const scale = 1 / cosTheta; // must match setBoardTilt's compensating scale
+            const pivotY = tiltDeg > 0 ? H : 0; // must match setBoardTilt's transform-origin choice
             const sx = (clientX - rect.left) - W / 2;
-            const sy = (clientY - rect.top) - H; // pivot is at the bottom edge, not center
+            const sy = (clientY - rect.top) - pivotY;
             let denom = 1 + (sy * Math.tan(theta)) / BOARD_TILT_PERSPECTIVE_PX;
             if (Math.abs(denom) < 0.01) denom = denom < 0 ? -0.01 : 0.01;
             const w = 1 / denom;
-            const dx = (sx * w) / scale;
-            const dy = (sy * w) / (scale * cosTheta);
-            return { x: W / 2 + dx, y: H + dy };
+            const dx = sx * w;
+            const dy = (sy * w) / Math.cos(theta);
+            return { x: W / 2 + dx, y: pivotY + dy };
         }
 
         // Fit all placed tiles into view, centered
