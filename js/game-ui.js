@@ -45,22 +45,24 @@
             }
 
 
-            // Opponent active scrolls: show/hide stone patterns (same idea as common area popout)
-            let opponentPatternsExpanded = false;
+            // Opponent Status panel: collapse to just the header (title + arrow),
+            // hiding every player card \u2014 not a "show patterns inline" toggle
+            // (patterns are always available via hover preview instead, see
+            // js/scroll-panels.js's _initCardHoverPreview).
+            let opponentPanelExpanded = true;
             const toggleOpponentPatternsBtn = document.getElementById('toggle-opponent-patterns');
-            const rightPanel = document.getElementById('right-panel');
-            if (toggleOpponentPatternsBtn && rightPanel) {
-                function setOpponentPatternsToggleLabel() {
-                    toggleOpponentPatternsBtn.textContent = opponentPatternsExpanded ? '\u25C0' : '\u25B6';
-                    toggleOpponentPatternsBtn.title = opponentPatternsExpanded ? 'Hide opponent scroll patterns' : 'Show opponent active scroll patterns';
-                    rightPanel.dataset.opponentPatternsExpanded = opponentPatternsExpanded ? 'true' : 'false';
+            const opponentPanelContent = document.getElementById('new-opponent-cards');
+            if (toggleOpponentPatternsBtn && opponentPanelContent) {
+                function setOpponentPanelToggleLabel() {
+                    toggleOpponentPatternsBtn.textContent = opponentPanelExpanded ? '\u25C0' : '\u25B6';
+                    toggleOpponentPatternsBtn.title = opponentPanelExpanded ? 'Collapse opponent status' : 'Expand opponent status';
+                    opponentPanelContent.style.display = opponentPanelExpanded ? '' : 'none';
                 }
                 toggleOpponentPatternsBtn.addEventListener('click', () => {
-                    opponentPatternsExpanded = !opponentPatternsExpanded;
-                    setOpponentPatternsToggleLabel();
-                    updateOpponentPanel();
+                    opponentPanelExpanded = !opponentPanelExpanded;
+                    setOpponentPanelToggleLabel();
                 });
-                setOpponentPatternsToggleLabel();
+                setOpponentPanelToggleLabel();
             }
 
             // Initial HUD update
@@ -814,12 +816,8 @@
         // Update the opponent panel with current game state
         function updateOpponentPanel() {
             const panel = document.getElementById('opponent-panel');
-            const rightPanelEl = document.getElementById('right-panel');
             const cardsContainer = document.getElementById('opponent-cards');
             const newCardsContainer = document.getElementById('new-opponent-cards');
-            if (rightPanelEl && rightPanelEl.dataset.opponentPatternsExpanded === undefined) {
-                rightPanelEl.dataset.opponentPatternsExpanded = 'false';
-            }
 
             // Only show in multiplayer with more than 1 player
             if (!isMultiplayer || totalPlayers <= 1) {
@@ -937,24 +935,14 @@
 
                         const scrollCard = document.createElement('div');
                         scrollCard.className = 'opponent-scroll-card';
-                        scrollCard.style.cursor = 'pointer';
-                        scrollCard.title = 'Click to view scroll details';
-                        scrollCard.dataset.scrollName = scrollName; // stored for clone re-wiring
+                        scrollCard.title = 'Hover to preview';
+                        scrollCard.dataset.scrollName = scrollName; // read by _initCardHoverPreview (js/scroll-panels.js)
                         scrollCard.innerHTML = `
                             <div class="opponent-scroll-name">${pattern ? pattern.name : scrollName}</div>
                             <div class="opponent-scroll-element" style="color: ${elementColor};">
                                 ${elementIconHTML} ${element ? element.charAt(0).toUpperCase() + element.slice(1) : 'Unknown'}
                             </div>
-                            <div class="opponent-scroll-pattern-wrap"></div>
                         `;
-                        const patternWrap = scrollCard.querySelector('.opponent-scroll-pattern-wrap');
-                        const showPatterns = (document.getElementById('right-panel')?.dataset.opponentPatternsExpanded === 'true');
-                        if (showPatterns && pattern?.patterns && typeof spellSystem.createPatternVisual === 'function' && patternWrap) {
-                            const patternVisual = spellSystem.createPatternVisual(pattern, element);
-                            patternVisual.classList?.add?.('opponent-scroll-pattern');
-                            patternWrap.appendChild(patternVisual);
-                        }
-                        // Click handled by delegated listener on the container (see attachScrollDelegate above)
                         activeScrollsDiv.appendChild(scrollCard);
                     });
 
