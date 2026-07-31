@@ -568,9 +568,18 @@
                     if (isMyTurnNow) {
                         hudPlayerName.textContent = 'Your Turn';
                     } else {
-                        const name = typeof getPlayerColorName === 'function'
+                        // getPlayerColorName() returns "Username (Color)" — for a
+                        // bot that's the raw "🤖 Some Bot Name (Purple)" username,
+                        // which is far longer/taller than "Your Turn" and was
+                        // stretching the dock bar's height every time a bot's
+                        // turn came up. Keep just the color for this compact
+                        // slot; the full name is still shown elsewhere (player
+                        // cards, response window, etc).
+                        const raw = typeof getPlayerColorName === 'function'
                             ? getPlayerColorName(activePlayerIndex)
                             : `Player ${activePlayerIndex + 1}`;
+                        const colorOnly = raw.match(/\(([^)]+)\)\s*$/);
+                        const name = colorOnly ? colorOnly[1] : raw;
                         hudPlayerName.textContent = `${name}'s Turn`;
                     }
                     if (hudPlayer) hudPlayer.classList.toggle('your-turn', isMyTurnNow);

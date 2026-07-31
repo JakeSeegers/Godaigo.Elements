@@ -543,7 +543,7 @@ body {
     background: #0e0e1a;
     border: 2px solid #333;
     border-radius: 2px;
-    padding: var(--space-sm);
+    padding: 6px;
     text-align: center;
     cursor: grab;
     transition: box-shadow 0.05s, border-color 0.05s;
@@ -563,12 +563,12 @@ body {
 
 .stone-card svg {
     display: block;
-    margin: 0 auto var(--space-xs);
+    margin: 0 auto 2px;
 }
 
 .stone-card .count {
     font-family: var(--font-terminal);
-    font-size: 20px;
+    font-size: 15px;
     font-weight: bold;
     color: #eee;
     line-height: 1;
@@ -581,37 +581,46 @@ body {
 #elemental-stones-panel {
     position: fixed;
     /* Anchored above the dock bar (72px tall — see .dock-bar) so the panel
-       emerges from the dock itself instead of sliding up from the bottom of
-       the screen and covering the dock's other buttons. */
+       sits directly above it, bottom edge flush with the dock's top edge. */
     bottom: 72px;
     left: 50%;
-    width: 480px;
+    width: 420px;
     max-width: calc(100vw - 24px);
-    margin-left: -240px;
+    margin-left: -210px;
     background: #0e0e1a;
     border: 2px solid #d9b08c;
     z-index: 9999;
-    /* translateY(100%) alone only clears the panel's OWN height — with a
-       72px bottom offset (not 0) that left it still overlapping the dock
-       bar when "closed". Push it the extra 72px too so it fully clears
-       the dock before disappearing off-screen. */
-    transform: translateY(calc(100% + 72px));
-    transition: transform 0.28s ease;
+    /* Grow up out of the dock's top edge rather than sliding in from the
+       bottom of the screen: bottom stays pinned (bottom:72px) and the
+       panel's height grows from 0, so its top edge rises out of the dock
+       instead of travelling in from off-screen. max-height (not height) so
+       no fixed content height has to be hardcoded; overflow:hidden clips it
+       cleanly mid-animation instead of squishing/distorting the content the
+       way animating transform:scaleY would. */
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 0.18s ease, opacity 0.12s ease;
     box-shadow: 0 -4px 0 #000, 4px 0 0 #000, -4px 0 0 #000;
 }
-#elemental-stones-panel.open { transform: translateY(0); }
+#elemental-stones-panel.open {
+    max-height: 220px;
+    opacity: 1;
+    pointer-events: auto;
+}
 
 .es-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 14px;
+    padding: 5px 8px;
     background: #111;
     border-bottom: 2px solid #d9b08c;
 }
 .es-title {
     font-family: var(--font-pixel);
-    font-size: 13px;
+    font-size: 10px;
     color: #d9b08c;
     text-shadow: 1px 1px 0 #000;
     text-transform: uppercase;
@@ -619,25 +628,27 @@ body {
 }
 .es-close {
     font-family: var(--font-terminal);
-    font-size: 22px;
+    font-size: 14px;
+    line-height: 1;
     background: #1a1a1a;
     border: 2px solid #444;
     border-radius: 2px;
     color: #888;
     cursor: pointer;
-    padding: 0 6px;
+    padding: 2px 5px;
     box-shadow: 2px 2px 0 #000;
 }
 .es-close:hover { border-color: #c05050; color: #c05050; }
 
 .es-body {
     display: flex;
-    gap: var(--space-sm);
-    padding: 14px;
+    gap: 6px;
+    padding: 8px;
 }
 .es-body .stone-card {
     flex: 1;
     position: relative;
+    padding: 6px;
 }
 
 /* "Return Stone" glow + label — shown only on the card matching the stone
@@ -672,7 +683,7 @@ body {
 
 .stone-card .source {
     font-family: var(--font-terminal);
-    font-size: 14px;
+    font-size: 11px;
     color: #ccc;
 }
 
