@@ -191,12 +191,21 @@ const ScrollPanelSystem = (() => {
             if (handle)  handle.style.display  = 'none';
             if (btn)     btn.textContent        = '+';
             el.style.height = '';
+            // Shrink to fit the compact list's own content instead of
+            // staying at whatever width the full card grid needed — a
+            // one-line "Reflecting Pool · Catacomb · Lv. II" row doesn't
+            // need the same width as a row of 400px-wide cards.
+            el.style.width = '';
         } else {
             if (body)    body.style.display    = '';
             if (compact) compact.style.display = 'none';
             if (handle)  handle.style.display  = (state.autofit !== false) ? 'none' : '';
             if (btn)     btn.textContent        = '−';
             if (state.h) el.style.height = state.h + 'px';
+            // Restore the card-grid width (autofit recomputes it fresh below
+            // if enabled; otherwise fall back to the last saved width).
+            el.style.width = (state.w || DEFAULTS[id].w) + 'px';
+            if (state.autofit !== false) fitPanel(id);
         }
     }
     function toggleCollapse(id) {
