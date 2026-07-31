@@ -2941,17 +2941,40 @@
                 `translate(${centerX}, ${centerY}) rotate(${viewportRotation}) translate(${viewportX - centerX}, ${viewportY - centerY}) scale(${viewportScale})`);
         }
 
-        // Hermit-only board angle tool (js/game-ui.js's openBoardAnglePanel):
+        // Hermit-only board rotation tool (js/game-ui.js's openBoardRotationPanel):
         // viewportRotation already drives both the render transform above and
         // screenToWorld()'s inverse, so setting it and re-rendering is enough
-        // to rotate the whole board — hit-testing/placement stay correct.
-        window.getBoardAngle = function () {
+        // to spin the whole board flat, in-plane — hit-testing/placement stay
+        // correct. Distinct from window.getBoardTilt/setBoardTilt below, which
+        // is a 3D camera tilt, not a rotation.
+        window.getBoardRotation = function () {
             return ((viewportRotation % 360) + 360) % 360;
         };
-        window.setBoardAngle = function (degrees) {
+        window.setBoardRotation = function (degrees) {
             viewportRotation = ((degrees % 360) + 360) % 360;
             updateViewport();
             return viewportRotation;
+        };
+
+        // Hermit-only board tilt ("angle") tool (js/game-ui.js's
+        // openBoardTiltPanel): a purely visual CSS 3D perspective tilt on the
+        // board container, like tipping a table up to look at it from an
+        // angle rather than straight top-down. This is layered on top of the
+        // SVG's own coordinate system (rather than folded into viewportRotation/
+        // screenToWorld above) so it doesn't skew click/drag hit-testing —
+        // it's a camera preview effect, not a board-space transform.
+        window.getBoardTilt = function () {
+            return window._boardTiltDegrees || 0;
+        };
+        window.setBoardTilt = function (degrees) {
+            const clamped = Math.max(-80, Math.min(80, degrees));
+            window._boardTiltDegrees = clamped;
+            const el = document.getElementById('new-board-container');
+            if (el) {
+                el.style.transformOrigin = '50% 50%';
+                el.style.transform = clamped === 0 ? '' : `perspective(1400px) rotateX(${clamped}deg)`;
+            }
+            return clamped;
         };
 
         // Fit all placed tiles into view, centered

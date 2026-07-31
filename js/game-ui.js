@@ -7138,23 +7138,24 @@ document.getElementById('undo-move').onclick = function() {
                 load();
             }
 
-            // ── Board Angle tool ─────────────────────────────────────────────
-            // Lets the developer rotate the whole board (viewport) live, with a
-            // readout of the exact degree value so it can be reported back.
-            // Backed by window.getBoardAngle/setBoardAngle in game-core.js —
-            // viewportRotation already drives the render transform and
-            // screenToWorld()'s inverse, so this was just missing a UI.
-            function openBoardAnglePanel() {
-                const existing = document.getElementById('board-angle-panel');
+            // ── Board Rotation tool ──────────────────────────────────────────
+            // Lets the developer spin the whole board (viewport) flat, in-plane,
+            // live, with a readout of the exact degree value so it can be
+            // reported back. Backed by window.getBoardRotation/setBoardRotation
+            // in game-core.js — viewportRotation already drives the render
+            // transform and screenToWorld()'s inverse, so this was just missing
+            // a UI. Distinct from the Board Angle (tilt) tool below.
+            function openBoardRotationPanel() {
+                const existing = document.getElementById('board-rotation-panel');
                 if (existing) { existing.remove(); return; }
 
-                if (typeof window.getBoardAngle !== 'function' || typeof window.setBoardAngle !== 'function') {
-                    updateStatus('Board angle tool unavailable — start a game first');
+                if (typeof window.getBoardRotation !== 'function' || typeof window.setBoardRotation !== 'function') {
+                    updateStatus('Board rotation tool unavailable — start a game first');
                     return;
                 }
 
                 const panel = document.createElement('div');
-                panel.id = 'board-angle-panel';
+                panel.id = 'board-rotation-panel';
                 Object.assign(panel.style, {
                     position: 'fixed', top: '12px', right: '12px', zIndex: '10060',
                     background: '#1a1a2e', border: '1px solid #444', borderRadius: '8px',
@@ -7167,7 +7168,7 @@ document.getElementById('undo-move').onclick = function() {
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px'
                 });
                 const title = document.createElement('div');
-                title.textContent = 'Board Angle';
+                title.textContent = 'Board Rotation';
                 Object.assign(title.style, { fontWeight: 'bold', color: '#d9b08c' });
                 const closeX = document.createElement('button');
                 closeX.textContent = '✕';
@@ -7203,7 +7204,7 @@ document.getElementById('undo-move').onclick = function() {
                 numberRow.appendChild(degLabel);
 
                 function apply(deg) {
-                    const applied = window.setBoardAngle(deg);
+                    const applied = window.setBoardRotation(deg);
                     slider.value = String(applied);
                     numInput.value = String(applied);
                     readout.textContent = `${applied}°`;
@@ -7216,7 +7217,7 @@ document.getElementById('undo-move').onclick = function() {
                         flex: '1', padding: '5px 0', background: '#2d2d44', color: '#eee',
                         border: '1px solid #555', borderRadius: '5px', cursor: 'pointer'
                     });
-                    b.onclick = () => apply(window.getBoardAngle() + delta);
+                    b.onclick = () => apply(window.getBoardRotation() + delta);
                     return b;
                 }
 
@@ -7246,7 +7247,121 @@ document.getElementById('undo-move').onclick = function() {
                 panel.appendChild(resetBtn);
                 document.body.appendChild(panel);
 
-                apply(window.getBoardAngle());
+                apply(window.getBoardRotation());
+            }
+
+            // ── Board Angle (tilt) tool ──────────────────────────────────────
+            // Lets the developer tilt the camera on the board — like tipping a
+            // table up to view it at a slant instead of straight top-down —
+            // live, with a readout of the exact degree value so it can be
+            // reported back. Backed by window.getBoardTilt/setBoardTilt in
+            // game-core.js, which apply a CSS 3D perspective/rotateX transform
+            // to the board container. Purely a camera-preview effect layered on
+            // top of the SVG's own coordinates — distinct from Board Rotation
+            // above, which actually spins board-space and stays interactive.
+            function openBoardTiltPanel() {
+                const existing = document.getElementById('board-tilt-panel');
+                if (existing) { existing.remove(); return; }
+
+                if (typeof window.getBoardTilt !== 'function' || typeof window.setBoardTilt !== 'function') {
+                    updateStatus('Board angle tool unavailable — start a game first');
+                    return;
+                }
+
+                const panel = document.createElement('div');
+                panel.id = 'board-tilt-panel';
+                Object.assign(panel.style, {
+                    position: 'fixed', top: '12px', right: '244px', zIndex: '10060',
+                    background: '#1a1a2e', border: '1px solid #444', borderRadius: '8px',
+                    padding: '12px 14px', width: '220px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+                    color: '#eee', fontSize: '13px'
+                });
+
+                const header = document.createElement('div');
+                Object.assign(header.style, {
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px'
+                });
+                const title = document.createElement('div');
+                title.textContent = 'Board Angle';
+                Object.assign(title.style, { fontWeight: 'bold', color: '#d9b08c' });
+                const closeX = document.createElement('button');
+                closeX.textContent = '✕';
+                Object.assign(closeX.style, {
+                    background: 'none', border: '1px solid #444', borderRadius: '5px',
+                    color: '#ccc', cursor: 'pointer', padding: '1px 7px'
+                });
+                closeX.onclick = () => panel.remove();
+                header.appendChild(title);
+                header.appendChild(closeX);
+
+                const readout = document.createElement('div');
+                Object.assign(readout.style, {
+                    fontSize: '22px', fontWeight: 'bold', textAlign: 'center',
+                    margin: '4px 0 10px', color: '#fff'
+                });
+
+                const slider = document.createElement('input');
+                slider.type = 'range'; slider.min = '-80'; slider.max = '80'; slider.step = '1';
+                slider.style.width = '100%';
+
+                const numberRow = document.createElement('div');
+                Object.assign(numberRow.style, { display: 'flex', gap: '6px', marginTop: '8px', alignItems: 'center' });
+                const numInput = document.createElement('input');
+                numInput.type = 'number'; numInput.min = '-80'; numInput.max = '80';
+                Object.assign(numInput.style, {
+                    width: '64px', background: '#111', color: '#eee',
+                    border: '1px solid #555', borderRadius: '4px', padding: '4px 6px'
+                });
+                const degLabel = document.createElement('span');
+                degLabel.textContent = '°';
+                numberRow.appendChild(numInput);
+                numberRow.appendChild(degLabel);
+
+                function apply(deg) {
+                    const applied = window.setBoardTilt(deg);
+                    slider.value = String(applied);
+                    numInput.value = String(applied);
+                    readout.textContent = `${applied}°`;
+                }
+
+                function makeStepBtn(label, delta) {
+                    const b = document.createElement('button');
+                    b.textContent = label;
+                    Object.assign(b.style, {
+                        flex: '1', padding: '5px 0', background: '#2d2d44', color: '#eee',
+                        border: '1px solid #555', borderRadius: '5px', cursor: 'pointer'
+                    });
+                    b.onclick = () => apply(window.getBoardTilt() + delta);
+                    return b;
+                }
+
+                const stepRow = document.createElement('div');
+                Object.assign(stepRow.style, { display: 'flex', gap: '6px', marginTop: '8px' });
+                stepRow.appendChild(makeStepBtn('-15°', -15));
+                stepRow.appendChild(makeStepBtn('-1°', -1));
+                stepRow.appendChild(makeStepBtn('+1°', 1));
+                stepRow.appendChild(makeStepBtn('+15°', 15));
+
+                const resetBtn = document.createElement('button');
+                resetBtn.textContent = 'Reset to 0°';
+                Object.assign(resetBtn.style, {
+                    width: '100%', marginTop: '8px', padding: '6px 0', background: '#2d2d44',
+                    color: '#eee', border: '1px solid #555', borderRadius: '5px', cursor: 'pointer'
+                });
+                resetBtn.onclick = () => apply(0);
+
+                slider.addEventListener('input', () => apply(Number(slider.value)));
+                numInput.addEventListener('change', () => apply(Number(numInput.value) || 0));
+
+                panel.appendChild(header);
+                panel.appendChild(readout);
+                panel.appendChild(slider);
+                panel.appendChild(numberRow);
+                panel.appendChild(stepRow);
+                panel.appendChild(resetBtn);
+                document.body.appendChild(panel);
+
+                apply(window.getBoardTilt());
             }
 
             function buildMenu() {
@@ -7329,7 +7444,8 @@ document.getElementById('undo-move').onclick = function() {
                     if (window.JoytoneBridge && typeof window.JoytoneBridge.togglePopup === 'function') window.JoytoneBridge.togglePopup();
                 }));
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
-                menu.appendChild(makeItem('Board Angle', openBoardAnglePanel));
+                menu.appendChild(makeItem('Board Rotation', openBoardRotationPanel));
+                menu.appendChild(makeItem('Board Angle', openBoardTiltPanel));
                 menu.appendChild(makeItem('☢️ Nuke All Rooms', async () => {
                     const ok = window.confirm('Nuke ALL rooms and players from the database?\n\nThis cannot be undone.');
                     if (!ok) return;
