@@ -596,9 +596,12 @@ body {
        sits directly above it, bottom edge flush with the dock's top edge. */
     bottom: 72px;
     left: 50%;
-    width: 420px;
+    /* 420px clipped the 5th (void) stone card entirely — 5 cards need
+       ~610px of min-content width (measured), so 640px gives a bit of
+       breathing room instead of shrinking cards down to the wire. */
+    width: 640px;
     max-width: calc(100vw - 24px);
-    margin-left: -210px;
+    margin-left: -320px;
     background: #0e0e1a;
     border: 2px solid #d9b08c;
     z-index: 9999;
