@@ -813,16 +813,16 @@ body {
 .board-area {
     grid-area: board;
     background: var(--bg-dark);
-    /* Vertical only: left/right still clip at the board's own edges as
-       before. Top/bottom stay visible instead of hard-clipping — the HUD
-       bar, status bar, and dock bar immediately above/below all have
-       opaque backgrounds and an explicit z-index (--z-hud) higher than
-       this element's default stacking level, so anything from a tilted
-       board that pokes past this box renders behind those bars (occluded)
-       rather than getting cut off abruptly. body's own overflow:hidden is
-       still the ultimate boundary, so this can't cause page scrollbars. */
-    overflow-x: hidden;
-    overflow-y: visible;
+    /* No clipping on any side at this box's own edges — the tilt distorts
+       both dimensions, so a boundary tight to the pre-tilt box hard-cuts
+       whichever side the tilt pushes content toward. body's own
+       overflow:hidden is still the true outer boundary everywhere, so this
+       can't cause page scrollbars or spillover. Top/bottom overflow is
+       occluded by the HUD/status/dock bars' opaque backgrounds and higher
+       z-index (--z-hud); left/right has no equivalent opaque bar, but
+       .board-area, .game-layout, and body all share the same background
+       color, so overflow there blends in rather than creating a seam. */
+    overflow: visible;
     position: relative;
     display: flex;
 }
