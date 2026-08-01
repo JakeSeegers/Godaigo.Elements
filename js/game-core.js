@@ -3072,6 +3072,40 @@
             return { x: W / 2 + dx, y: H + dy };
         }
 
+        // Forward counterpart to getBoardScreenXY above: projects a point
+        // FROM the same flat, untransformed board-pixel space (relative to
+        // .board-area's rect) TO its actual on-screen position once the
+        // tilt is applied — i.e. the inverse operation. For anything that
+        // computes a board-space draw position independently of the DOM
+        // (e.g. js/effects-system.js's tileToScreen, which derives a flat
+        // pixel position via the SVG viewport's own CTM and used to just
+        // add boardSvg.getBoundingClientRect() — wrong once tilted, for the
+        // exact same reason getBoardScreenXY's own comment explains: that
+        // rect is the foreshortened/trapezoidal projected box, not the true
+        // layout size). `scale` is the same perspective divisor (w) used
+        // for position, returned so callers also shrink whatever they draw
+        // there to match — a fire icon on a distant (tilted-away) tile
+        // should appear smaller, the same way the tile itself does.
+        function getScreenFromBoardXY(localX, localY) {
+            const area = document.querySelector('.board-area');
+            if (!area) return null;
+            const rect = area.getBoundingClientRect();
+            const tiltDeg = window._boardTiltDegrees || 0;
+            if (!tiltDeg) {
+                return { x: rect.left + localX, y: rect.top + localY, scale: 1 };
+            }
+            const W = rect.width, H = rect.height;
+            const theta = tiltDeg * Math.PI / 180;
+            const dx = localX - W / 2;
+            const dy = localY - H; // pivot is at the bottom edge
+            let w = 1 - (dy * Math.sin(theta)) / BOARD_TILT_PERSPECTIVE_PX;
+            if (Math.abs(w) < 0.01) w = w < 0 ? -0.01 : 0.01;
+            const sx = dx / w;
+            const sy = (dy * Math.cos(theta)) / w;
+            return { x: rect.left + W / 2 + sx, y: rect.top + H + sy, scale: w };
+        }
+        window.getScreenFromBoardXY = getScreenFromBoardXY;
+
         // Fit all placed tiles into view, centered
         function fitBoardToView() {
             if (placedTiles.length === 0) return;

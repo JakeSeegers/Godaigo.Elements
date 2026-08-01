@@ -56,11 +56,24 @@ window.effectsSystem = (() => {
         pt.y = svgY;
         const ctm = viewport.getCTM();
         const screenPt = pt.matrixTransform(ctm);
-        const svgRect = boardSvg.getBoundingClientRect();
+        const ctmScale = Math.sqrt(ctm.a * ctm.a + ctm.b * ctm.b);
+        // screenPt is relative to boardSvg's own untransformed box, which by
+        // design matches .board-area's rect exactly at 0deg tilt (see
+        // syncBoardViewport in js/game-core.js) — the same flat local-pixel
+        // space getScreenFromBoardXY expects. Previously this just added
+        // boardSvg.getBoundingClientRect() directly, which is wrong once a
+        // board tilt is active (that rect becomes the foreshortened,
+        // trapezoidal projected box — same issue getBoardScreenXY's own
+        // comment describes for hit-testing). getScreenFromBoardXY
+        // forward-projects through the tilt instead, so the fire-destroy
+        // effect (and anything else using this) lands on the actual tile
+        // position instead of drifting once tilted.
+        const pos = window.getScreenFromBoardXY(screenPt.x, screenPt.y);
+        if (!pos) return null;
         return {
-            x: svgRect.left + screenPt.x,
-            y: svgRect.top + screenPt.y,
-            boardScale: Math.sqrt(ctm.a * ctm.a + ctm.b * ctm.b),
+            x: pos.x,
+            y: pos.y,
+            boardScale: ctmScale * pos.scale,
         };
     }
 
