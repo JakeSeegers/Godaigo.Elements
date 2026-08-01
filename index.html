@@ -319,7 +319,18 @@
         <!-- Status bar anchored below the HUD -->
         <div id="status">Ready to play</div>
 
-        <div class="board-area">
+        <!-- .board-area stays exactly as it always was — same grid slot,
+             same CSS, no visible content — it's kept only as an empty
+             placeholder (reserves the "board" row) and, more importantly,
+             as the stable/untransformed reference rect every hit-test
+             calculation (getBoardScreenXY, fitBoardToView in
+             js/game-core.js) keys off. The actual board content now lives
+             in .board-viewport (position:fixed, JS-positioned from
+             .board-area's measured rect, see syncBoardViewport in
+             js/game-core.js) so the tilted board has real extra room to
+             render into on every side without hitting a hard clip. -->
+        <div class="board-area"></div>
+        <div class="board-viewport" id="board-viewport">
             <div class="board-container" id="new-board-container">
                 <svg id="boardSvg" width="1000" height="800">
                     <g id="viewport">

@@ -810,6 +810,10 @@ body {
 /* ============================================
    BOARD CONTAINER (Center)
    ============================================ */
+/* Unchanged from its original rule — same grid slot, same everything.
+   Kept as an empty placeholder purely so its rect stays a stable,
+   untransformed reference for hit-testing (see .board-viewport below and
+   syncBoardViewport()/getBoardScreenXY() in js/game-core.js). */
 .board-area {
     grid-area: board;
     background: var(--bg-dark);
@@ -818,10 +822,38 @@ body {
     display: flex;
 }
 
+/* Decoupled, JS-positioned viewing frame for the actual board content.
+   position:fixed takes it out of the grid/flex layout entirely (avoiding
+   the track-sizing side effects that broke two earlier CSS-only
+   attempts) — top/left/width/height are set by syncBoardViewport() in
+   js/game-core.js to .board-area's measured rect, expanded by a fixed
+   margin on every side, so a tilted board has real room to render into
+   before hitting a hard clip. z-index stays below the HUD/status/dock
+   bars (--z-hud) so overflow still renders behind them, same as the part
+   of this fix that already worked. pointer-events:none lets clicks in
+   the empty margin fall through to whatever's actually there (HUD, dock,
+   Opponent Status panel, or the page background); .board-container
+   re-enables pointer-events for the actual interactive board. */
+.board-viewport {
+    position: fixed;
+    overflow: hidden;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Positioned via inset within .board-viewport rather than the old
+   flex:1/width:100%/height:100% (which relied on being inside
+   .board-area's flex layout). The inset value matches the margin
+   syncBoardViewport() expands .board-viewport by, so this box's actual
+   rendered size/position is identical to .board-area's original rect —
+   only the tilt's overflow gets the surrounding margin, the base board
+   itself doesn't change size at all. Default value here is just a
+   fallback before JS runs; syncBoardViewport() sets the real inline
+   value from the same constant. */
 .board-container {
-    flex: 1;
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 150px;
+    pointer-events: auto;
     background: transparent;
     overflow: hidden;
     padding: 0;

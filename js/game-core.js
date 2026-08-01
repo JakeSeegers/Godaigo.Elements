@@ -2992,10 +2992,55 @@
         };
         window.setBoardTilt(20); // default camera angle
 
+        // Positions #board-viewport (position:fixed, holds the actual board
+        // content — see index.html) from .board-area's measured rect,
+        // expanded by a fixed margin on every side, so a tilted board has
+        // real room to render into instead of hitting a hard clip.
+        // .board-area itself (and everything that keys off its rect, e.g.
+        // getBoardScreenXY below) is completely untouched by this — only
+        // .board-viewport's position/size and .board-container's inset are
+        // driven by it. Backed by a ResizeObserver on .board-area rather
+        // than a plain window-resize listener: "board" is the only
+        // flexible (1fr) row in the grid, so any layout change that could
+        // move or resize it — a window resize, the status bar's auto row
+        // growing if its text wraps, or the game actually starting (which
+        // takes .board-area from a display:none ancestor to its real
+        // rendered size) — necessarily changes .board-area's own measured
+        // box, which ResizeObserver reliably catches; a resize listener
+        // alone would miss the status-bar case. rAF-throttled so rapid
+        // resize events don't cause redundant layout thrashing.
+        const BOARD_VIEWPORT_MARGIN_PX = 150; // must match .board-container's CSS inset fallback
+        let _boardViewportSyncQueued = false;
+        function syncBoardViewport() {
+            if (_boardViewportSyncQueued) return;
+            _boardViewportSyncQueued = true;
+            requestAnimationFrame(() => {
+                _boardViewportSyncQueued = false;
+                const area = document.querySelector('.board-area');
+                const viewport = document.getElementById('board-viewport');
+                const container = document.getElementById('new-board-container');
+                if (!area || !viewport) return;
+                const rect = area.getBoundingClientRect();
+                viewport.style.top = (rect.top - BOARD_VIEWPORT_MARGIN_PX) + 'px';
+                viewport.style.left = (rect.left - BOARD_VIEWPORT_MARGIN_PX) + 'px';
+                viewport.style.width = (rect.width + BOARD_VIEWPORT_MARGIN_PX * 2) + 'px';
+                viewport.style.height = (rect.height + BOARD_VIEWPORT_MARGIN_PX * 2) + 'px';
+                if (container) container.style.inset = BOARD_VIEWPORT_MARGIN_PX + 'px';
+            });
+        }
+        window.syncBoardViewport = syncBoardViewport;
+        (function initBoardViewportSync() {
+            const areaEl = document.querySelector('.board-area');
+            if (areaEl && typeof ResizeObserver !== 'undefined') {
+                new ResizeObserver(syncBoardViewport).observe(areaEl);
+            }
+            syncBoardViewport();
+        })();
+
         // Drop-in replacement for the old `rect = boardSvg.getBoundingClientRect();
         // x = clientX - rect.left` pattern used at every drag/click hit-testing
-        // call site. Reads the untransformed rect from .board-area (the board
-        // container's parent, which is never itself transformed) and, if a
+        // call site. Reads the untransformed rect from .board-area (a stable,
+        // never-transformed placeholder — see syncBoardViewport above) and, if a
         // tilt is active, inverts the perspective(P) rotateX(θ) projection CSS
         // applied when rendering, pivoting at the bottom edge (per above):
         // forward projection puts a local offset (dx, dy) from that pivot at
@@ -3004,7 +3049,12 @@
         // yields the inverse used here. With no tilt this reduces to the
         // exact same math the old pattern did.
         function getBoardScreenXY(clientX, clientY) {
-            const area = boardSvg.closest('.board-area');
+            // .board-area is no longer an ancestor of boardSvg (the actual
+            // board content lives in the JS-positioned .board-viewport, see
+            // syncBoardViewport below) — .board-area still exists as a
+            // stable, untransformed placeholder purely for this reference,
+            // so look it up directly rather than via closest().
+            const area = document.querySelector('.board-area');
             const rect = area ? area.getBoundingClientRect() : boardSvg.getBoundingClientRect();
             const tiltDeg = window._boardTiltDegrees || 0;
             if (!tiltDeg) {
@@ -3047,7 +3097,9 @@
             // Get available screen space. Read from .board-area, not boardSvg
             // directly — when a board tilt is active, boardSvg's own rect is
             // the foreshortened/trapezoidal projected box, not its true size.
-            const svgRect = (boardSvg.closest('.board-area') || boardSvg).getBoundingClientRect();
+            // .board-area is no longer an ancestor of boardSvg (see
+            // getBoardScreenXY above), so look it up directly.
+            const svgRect = (document.querySelector('.board-area') || boardSvg).getBoundingClientRect();
             const screenWidth = svgRect.width;
             const screenHeight = svgRect.height;
 
