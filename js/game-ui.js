@@ -61,7 +61,19 @@
         function updatePlacementTileOverlay() {
             const overlay = document.getElementById('placement-tile-overlay');
             if (!overlay) return;
-            const myPlacementTurn = typeof isPlacementPhase !== 'undefined' && isPlacementPhase &&
+            // isPlacementPhase is only ever set true by the real multiplayer
+            // lobby flow (startMultiplayerGame() in lobby.js) — the local
+            // startGame() path (used by both a manual local game and
+            // js/tutorial-mode.js) never touches it, so it stays
+            // permanently false/undefined there and this overlay never
+            // showed the starting tile to drag. Same "observable state"
+            // fallback already used in js/bot-state.js's legalActions():
+            // when the flag isn't meaningfully set, fall back to whether
+            // the active player has placed a pawn yet instead of trusting it.
+            const inPlacementPhase = (typeof isPlacementPhase !== 'undefined' && isPlacementPhase)
+                ? true
+                : (typeof playerPositions !== 'undefined' && !playerPositions[activePlayerIndex]);
+            const myPlacementTurn = inPlacementPhase &&
                 (typeof isMultiplayer === 'undefined' || !isMultiplayer || myPlayerIndex === activePlayerIndex);
             const hasTiles = typeof playerTilesAvailable !== 'undefined' && playerTilesAvailable > 0;
             overlay.style.display = (myPlacementTurn && hasTiles) ? '' : 'none';
