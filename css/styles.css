@@ -813,7 +813,16 @@ body {
 .board-area {
     grid-area: board;
     background: var(--bg-dark);
-    overflow: hidden;
+    /* Vertical only: left/right still clip at the board's own edges as
+       before. Top/bottom stay visible instead of hard-clipping — the HUD
+       bar, status bar, and dock bar immediately above/below all have
+       opaque backgrounds and an explicit z-index (--z-hud) higher than
+       this element's default stacking level, so anything from a tilted
+       board that pokes past this box renders behind those bars (occluded)
+       rather than getting cut off abruptly. body's own overflow:hidden is
+       still the ultimate boundary, so this can't cause page scrollbars. */
+    overflow-x: hidden;
+    overflow-y: visible;
     position: relative;
     display: flex;
 }

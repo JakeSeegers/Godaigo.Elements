@@ -2990,7 +2990,7 @@
             }
             return clamped;
         };
-        window.setBoardTilt(35); // default camera angle
+        window.setBoardTilt(20); // default camera angle
 
         // Drop-in replacement for the old `rect = boardSvg.getBoundingClientRect();
         // x = clientX - rect.left` pattern used at every drag/click hit-testing
