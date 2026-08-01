@@ -849,20 +849,32 @@ body {
    only the tilt's overflow gets the surrounding margin, the base board
    itself doesn't change size at all. Default value here is just a
    fallback before JS runs; syncBoardViewport() sets the real inline
-   value from the same constant. */
+   value from the same constant.
+   overflow is visible (not hidden) deliberately: this box is
+   inset back to .board-area's original size, so an overflow:hidden here
+   would re-clip the tilt right back at the pre-fix boundary before it
+   ever reached .board-viewport's actual (larger, JS-synced) margin —
+   which is exactly what happened until this was caught live. The real
+   clip boundary is .board-viewport's overflow:hidden above. */
 .board-container {
     position: absolute;
     inset: 150px;
     pointer-events: auto;
     background: transparent;
-    overflow: hidden;
+    overflow: visible;
     padding: 0;
 }
 
+/* overflow: visible because <svg> elements default to clipping their own
+   content to the viewBox/dimensions otherwise — the same re-clipping
+   problem as .board-container above, just enforced by the SVG spec's UA
+   stylesheet instead of an explicit rule. .board-viewport's overflow:hidden
+   remains the real, JS-synced clip boundary. */
 #boardSvg {
     display: block;
     width: 100%;
     height: 100%;
+    overflow: visible;
 }
 
 /* ============================================
