@@ -4616,7 +4616,7 @@ const ScrollEffects = {
     // HELPER MODAL FUNCTIONS
     // ============================================
 
-    showScrollSelectionModal(scrollNames, title, onSelect) {
+    showScrollSelectionModal(scrollNames, title, onSelect, onCancel) {
         // Remove existing modal
         const existing = document.getElementById('scroll-select-modal');
         if (existing) existing.remove();
@@ -4683,7 +4683,10 @@ const ScrollEffects = {
             borderRadius: '5px',
             cursor: 'pointer'
         });
-        cancelBtn.onclick = () => overlay.remove();
+        cancelBtn.onclick = () => {
+            overlay.remove();
+            if (typeof onCancel === 'function') onCancel();
+        };
         modal.appendChild(cancelBtn);
 
         overlay.appendChild(modal);

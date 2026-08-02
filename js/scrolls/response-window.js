@@ -48,6 +48,12 @@ class ResponseWindowSystem {
         this.responseTimeout = null;
         this.RESPONSE_TIMEOUT_MS = 15000; // 15 seconds to respond
         this.responseModalElement = null;
+        // True while the local player is browsing the Sacrificial Pyre
+        // hand-scroll picker (a sub-modal on top of the response window).
+        // Guards showResponseModal() against getting rebuilt underneath/on
+        // top of the picker by a re-entrant call (e.g. a duplicate
+        // 'response-window-opened' broadcast) while they're mid-pick.
+        this.sacrificialPyrePicking = false;
     }
 
     // ── Bot-aware identity helpers ─────────────────────────────────────────
@@ -439,6 +445,17 @@ class ResponseWindowSystem {
      * Show the response window modal overlay
      */
     showResponseModal() {
+        // Don't rebuild the response window out from under an in-progress
+        // Sacrificial Pyre pick — a re-entrant call here (e.g. a duplicate
+        // 'response-window-opened' broadcast landing while the player is
+        // browsing the hand-scroll picker) would otherwise render a fresh
+        // copy of this modal on top of the picker, making it look like the
+        // response window "reset" with no way back to the picker.
+        if (this.sacrificialPyrePicking) {
+            console.log('Skipping response modal rebuild — Sacrificial Pyre picker is open');
+            return;
+        }
+
         // Remove existing modal if present
         if (this.responseModalElement) {
             this.responseModalElement.remove();
@@ -916,10 +933,22 @@ class ResponseWindowSystem {
     showSacrificialPyreResponsePicker(pyreScrollInfo, responderIndexOverride) {
         const se = this.spellSystem?.scrollEffects;
         if (!se || typeof se.showScrollSelectionModal !== 'function') return;
+        if (typeof window !== 'undefined' && window.logScrollEvent) {
+            window.logScrollEvent('sacrificial_pyre_response_opened', {
+                playerIndex: responderIndexOverride ?? this.localResponderIndex(),
+                triggeringScroll: this.pendingScrollData?.name || null,
+                reactionOptions: pyreScrollInfo.reactionOptions
+            });
+        }
+        this.sacrificialPyrePicking = true;
         se.showScrollSelectionModal(
             pyreScrollInfo.reactionOptions,
             'Sacrificial Pyre: choose a Level I scroll from your hand to activate as your response (pattern ignored):',
-            (chosenScrollName) => this.respondWithSacrificialPyre(pyreScrollInfo, chosenScrollName, responderIndexOverride)
+            (chosenScrollName) => {
+                this.sacrificialPyrePicking = false;
+                this.respondWithSacrificialPyre(pyreScrollInfo, chosenScrollName, responderIndexOverride);
+            },
+            () => { this.sacrificialPyrePicking = false; } // cancelled — back to the response window
         );
     }
 
@@ -960,6 +989,16 @@ class ResponseWindowSystem {
 
         const isCounter = chosenDef.canCounter === 'any';
         const isResponse = chosenDef.isResponse === true;
+
+        if (typeof window !== 'undefined' && window.logScrollEvent) {
+            window.logScrollEvent('sacrificial_pyre_response_submitted', {
+                playerIndex: myIndex,
+                scrollName: chosenScrollName,
+                isCounter,
+                isResponse,
+                triggeringScroll: this.pendingScrollData?.name || null
+            });
+        }
 
         this.responseStack.push({
             scrollData: { name: chosenScrollName, definition: chosenDef, fromCommonArea: false },
@@ -1584,6 +1623,21 @@ class ResponseWindowSystem {
      * Show response modal for a non-casting player (called when receiving broadcast)
      */
     showResponseModalForOtherPlayer(scrollData, casterIndex) {
+        // Guard against a duplicate/late 'response-window-opened' broadcast for
+        // a cast this player has already responded to (or passed on). Without
+        // this, re-running the reset below would clear respondingPlayers and
+        // rebuild responseStack to just the original entry — silently dropping
+        // an already-submitted response (most visibly with Sacrificial Pyre,
+        // whose hand-scroll picker takes a few extra seconds, widening the
+        // window for a duplicate broadcast to land mid-pick).
+        const myIndex = this.localResponderIndex();
+        if (this.isResponseWindowOpen && this.currentCaster === casterIndex
+                && this.pendingScrollData?.name === scrollData?.name
+                && this.respondingPlayers.has(myIndex)) {
+            console.log('Ignoring duplicate response-window-opened broadcast — already responded to this cast');
+            return;
+        }
+
         this.isResponseWindowOpen = true;
         this.currentCaster = casterIndex;
         this.pendingScrollData = scrollData;
