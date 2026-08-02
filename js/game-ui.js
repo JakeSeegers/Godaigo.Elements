@@ -736,14 +736,14 @@
         // 'scroll-resolved' listener in multiplayer-state.js, which knows the
         // real responder/caster index for a resolving response/counter, as
         // opposed to whatever this client happens to be impersonating right
-        // now). null means "fall back to the default (BotDriver.
-        // controlsActivePlayer) check below".
-        let _statusActorIsBot = null;
+        // now). undefined means "fall back to the default (BotDriver.
+        // controlsActivePlayer + activePlayerIndex) check below".
+        let _statusActorIndex;
         window.withStatusActor = function (actorIndex, fn) {
-            const prev = _statusActorIsBot;
-            _statusActorIsBot = !!(window.BotDriver?.isBot?.(actorIndex));
+            const prev = _statusActorIndex;
+            _statusActorIndex = actorIndex;
             try { return fn(); }
-            finally { _statusActorIsBot = prev; }
+            finally { _statusActorIndex = prev; }
         };
         function updateStatus(msg) {
             // Suppress messages that reveal a BOT's private state (scroll draws,
@@ -751,13 +751,16 @@
             // duration of its own turn (swapping myPlayerIndex), which reused the
             // normal action code's updateStatus() calls and leaked what the bot
             // drew/activated onto the host's own screen. controlsActivePlayer()
-            // covers a bot's own turn (movement/casting/drawing); _statusActorIsBot
+            // covers a bot's own turn (movement/casting/drawing); _statusActorIndex
             // (set via withStatusActor) covers the separate case of a bot RESPONDING
             // to any cast, which runs without impersonation.
-            const suppress = _statusActorIsBot !== null
-                ? _statusActorIsBot
-                : !!(window.BotDriver?.controlsActivePlayer?.());
-            if (suppress) msg = "🤖 Bot is taking its turn...";
+            const actorIndex = _statusActorIndex !== undefined
+                ? _statusActorIndex
+                : (window.BotDriver?.controlsActivePlayer?.() ? activePlayerIndex : null);
+            if (actorIndex != null && window.BotDriver?.isBot?.(actorIndex)) {
+                const name = typeof getPlayerColorName === 'function' ? getPlayerColorName(actorIndex) : `Player ${actorIndex + 1}`;
+                msg = `${name} is taking their turn...`;
+            }
             if (msg === lastStatusMessage) return;
             lastStatusMessage = msg;
             const el = document.getElementById('status');
