@@ -1623,18 +1623,19 @@ class ResponseWindowSystem {
      * Show response modal for a non-casting player (called when receiving broadcast)
      */
     showResponseModalForOtherPlayer(scrollData, casterIndex) {
-        // Guard against a duplicate/late 'response-window-opened' broadcast for
-        // a cast this player has already responded to (or passed on). Without
-        // this, re-running the reset below would clear respondingPlayers and
-        // rebuild responseStack to just the original entry — silently dropping
-        // an already-submitted response (most visibly with Sacrificial Pyre,
-        // whose hand-scroll picker takes a few extra seconds, widening the
-        // window for a duplicate broadcast to land mid-pick).
-        const myIndex = this.localResponderIndex();
+        // Guard against a duplicate/replayed 'response-window-opened' broadcast
+        // for a cast this player is already actively handling — whether they've
+        // already responded/passed, or are still mid-decision (e.g. browsing the
+        // Sacrificial Pyre hand-scroll picker, which takes a few extra seconds
+        // and widens the window for a duplicate to land). Once a response window
+        // is open for a given cast it should stay open in whatever sub-state
+        // it's in until IT resolves — re-running the reset below for the SAME
+        // cast would otherwise wipe an in-flight response, or yank the picker
+        // out from under the player and dump them back at the main response
+        // list, which is exactly the "keeps glitching back" symptom this fixes.
         if (this.isResponseWindowOpen && this.currentCaster === casterIndex
-                && this.pendingScrollData?.name === scrollData?.name
-                && this.respondingPlayers.has(myIndex)) {
-            console.log('Ignoring duplicate response-window-opened broadcast — already responded to this cast');
+                && this.pendingScrollData?.name === scrollData?.name) {
+            console.log('Ignoring duplicate response-window-opened broadcast for a cast already being handled');
             return;
         }
 
