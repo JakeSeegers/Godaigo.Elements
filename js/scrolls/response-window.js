@@ -1036,7 +1036,16 @@ class ResponseWindowSystem {
             console.log(`🏆 Win condition met for player ${myIndex} (Sacrificial Pyre response — fire)`);
         }
         if (typeof updateStatus === 'function') {
-            updateStatus(`Sacrificial Pyre! Activated ${chosenDef.name} as your response (+${chosenDef.level} ${chosenDef.element} stones).`);
+            // withStatusActor: this response can only be initiated by a local human
+            // clicking through this picker (no bot AI drives Sacrificial Pyre yet),
+            // so force this through even if this client happens to be impersonating
+            // an unrelated bot's turn right now.
+            const show = () => updateStatus(`Sacrificial Pyre! Activated ${chosenDef.name} as your response (+${chosenDef.level} ${chosenDef.element} stones).`);
+            if (typeof window !== 'undefined' && typeof window.withStatusActor === 'function') {
+                window.withStatusActor(myIndex, show);
+            } else {
+                show();
+            }
         }
 
         const isCounter = chosenDef.canCounter === 'any';

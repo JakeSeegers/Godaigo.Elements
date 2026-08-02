@@ -189,9 +189,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Execute on ALL clients — response effects like Lamplight set global state
                             // (pendingHandRedirect) that must exist on the caster's client before the
                             // original scroll's handleScrollDisposition runs.
-                            spellSystem.scrollEffects.execute(scrollName, entry.casterIndex, {
-                                spell: scrollDef,
-                                triggeringScroll: entry.triggeringScroll
+                            // withStatusActor: this responder may be a bot deciding on its own (no
+                            // impersonation involved), so gate its status text on the REAL responder
+                            // index rather than whatever this client happens to be impersonating.
+                            window.withStatusActor(entry.casterIndex, () => {
+                                spellSystem.scrollEffects.execute(scrollName, entry.casterIndex, {
+                                    spell: scrollDef,
+                                    triggeringScroll: entry.triggeringScroll
+                                });
                             });
 
                             if (isLocalPlayer && !entry.viaSacrificialPyre) {
@@ -260,10 +265,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (spellSystem.scrollEffects) {
                         const effect = spellSystem.scrollEffects.getEffect(scrollName);
                         if (effect) {
-                            spellSystem.scrollEffects.execute(scrollName, counterCasterIdx, {
-                                spell: scrollDef,
-                                scrollName: scrollName,
-                                triggeringScroll: entry.triggeringScroll
+                            // withStatusActor: gate this counter's status text on the REAL
+                            // counter-caster index — covers a bot responding on its own (no
+                            // impersonation) as well as a bot's own turn.
+                            window.withStatusActor(counterCasterIdx, () => {
+                                spellSystem.scrollEffects.execute(scrollName, counterCasterIdx, {
+                                    spell: scrollDef,
+                                    scrollName: scrollName,
+                                    triggeringScroll: entry.triggeringScroll
+                                });
                             });
 
                             // Track activated element(s) for win condition (counter scrolls count too!)

@@ -731,7 +731,33 @@
 
         let lastStatusMessage = null;
         let _statusFlashTimer = null;
+        // Ambient override for the bot-turn suppression below — set by callers
+        // that know EXACTLY whose action a status message is about (the
+        // 'scroll-resolved' listener in multiplayer-state.js, which knows the
+        // real responder/caster index for a resolving response/counter, as
+        // opposed to whatever this client happens to be impersonating right
+        // now). null means "fall back to the default (BotDriver.
+        // controlsActivePlayer) check below".
+        let _statusActorIsBot = null;
+        window.withStatusActor = function (actorIndex, fn) {
+            const prev = _statusActorIsBot;
+            _statusActorIsBot = !!(window.BotDriver?.isBot?.(actorIndex));
+            try { return fn(); }
+            finally { _statusActorIsBot = prev; }
+        };
         function updateStatus(msg) {
+            // Suppress messages that reveal a BOT's private state (scroll draws,
+            // sacrifices, casts, ...). bot-driver.js impersonates a bot for the
+            // duration of its own turn (swapping myPlayerIndex), which reused the
+            // normal action code's updateStatus() calls and leaked what the bot
+            // drew/activated onto the host's own screen. controlsActivePlayer()
+            // covers a bot's own turn (movement/casting/drawing); _statusActorIsBot
+            // (set via withStatusActor) covers the separate case of a bot RESPONDING
+            // to any cast, which runs without impersonation.
+            const suppress = _statusActorIsBot !== null
+                ? _statusActorIsBot
+                : !!(window.BotDriver?.controlsActivePlayer?.());
+            if (suppress) msg = "🤖 Bot is taking its turn...";
             if (msg === lastStatusMessage) return;
             lastStatusMessage = msg;
             const el = document.getElementById('status');
