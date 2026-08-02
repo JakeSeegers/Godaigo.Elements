@@ -3861,7 +3861,19 @@ const ScrollEffects = {
             return;
         }
 
-        const scrollArray = Array.from(playerScrolls.hand);
+        // Level I response/counter scrolls can't be activated this way on your
+        // own turn — they have nothing to respond to here. They're only
+        // activatable via Sacrificial Pyre during an opponent's response
+        // window (see ResponseWindowSystem.showSacrificialPyreResponsePicker),
+        // where a real triggering scroll exists for them to act on.
+        const scrollArray = Array.from(playerScrolls.hand).filter(s => {
+            const d = this.spellSystem?.patterns?.[s];
+            return !(d && (d.canCounter === 'any' || d.isResponse === true));
+        });
+        if (scrollArray.length === 0) {
+            updateStatus('No scrolls to sacrifice! (Level I response scrolls can only be activated this way as a response on an opponent\'s turn.)');
+            return;
+        }
         this.showScrollSelectionModal(scrollArray, 'Select a scroll to sacrifice and activate:', (selectedScroll) => {
             // Remove from hand
             playerScrolls.hand.delete(selectedScroll);

@@ -1000,6 +1000,45 @@ class ResponseWindowSystem {
         this.spendPlayerAP(myIndex, pyreScrollInfo.cost);
         console.log(`  Spent ${pyreScrollInfo.cost} AP for Sacrificial Pyre response`);
 
+        // Base stone reward for the sacrificed scroll — same conversion value
+        // as the main-phase flow (enterScrollSacrificeMode). Level I scrolls
+        // are never catacomb, so this is always the single-element case.
+        const pools = typeof playerPools !== 'undefined' ? playerPools : [];
+        const poolCaps = typeof playerPoolCapacity !== 'undefined' ? playerPoolCapacity : {};
+        if (pools[myIndex] && poolCaps) {
+            pools[myIndex][chosenDef.element] = Math.min(
+                poolCaps[chosenDef.element] || 5,
+                (pools[myIndex][chosenDef.element] || 0) + chosenDef.level
+            );
+        }
+        if (typeof updateStoneCount === 'function') updateStoneCount(chosenDef.element);
+
+        // Using Sacrificial Pyre itself activates fire for the responder — this
+        // flow bypasses the normal executeSpell/applyScrollEffects pipeline for
+        // FIRE_SCROLL_3 (there's no live cast of Pyre to run it through), which
+        // is what handles fire crediting for the main-phase sacrifice. The
+        // sacrificed scroll's own element is credited separately once it
+        // resolves off the response stack below (existing resolveResponseStack
+        // → scroll-resolved → multiplayer-state.js path, unchanged).
+        this.spellSystem.ensurePlayerScrollsStructure(myIndex);
+        this.spellSystem.playerScrolls[myIndex].activated.add('fire');
+        if (typeof updatePlayerElementSymbols === 'function') updatePlayerElementSymbols(myIndex);
+        if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+            broadcastGameAction('scroll-effect', {
+                playerIndex: myIndex,
+                scrollName: 'FIRE_SCROLL_3',
+                effectName: 'Sacrificial Pyre',
+                element: 'fire',
+                activatedElements: ['fire']
+            });
+        }
+        if (typeof checkWinCondition === 'function' && checkWinCondition(myIndex, { announce: true })) {
+            console.log(`🏆 Win condition met for player ${myIndex} (Sacrificial Pyre response — fire)`);
+        }
+        if (typeof updateStatus === 'function') {
+            updateStatus(`Sacrificial Pyre! Activated ${chosenDef.name} as your response (+${chosenDef.level} ${chosenDef.element} stones).`);
+        }
+
         const isCounter = chosenDef.canCounter === 'any';
         const isResponse = chosenDef.isResponse === true;
 
