@@ -195,6 +195,38 @@ class ResponseWindowSystem {
             }
         }
 
+        // Sacrificial Pyre (FIRE_SCROLL_3): "Activate any scroll in your hand
+        // (ignoring pattern)." If the player can cast Pyre itself (own pattern
+        // formed, sitting in active/common, affordable) and has a Level I
+        // response/counter scroll sitting in hand, offer Pyre as a special
+        // response option — picking it lets them activate that hand scroll as
+        // their real response, ignoring ITS pattern requirement. The chosen
+        // scroll is free (Pyre's own cost covers it), matching the main-phase
+        // sacrifice flow (enterScrollSacrificeMode in scroll-effects.js).
+        const SACRIFICIAL_PYRE = 'FIRE_SCROLL_3';
+        if (allCastableScrolls.includes(SACRIFICIAL_PYRE) && this.checkPatternForPlayer(SACRIFICIAL_PYRE, playerIndex)) {
+            const pyreDef = this.spellSystem.patterns[SACRIFICIAL_PYRE];
+            const pyreCost = this.spellSystem?.getSpellCost ? this.spellSystem.getSpellCost(pyreDef, playerIndex) : 2;
+            if (pyreDef && playerAP >= pyreCost) {
+                const reactionOptions = [...(playerScrolls.hand || new Set())].filter(s => {
+                    const d = this.spellSystem.patterns[s];
+                    return d && (d.canCounter === 'any' || d.isResponse === true);
+                });
+                if (reactionOptions.length > 0) {
+                    validScrolls.push({
+                        name: SACRIFICIAL_PYRE,
+                        definition: pyreDef,
+                        isCounter: false,
+                        isResponse: false,
+                        isSacrificeVehicle: true,
+                        reactionOptions,
+                        fromCommonArea: commonScrolls.includes(SACRIFICIAL_PYRE),
+                        cost: pyreCost
+                    });
+                }
+            }
+        }
+
         if (validScrolls.length === 0) {
             return { canRespond: false, validScrolls: [], reason: `No valid responses you can afford (AP=${playerAP})` };
         }
@@ -742,17 +774,21 @@ class ResponseWindowSystem {
             Object.assign(b.style, { backgroundColor: bg, color: 'white', padding: '2px 7px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' });
             return b;
         };
-        if (scrollInfo.isCounter)      badgesWrap.appendChild(makeBadge('COUNTER',  '#e74c3c'));
-        if (scrollInfo.isResponse)     badgesWrap.appendChild(makeBadge('RESPONSE', '#f39c12'));
-        if (scrollInfo.fromCommonArea) badgesWrap.appendChild(makeBadge('COMMON',   '#9b59b6'));
+        if (scrollInfo.isCounter)        badgesWrap.appendChild(makeBadge('COUNTER',  '#e74c3c'));
+        if (scrollInfo.isResponse)       badgesWrap.appendChild(makeBadge('RESPONSE', '#f39c12'));
+        if (scrollInfo.fromCommonArea)   badgesWrap.appendChild(makeBadge('COMMON',   '#9b59b6'));
+        if (scrollInfo.isSacrificeVehicle) badgesWrap.appendChild(makeBadge('IGNORES PATTERN', '#ed1b43'));
         if (badgesWrap.children.length) headerDiv.appendChild(badgesWrap);
 
         card.appendChild(headerDiv);
 
         // ── Description ───────────────────────────────────────────────────
-        if (def?.description) {
+        const descText = scrollInfo.isSacrificeVehicle
+            ? 'Activate a Level I scroll from your hand as your response, ignoring its pattern. That scroll goes to the common area.'
+            : def?.description;
+        if (descText) {
             const descDiv = document.createElement('div');
-            descDiv.textContent = def.description;
+            descDiv.textContent = descText;
             Object.assign(descDiv.style, { fontSize: '12px', color: '#bdc3c7', marginBottom: '8px' });
             card.appendChild(descDiv);
         }
@@ -782,8 +818,15 @@ class ResponseWindowSystem {
         Object.assign(costDiv.style, { fontSize: '12px', color: '#f39c12', marginTop: '6px' });
         card.appendChild(costDiv);
 
-        // Click to respond
-        card.onclick = () => this.playerResponds(scrollInfo);
+        // Click to respond — Sacrificial Pyre opens a picker for which hand
+        // scroll to activate instead of responding with itself directly.
+        card.onclick = () => {
+            if (scrollInfo.isSacrificeVehicle) {
+                this.showSacrificialPyreResponsePicker(scrollInfo);
+            } else {
+                this.playerResponds(scrollInfo);
+            }
+        };
 
         return card;
     }
@@ -862,6 +905,87 @@ class ResponseWindowSystem {
         } else if (isLocalHuman) {
             // Non-caster: sent our response, wait for caster to arbitrate and broadcast result
             console.log(`  Response sent, waiting for caster to resolve`);
+            this.clearResponseTimeout();
+        }
+    }
+
+    /**
+     * Sacrificial Pyre chosen as a response: let the player pick a Level I
+     * scroll from their hand to actually respond with, ignoring its pattern.
+     */
+    showSacrificialPyreResponsePicker(pyreScrollInfo, responderIndexOverride) {
+        const se = this.spellSystem?.scrollEffects;
+        if (!se || typeof se.showScrollSelectionModal !== 'function') return;
+        se.showScrollSelectionModal(
+            pyreScrollInfo.reactionOptions,
+            'Sacrificial Pyre: choose a Level I scroll from your hand to activate as your response (pattern ignored):',
+            (chosenScrollName) => this.respondWithSacrificialPyre(pyreScrollInfo, chosenScrollName, responderIndexOverride)
+        );
+    }
+
+    /**
+     * Resolve the Sacrificial Pyre response: spend Pyre's own AP cost, send
+     * the chosen hand scroll straight to the common area (its normal
+     * disposition), and push IT — not Pyre — onto the response stack so it
+     * resolves with its real counter/response effect against the live cast.
+     */
+    respondWithSacrificialPyre(pyreScrollInfo, chosenScrollName, responderIndexOverride) {
+        const myIndex = responderIndexOverride ?? this.localResponderIndex();
+        const myAP = this.getPlayerAP(myIndex);
+        if (myAP < pyreScrollInfo.cost) {
+            this.showResponseError(`Not enough AP! Need ${pyreScrollInfo.cost}, have ${myAP}`);
+            return;
+        }
+
+        const chosenDef = this.spellSystem?.patterns?.[chosenScrollName];
+        if (!chosenDef) return;
+
+        // Move the chosen scroll from hand straight to the common area —
+        // Sacrificial Pyre's own disposition rule, same as the main-phase
+        // sacrifice flow (enterScrollSacrificeMode).
+        const pScrolls = this.spellSystem.playerScrolls[myIndex];
+        if (pScrolls) {
+            pScrolls.hand.delete(chosenScrollName);
+        }
+        if (this.spellSystem.discardToCommonArea) {
+            this.spellSystem.discardToCommonArea(chosenScrollName);
+        }
+        this.spellSystem.updateScrollCount();
+        if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+
+        // Spend Pyre's own cost — the sacrificed scroll itself is free,
+        // matching the main-phase flow.
+        this.spendPlayerAP(myIndex, pyreScrollInfo.cost);
+        console.log(`  Spent ${pyreScrollInfo.cost} AP for Sacrificial Pyre response`);
+
+        const isCounter = chosenDef.canCounter === 'any';
+        const isResponse = chosenDef.isResponse === true;
+
+        this.responseStack.push({
+            scrollData: { name: chosenScrollName, definition: chosenDef, fromCommonArea: false },
+            casterIndex: myIndex,
+            isCounter,
+            isResponse,
+            fromCommonArea: false,
+            isOriginal: false
+        });
+        console.log(`  Added ${chosenScrollName} to response stack via Sacrificial Pyre`);
+
+        this.respondingPlayers.add(myIndex);
+
+        if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
+            this.broadcastResponse({ name: chosenScrollName, isCounter, fromHand: false, viaSacrificialPyre: true }, myIndex);
+        }
+
+        const isLocalHuman = myIndex === this.localResponderIndex();
+        if (isLocalHuman) this.closeResponseModal();
+
+        const isCasterClient = this.isArbitratorClient();
+        if (isCasterClient) {
+            console.log(`  Sacrificial Pyre response submitted (caster client) — waiting for all players`);
+            this.checkAllPlayersResponded();
+        } else if (isLocalHuman) {
+            console.log(`  Sacrificial Pyre response sent, waiting for caster to resolve`);
             this.clearResponseTimeout();
         }
     }
@@ -1399,7 +1523,8 @@ class ResponseWindowSystem {
                 scrollName: scrollInfo.name,
                 playerIndex: playerIndex,
                 isCounter: scrollInfo.isCounter,
-                fromHand: scrollInfo.fromHand ?? false
+                fromHand: scrollInfo.fromHand ?? false,
+                viaSacrificialPyre: scrollInfo.viaSacrificialPyre ?? false
             });
         }
     }
@@ -1497,12 +1622,21 @@ class ResponseWindowSystem {
      * @param {number} playerIndex
      * @param {boolean} isCounter
      * @param {boolean} fromHand - if true, move scroll from hand to active on this client
+     * @param {boolean} viaSacrificialPyre - if true, scroll came from hand straight to
+     *   the common area (the sender already broadcast that move via discardToCommonArea's
+     *   own 'common-area-update' event) — just sync the hand removal here, no active add.
      */
-    handleRemoteResponse(scrollName, playerIndex, isCounter, fromHand = false) {
-        console.log(`Remote player ${playerIndex} responded with ${scrollName} (fromHand=${fromHand})`);
+    handleRemoteResponse(scrollName, playerIndex, isCounter, fromHand = false, viaSacrificialPyre = false) {
+        console.log(`Remote player ${playerIndex} responded with ${scrollName} (fromHand=${fromHand}, viaSacrificialPyre=${viaSacrificialPyre})`);
 
-        // If scroll came from hand, sync the hand→active move on this client
-        if (fromHand && this.spellSystem) {
+        if (viaSacrificialPyre && this.spellSystem) {
+            const pScrolls = this.spellSystem.playerScrolls[playerIndex];
+            if (pScrolls) {
+                pScrolls.hand.delete(scrollName);
+                this.spellSystem.updateScrollCount();
+            }
+        } else if (fromHand && this.spellSystem) {
+            // If scroll came from hand, sync the hand→active move on this client
             const pScrolls = this.spellSystem.playerScrolls[playerIndex];
             if (pScrolls) {
                 pScrolls.hand.delete(scrollName);

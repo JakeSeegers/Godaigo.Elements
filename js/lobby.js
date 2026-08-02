@@ -2857,11 +2857,12 @@
 
             gameChannel.on('broadcast', { event: 'scroll-response' }, ({ payload }) => {
                 console.log('📄 Received scroll response:', payload);
-                const { scrollName, playerIndex, isCounter, fromHand } = payload;
+                const { scrollName, playerIndex, isCounter, fromHand, viaSacrificialPyre } = payload;
 
-                // Update response window state (passes fromHand so hand→active move is synced)
+                // Update response window state (passes fromHand so hand→active move is synced;
+                // viaSacrificialPyre so hand→common is synced instead)
                 if (spellSystem.responseWindow) {
-                    spellSystem.responseWindow.handleRemoteResponse(scrollName, playerIndex, isCounter, fromHand ?? false);
+                    spellSystem.responseWindow.handleRemoteResponse(scrollName, playerIndex, isCounter, fromHand ?? false, viaSacrificialPyre ?? false);
                 }
             });
 
