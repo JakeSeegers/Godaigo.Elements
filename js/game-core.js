@@ -218,8 +218,22 @@
             // Get active player's scroll collection
             // In multiplayer, show MY scrolls for display, but use activePlayerIndex for game logic
             getPlayerScrolls(forDisplay = false) {
-                // For display in multiplayer, show my own scrolls
-                const displayIndex = (forDisplay && isMultiplayer && myPlayerIndex !== null) ? myPlayerIndex : activePlayerIndex;
+                // For display in multiplayer, show my own scrolls — never a bot's,
+                // even while this client is impersonating one. BotDriver
+                // temporarily swaps myPlayerIndex to the bot's index for the
+                // duration of its turn so the same action code can drive it
+                // (asBot() in bot-driver.js); driverRealIndex() is the host's
+                // real identity underneath that swap. Without this, the Hand/
+                // Active panels (scroll-panels.js, via the handScrolls/
+                // activeScrolls getters below) would briefly render the bot's
+                // actual private hand/active contents on the host's own screen
+                // during its turn.
+                const realIndex = (typeof window !== 'undefined' && window.BotDriver
+                    && typeof window.BotDriver.driverRealIndex === 'function'
+                    && window.BotDriver.driverRealIndex() != null)
+                    ? window.BotDriver.driverRealIndex()
+                    : myPlayerIndex;
+                const displayIndex = (forDisplay && isMultiplayer && realIndex !== null) ? realIndex : activePlayerIndex;
 
                 this.ensurePlayerScrollsStructure(displayIndex);
                 return this.playerScrolls[displayIndex];
