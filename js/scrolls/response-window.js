@@ -1058,7 +1058,15 @@ class ResponseWindowSystem {
             isCounter,
             isResponse,
             fromCommonArea: false,
-            isOriginal: false
+            isOriginal: false,
+            // Only fire counts toward win condition for a Sacrificial-Pyre
+            // response (credited above) — the activated scroll's own element
+            // does not, same rule as the main-phase sacrifice. Read by the
+            // 'scroll-resolved' listener (multiplayer-state.js) to skip its
+            // element-crediting for this entry while still running the
+            // scroll's real mechanical effect (e.g. Iron Stance still cancels
+            // the original cast; only the extra earth credit is suppressed).
+            viaSacrificialPyre: true
         });
         console.log(`  Added ${chosenScrollName} to response stack via Sacrificial Pyre`);
 

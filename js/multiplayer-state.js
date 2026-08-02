@@ -194,8 +194,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 triggeringScroll: entry.triggeringScroll
                             });
 
-                            if (isLocalPlayer) {
+                            if (isLocalPlayer && !entry.viaSacrificialPyre) {
                                 // Track activated element(s) for win condition (response scrolls count too!)
+                                // Skipped when activated via Sacrificial Pyre — only fire counts then
+                                // (credited separately in respondWithSacrificialPyre), same rule as the
+                                // main-phase sacrifice flow.
                                 spellSystem.ensurePlayerScrollsStructure(entry.casterIndex);
                                 if (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0]) {
                                     // Catacomb scrolls activate each component element
@@ -264,39 +267,46 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
 
                             // Track activated element(s) for win condition (counter scrolls count too!)
-                            spellSystem.ensurePlayerScrollsStructure(counterCasterIdx);
-                            if (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0]) {
-                                // Catacomb scrolls activate each component element
-                                const elements = new Set(scrollDef.patterns[0].map(pos => pos.type));
-                                elements.forEach(el => spellSystem.playerScrolls[counterCasterIdx].activated.add(el));
-                            } else {
-                                spellSystem.playerScrolls[counterCasterIdx].activated.add(scrollDef.element);
-                            }
-                            if (typeof updatePlayerElementSymbols === 'function') {
-                                updatePlayerElementSymbols(counterCasterIdx);
-                            }
+                            // Skipped when activated via Sacrificial Pyre — only fire counts then
+                            // (credited separately in respondWithSacrificialPyre), same rule as the
+                            // main-phase sacrifice flow. The counter's actual effect (e.g. Iron Stance
+                            // cancelling the original, decided earlier in resolveResponseStack) still
+                            // applies regardless — only this extra win-condition credit is suppressed.
+                            if (!entry.viaSacrificialPyre) {
+                                spellSystem.ensurePlayerScrollsStructure(counterCasterIdx);
+                                if (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0]) {
+                                    // Catacomb scrolls activate each component element
+                                    const elements = new Set(scrollDef.patterns[0].map(pos => pos.type));
+                                    elements.forEach(el => spellSystem.playerScrolls[counterCasterIdx].activated.add(el));
+                                } else {
+                                    spellSystem.playerScrolls[counterCasterIdx].activated.add(scrollDef.element);
+                                }
+                                if (typeof updatePlayerElementSymbols === 'function') {
+                                    updatePlayerElementSymbols(counterCasterIdx);
+                                }
 
-                            // Broadcast the activation in multiplayer
-                            if (isMultiplayer && typeof broadcastGameAction === 'function') {
-                                const activatedElements = (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0])
-                                    ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
-                                    : [scrollDef.element];
-                                broadcastGameAction('scroll-effect', {
-                                    playerIndex: counterCasterIdx,
-                                    scrollName: scrollName,
-                                    effectName: effect.name,
-                                    element: scrollDef.element,
-                                    activatedElements: activatedElements
-                                });
-                            }
+                                // Broadcast the activation in multiplayer
+                                if (isMultiplayer && typeof broadcastGameAction === 'function') {
+                                    const activatedElements = (scrollDef.element === 'catacomb' && scrollDef.patterns && scrollDef.patterns[0])
+                                        ? [...new Set(scrollDef.patterns[0].map(pos => pos.type))]
+                                        : [scrollDef.element];
+                                    broadcastGameAction('scroll-effect', {
+                                        playerIndex: counterCasterIdx,
+                                        scrollName: scrollName,
+                                        effectName: effect.name,
+                                        element: scrollDef.element,
+                                        activatedElements: activatedElements
+                                    });
+                                }
 
-                            // Win-condition check for the counter-caster (e.g. Iron Stance is
-                            // Player B's 5th scroll). The caster's client (which runs resolveResponseStack)
-                            // doesn't receive its own scroll-effect broadcast (self: false), so we must
-                            // check here. The receiving client also checks via the scroll-effect handler.
-                            if (typeof checkWinCondition === 'function' &&
-                                checkWinCondition(counterCasterIdx, { announce: true })) {
-                                console.log(`🏆 Win condition met for counter-caster player ${counterCasterIdx} (Iron Stance / counter scroll)`);
+                                // Win-condition check for the counter-caster (e.g. Iron Stance is
+                                // Player B's 5th scroll). The caster's client (which runs resolveResponseStack)
+                                // doesn't receive its own scroll-effect broadcast (self: false), so we must
+                                // check here. The receiving client also checks via the scroll-effect handler.
+                                if (typeof checkWinCondition === 'function' &&
+                                    checkWinCondition(counterCasterIdx, { announce: true })) {
+                                    console.log(`🏆 Win condition met for counter-caster player ${counterCasterIdx} (Iron Stance / counter scroll)`);
+                                }
                             }
                         }
                     }
