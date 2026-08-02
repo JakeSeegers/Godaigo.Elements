@@ -941,6 +941,18 @@ class ResponseWindowSystem {
             });
         }
         this.sacrificialPyrePicking = true;
+        // Distinct modal id (NOT the shared 'scroll-select-modal') — that id is
+        // in ScrollEffects.EFFECT_MODAL_IDS, which bot.js's waitForQuiescence()
+        // treats as generic "bot selection UI" to drive-or-cancel every ~250ms
+        // while a bot's turn is in flight. In multiplayer with a bot in the
+        // game, the human's own browser IS the bot's driver (bot-driver.js
+        // impersonates the bot on the host's client), so that watchdog runs
+        // alongside the human's own response window. It doesn't recognize this
+        // picker's heading text, so it was repeatedly cancelling it out from
+        // under the player — the actual cause of the "glitching back to the
+        // first response window" symptom, not the duplicate-broadcast issue
+        // fixed earlier (that was real too, just not the whole story). A
+        // private id keeps this picker invisible to that sweep entirely.
         se.showScrollSelectionModal(
             pyreScrollInfo.reactionOptions,
             'Sacrificial Pyre: choose a Level I scroll from your hand to activate as your response (pattern ignored):',
@@ -948,7 +960,8 @@ class ResponseWindowSystem {
                 this.sacrificialPyrePicking = false;
                 this.respondWithSacrificialPyre(pyreScrollInfo, chosenScrollName, responderIndexOverride);
             },
-            () => { this.sacrificialPyrePicking = false; } // cancelled — back to the response window
+            () => { this.sacrificialPyrePicking = false; }, // cancelled — back to the response window
+            'sacrificial-pyre-response-modal'
         );
     }
 

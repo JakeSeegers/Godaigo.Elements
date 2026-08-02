@@ -4616,13 +4616,13 @@ const ScrollEffects = {
     // HELPER MODAL FUNCTIONS
     // ============================================
 
-    showScrollSelectionModal(scrollNames, title, onSelect, onCancel) {
+    showScrollSelectionModal(scrollNames, title, onSelect, onCancel, modalId = 'scroll-select-modal') {
         // Remove existing modal
-        const existing = document.getElementById('scroll-select-modal');
+        const existing = document.getElementById(modalId);
         if (existing) existing.remove();
 
         const overlay = document.createElement('div');
-        overlay.id = 'scroll-select-modal';
+        overlay.id = modalId;
         Object.assign(overlay.style, {
             position: 'fixed',
             top: '0', left: '0', right: '0', bottom: '0',
