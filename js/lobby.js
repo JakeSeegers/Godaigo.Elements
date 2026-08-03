@@ -1542,9 +1542,12 @@
                 const turnTimeLimit = parseInt(timeoutSelect.value, 10) * 1000; // seconds -> ms
                 const kickCheckbox = document.getElementById('kick-on-timeout');
                 const kickMode = !!(kickCheckbox && kickCheckbox.checked);
+                const scarceTilesCheckbox = document.getElementById('scarce-tiles-mode');
+                const scarceTiles = !!(scarceTilesCheckbox && scarceTilesCheckbox.checked);
 
                 console.log('⚠️ Turn time limit set to:', turnTimeLimit / 1000, 'seconds');
                 console.log('👢 Kick on turn timeout:', kickMode);
+                console.log('🎴 Scarce tiles mode:', scarceTiles);
 
                 // Randomly assign player indices and colors
                 const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
@@ -1591,13 +1594,14 @@
                         current_turn_index: 0,
                         inactivity_timeout: turnTimeLimit,        // reused as turn time limit (ms)
                         kick_on_turn_timeout: kickMode,
-                        turn_started_at: startedAtIso
+                        turn_started_at: startedAtIso,
+                        scarce_tiles: scarceTiles
                     })
                     .eq('id', currentGameId);
 
                 if (roomError) {
                     console.warn('⚠️ Failed to write extended turn timer fields to game_room. Trying without optional fields...', roomError);
-                    // Try without kick_on_turn_timeout and turn_started_at
+                    // Try without kick_on_turn_timeout, turn_started_at and scarce_tiles
                     let fallback = await supabase
                         .from('game_room')
                         .update({
@@ -1744,6 +1748,9 @@
                     console.log('👢 kickOnTurnTimeout:', kickOnTurnTimeout);
                 }
 
+                const scarceTiles = !!(room && room.scarce_tiles);
+                console.log('🎴 Scarce tiles mode:', scarceTiles);
+
                 // Set turn started time
                 if (room && room.turn_started_at) {
                     const ts = new Date(room.turn_started_at).getTime();
@@ -1791,7 +1798,7 @@
                 startLastManStandingPoll();
 
                 // Initialize game with multiplayer players and shared deck seed
-                startMultiplayerGame(allPlayers, gameDeckSeed);
+                startMultiplayerGame(allPlayers, gameDeckSeed, scarceTiles);
                 
             } catch (error) {
                 console.error('Error handling game start:', error);
@@ -3624,7 +3631,7 @@
         }
 
         // Start multiplayer game
-        function startMultiplayerGame(allPlayers, sharedDeckSeed = null) {
+        function startMultiplayerGame(allPlayers, sharedDeckSeed = null, scarceTiles = false) {
             // Reset all per-game resources so leftover state from a previous session doesn't carry over
             if (typeof window.resetGameResources === 'function') {
                 window.resetGameResources();
@@ -3670,8 +3677,8 @@
             setupGameBroadcast();
 
             // Initialize deck with shared seed for multiplayer synchronization
-            initializeDeck(numPlayers, sharedDeckSeed);
-            console.log(`🎴 Deck initialized with seed: ${sharedDeckSeed}`);
+            initializeDeck(numPlayers, sharedDeckSeed, scarceTiles);
+            console.log(`🎴 Deck initialized with seed: ${sharedDeckSeed}${scarceTiles ? ' (scarce tiles mode)' : ''}`);
 
             // In multiplayer, only show MY player tile
             initializeMyPlayerTile(myPlayer.player_index, myPlayer.color);
@@ -3682,8 +3689,10 @@
             updateViewport();
             boardSvg.style.cursor = 'grab';
 
-            // Calculate number of tiles (6 per player)
-            const numTiles = numPlayers * 6;
+            // Number of tiles actually in the deck (6 per player normally, 6 per
+            // (player-1) in scarce tiles mode) — read from tileDeck itself rather
+            // than recomputing the formula, so spiral positions always match deck size.
+            const numTiles = tileDeck.length;
 
             // Place hidden tiles in spiral pattern
             const spiralPositions = generateSpiralPositions(numTiles);
@@ -3710,7 +3719,7 @@
 
 
         // Start game with selected number of players (local mode)
-        function startGame(numPlayers) {
+        function startGame(numPlayers, scarceTiles = false) {
             // Clear the board first (skip confirmation — startGame is always intentional)
             clearBoard(true);
 
@@ -3727,12 +3736,14 @@
             // Initialize new UI elements
             initializeNewUI();
 
-            // Calculate number of tiles (6 per player)
-            const numTiles = numPlayers * 6;
-
             // Initialize
-            initializeDeck(numPlayers); // Shuffle the tile deck
+            initializeDeck(numPlayers, null, scarceTiles); // Shuffle the tile deck
             initializePlayerTiles(numPlayers); // Create player tiles
+
+            // Number of tiles actually in the deck (6 per player normally, 6 per
+            // (player-1) in scarce tiles mode) — read from tileDeck itself rather
+            // than recomputing the formula, so spiral positions always match deck size.
+            const numTiles = tileDeck.length;
             Object.keys(stoneCounts).forEach(updateStoneCount);
             updateVoidAP(); // Initialize void AP display
             drawDeckTile();

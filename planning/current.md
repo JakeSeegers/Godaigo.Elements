@@ -6,8 +6,7 @@
 ---
 
 ## Active Branch
-`claude/game-testing-player-count-0oxsn6` → remote: `JakeSeegers/Godaigo.Elements`
-(continues from `claude/earth-blocking-fire-tactics-bpinp3`.)
+`claude/game-starting-tiles-mode-aabsrh` → remote: `JakeSeegers/Godaigo.Elements`
 
 ## Open question in progress: weight-tuning ceiling vs. missing feature (HANDOFF.md §3)
 No code changes yet — investigation only, picking up HANDOFF's "are we at the
@@ -93,6 +92,41 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **SCARCE TILES MODE: host-configurable N-1 tiles per element instead of N**
+  — `js/game-core.js`, `js/lobby.js`, `index.html`, `js/INDEX.md`, Supabase
+  migration `add_scarce_tiles_to_game_room`. User request: the tile deck
+  normally holds `numPlayers` copies of each of the 6 shrine types (1 of
+  every element per player — `initializeDeck()`'s `tilesPerType`); this adds
+  an opt-in mode where it's `numPlayers-1` per type instead (clamped to a
+  minimum of 1 so a 1-player game never gets an empty deck), so not every
+  player can end up collecting one of every element.
+  `initializeDeck(numPlayers, seed, scarceTiles)` gained the third param
+  (default `false`, so every existing caller — including bot-arena's
+  `startGame()`-based self-play/training, which never passes it — is
+  unaffected). Both callers now read `tileDeck.length` for the spiral-tile
+  count instead of recomputing `numPlayers*6`, so board layout always
+  matches actual deck size in both modes.
+  Local `startGame(numPlayers, scarceTiles)` threads straight through.
+  Multiplayer needed a real per-room setting since every client must
+  independently build an IDENTICAL deck (no seed round-trip for this flag):
+  a new `game_room.scarce_tiles` boolean column, set by the host from a new
+  "Scarce Tiles Mode" checkbox in `#host-settings` (`hostStartGame()`,
+  same fallback-write pattern as the existing turn-timer fields), read back
+  by every client in `handleGameStart()` and passed through
+  `startMultiplayerGame(allPlayers, gameDeckSeed, scarceTiles)` →
+  `initializeDeck()`.
+  Verified headless (Playwright, real page, cached `supabase.js` UMD bundle
+  via `npm pack` since this sandbox can't reach the unpkg CDN — same
+  workaround `tools/arena-headless.mjs` already documents for this exact
+  situation): `startGame(3)` → 18 tiles, 3 of each of the 6 types;
+  `startGame(3, true)` → 12 tiles, exactly 2 of each type;
+  `startGame(1, true)` → 6 tiles, exactly 1 of each type (clamp confirmed,
+  never zero); placed board-tile count matches `tileDeck.length` exactly in
+  scarce mode; the seeded branch (`initializeDeck(4, seed, true)`, what
+  multiplayer actually calls) independently confirmed at 18 tiles / 3 each.
+  Zero page errors relevant to this feature (the only console errors seen
+  were this sandbox's own network restrictions — no font CDN, no live
+  Supabase REST — unrelated to the change).
 - **HEADLESS GENERALIST TRAINING: `--players all` wired through
   arena-headless evolve + a confirmAcrossSizes-based confirm phase** —
   `tools/arena-headless.mjs`. Option B from the training discussion: make

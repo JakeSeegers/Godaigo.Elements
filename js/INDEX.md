@@ -49,7 +49,7 @@
 - `placeTile(x, y, rotation, flipped, shrineType, isPlayerTile, skipMP, forcedId)` — creates SVG tile group, assigns color, calls `placePlayer()` for player tiles. Fires `TutorialMode.onPlayerTilePlaced()` hook.
 - `revealTile(tileId)` — flips hidden tile: fires `onTilePreReveal` (before visual), builds SVG, fires `onTileRevealed` (after visual), draws scroll
 - `addAP(amount)` — respects max AP (5 + void bonus), updates HUD, calls `syncPlayerState()`
-- `initializeDeck(numPlayers, seed)` — checks `window.tutorialDeckOverride` first; if set, uses it and nulls the override
+- `initializeDeck(numPlayers, seed, scarceTiles)` — checks `window.tutorialDeckOverride` first; if set, uses it and nulls the override. Tile deck is normally `numPlayers` of each of the 6 shrine types; `scarceTiles:true` (Scarce Tiles Mode) drops that to `numPlayers-1` per type (clamped to a minimum of 1), so the deck won't have enough tiles for every player to get one of every element. Callers read `tileDeck.length` afterward rather than recomputing `numPlayers*6`, since that count changes in scarce mode.
 - `generateSpiralPositions(n)` — returns world coords for n tiles in spiral order (defined in game-ui.js)
 
 ### gotchas
@@ -84,9 +84,9 @@ Position 0 = `(0,0)` (center). For 1-player tutorial: 6 tiles, positions 0–5. 
 ### startGame(numPlayers) — local single-player launch
 1. `clearBoard()` → reset all state
 2. Hide `#lobby-wrapper`, show `#game-layout`
-3. `initializeDeck(numPlayers)` — checks tutorialDeckOverride
+3. `initializeDeck(numPlayers, seed, scarceTiles)` — checks tutorialDeckOverride
 4. `initializePlayerTiles(numPlayers)` — creates draggable SVG tiles in left panel
-5. Places `numPlayers * 6` tiles via `generateSpiralPositions()` + `placeTile()`
+5. Places `tileDeck.length` tiles (`numPlayers * 6` normally, less in Scarce Tiles mode) via `generateSpiralPositions()` + `placeTile()`
 6. Exposed as `window.startGame` explicitly at bottom of file
 
 ### Auth flow

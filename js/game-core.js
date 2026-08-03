@@ -2873,7 +2873,7 @@
             };
         }
 
-        function initializeDeck(numPlayers = 1, seed = null) {
+        function initializeDeck(numPlayers = 1, seed = null, scarceTiles = false) {
             // Tutorial mode: use a fixed deck order so earth lands at the center position
             if (window.tutorialDeckOverride) {
                 tileDeck = [...window.tutorialDeckOverride];
@@ -2886,7 +2886,10 @@
             }
 
             const shrineTypes = ['earth', 'water', 'fire', 'wind', 'void', 'catacomb'];
-            const tilesPerType = numPlayers; // 1 of each type per player
+            // Scarce Tiles mode: N-1 of each type instead of N, so not everyone
+            // can end up with one of every element. Clamped to 1 so a 1-player
+            // game never generates an empty deck.
+            const tilesPerType = scarceTiles ? Math.max(1, numPlayers - 1) : numPlayers;
 
             tileDeck = [];
 
