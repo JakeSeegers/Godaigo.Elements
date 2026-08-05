@@ -354,6 +354,14 @@ input[type=range]{cursor:pointer}
       <input type="file" id="fx-states-file-input" accept=".json,application/json" style="display:none">
       <div id="fx-state-buttons"></div>
     </div>
+    <div class="sep"></div>
+    <div class="mc-group" id="meta-state-wrap">
+      <button id="btn-update-meta" title="Capture every track in the CURRENT section into ★ Meta State (one entry per instrument label) and immediately apply it to every other section, so an edit here can never get overwritten by re-capturing an unrelated section later. This is the designer's real, evolving default — it always wins over any 🧷 pinned FX state.">📝 Update Meta</button>
+      <button id="btn-download-meta" title="Download ★ Meta State as its own JSON file.">⬇ Meta</button>
+      <button id="btn-upload-meta" title="Upload a ★ Meta State JSON file. This replaces the current meta state and applies it to all sections.">⬆ Meta</button>
+      <input type="file" id="meta-state-file-input" accept=".json,application/json" style="display:none">
+      <span id="meta-state-info" style="font-size:11px;color:#888" title="No meta state saved yet">★ Meta: empty</span>
+    </div>
   </div>
 
   <!-- ── SECTION STRIP ────────────────────────────────────────────── -->
@@ -558,6 +566,14 @@ let fxSnapshots = [];         // saved FX-state buttons/preset bank
 let fxMorphSerial = 0;        // cancels in-progress FX state morphs
 let fxStateSticky = false;    // 🧷 toggle: recalled state applies to ALL tracks + future generated ones
 let activeFxStateId = null;   // id of the snapshot acting as the persistent style (sticky mode)
+// ★ Meta State: the designer's curated per-instrument defaults, built up over
+// time via updateMetaState() — one entry per track label, NOT per numbered
+// FX snapshot. Unlike fxSnapshots (ad hoc, section-order-dependent captures),
+// this always wins in activeFxStyle() once it has any roles, and every
+// update immediately re-broadcasts to all existing sections so an edit made
+// in one section can never get silently overwritten by re-capturing a
+// different, unrelated section later.
+let metaState = { version: 1, updatedAt: null, roles: {} };
 
 // Audio
 let audioCtx      = null;
@@ -839,7 +855,7 @@ let _gameSessionActive = false;
 
 function saveProject() {
   if (_gameSessionActive) return;
-  try { localStorage.setItem('daw-v2', JSON.stringify({ project, activeSectionId, selectedTrackId, fxSnapshots, fxStateSticky, activeFxStateId, brownOn, brownLevel })); }
+  try { localStorage.setItem('daw-v2', JSON.stringify({ project, activeSectionId, selectedTrackId, fxSnapshots, fxStateSticky, activeFxStateId, metaState, brownOn, brownLevel })); }
   catch(e) {}
 }
 
@@ -878,6 +894,10 @@ function loadSaved() {
     fxSnapshots = Array.isArray(data.fxSnapshots) ? data.fxSnapshots : [];
     fxStateSticky = !!data.fxStateSticky;
     activeFxStateId = data.activeFxStateId || null;
+    metaState = (data.metaState && typeof data.metaState === 'object')
+      ? { version: 1, updatedAt: data.metaState.updatedAt || null, roles: data.metaState.roles || {} }
+      : { version: 1, updatedAt: null, roles: {} };
+    for (const r of Object.values(metaState.roles)) r.effects = { ...DEFAULT_FX(), ...(r.effects || {}) };
     brownOn = !!data.brownOn;
     brownLevel = (typeof data.brownLevel === 'number') ? data.brownLevel : 0.3;
     ensureSelectedTrack();
@@ -3858,8 +3878,58 @@ function applyCompReading(orchKey, trackName, rel) {
 }
 const THEME_VOL = [0.85,0.60,0.62,0.50,0.55,0.72,0.90,0.85,0.70,0.50];
 
-// FX baked from the user's saved 'FX 7' snapshot — the theme's default mix.
-const THEME_FX = {"Shakuhachi (Wind lead)":{"instrument":"flute","volume":0.27,"reverbSend":0.28,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0.22,"delayTime":0.8,"delayFeedback":0.35,"delaySync":"1/4D","pan":0,"eqHPF":20,"eqLowGain":0,"eqMidFreq":1000,"eqMidGain":0,"eqMidQ":1,"eqHighGain":0,"filterType":"bandpass","filterCutoff":7000,"filterRes":3.7,"lfoDepth":0.15,"lfoRate":14.5,"wowDepth":0.003,"distDrive":0.48,"distMix":0.2}},"Koto (Water)":{"instrument":"marimba","volume":0.6,"reverbSend":0.28,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0,"delayTime":0.375,"delayFeedback":0.35,"delaySync":"free","pan":0,"eqHPF":20,"eqLowGain":0,"eqMidFreq":1000,"eqMidGain":0,"eqMidQ":1,"eqHighGain":0,"filterType":"bandpass","filterCutoff":1500,"filterRes":0.5,"lfoDepth":0,"lfoRate":1,"wowDepth":0.003,"distDrive":0.08,"distMix":0.07}},"Shamisen (Fire)":{"instrument":"pluck","volume":0.62,"reverbSend":0.28,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0,"delayTime":0.375,"delayFeedback":0.35,"delaySync":"free","pan":0,"eqHPF":20,"eqLowGain":0,"eqMidFreq":1000,"eqMidGain":0,"eqMidQ":1,"eqHighGain":0,"filterType":"bandpass","filterCutoff":1500,"filterRes":0.5,"lfoDepth":0,"lfoRate":1,"wowDepth":0.003,"distDrive":0.08,"distMix":0.07}},"Strings (drone)":{"instrument":"bass","volume":0.5,"reverbSend":0.28,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0,"delayTime":0.375,"delayFeedback":0.35,"delaySync":"free","pan":0,"eqHPF":20,"eqLowGain":0,"eqMidFreq":1000,"eqMidGain":0,"eqMidQ":1,"eqHighGain":0,"filterType":"bandpass","filterCutoff":1500,"filterRes":0.5,"lfoDepth":0,"lfoRate":1,"wowDepth":0.003,"distDrive":0.08,"distMix":0.07}},"Horn (the old empire)":{"instrument":"chitri","volume":0.18,"reverbSend":0.28,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0.23,"delayTime":0.52,"delayFeedback":0.35,"delaySync":"1/8D","pan":0,"eqHPF":20,"eqLowGain":0,"eqMidFreq":1000,"eqMidGain":0,"eqMidQ":1,"eqHighGain":0,"filterType":"bandpass","filterCutoff":1500,"filterRes":0.5,"lfoDepth":0.81,"lfoRate":0.1,"wowDepth":0.003,"distDrive":0.08,"distMix":0.28}},"Temple bells (Void)":{"instrument":"bell","volume":0.56,"reverbSend":1,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0.63,"delayTime":0.65,"delayFeedback":0.66,"delaySync":"1/4D","pan":-0.08,"eqHPF":150,"eqLowGain":9,"eqMidFreq":2750,"eqMidGain":-9.5,"eqMidQ":1,"eqHighGain":-5.5,"filterType":"notch","filterCutoff":4000,"filterRes":2.4,"lfoDepth":0.66,"lfoRate":8.1,"wowDepth":0.003,"distDrive":0.2,"distMix":0.43}},"Taiko (Earth)":{"instrument":"kick","volume":0.9,"reverbSend":0.06,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0,"delayTime":0.375,"delayFeedback":0.35,"delaySync":"free","pan":0,"eqHPF":20,"eqLowGain":0,"eqMidFreq":1000,"eqMidGain":0,"eqMidQ":1,"eqHighGain":0,"filterType":"bandpass","filterCutoff":1500,"filterRes":0.5,"lfoDepth":0,"lfoRate":1,"wowDepth":0.003,"distDrive":0.08,"distMix":0.07}},"Kick":{"instrument":"kick","volume":1,"reverbSend":0.06,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0,"delayTime":0.375,"delayFeedback":0.35,"delaySync":"free","pan":0,"eqHPF":100,"eqLowGain":6,"eqMidFreq":1000,"eqMidGain":-6.5,"eqMidQ":1,"eqHighGain":3.5,"filterType":"lowpass","filterCutoff":7300,"filterRes":6,"lfoDepth":0.35,"lfoRate":1,"wowDepth":0.003,"distDrive":0.82,"distMix":0.59}},"Snare":{"instrument":"snare","volume":0.7,"reverbSend":0.06,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0,"delayTime":0.375,"delayFeedback":0.35,"delaySync":"free","pan":0,"eqHPF":20,"eqLowGain":0,"eqMidFreq":1000,"eqMidGain":0,"eqMidQ":1,"eqHighGain":0,"filterType":"bandpass","filterCutoff":1500,"filterRes":0.5,"lfoDepth":0,"lfoRate":1,"wowDepth":0.003,"distDrive":0.08,"distMix":0.07}},"Hat":{"instrument":"hat","volume":0.16,"reverbSend":0.06,"effects":{"reverbMix":0.2,"reverbDecay":2,"delayMix":0,"delayTime":0.12,"delayFeedback":0.35,"delaySync":"free","pan":0,"eqHPF":20,"eqLowGain":7.5,"eqMidFreq":800,"eqMidGain":6,"eqMidQ":1,"eqHighGain":-11.5,"filterType":"lowpass","filterCutoff":800,"filterRes":4.7,"lfoDepth":0,"lfoRate":1,"wowDepth":0.003,"distDrive":0.04,"distMix":0.05}}};
+// FX baked from the designer's ★ Meta State export (joytone/index.html's
+// own "📝 Update Meta" / "⬇ Meta" tools) — the theme's default mix, applied
+// to every fresh install with no localStorage state of its own. A player's
+// or the designer's own local ★ Meta State (if they've ever clicked Update
+// Meta) always overrides this at runtime — see activeFxStyle(). To refresh
+// these values: build the mix in-browser, click "⬇ Meta" to export, and
+// paste the exported roles back in here.
+// Last updated from export: 2026-08-05T18:34:23.913Z ("Hi-Hat" role dropped —
+// it's a MIDI-drum-library label distinct from "Hat" that no code path
+// reads; see applyDrummerToRiff()'s hardcoded fxKey mapping).
+const THEME_FX = {
+  "Kick": {
+    "instrument": "kick", "volume": 1, "reverbSend": 0.06,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0, "delayTime":0.375, "delayFeedback":0.35, "delaySync":"free", "pan":0, "eqHPF":100, "eqLowGain":6, "eqMidFreq":1000, "eqMidGain":-6.5, "eqMidQ":1, "eqHighGain":3.5, "filterType":"lowpass", "filterCutoff":7300, "filterRes":6, "lfoDepth":0.35, "lfoRate":1, "wowDepth":0.003, "distDrive":0.82, "distMix":0.59, "revrevSend":0 }
+  },
+  "Strings (drone)": {
+    "instrument": "bass", "volume": 0.5, "reverbSend": 0.18,
+    "effects": { "reverbMix":0.25, "reverbDecay":2.4, "delayMix":0, "delayTime":0.375, "delayFeedback":0.35, "delaySync":"free", "pan":0, "eqHPF":20, "eqLowGain":0, "eqMidFreq":1000, "eqMidGain":0, "eqMidQ":1, "eqHighGain":0, "filterType":"lowpass", "filterCutoff":700, "filterRes":0.9, "lfoDepth":0, "lfoRate":1, "wowDepth":0.003, "distDrive":0.08, "distMix":0.07, "revrevSend":0.45 }
+  },
+  "Horn (the old empire)": {
+    "instrument": "organ", "volume": 0.18, "reverbSend": 0.28,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0.23, "delayTime":0.52, "delayFeedback":0.35, "delaySync":"1/8D", "pan":0, "eqHPF":20, "eqLowGain":0, "eqMidFreq":1000, "eqMidGain":0, "eqMidQ":1, "eqHighGain":0, "filterType":"bandpass", "filterCutoff":1500, "filterRes":0.5, "lfoDepth":0.81, "lfoRate":0.1, "wowDepth":0.003, "distDrive":0.08, "distMix":0.28, "revrevSend":0 }
+  },
+  "Temple bells (Void)": {
+    "instrument": "bell", "volume": 0.38, "reverbSend": 1,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0.63, "delayTime":0.65, "delayFeedback":0.66, "delaySync":"1/4D", "pan":-0.08, "eqHPF":70, "eqLowGain":-5, "eqMidFreq":2800, "eqMidGain":-1.5, "eqMidQ":1.6, "eqHighGain":-12, "filterType":"notch", "filterCutoff":4000, "filterRes":2.4, "lfoDepth":0.66, "lfoRate":8.1, "wowDepth":0.003, "distDrive":0.2, "distMix":0.65, "revrevSend":0 }
+  },
+  "Taiko (Earth)": {
+    "instrument": "kick", "volume": 0.9, "reverbSend": 0.06,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0, "delayTime":0.375, "delayFeedback":0.35, "delaySync":"free", "pan":0, "eqHPF":20, "eqLowGain":0, "eqMidFreq":1000, "eqMidGain":0, "eqMidQ":1, "eqHighGain":0, "filterType":"bandpass", "filterCutoff":1500, "filterRes":0.5, "lfoDepth":0, "lfoRate":1, "wowDepth":0.003, "distDrive":0.08, "distMix":0.07, "revrevSend":0 }
+  },
+  "Hat": {
+    "instrument": "hat", "volume": 0.68, "reverbSend": 0.06,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0, "delayTime":0.12, "delayFeedback":0.35, "delaySync":"free", "pan":0, "eqHPF":20, "eqLowGain":7.5, "eqMidFreq":800, "eqMidGain":6, "eqMidQ":1, "eqHighGain":-11.5, "filterType":"lowpass", "filterCutoff":800, "filterRes":4.7, "lfoDepth":0, "lfoRate":1, "wowDepth":0.003, "distDrive":0.04, "distMix":0.05, "revrevSend":0 }
+  },
+  "Koto (Water)": {
+    "instrument": "pluck", "volume": 0.6, "reverbSend": 0.28,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0, "delayTime":0.375, "delayFeedback":0.35, "delaySync":"free", "pan":0, "eqHPF":20, "eqLowGain":0, "eqMidFreq":1000, "eqMidGain":0, "eqMidQ":1, "eqHighGain":0, "filterType":"bandpass", "filterCutoff":1500, "filterRes":0.5, "lfoDepth":0, "lfoRate":1, "wowDepth":0.003, "distDrive":0.08, "distMix":0.07, "revrevSend":0 }
+  },
+  "Shamisen (Fire)": {
+    "instrument": "chisaw", "volume": 0.14, "reverbSend": 0.28,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0.46, "delayTime":0.375, "delayFeedback":0.35, "delaySync":"free", "pan":0, "eqHPF":310, "eqLowGain":1, "eqMidFreq":1000, "eqMidGain":-5, "eqMidQ":1, "eqHighGain":-11.5, "filterType":"lowpass", "filterCutoff":3500, "filterRes":0.5, "lfoDepth":0, "lfoRate":1, "wowDepth":0.003, "distDrive":0.08, "distMix":0.07, "revrevSend":0 }
+  },
+  "Snare": {
+    "instrument": "snare", "volume": 0.7, "reverbSend": 0.06,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0, "delayTime":0.375, "delayFeedback":0.35, "delaySync":"free", "pan":0, "eqHPF":20, "eqLowGain":0, "eqMidFreq":1000, "eqMidGain":0, "eqMidQ":1, "eqHighGain":0, "filterType":"bandpass", "filterCutoff":1500, "filterRes":0.5, "lfoDepth":0, "lfoRate":1, "wowDepth":0.003, "distDrive":0.08, "distMix":0.07, "revrevSend":0 }
+  },
+  "Shakuhachi (Wind lead)": {
+    "instrument": "chip", "volume": 0.08, "reverbSend": 0.28,
+    "effects": { "reverbMix":0.2, "reverbDecay":2, "delayMix":0.22, "delayTime":0.61, "delayFeedback":0.35, "delaySync":"1/1", "pan":0, "eqHPF":100, "eqLowGain":-3, "eqMidFreq":1500, "eqMidGain":-5, "eqMidQ":0.8, "eqHighGain":3.5, "filterType":"lowpass", "filterCutoff":600, "filterRes":2.3, "lfoDepth":0.04, "lfoRate":12.9, "wowDepth":0.003, "distDrive":0.39, "distMix":0.08, "revrevSend":0.15 }
+  }
+};
 const THEME_MASTER_FX = {"compThreshold":-24,"compRatio":6,"compMakeup":0,"bassGain":8,"bassFreq":120,"masterVolume":0.58,"hissLevel":0.002,"derezBits":13,"derezRate":0.26,"derezMix":0.57};
 
 // Build the theme as a native project, optionally transposed / re-orchestrated
@@ -5086,19 +5156,23 @@ function normalizeFxSnapshot(snap, i=0) {
   return out;
 }
 
-// The snapshot currently pinned by 🧷 All-Tracks mode, or null.
+// The style that should drive freshly generated tracks: ★ Meta State always
+// wins once it has any roles (it's the designer's real, curated default);
+// otherwise fall back to whatever's pinned by 🧷 All-Tracks mode, or null.
 function activeFxStyle() {
+  if (metaState.roles && Object.keys(metaState.roles).length) return metaState;
   if (!fxStateSticky || !activeFxStateId) return null;
   const snap = fxSnapshots.find(s => s && s.id === activeFxStateId);
   return snap ? normalizeFxSnapshot(snap) : null;
 }
 
-// Restyle freshly generated tracks with the pinned FX state, matching by role
-// label (Chords, Pad, Bass Line, Melody, Arpeggio, Kick, Snare, Hat…).
-// Generator presets run first; the pinned style wins. Mute/solo are left
-// alone — they're arrangement state, not sound design.
-function applyFxStyleToTracks(tracks) {
-  const style = activeFxStyle();
+// Restyle tracks with a role-mapped style (activeFxStyle() by default —
+// covers freshly generated tracks matched by role label: Chords, Pad, Bass
+// Line, Melody, Arpeggio, Kick, Snare, Hat…), or an explicit style object
+// (used by updateMetaState() to broadcast to every existing section, not
+// just future ones). Generator presets run first; the style wins. Mute/solo
+// are left alone — they're arrangement state, not sound design.
+function applyFxStyleToTracks(tracks, style = activeFxStyle()) {
   if (!style) return;
   for (const t of tracks || []) {
     const r = style.roles[t.label];
@@ -5109,6 +5183,88 @@ function applyFxStyleToTracks(tracks) {
     if (r.color) t.color = r.color;
     t.effects = { ...DEFAULT_FX(), ...(r.effects || {}) };
   }
+}
+
+// ── ★ META STATE ─────────────────────────────────────────────────────
+// Capture every track in the ACTIVE section into metaState.roles (by label —
+// only the labels present here get touched) and immediately re-apply the
+// updated map to every OTHER existing section too. That immediate broadcast
+// is the whole point: without it, moving to a different section and
+// updating a different instrument there would re-capture THIS section's
+// still-unedited copy of the instrument you just fixed, silently reverting
+// it. Sections created later (grown riffs) inherit it automatically via
+// activeFxStyle() → applyThemeVariation(), same path as a 🧷 pin.
+function updateMetaState() {
+  const tracks = Object.values(activeTracks());
+  if (!tracks.length) { setStatus('No tracks in this section to capture', true); return; }
+  const labels = [];
+  for (const t of tracks) {
+    if (!t.label) continue;
+    metaState.roles[t.label] = captureTrackFxSettings(t);
+    labels.push(t.label);
+  }
+  metaState.updatedAt = new Date().toISOString();
+  for (const sec of Object.values(project.sections || {}))
+    applyFxStyleToTracks(Object.values(sec.tracks), metaState);
+  renderTrackHeaders();
+  renderMetaStateUI();
+  saveProject();
+  setStatus(`★ Meta state updated (${labels.join(', ')}) — applied to all ${project.sectionOrder.length} sections`);
+}
+
+function renderMetaStateUI() {
+  const el = document.getElementById('meta-state-info');
+  if (!el) return;
+  const n = metaState.roles ? Object.keys(metaState.roles).length : 0;
+  el.textContent = n ? `★ Meta: ${n} role${n !== 1 ? 's' : ''}` : '★ Meta: empty';
+  el.title = metaState.updatedAt
+    ? `Last updated ${new Date(metaState.updatedAt).toLocaleString()} — always overrides 🧷 pinned FX states`
+    : 'No meta state saved yet — click 📝 Update Meta';
+}
+
+function downloadMetaState() {
+  if (!metaState.roles || !Object.keys(metaState.roles).length) {
+    setStatus('No meta state saved yet — click 📝 Update Meta first', true);
+    return;
+  }
+  const payload = {
+    type: 'daw-meta-state',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    projectTitle: project.title || 'Untitled',
+    metaState: cloneData(metaState)
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (project.title || 'daw') + '-meta-state.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus('★ Meta state downloaded');
+}
+
+function uploadMetaStateFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const incoming = (data && data.metaState) ? data.metaState : data;
+      if (!incoming || typeof incoming !== 'object' || !incoming.roles) throw new Error('No roles found in file');
+      const hasExisting = metaState.roles && Object.keys(metaState.roles).length;
+      if (hasExisting && !confirm('Replace the current ★ Meta State with the uploaded one?')) return;
+      metaState = { version: 1, updatedAt: incoming.updatedAt || new Date().toISOString(), roles: cloneData(incoming.roles) };
+      for (const r of Object.values(metaState.roles)) r.effects = { ...DEFAULT_FX(), ...(r.effects || {}) };
+      for (const sec of Object.values(project.sections || {}))
+        applyFxStyleToTracks(Object.values(sec.tracks), metaState);
+      renderTrackHeaders();
+      renderMetaStateUI();
+      saveProject();
+      setStatus(`Loaded ★ meta state (${Object.keys(metaState.roles).length} roles) and applied it to all sections`);
+    } catch(err) {
+      setStatus('Meta state upload error: ' + err.message, true);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function downloadFxStates() {
@@ -5398,6 +5554,14 @@ document.getElementById('fx-states-file-input').addEventListener('change', e => 
   if (e.target.files[0]) uploadFxStatesFile(e.target.files[0]);
   e.target.value = '';
 });
+document.getElementById('btn-update-meta').addEventListener('click', updateMetaState);
+document.getElementById('btn-download-meta').addEventListener('click', downloadMetaState);
+document.getElementById('btn-upload-meta').addEventListener('click', () =>
+  document.getElementById('meta-state-file-input').click());
+document.getElementById('meta-state-file-input').addEventListener('change', e => {
+  if (e.target.files[0]) uploadMetaStateFile(e.target.files[0]);
+  e.target.value = '';
+});
 
 // ── MIDI LIBRARY BROWSER ──────────────────────────────────────────
 let manifestCache = null;
@@ -5679,6 +5843,7 @@ function init() {
   renderTrackHeaders();
   renderSectionUI();
   renderFxSnapshotUI();
+  renderMetaStateUI();
   populateGenMenu();
   updateAddDrumsButton();
 
@@ -5769,23 +5934,27 @@ init();
     if (!_growMode) toggleGrowMode();
     if (!_drummerMode) toggleDrummerMode();
     if (!_growUseAllTracksFx) toggleGrowFx();
-    // Pin the most recently saved FX state (🧷 All-Tracks) as the default
-    // style for every riff this game grows — "last" = highest "FX N" number,
-    // which is always the array's last entry (states are only ever appended).
+    // Pin a default style for every riff this game grows, and restyle the
+    // opening theme itself the same way (not just riffs grown later — same
+    // role-matching path applyThemeVariation() uses for every generated
+    // riff). ★ Meta State (the designer's curated, evolving default) always
+    // wins if it has any roles; otherwise fall back to the most recently
+    // saved numbered FX state ("FX N", always fxSnapshots' last entry).
     let fxNote = '';
-    if (fxSnapshots.length) {
+    if (!(metaState.roles && Object.keys(metaState.roles).length) && fxSnapshots.length) {
       fxStateSticky = true;
-      const last = fxSnapshots[fxSnapshots.length - 1];
-      activeFxStateId = last.id;
-      // Restyle the opening theme itself, not just riffs grown later — same
-      // role-matching path applyThemeVariation() uses for every generated riff.
-      const style = activeFxStyle();
-      if (style)
-        for (const sec of Object.values(project.sections))
-          applyFxStyleToTracks(Object.values(sec.tracks));
+      activeFxStateId = fxSnapshots[fxSnapshots.length - 1].id;
+    }
+    const style = activeFxStyle();
+    if (style) {
+      for (const sec of Object.values(project.sections))
+        applyFxStyleToTracks(Object.values(sec.tracks), style);
       renderFxSnapshotUI();
       updateFxStickyUI();
-      fxNote = ` · 🧷${last.label}`;
+      renderMetaStateUI();
+      fxNote = (style === metaState)
+        ? ` · ★Meta(${Object.keys(metaState.roles).length})`
+        : ` · 🧷${style.label}`;
     }
     refreshAfterThemeLoad(`☯ Godaigo game start — theme loaded, Grow + Drummer + FX on${fxNote}`);
     loadManifest().catch(() => {});   // warm the drummer library
