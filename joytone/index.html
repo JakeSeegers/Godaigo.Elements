@@ -261,6 +261,7 @@ input[type=range]{cursor:pointer}
       BPM <input type="number" id="bpm-input" value="120" min="20" max="400" step="1">
     </label>
     <span id="playhead-time" style="font-size:11px;color:#666;min-width:40px">0:00</span>
+    <button id="btn-follow-play" title="When ON, the piano roll and track list automatically jump to whichever section is currently playing" style="font-weight:600">👁 Follow: Off</button>
     <div class="sep"></div>
     <!-- Tools -->
     <button class="tool-btn active" id="tool-pointer" title="Select / Move (S)">⟡</button>
@@ -828,7 +829,16 @@ function performUndo() {
 }
 
 // ── PERSISTENCE ────────────────────────────────────────────────────
+// Set by the Godaigo embed adapter for the duration of a game session (see
+// boot()/stopAll() below). A play-through must never overwrite the
+// designer's own saved project/FX bank in this browser's localStorage —
+// otherwise opening the standalone tool later would show leftover in-game
+// riffs instead of what the designer actually left there, and "what loads
+// by default" would silently drift out from under them.
+let _gameSessionActive = false;
+
 function saveProject() {
+  if (_gameSessionActive) return;
   try { localStorage.setItem('daw-v2', JSON.stringify({ project, activeSectionId, selectedTrackId, fxSnapshots, fxStateSticky, activeFxStateId, brownOn, brownLevel })); }
   catch(e) {}
 }
@@ -2065,6 +2075,7 @@ function animLoop() {
   const m = Math.floor(secs/60), s = Math.floor(secs%60);
   document.getElementById('playhead-time').textContent = `${m}:${s.toString().padStart(2,'0')}`;
   updatePlayingSectionHighlight();
+  followPlayingSection();
   animFrameId = requestAnimationFrame(animLoop);
 }
 
@@ -2569,6 +2580,35 @@ function currentPlayingOrderIndex() {
 function currentPlayingSectionId() {
   const idx = currentPlayingOrderIndex();
   return idx >= 0 ? project.sectionOrder[idx] : null;
+}
+
+// When ON, the piano roll / track list view chases whichever section is
+// currently sounding instead of staying put — driven once per animation
+// frame from animLoop() while playing. View-only: unlike switchSection()
+// this never calls rebuildEngines(), so it can't interrupt notes that are
+// already scheduled on the real (unaffected) playback engines.
+let _followPlayback = false;
+
+function toggleFollowPlayback() {
+  _followPlayback = !_followPlayback;
+  const b = document.getElementById('btn-follow-play');
+  b.textContent = _followPlayback ? '👁 Follow: On' : '👁 Follow: Off';
+  b.classList.toggle('on', _followPlayback);
+  setStatus(_followPlayback
+    ? '👁 Follow ON — view jumps to whichever section is currently playing'
+    : 'Follow off — view stays on the section you pick');
+  followPlayingSection();
+}
+
+function followPlayingSection() {
+  if (!_followPlayback || !isPlaying) return;
+  const playingId = currentPlayingSectionId();
+  if (!playingId || playingId === activeSectionId) return;
+  activeSectionId = playingId;
+  ensureSelectedTrack();
+  renderTrackHeaders();
+  renderSectionUI();
+  PR.gridDirty = true; PR.dirty = true; schedRedraw();
 }
 
 function updatePlayingSectionHighlight() {
@@ -5458,6 +5498,7 @@ populateGenMenu();   // fill immediately at load — don't depend on init() reac
 document.getElementById('btn-grow').addEventListener('click', toggleGrowMode);
 document.getElementById('btn-grow-fx').addEventListener('click', toggleGrowFx);
 document.getElementById('btn-drummer').addEventListener('click', toggleDrummerMode);
+document.getElementById('btn-follow-play').addEventListener('click', toggleFollowPlayback);
 document.getElementById('lib-close').addEventListener('click', () =>
   document.getElementById('lib-modal').classList.remove('open'));
 document.getElementById('lib-modal').addEventListener('click', e => {
@@ -5718,6 +5759,7 @@ init();
   // or powered off, and playback joins in on the next unlock.
   async function boot() {
     if (booted) return true;
+    _gameSessionActive = true; // suppress saveProject() for the whole session — see its declaration
     stopPlayback();
     project = makeThemeProject();
     _themeRiffCount = 1;
@@ -5726,7 +5768,26 @@ init();
     usedGenerations.add('__original__');
     if (!_growMode) toggleGrowMode();
     if (!_drummerMode) toggleDrummerMode();
-    refreshAfterThemeLoad('☯ Godaigo game start — theme loaded, Grow + Drummer on');
+    if (!_growUseAllTracksFx) toggleGrowFx();
+    // Pin the most recently saved FX state (🧷 All-Tracks) as the default
+    // style for every riff this game grows — "last" = highest "FX N" number,
+    // which is always the array's last entry (states are only ever appended).
+    let fxNote = '';
+    if (fxSnapshots.length) {
+      fxStateSticky = true;
+      const last = fxSnapshots[fxSnapshots.length - 1];
+      activeFxStateId = last.id;
+      // Restyle the opening theme itself, not just riffs grown later — same
+      // role-matching path applyThemeVariation() uses for every generated riff.
+      const style = activeFxStyle();
+      if (style)
+        for (const sec of Object.values(project.sections))
+          applyFxStyleToTracks(Object.values(sec.tracks));
+      renderFxSnapshotUI();
+      updateFxStickyUI();
+      fxNote = ` · 🧷${last.label}`;
+    }
+    refreshAfterThemeLoad(`☯ Godaigo game start — theme loaded, Grow + Drummer + FX on${fxNote}`);
     loadManifest().catch(() => {});   // warm the drummer library
     booted = true;
     if (!powerOn) await togglePower();
@@ -5790,6 +5851,7 @@ init();
     booted = false;
     pendingPlay = false;
     usedGenerations.clear();
+    _gameSessionActive = false;
   }
 
   // Parent just made the iframe visible — canvases were sized at 0 while hidden.
