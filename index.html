@@ -22,8 +22,18 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/paper-ui-profile.css">
     <link rel="stylesheet" href="css/paper-ui-lobby.css">
+    <link rel="stylesheet" href="css/boot-splash.css">
 </head>
 <body>
+    <!-- ============================================
+         BOOT SPLASH (studio/logo intro video — plays once
+         per page load, ahead of everything else)
+         ============================================ -->
+    <div id="boot-splash">
+        <video id="boot-splash-video" src="video/splash-intro.mp4" muted playsinline preload="auto"></video>
+        <div id="boot-splash-prompt">Press any key to start</div>
+    </div>
+
     <!-- ============================================
          LOBBY WRAPPER (shown before game starts)
          ============================================ -->
@@ -567,6 +577,8 @@
     </div>
 
     <!-- JavaScript -->
+    <!-- Boot splash (no game deps — runs first) -->
+    <script src="js/boot-splash.js" charset="UTF-8"></script>
     <!-- Scroll System (load before main.js) -->
     <script src="js/scrolls/scroll-definitions.js" charset="UTF-8"></script>
     <script src="js/scrolls/effects/scroll-effects.js" charset="UTF-8"></script>

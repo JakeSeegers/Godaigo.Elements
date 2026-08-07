@@ -1,0 +1,71 @@
+/* ── Boot Splash — studio/logo intro video ───────────────────────────
+   Full-screen video shown once per page load, ahead of the lobby/auth
+   screen (which is already rendered underneath it). Any key or click
+   crossfades it away; see js/boot-splash.js for the timing logic. */
+
+#boot-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 100000; /* above everything, including the CRT overlay canvas */
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transition: opacity 0.8s ease;
+    cursor: pointer;
+}
+
+#boot-splash.boot-splash-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#boot-splash-video {
+    max-width: 100%;
+    max-height: 100%;
+    /* Source is portrait (720x900) — contain, not cover, so nothing in the
+       logo/lettering ever gets cropped on a wide viewport. */
+    object-fit: contain;
+}
+
+#boot-splash-prompt {
+    position: absolute;
+    bottom: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    /* Source video is portrait and often fills the full viewport height on
+       a wide window, so this can land directly on its (white) content
+       instead of the black letterbox. A backdrop pill keeps it readable
+       against either. */
+    padding: 8px 18px;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 20px;
+    text-align: center;
+    white-space: nowrap;
+    font-family: var(--font-pixel, 'Press Start 2P', monospace);
+    font-size: 14px;
+    color: #fff;
+    letter-spacing: 1px;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+}
+
+#boot-splash-prompt.boot-splash-prompt-visible {
+    opacity: 1;
+    animation: boot-splash-blink 1.4s ease-in-out 0.6s infinite;
+}
+
+@keyframes boot-splash-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+}
+
+@media (max-width: 600px) {
+    #boot-splash-prompt {
+        font-size: 11px;
+        bottom: 10%;
+    }
+}
