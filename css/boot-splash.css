@@ -40,7 +40,11 @@ body.boot-splash-active .site-logo {
 #auth-screen,
 #multiplayer-lobby,
 .site-logo {
-    transition: opacity 0.6s ease;
+    /* Slower than the splash's own 0.8s fade-out (below), and with a
+       delay on top, so the login screen doesn't become visible until the
+       splash is most of the way gone — no hard-edge overlap between the
+       two on dismiss. */
+    transition: opacity 1s ease 0.2s;
 }
 
 #boot-splash.boot-splash-hidden {
@@ -73,6 +77,17 @@ body.boot-splash-active .site-logo {
     filter:
         drop-shadow(0 0 20px rgba(255, 250, 230, 0.4))
         drop-shadow(0 0 46px rgba(255, 240, 200, 0.22));
+    /* Own fast fade-in, independent of #boot-splash's slower 0.5s one —
+       extra margin around js/boot-splash.js's frame-skip: even if the
+       first content actually drawn is briefly off, it renders at low
+       opacity instead of full strength while this ramps up. */
+    opacity: 0;
+    animation: boot-splash-canvas-fade-in 0.18s ease forwards;
+}
+
+@keyframes boot-splash-canvas-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 #boot-splash-prompt {
