@@ -11,6 +11,10 @@
     // there is no audio to preserve here), lingers on its last frame once
     // it ends, then fades in a "press any key" prompt. Any key or click, at
     // any point (mid-playback or after), crossfades the whole thing away.
+    // Just before the video reaches its end, images/Final Logo Sign In.png
+    // (same pixel dimensions as the video, so it lines up with zero extra
+    // positioning math) crossfades in on top, chroma-keyed the same way —
+    // see "Sign-in logo overlay" below.
     //
     // An inline <script> right after #boot-splash's markup (before
     // #lobby-wrapper even exists in the DOM, so there's zero flash) already
@@ -52,6 +56,68 @@
         const SHIMMER_SPEED     = 0.002;  // radians/ms
 
         function clamp8(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+
+        // ── Sign-in logo overlay ───────────────────────────────────────
+        // images/Final Logo Sign In.png is 852x480 — exactly the video's
+        // raw decoded frame size (confirmed against the mp4's tkhd box),
+        // so it's drawn 1:1 onto the canvas with no scaling/offset math.
+        // Its flat background is a solid #B174E7 (confirmed by sampling
+        // the file), chroma-keyed out the same two-threshold-feather way
+        // as the video above so the same parallax background shows
+        // through around it. Keyed once into an offscreen canvas on load
+        // (cheap — it's a still image, not a per-frame video decode) and
+        // faded in over the last SIGNIN_FADE_SECONDS of playback by
+        // ramping globalAlpha; video.currentTime holds at video.duration
+        // once 'ended' fires, so alpha naturally settles at 1 and stays
+        // there through the "press any key" wait with no extra state.
+        const SIGNIN_KEY_R = 0xB1, SIGNIN_KEY_G = 0x74, SIGNIN_KEY_B = 0xE7;
+        const SIGNIN_INNER = 18, SIGNIN_OUTER = 45;
+        const SIGNIN_FADE_SECONDS = 0.8;
+
+        let signInCanvas = null; // set once the image has loaded + been keyed
+        const signInImg = new Image();
+        signInImg.addEventListener('load', () => {
+            const off = document.createElement('canvas');
+            off.width = signInImg.naturalWidth;
+            off.height = signInImg.naturalHeight;
+            const octx = off.getContext('2d');
+            octx.drawImage(signInImg, 0, 0);
+            const frame = octx.getImageData(0, 0, off.width, off.height);
+            const d = frame.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const dr = Math.abs(d[i]     - SIGNIN_KEY_R);
+                const dg = Math.abs(d[i + 1] - SIGNIN_KEY_G);
+                const db = Math.abs(d[i + 2] - SIGNIN_KEY_B);
+                const dist = Math.max(dr, dg, db);
+                if (dist <= SIGNIN_INNER) {
+                    d[i + 3] = 0;
+                } else if (dist < SIGNIN_OUTER) {
+                    // Scale (not overwrite) so any anti-aliasing already
+                    // baked into the PNG's own alpha channel is preserved.
+                    d[i + 3] = Math.round(d[i + 3] * (dist - SIGNIN_INNER) / (SIGNIN_OUTER - SIGNIN_INNER));
+                }
+            }
+            octx.putImageData(frame, 0, 0);
+            signInCanvas = off; // only assign once fully keyed — drawSignInOverlay checks this
+        });
+        // If the image 404s or fails to decode, the splash still plays
+        // fine — signInCanvas just never gets set and drawSignInOverlay()
+        // stays a no-op.
+        signInImg.addEventListener('error', () => {
+            console.warn('Boot splash: sign-in logo failed to load, skipping overlay');
+        });
+        signInImg.src = 'images/Final Logo Sign In.png';
+
+        function drawSignInOverlay() {
+            if (!signInCanvas || !video.duration || !isFinite(video.duration)) return;
+            const remaining = video.duration - video.currentTime;
+            if (remaining >= SIGNIN_FADE_SECONDS) return;
+            const alpha = 1 - Math.max(0, remaining) / SIGNIN_FADE_SECONDS;
+            const prevAlpha = ctx.globalAlpha;
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(signInCanvas, 0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = prevAlpha;
+        }
 
         // H.264 encodes in 16px macroblocks; whichever of a video's
         // width/height isn't a multiple of 16 gets a padding row/column on
@@ -132,6 +198,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawVideoFrame();
             keyAndShimmerFrame(t);
+            drawSignInOverlay();
         }
 
         // Keeps redrawing (and so keeps waving/shimmering) even once the
