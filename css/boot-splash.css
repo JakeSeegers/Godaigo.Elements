@@ -66,11 +66,12 @@ body.boot-splash-active .site-logo {
 #boot-splash-canvas {
     /* Explicit (not just max-) width/height so it actually scales up to
        use most of the screen instead of sitting at the raw 852x480 video
-       resolution — up from the old 100%-cap-only sizing, per request. */
-    width: 90vw;
-    height: 90vh;
-    max-width: 90vw;
-    max-height: 90vh;
+       resolution — up from the old 100%-cap-only sizing, per request.
+       Dialed back 25% from an initial 90vw/90vh pass that ran too big. */
+    width: 67.5vw;
+    height: 67.5vh;
+    max-width: 67.5vw;
+    max-height: 67.5vh;
     /* Source is landscape (852x480) — contain, not cover, so nothing in the
        logo/lettering ever gets cropped regardless of viewport aspect ratio.
        Actual fit math happens in JS (drawImage dest rect), this just caps
