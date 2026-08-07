@@ -1,13 +1,15 @@
 /* ── Boot Splash — studio/logo intro video ───────────────────────────
    Full-screen video shown once per page load, ahead of the lobby/auth
-   screen (which is already rendered underneath it). Any key or click
-   crossfades it away; see js/boot-splash.js for the timing logic. */
+   screen. #lobby-wrapper's own parallax background (js/parallax.js) is
+   already animating directly underneath — this layer is transparent on
+   purpose so it shows through around the chroma-keyed logo. Any key or
+   click crossfades it away; see js/boot-splash.js for the timing logic. */
 
 #boot-splash {
     position: fixed;
     inset: 0;
     z-index: 100000; /* above everything, including the CRT overlay canvas */
-    background: #000;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -16,16 +18,44 @@
     cursor: pointer;
 }
 
+/* Login UI (and the static site logo — redundant with the animated one)
+   stays hidden while the splash is up; both visually collided with the
+   logo animation. #lobby-wrapper itself (and its parallax background,
+   already animating) is NOT touched here, only these child elements. */
+body.boot-splash-active #auth-screen,
+body.boot-splash-active #multiplayer-lobby,
+body.boot-splash-active .site-logo {
+    opacity: 0;
+    pointer-events: none;
+}
+#auth-screen,
+#multiplayer-lobby,
+.site-logo {
+    transition: opacity 0.6s ease;
+}
+
 #boot-splash.boot-splash-hidden {
     opacity: 0;
     pointer-events: none;
 }
 
+/* Decode source only — never rendered. Kept in normal flow (not
+   display:none) so the browser has no excuse to throttle/pause frame
+   decoding; js/boot-splash.js reads its frames into the canvas. */
 #boot-splash-video {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
+}
+
+#boot-splash-canvas {
     max-width: 100%;
     max-height: 100%;
     /* Source is portrait (720x900) — contain, not cover, so nothing in the
-       logo/lettering ever gets cropped on a wide viewport. */
+       logo/lettering ever gets cropped on a wide viewport. Actual fit math
+       happens in JS (drawImage dest rect), this just caps CSS display size. */
     object-fit: contain;
 }
 

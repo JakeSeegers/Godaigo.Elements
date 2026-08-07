@@ -30,9 +30,17 @@
          per page load, ahead of everything else)
          ============================================ -->
     <div id="boot-splash">
+        <!-- Decode source only — chroma-keyed onto #boot-splash-canvas each
+             frame, never shown directly (see js/boot-splash.js). -->
         <video id="boot-splash-video" src="video/splash-intro.mp4" muted playsinline preload="auto"></video>
+        <canvas id="boot-splash-canvas"></canvas>
         <div id="boot-splash-prompt">Press any key to start</div>
     </div>
+    <!-- Runs immediately, before #auth-screen below even exists in the DOM,
+         so it hides with zero flash-of-unstyled-content. js/boot-splash.js
+         removes this class on dismiss (and as a fail-safe on its own setup
+         error, so a broken splash can never permanently hard-lock login). -->
+    <script>document.body.classList.add('boot-splash-active');</script>
 
     <!-- ============================================
          LOBBY WRAPPER (shown before game starts)
