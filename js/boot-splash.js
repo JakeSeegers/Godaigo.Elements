@@ -52,6 +52,18 @@
         // pale tones instead.
         const KEY_R = 0xFC, KEY_G = 0xFF, KEY_B = 0xFC;
         const INNER = 26, OUTER = 70;
+        // The video's H.264 compression introduces per-pixel noise right
+        // around the key color, so a handful of edge pixels land just
+        // outside INNER on any given frame and pop as a bright fleck
+        // against the (usually dark) background behind them — "speckle".
+        // Two independent mitigations, both applied only in the
+        // INNER..OUTER feather band (solid interior artwork untouched):
+        // EDGE_DARKEN_MIN dims a stray fleck's brightness so it blends in
+        // instead of standing out, and ALPHA_BLUR_RADIUS smooths the alpha
+        // mask itself so single noisy pixels get averaged into their
+        // (mostly-transparent) neighbors rather than flickering solo.
+        const EDGE_DARKEN_MIN = 0.55;
+        const ALPHA_BLUR_RADIUS = 1;
 
         // ── Shimmer ────────────────────────────────────────────────────
         // A gentle whole-logo brightness pulse, folded into the same
@@ -166,6 +178,42 @@
         const SKIP_FIRST_N_FRAMES = 6;
         let framesDrawn = 0;
 
+        // Separable box blur of just the alpha channel — cheap (two O(w*h)
+        // passes, tiny kernel) and leaves color/detail in the solid
+        // interior artwork untouched since it only ever reads/writes
+        // byte offset 3 of each pixel.
+        function blurAlphaChannel(d, w, h, radius) {
+            const n = w * h;
+            const src = new Uint8ClampedArray(n);
+            for (let p = 0; p < n; p++) src[p] = d[p * 4 + 3];
+            const tmp = new Uint8ClampedArray(n);
+            for (let y = 0; y < h; y++) {
+                const row = y * w;
+                for (let x = 0; x < w; x++) {
+                    let sum = 0, count = 0;
+                    for (let dx = -radius; dx <= radius; dx++) {
+                        const sx = x + dx;
+                        if (sx < 0 || sx >= w) continue;
+                        sum += src[row + sx];
+                        count++;
+                    }
+                    tmp[row + x] = sum / count;
+                }
+            }
+            for (let x = 0; x < w; x++) {
+                for (let y = 0; y < h; y++) {
+                    let sum = 0, count = 0;
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        const sy = y + dy;
+                        if (sy < 0 || sy >= h) continue;
+                        sum += tmp[sy * w + x];
+                        count++;
+                    }
+                    d[(y * w + x) * 4 + 3] = Math.round(sum / count);
+                }
+            }
+        }
+
         function keyAndShimmerFrame(t) {
             const w = canvas.width, h = canvas.height;
             const frame = ctx.getImageData(0, 0, w, h);
@@ -178,15 +226,22 @@
                 const dist = Math.max(dr, dg, db);
                 if (dist <= INNER) {
                     d[i + 3] = 0;
-                    continue; // fully transparent — nothing to shimmer
+                    continue; // fully transparent — nothing to shimmer or darken
                 }
+                let darken = 1;
                 if (dist < OUTER) {
-                    d[i + 3] = Math.round(255 * (dist - INNER) / (OUTER - INNER));
+                    const alphaFrac = (dist - INNER) / (OUTER - INNER);
+                    d[i + 3] = Math.round(255 * alphaFrac);
+                    // Worst right at the edge (alphaFrac -> 0, darken ->
+                    // EDGE_DARKEN_MIN), fading to no effect (darken -> 1)
+                    // by the time a pixel is fully opaque.
+                    darken = EDGE_DARKEN_MIN + (1 - EDGE_DARKEN_MIN) * alphaFrac;
                 }
-                d[i]     = clamp8(d[i]     + shimmer);
-                d[i + 1] = clamp8(d[i + 1] + shimmer);
-                d[i + 2] = clamp8(d[i + 2] + shimmer);
+                d[i]     = clamp8((d[i]     + shimmer) * darken);
+                d[i + 1] = clamp8((d[i + 1] + shimmer) * darken);
+                d[i + 2] = clamp8((d[i + 2] + shimmer) * darken);
             }
+            blurAlphaChannel(d, w, h, ALPHA_BLUR_RADIUS);
             ctx.putImageData(frame, 0, 0);
         }
 
