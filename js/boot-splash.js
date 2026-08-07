@@ -84,8 +84,12 @@
         // baked into the file itself (confirmed with ffmpeg: frame 1
         // averages to a dark rgb(121,111,122); every frame after it
         // averages to a near-white rgb(255,250,255)) — not a browser-
-        // readiness thing. Just skip drawing the first couple of frames.
-        const SKIP_FIRST_N_FRAMES = 2;
+        // readiness thing. Skip drawing several frames up front, generous
+        // margin past the 1 confirmed-dark one — this is belt-and-suspenders
+        // with the CSS-side hard hold in css/boot-splash.css (independent,
+        // time-based rather than frame-count-based, so a bug in one doesn't
+        // sink both).
+        const SKIP_FIRST_N_FRAMES = 6;
         let framesDrawn = 0;
 
         function keyAndShimmerFrame(t) {

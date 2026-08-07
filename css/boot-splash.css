@@ -77,12 +77,13 @@ body.boot-splash-active .site-logo {
     filter:
         drop-shadow(0 0 20px rgba(255, 250, 230, 0.4))
         drop-shadow(0 0 46px rgba(255, 240, 200, 0.22));
-    /* Own fast fade-in, independent of #boot-splash's slower 0.5s one —
-       extra margin around js/boot-splash.js's frame-skip: even if the
-       first content actually drawn is briefly off, it renders at low
-       opacity instead of full strength while this ramps up. */
+    /* Hard, time-based hold — independent of js/boot-splash.js's
+       frame-count-based skip, deliberately, so a bug in one can't sink
+       both: stays fully invisible for 0.25s no matter what's being drawn
+       underneath, then fades in over 0.2s. By ~0.45s the JS-side frame
+       skip has long since moved past any bad early content. */
     opacity: 0;
-    animation: boot-splash-canvas-fade-in 0.18s ease forwards;
+    animation: boot-splash-canvas-fade-in 0.2s ease 0.25s forwards;
 }
 
 @keyframes boot-splash-canvas-fade-in {
