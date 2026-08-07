@@ -35,39 +35,41 @@
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         // ── Chroma key ──────────────────────────────────────────────────
-        // Video background is #FBFCF3 (near-white). Two-threshold feather —
+        // Video background is #FCFFFC (near-white). Two-threshold feather —
         // fully transparent inside INNER, fully opaque outside OUTER, linear
         // fade between — so edges around the logo don't look like a
         // hard-cut sticker. Tune these three if real playback shows
-        // fringing or eats into the artwork's own pale pink/green tones.
-        const KEY_R = 0xFB, KEY_G = 0xFC, KEY_B = 0xF3;
+        // fringing or eats into the artwork's own pale tones.
+        const KEY_R = 0xFC, KEY_G = 0xFF, KEY_B = 0xFC;
         const INNER = 18, OUTER = 45;
 
-        // ── Wave + shimmer ────────────────────────────────────────────
-        // Wave: the frame is drawn in thin horizontal strips, each nudged
-        // sideways by a slow sine wave (classic heat-shimmer/water-ripple
-        // technique) instead of one flat drawImage — cheap, since it's a
-        // handful of extra draw calls, not extra per-pixel work.
-        // Shimmer: a gentle whole-logo brightness pulse, folded into the
-        // same per-pixel loop the chroma key already runs, so it's nearly
-        // free. Keep all four amplitude/speed constants small — "slightly"
-        // wavy/shimmery was the ask, not a full liquid-glitch effect.
-        const STRIP_H          = 3;      // px per wave strip — smaller = smoother, more draw calls
-        const WAVE_AMPLITUDE   = 4;       // px horizontal displacement
-        const WAVE_LENGTH      = 90;      // px per vertical sine cycle — bigger = gentler
-        const WAVE_SPEED       = 0.0011;  // radians/ms — how fast the wave drifts
+        // ── Shimmer ────────────────────────────────────────────────────
+        // A gentle whole-logo brightness pulse, folded into the same
+        // per-pixel loop the chroma key already runs, so it's nearly free.
+        // (Wave distortion removed — was drawing the frame in offset
+        // horizontal strips; dropped per request.)
         const SHIMMER_AMPLITUDE = 10;     // brightness delta, 0-255 scale
         const SHIMMER_SPEED     = 0.002;  // radians/ms
 
         function clamp8(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
 
-        function drawWavyVideo(t) {
-            const w = canvas.width, h = canvas.height;
-            for (let y = 0; y < h; y += STRIP_H) {
-                const dx = Math.sin(y / WAVE_LENGTH + t * WAVE_SPEED) * WAVE_AMPLITUDE;
-                const sh = Math.min(STRIP_H, h - y);
-                ctx.drawImage(video, 0, y, w, sh, dx, y, w, sh);
-            }
+        // H.264 encodes in 16px macroblocks; whichever of a video's
+        // width/height isn't a multiple of 16 gets a padding row/column on
+        // decode that doesn't crop cleanly — a solid, flat-colored edge
+        // artifact distinct from the real background color (confirmed on
+        // two different source videos so far: one had it on the bottom row,
+        // the next had it on the right column instead, depending on which
+        // dimension didn't divide evenly). Trimming a small margin off all
+        // four edges unconditionally, rather than diagnosing which specific
+        // edge is affected each time a video gets swapped, costs nothing
+        // visually and is robust to whatever the next file's dimensions are.
+        const EDGE_TRIM_PX = 3;
+
+        function drawVideoFrame() {
+            const vw = video.videoWidth, vh = video.videoHeight;
+            const sw = Math.max(1, vw - EDGE_TRIM_PX * 2);
+            const sh = Math.max(1, vh - EDGE_TRIM_PX * 2);
+            ctx.drawImage(video, EDGE_TRIM_PX, EDGE_TRIM_PX, sw, sh, EDGE_TRIM_PX, EDGE_TRIM_PX, sw, sh);
         }
 
         function keyAndShimmerFrame(t) {
@@ -97,7 +99,7 @@
         function drawFrame(t) {
             if (!canvas.width) return; // metadata not loaded yet — next tick retries
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawWavyVideo(t);
+            drawVideoFrame();
             keyAndShimmerFrame(t);
         }
 
