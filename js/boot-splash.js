@@ -59,11 +59,14 @@
         // Two independent mitigations, both applied only in the
         // INNER..OUTER feather band (solid interior artwork untouched):
         // EDGE_DARKEN_MIN dims a stray fleck's brightness so it blends in
-        // instead of standing out, and ALPHA_BLUR_RADIUS smooths the alpha
-        // mask itself so single noisy pixels get averaged into their
-        // (mostly-transparent) neighbors rather than flickering solo.
+        // instead of standing out, and medianAlphaChannel() (below) cleans
+        // up isolated noisy alpha pixels. Deliberately a median filter, not
+        // a box/mean blur — a mean blur softens every pixel it touches
+        // (made the whole logo read as blurry, not just its edges); a
+        // median filter only overrides a pixel that disagrees with its
+        // neighbors, so continuous real gradients pass through untouched
+        // and just the salt-and-pepper noise gets cleaned up.
         const EDGE_DARKEN_MIN = 0.55;
-        const ALPHA_BLUR_RADIUS = 1;
 
         // ── Shimmer ────────────────────────────────────────────────────
         // A gentle whole-logo brightness pulse, folded into the same
@@ -178,38 +181,37 @@
         const SKIP_FIRST_N_FRAMES = 6;
         let framesDrawn = 0;
 
-        // Separable box blur of just the alpha channel — cheap (two O(w*h)
-        // passes, tiny kernel) and leaves color/detail in the solid
-        // interior artwork untouched since it only ever reads/writes
-        // byte offset 3 of each pixel.
-        function blurAlphaChannel(d, w, h, radius) {
+        // 3x3 median filter on just the alpha channel — unlike a box/mean
+        // blur, a median only ever replaces a pixel that disagrees with
+        // its neighborhood (exactly what a compression-noise speckle is),
+        // so a smooth intentional gradient — which is already locally
+        // consistent — passes through essentially unchanged. Cheap: at
+        // most 9 taps per pixel, tiny selection sort (no generic
+        // Array#sort comparator overhead) to find the middle value.
+        function medianAlphaChannel(d, w, h) {
             const n = w * h;
             const src = new Uint8ClampedArray(n);
             for (let p = 0; p < n; p++) src[p] = d[p * 4 + 3];
-            const tmp = new Uint8ClampedArray(n);
+            const win = new Uint8ClampedArray(9);
             for (let y = 0; y < h; y++) {
-                const row = y * w;
                 for (let x = 0; x < w; x++) {
-                    let sum = 0, count = 0;
-                    for (let dx = -radius; dx <= radius; dx++) {
-                        const sx = x + dx;
-                        if (sx < 0 || sx >= w) continue;
-                        sum += src[row + sx];
-                        count++;
-                    }
-                    tmp[row + x] = sum / count;
-                }
-            }
-            for (let x = 0; x < w; x++) {
-                for (let y = 0; y < h; y++) {
-                    let sum = 0, count = 0;
-                    for (let dy = -radius; dy <= radius; dy++) {
+                    let count = 0;
+                    for (let dy = -1; dy <= 1; dy++) {
                         const sy = y + dy;
                         if (sy < 0 || sy >= h) continue;
-                        sum += tmp[sy * w + x];
-                        count++;
+                        const row = sy * w;
+                        for (let dx = -1; dx <= 1; dx++) {
+                            const sx = x + dx;
+                            if (sx < 0 || sx >= w) continue;
+                            win[count++] = src[row + sx];
+                        }
                     }
-                    d[(y * w + x) * 4 + 3] = Math.round(sum / count);
+                    for (let a = 0; a < count - 1; a++) {
+                        let m = a;
+                        for (let b = a + 1; b < count; b++) if (win[b] < win[m]) m = b;
+                        if (m !== a) { const tmp = win[a]; win[a] = win[m]; win[m] = tmp; }
+                    }
+                    d[(y * w + x) * 4 + 3] = win[count >> 1];
                 }
             }
         }
@@ -241,7 +243,7 @@
                 d[i + 1] = clamp8((d[i + 1] + shimmer) * darken);
                 d[i + 2] = clamp8((d[i + 2] + shimmer) * darken);
             }
-            blurAlphaChannel(d, w, h, ALPHA_BLUR_RADIUS);
+            medianAlphaChannel(d, w, h);
             ctx.putImageData(frame, 0, 0);
         }
 
