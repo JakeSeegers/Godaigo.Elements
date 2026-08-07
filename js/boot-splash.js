@@ -10,7 +10,9 @@
     // Plays muted+autoplay (guaranteed to work with no prior user gesture —
     // there is no audio to preserve here), lingers on its last frame once
     // it ends, then fades in a "press any key" prompt. Any key or click, at
-    // any point (mid-playback or after), crossfades the whole thing away.
+    // any point (mid-playback or after), fades the whole thing out — fully,
+    // before the login screen starts its own fade-in (see css/boot-splash.css;
+    // sequential on purpose, not a crossfade).
     // Just before the video reaches its end, images/Final Logo Sign In.png
     // (same pixel dimensions as the video, so it lines up with zero extra
     // positioning math) crossfades in on top, chroma-keyed the same way —
@@ -253,7 +255,7 @@
             splash.classList.add('boot-splash-hidden');
             revealLogin();
             video.pause();
-            // Remove after the crossfade finishes so it can't intercept
+            // Remove after the fade-out finishes so it can't intercept
             // clicks or linger in the DOM (matches css/boot-splash.css's
             // 1.4s #boot-splash fade-out, +margin).
             setTimeout(() => { splash.remove(); }, 1500);

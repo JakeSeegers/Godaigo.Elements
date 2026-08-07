@@ -3,7 +3,8 @@
    screen. #lobby-wrapper's own parallax background (js/parallax.js) is
    already animating directly underneath — this layer is transparent on
    purpose so it shows through around the chroma-keyed logo. Any key or
-   click crossfades it away; see js/boot-splash.js for the timing logic. */
+   click fades it away, fully, before the login screen starts fading in
+   (sequential, not a crossfade — see js/boot-splash.js for the timing). */
 
 #boot-splash {
     position: fixed;
@@ -14,9 +15,10 @@
     align-items: center;
     justify-content: center;
     opacity: 1;
-    /* Slowed from 0.8s (per request) — was finishing before the login
-       screen's own fade (below) had a chance to feel like a crossfade
-       rather than a jump-cut. */
+    /* Slowed from 0.8s (per request). The login screen's own fade-in
+       (below) doesn't start until this fully finishes — sequential, not
+       overlapping — so this duration alone sets how long the player
+       waits looking at a blank fade before login appears. */
     transition: opacity 1.4s ease;
     cursor: pointer;
     /* Fades in once on load instead of hard-popping into existence — pure
@@ -43,13 +45,10 @@ body.boot-splash-active .site-logo {
 #auth-screen,
 #multiplayer-lobby,
 .site-logo {
-    /* Delay pushed out to 1s (was 0.2s, which started this fade-in far
-       too early against the splash's old 0.8s fade-out and read as two
-       busy visuals overlapping rather than a clean handoff). The splash
-       (1.4s fade-out, above) is now mostly gone before this starts, with
-       just its last 0.4s overlapping this fade-in's first 0.4s — a real
-       but brief crossfade instead of a jump-cut. */
-    transition: opacity 1s ease 1s;
+    /* Delay matches #boot-splash's own 1.4s fade-out exactly (below) —
+       zero overlap. The splash must be fully invisible before this
+       starts fading in at all; sequential, not a crossfade. */
+    transition: opacity 1s ease 1.4s;
 }
 
 #boot-splash.boot-splash-hidden {
