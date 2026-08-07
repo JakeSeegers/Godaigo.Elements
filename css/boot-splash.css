@@ -14,7 +14,10 @@
     align-items: center;
     justify-content: center;
     opacity: 1;
-    transition: opacity 0.8s ease;
+    /* Slowed from 0.8s (per request) — was finishing before the login
+       screen's own fade (below) had a chance to feel like a crossfade
+       rather than a jump-cut. */
+    transition: opacity 1.4s ease;
     cursor: pointer;
     /* Fades in once on load instead of hard-popping into existence — pure
        CSS, no JS coordination needed. Plays once (forwards keeps it at 1),
@@ -40,11 +43,13 @@ body.boot-splash-active .site-logo {
 #auth-screen,
 #multiplayer-lobby,
 .site-logo {
-    /* Slower than the splash's own 0.8s fade-out (below), and with a
-       delay on top, so the login screen doesn't become visible until the
-       splash is most of the way gone — no hard-edge overlap between the
-       two on dismiss. */
-    transition: opacity 1s ease 0.2s;
+    /* Delay pushed out to 1s (was 0.2s, which started this fade-in far
+       too early against the splash's old 0.8s fade-out and read as two
+       busy visuals overlapping rather than a clean handoff). The splash
+       (1.4s fade-out, above) is now mostly gone before this starts, with
+       just its last 0.4s overlapping this fade-in's first 0.4s — a real
+       but brief crossfade instead of a jump-cut. */
+    transition: opacity 1s ease 1s;
 }
 
 #boot-splash.boot-splash-hidden {

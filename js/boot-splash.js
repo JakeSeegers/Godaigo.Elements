@@ -254,9 +254,9 @@
             revealLogin();
             video.pause();
             // Remove after the crossfade finishes so it can't intercept
-            // clicks or linger in the DOM (matches the CSS opacity
-            // transition, +margin).
-            setTimeout(() => { splash.remove(); }, 900);
+            // clicks or linger in the DOM (matches css/boot-splash.css's
+            // 1.4s #boot-splash fade-out, +margin).
+            setTimeout(() => { splash.remove(); }, 1500);
         }
 
         video.addEventListener('ended', onEnded);
