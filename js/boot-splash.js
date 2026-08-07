@@ -80,6 +80,14 @@
             ctx.drawImage(video, EDGE_TRIM_PX, TOP_TRIM_PX, sw, sh, EDGE_TRIM_PX, TOP_TRIM_PX, sw, sh);
         }
 
+        // This source clip's actual frame 0 is a stray dark lead-in frame
+        // baked into the file itself (confirmed with ffmpeg: frame 1
+        // averages to a dark rgb(121,111,122); every frame after it
+        // averages to a near-white rgb(255,250,255)) — not a browser-
+        // readiness thing. Just skip drawing the first couple of frames.
+        const SKIP_FIRST_N_FRAMES = 2;
+        let framesDrawn = 0;
+
         function keyAndShimmerFrame(t) {
             const w = canvas.width, h = canvas.height;
             const frame = ctx.getImageData(0, 0, w, h);
@@ -116,6 +124,7 @@
             // decoded frame exists (and, being a later state, that metadata
             // — hence real canvas dimensions — is already set too).
             if (!canvas.width || video.readyState < video.HAVE_CURRENT_DATA) return;
+            if (framesDrawn < SKIP_FIRST_N_FRAMES) { framesDrawn++; return; }
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawVideoFrame();
             keyAndShimmerFrame(t);
