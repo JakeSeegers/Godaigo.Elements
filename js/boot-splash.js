@@ -105,7 +105,17 @@
         }
 
         function drawFrame(t) {
-            if (!canvas.width) return; // metadata not loaded yet — next tick retries
+            // canvas.width alone isn't a safe "ready" check — an untouched
+            // <canvas> defaults to 300x150 (non-zero!) before loadedmetadata
+            // sets the real size, so this used to let the loop draw a frame
+            // or two of default/black video content while still "loading".
+            // The chroma key only ever REMOVES opacity, never adds it, so
+            // that dark not-ready content stayed fully opaque — and with
+            // the drop-shadow glow added, that was a flashed glowing box on
+            // load. readyState >= HAVE_CURRENT_DATA guarantees an actual
+            // decoded frame exists (and, being a later state, that metadata
+            // — hence real canvas dimensions — is already set too).
+            if (!canvas.width || video.readyState < video.HAVE_CURRENT_DATA) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawVideoFrame();
             keyAndShimmerFrame(t);
