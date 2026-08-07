@@ -64,11 +64,17 @@ body.boot-splash-active .site-logo {
 }
 
 #boot-splash-canvas {
-    max-width: 100%;
-    max-height: 100%;
-    /* Source is portrait (720x900) — contain, not cover, so nothing in the
-       logo/lettering ever gets cropped on a wide viewport. Actual fit math
-       happens in JS (drawImage dest rect), this just caps CSS display size. */
+    /* Explicit (not just max-) width/height so it actually scales up to
+       use most of the screen instead of sitting at the raw 852x480 video
+       resolution — up from the old 100%-cap-only sizing, per request. */
+    width: 90vw;
+    height: 90vh;
+    max-width: 90vw;
+    max-height: 90vh;
+    /* Source is landscape (852x480) — contain, not cover, so nothing in the
+       logo/lettering ever gets cropped regardless of viewport aspect ratio.
+       Actual fit math happens in JS (drawImage dest rect), this just caps
+       CSS display size. */
     object-fit: contain;
     /* Soft ambient glow so the logo reads as floating/lit in the starfield
        rather than pasted on top. Pure CSS filter — GPU-composited, zero

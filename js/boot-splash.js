@@ -42,10 +42,14 @@
         // Video background is #FCFFFC (near-white). Two-threshold feather —
         // fully transparent inside INNER, fully opaque outside OUTER, linear
         // fade between — so edges around the logo don't look like a
-        // hard-cut sticker. Tune these three if real playback shows
-        // fringing or eats into the artwork's own pale tones.
+        // hard-cut sticker. Widened past the original 18/45 (per request)
+        // to pull more of the near-white background out and soften the
+        // transition into a visibly fuzzier edge; the logo art itself is
+        // also pale, so push these further only if playback still shows a
+        // white fringe — past a point it starts eating the artwork's own
+        // pale tones instead.
         const KEY_R = 0xFC, KEY_G = 0xFF, KEY_B = 0xFC;
-        const INNER = 18, OUTER = 45;
+        const INNER = 26, OUTER = 70;
 
         // ── Shimmer ────────────────────────────────────────────────────
         // A gentle whole-logo brightness pulse, folded into the same
@@ -72,7 +76,9 @@
         // there through the "press any key" wait with no extra state.
         const SIGNIN_KEY_R = 0xB1, SIGNIN_KEY_G = 0x74, SIGNIN_KEY_B = 0xE7;
         const SIGNIN_INNER = 18, SIGNIN_OUTER = 45;
-        const SIGNIN_FADE_SECONDS = 0.8;
+        // Shortened from the original 0.8s (per request) — the crossfade
+        // between the video and this overlay now happens quicker.
+        const SIGNIN_FADE_SECONDS = 0.45;
 
         let signInCanvas = null; // set once the image has loaded + been keyed
         const signInImg = new Image();
