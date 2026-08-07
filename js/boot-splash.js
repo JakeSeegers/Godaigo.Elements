@@ -64,12 +64,20 @@
         // edge is affected each time a video gets swapped, costs nothing
         // visually and is robust to whatever the next file's dimensions are.
         const EDGE_TRIM_PX = 3;
+        // This particular source clip also has a small stray blob baked
+        // into the top-right of its first few frames (roughly x:603-614,
+        // y:10-20 at 852x480) — real content, not an encoder artifact; it
+        // gets covered by the paint animation within ~0.15s but is visible
+        // right at the start. Cropping the top down past it is simpler and
+        // more robust than trying to mask just that one region for just
+        // those first few frames.
+        const TOP_TRIM_PX = 24;
 
         function drawVideoFrame() {
             const vw = video.videoWidth, vh = video.videoHeight;
             const sw = Math.max(1, vw - EDGE_TRIM_PX * 2);
-            const sh = Math.max(1, vh - EDGE_TRIM_PX * 2);
-            ctx.drawImage(video, EDGE_TRIM_PX, EDGE_TRIM_PX, sw, sh, EDGE_TRIM_PX, EDGE_TRIM_PX, sw, sh);
+            const sh = Math.max(1, vh - TOP_TRIM_PX - EDGE_TRIM_PX);
+            ctx.drawImage(video, EDGE_TRIM_PX, TOP_TRIM_PX, sw, sh, EDGE_TRIM_PX, TOP_TRIM_PX, sw, sh);
         }
 
         function keyAndShimmerFrame(t) {

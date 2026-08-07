@@ -16,6 +16,15 @@
     opacity: 1;
     transition: opacity 0.8s ease;
     cursor: pointer;
+    /* Fades in once on load instead of hard-popping into existence — pure
+       CSS, no JS coordination needed. Plays once (forwards keeps it at 1),
+       then the dismiss transition above takes over for the fade-out. */
+    animation: boot-splash-fade-in 0.5s ease forwards;
+}
+
+@keyframes boot-splash-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 /* Login UI (and the static site logo — redundant with the animated one)
@@ -57,6 +66,13 @@ body.boot-splash-active .site-logo {
        logo/lettering ever gets cropped on a wide viewport. Actual fit math
        happens in JS (drawImage dest rect), this just caps CSS display size. */
     object-fit: contain;
+    /* Soft ambient glow so the logo reads as floating/lit in the starfield
+       rather than pasted on top. Pure CSS filter — GPU-composited, zero
+       per-frame JS cost on top of the chroma-key/shimmer work already
+       happening every frame. */
+    filter:
+        drop-shadow(0 0 20px rgba(255, 250, 230, 0.4))
+        drop-shadow(0 0 46px rgba(255, 240, 200, 0.22));
 }
 
 #boot-splash-prompt {
