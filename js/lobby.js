@@ -2073,6 +2073,54 @@
                     }
                     console.log(`🌬️ Take Flight scroll sync: ${tfScroll} moved to player ${targetPlayerIndex}'s hand`);
                 }
+
+                // If I'm the caster and was waiting on the target to choose
+                // their own landing hex (real-multiplayer opponent-target
+                // hand-off), this result IS that choice — finish the effect
+                // on my side now (see enterTakeFlightMode's handOffToTarget).
+                const pendingTF = window.pendingTakeFlightCompletion;
+                if (typeof myPlayerIndex !== 'undefined' && myPlayerIndex === tfCaster &&
+                    pendingTF && pendingTF.targetPlayerIndex === targetPlayerIndex) {
+                    window.pendingTakeFlightCompletion = null;
+                    if (spellSystem?.scrollEffects?.selectionMode?.type === 'take-flight-await-remote') {
+                        spellSystem.scrollEffects.selectionMode.cleanup?.();
+                        spellSystem.scrollEffects.selectionMode = null;
+                    }
+                    if (pendingTF.completionPayload && spellSystem && typeof spellSystem.onSelectionEffectComplete === 'function') {
+                        spellSystem.onSelectionEffectComplete(
+                            pendingTF.completionPayload.scrollName,
+                            pendingTF.completionPayload.effectName,
+                            pendingTF.completionPayload.spell
+                        );
+                    }
+                }
+            });
+
+            // Take Flight: caster targeted ME with an opponent-target — my own
+            // client drives the destination choice (see
+            // ScrollEffects.enterTakeFlightChoiceAsTarget).
+            gameChannel.on('broadcast', { event: 'take-flight-choose-request' }, ({ payload }) => {
+                console.log('📄 Received take-flight-choose-request:', payload);
+                const { casterIndex: tfCaster, targetPlayerIndex, scrollName: tfScroll } = payload;
+                if (typeof myPlayerIndex === 'undefined' || myPlayerIndex === null || myPlayerIndex !== targetPlayerIndex) return;
+                if (spellSystem?.scrollEffects?.enterTakeFlightChoiceAsTarget) {
+                    spellSystem.scrollEffects.enterTakeFlightChoiceAsTarget(tfCaster, targetPlayerIndex, tfScroll);
+                }
+            });
+
+            // Take Flight: either side (caster waiting, or target mid-drag)
+            // cancelled — tear down locally on whichever end is still open.
+            gameChannel.on('broadcast', { event: 'take-flight-cancel-request' }, ({ payload }) => {
+                console.log('📄 Received take-flight-cancel-request:', payload);
+                const { targetPlayerIndex } = payload;
+                if (window.takeFlightState?.targetPlayerIndex === targetPlayerIndex) {
+                    window.takeFlightState.onCancel?.();
+                } else if (spellSystem?.scrollEffects?.selectionMode?.type === 'take-flight-await-remote' &&
+                           spellSystem.scrollEffects.selectionMode.targetPlayerIndex === targetPlayerIndex) {
+                    window.pendingTakeFlightCompletion = null;
+                    spellSystem.scrollEffects.cancelSelectionMode();
+                    updateStatus('Take Flight cancelled.');
+                }
             });
 
             // Catacomb/Freedom teleport: sync shrine teleports

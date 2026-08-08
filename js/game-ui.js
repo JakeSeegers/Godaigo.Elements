@@ -1390,33 +1390,15 @@
                     const destPos = playerPos && playerPos.valid ? { x: playerPos.x, y: playerPos.y } : null;
                     const origin = tf.startPos || startPos;
 
-                    const hasStone = destPos && placedStones.some(s => {
-                        const dist = Math.sqrt(Math.pow(s.x - destPos.x, 2) + Math.pow(s.y - destPos.y, 2));
-                        return dist < 5;
-                    });
-                    const hasPlayer = destPos && playerPositions.some((p, idx) => {
-                        if (!p) return false;
-                        if (idx === targetIndex) return false;
-                        const dist = Math.sqrt(Math.pow(p.x - destPos.x, 2) + Math.pow(p.y - destPos.y, 2));
-                        return dist < 5;
-                    });
-                    // A teleport may not land on a face-down tile — it doesn't
-                    // reveal it, so ending there is illegal.
-                    const onFlipped = destPos && typeof isPositionOnFlippedTile === 'function' &&
-                        isPositionOnFlippedTile(destPos.x, destPos.y, getAllHexagonPositions());
-                    // Same rule ordinary movement enforces (canPlayerMoveToHex's
-                    // isOpponentTileCenter): a teleport may not land on the origin
-                    // hex of another player's tile either — only reachable by its
-                    // own owner (required for the win condition).
-                    const onOpponentTile = destPos && typeof isOpponentTileCenter === 'function' &&
-                        isOpponentTileCenter(destPos.x, destPos.y, targetIndex);
+                    // Destination rule: unoccupied hex on a tile occupied by
+                    // another player, never a player tile — see
+                    // ScrollEffects.getValidTakeFlightDestinations() for the
+                    // full definition (also used by the bot's take-flight driver).
+                    const isValidDest = destPos && typeof window.spellSystem?.scrollEffects?.isValidTakeFlightDestination === 'function' &&
+                        window.spellSystem.scrollEffects.isValidTakeFlightDestination(targetIndex, destPos.x, destPos.y);
 
-                    if (!destPos || hasStone || hasPlayer || onFlipped || onOpponentTile) {
-                        if (hasStone) updateStatus('Take Flight: cannot teleport onto a stone.');
-                        else if (hasPlayer) updateStatus('Take Flight: another player is in the way.');
-                        else if (onFlipped) updateStatus('Take Flight: cannot teleport onto a face-down tile.');
-                        else if (onOpponentTile) updateStatus('Take Flight: cannot teleport onto another player\'s tile.');
-                        else updateStatus('Take Flight: invalid destination.');
+                    if (!destPos || !isValidDest) {
+                        updateStatus('Take Flight: must land on an unoccupied hex on a tile occupied by another player.');
 
                         if (origin) {
                             if (targetIndex === activePlayerIndex) {

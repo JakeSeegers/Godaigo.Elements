@@ -1018,7 +1018,7 @@ const ScrollEffects = {
          */
         WIND_SCROLL_4: {
             name: 'Take Flight',
-            description: 'Teleport any player to an unoccupied space of your choice. If targeting an opponent, Take Flight goes to their hand. If targeting yourself, it stays in your active area.',
+            description: "Select a player to teleport. If you target yourself, you choose where to land; if you target another player, they choose instead. Destination must be an unoccupied hex on a tile occupied by another player. Cannot target player tiles. Cancels if no valid destination exists. If targeting an opponent, Take Flight goes to their hand; if targeting yourself, it stays in your active area.",
             isCounter: false,
             priority: 4,
 
@@ -4439,105 +4439,255 @@ const ScrollEffects = {
             document.body.appendChild(overlay);
         };
 
-        // Step 2: Drag the target pawn to an unoccupied hex
+        // Step 2: the CHOOSER drags a pawn to a valid hex. Self-target: the
+        // caster always chooses (here, directly). Opponent-target: the target
+        // chooses instead — in real multiplayer that means handing control to
+        // the target's own client (see enterTakeFlightChoiceAsTarget below and
+        // the 'take-flight-choose-request' broadcast); outside multiplayer
+        // (solo/hotseat, only one client exists) this same client just drives
+        // the drag on the target's behalf, same as self-target.
         const enterHexSelectionForPlayer = (targetPlayerIndex) => {
-            const cancelBtn = self.createCancelButton('Cancel Take Flight', () => {
-                if (window.takeFlightState?.onCancel) {
-                    window.takeFlightState.onCancel();
-                }
-                self.cancelSelectionMode();
-            });
-
             const targetPlayer = (typeof playerPositions !== 'undefined') ? playerPositions[targetPlayerIndex] : null;
             if (!targetPlayer) {
                 updateStatus('Take Flight: target player not found.');
-                if (cancelBtn && cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
                 return;
             }
-
-            const cleanup = () => {
-                if (cancelBtn && cancelBtn.parentNode) {
-                    cancelBtn.parentNode.removeChild(cancelBtn);
-                }
-                if (window.takeFlightState) {
-                    window.takeFlightState.active = false;
-                    window.takeFlightState = null;
-                }
-                self.selectionMode = null;
-            };
-
-            const onComplete = (destX, destY) => {
-                const targetName = (typeof getPlayerColorName === 'function')
-                    ? getPlayerColorName(targetPlayerIndex)
-                    : `Player ${targetPlayerIndex + 1}`;
-                updateStatus(`Take Flight! Teleported ${targetName} to a new location.`);
-                console.log(`🌬️ Take Flight: player ${targetPlayerIndex} teleported to (${destX.toFixed(1)}, ${destY.toFixed(1)})`);
-
-                // Disposition: opponent gets the scroll in their hand; self-target keeps it in active area
-                const scrollName = completionPayload?.scrollName || 'WIND_SCROLL_4';
-                if (self.spellSystem && targetPlayerIndex !== casterIndex) {
-                    const casterScrolls = self.spellSystem.playerScrolls[casterIndex];
-                    if (casterScrolls?.active.has(scrollName)) {
-                        casterScrolls.active.delete(scrollName);
-                    }
-                    self.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
-                    self.spellSystem.playerScrolls[targetPlayerIndex].hand.add(scrollName);
-                    self.spellSystem.updateScrollCount();
-                    updateCommonAreaUI();
-                    if (typeof window.ScrollPanelSystem?.renderPanel === 'function') {
-                        window.ScrollPanelSystem.renderPanel('hand');
-                    }
-                }
-                // If self-targeting, scroll stays in active area — no action needed
-
-                // Broadcast teleport + scroll disposition in multiplayer
-                if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
-                    broadcastGameAction('take-flight', {
-                        casterIndex: casterIndex,
-                        targetPlayerIndex: targetPlayerIndex,
-                        scrollName: scrollName,
-                        x: destX,
-                        y: destY
-                    });
-                }
-
-                // Signal completion
-                if (completionPayload && self.spellSystem && typeof self.spellSystem.onSelectionEffectComplete === 'function') {
-                    self.spellSystem.onSelectionEffectComplete(completionPayload.scrollName, completionPayload.effectName, completionPayload.spell);
-                }
-
-                cleanup();
-            };
-
-            const onCancel = () => {
-                updateStatus('Take Flight cancelled.');
-                cleanup();
-            };
-
-            window.takeFlightState = {
-                active: true,
-                casterIndex,
-                targetPlayerIndex,
-                startPos: { x: targetPlayer.x, y: targetPlayer.y },
-                onComplete,
-                onCancel
-            };
-
-            self.selectionMode = {
-                type: 'take-flight-drag',
-                casterIndex,
-                targetPlayerIndex,
-                cancelBtn,
-                cleanup
-            };
 
             const targetName = (typeof getPlayerColorName === 'function')
                 ? getPlayerColorName(targetPlayerIndex)
                 : `Player ${targetPlayerIndex + 1}`;
-            updateStatus(`Take Flight: Drag ${targetName} to an unoccupied hex.`);
+
+            const validDestinations = self.getValidTakeFlightDestinations(targetPlayerIndex);
+            if (validDestinations.length === 0) {
+                updateStatus(`Take Flight cancelled: no unoccupied hex on a tile occupied by another player exists for ${targetName}.`);
+                return;
+            }
+
+            const handOffToTarget = targetPlayerIndex !== casterIndex &&
+                typeof isMultiplayer !== 'undefined' && isMultiplayer;
+
+            if (handOffToTarget) {
+                const cancelBtn = self.createCancelButton('Cancel Take Flight', () => {
+                    if (typeof broadcastGameAction === 'function') {
+                        broadcastGameAction('take-flight-cancel-request', { casterIndex, targetPlayerIndex });
+                    }
+                    window.pendingTakeFlightCompletion = null;
+                    self.cancelSelectionMode();
+                });
+
+                self.selectionMode = {
+                    type: 'take-flight-await-remote',
+                    casterIndex,
+                    targetPlayerIndex,
+                    cancelBtn,
+                    cleanup() {
+                        if (cancelBtn && cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
+                    }
+                };
+
+                // Stashed so the 'take-flight' result broadcast we get back
+                // (sent by the target once they choose) can finish this
+                // effect on OUR side — see lobby.js's 'take-flight' handler.
+                window.pendingTakeFlightCompletion = { casterIndex, targetPlayerIndex, completionPayload };
+
+                if (typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('take-flight-choose-request', {
+                        casterIndex,
+                        targetPlayerIndex,
+                        scrollName: completionPayload?.scrollName || 'WIND_SCROLL_4'
+                    });
+                }
+
+                updateStatus(`Take Flight: waiting for ${targetName} to choose where to land...`);
+                return;
+            }
+
+            self._enterTakeFlightDrag(casterIndex, targetPlayerIndex, targetPlayer, {
+                onDone: (destX, destY) => {
+                    const scrollName = completionPayload?.scrollName || 'WIND_SCROLL_4';
+                    self.finalizeTakeFlightChoice(casterIndex, targetPlayerIndex, scrollName, destX, destY);
+                    if (completionPayload && self.spellSystem && typeof self.spellSystem.onSelectionEffectComplete === 'function') {
+                        self.spellSystem.onSelectionEffectComplete(completionPayload.scrollName, completionPayload.effectName, completionPayload.spell);
+                    }
+                },
+                onCancelled: () => updateStatus('Take Flight cancelled.')
+            });
         };
 
         showPlayerModal();
+    },
+
+    // Shared drag setup for whichever client is actually picking the
+    // destination: the caster (self-target, or opponent-target outside real
+    // multiplayer) or the target themselves (enterTakeFlightChoiceAsTarget,
+    // real-multiplayer opponent-target). The mouseup handler in game-ui.js
+    // reads window.takeFlightState and validates drops via
+    // isValidTakeFlightDestination() regardless of who set it up.
+    _enterTakeFlightDrag(casterIndex, targetPlayerIndex, targetPlayer, { onDone, onCancelled }) {
+        const self = this;
+        const cancelBtn = this.createCancelButton('Cancel Take Flight', () => {
+            if (window.takeFlightState?.onCancel) window.takeFlightState.onCancel();
+        });
+
+        const cleanup = () => {
+            if (cancelBtn && cancelBtn.parentNode) {
+                cancelBtn.parentNode.removeChild(cancelBtn);
+            }
+            if (window.takeFlightState) {
+                window.takeFlightState.active = false;
+                window.takeFlightState = null;
+            }
+            self.selectionMode = null;
+        };
+
+        window.takeFlightState = {
+            active: true,
+            casterIndex,
+            targetPlayerIndex,
+            startPos: { x: targetPlayer.x, y: targetPlayer.y },
+            onComplete: (destX, destY) => {
+                cleanup();
+                if (typeof onDone === 'function') onDone(destX, destY);
+            },
+            onCancel: () => {
+                cleanup();
+                if (typeof onCancelled === 'function') onCancelled();
+            }
+        };
+
+        this.selectionMode = {
+            type: 'take-flight-drag',
+            casterIndex,
+            targetPlayerIndex,
+            cancelBtn,
+            cleanup
+        };
+
+        const targetName = (typeof getPlayerColorName === 'function')
+            ? getPlayerColorName(targetPlayerIndex)
+            : `Player ${targetPlayerIndex + 1}`;
+        updateStatus(`Take Flight: drag ${targetName} to an unoccupied hex on a tile occupied by another player.`);
+    },
+
+    // Runs on the TARGET's own client when a caster targets them for Take
+    // Flight in real multiplayer (received via 'take-flight-choose-request' —
+    // see lobby.js). Mirrors enterTakeFlightMode's step 2, but here the LOCAL
+    // player is the chooser, not the caster.
+    enterTakeFlightChoiceAsTarget(casterIndex, targetPlayerIndex, scrollName) {
+        const targetPlayer = (typeof playerPositions !== 'undefined') ? playerPositions[targetPlayerIndex] : null;
+        if (!targetPlayer) return;
+
+        // Board state could in principle have shifted since the caster's own
+        // check (which already gates the "cancel if nothing valid" case) —
+        // re-check defensively rather than assume.
+        if (this.getValidTakeFlightDestinations(targetPlayerIndex).length === 0) {
+            updateStatus('Take Flight: no valid destination available.');
+            return;
+        }
+
+        this._enterTakeFlightDrag(casterIndex, targetPlayerIndex, targetPlayer, {
+            onDone: (destX, destY) => {
+                this.finalizeTakeFlightChoice(casterIndex, targetPlayerIndex, scrollName, destX, destY);
+            },
+            onCancelled: () => {
+                updateStatus('Take Flight cancelled.');
+                if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('take-flight-cancel-request', { casterIndex, targetPlayerIndex });
+                }
+            }
+        });
+    },
+
+    // Moves the pawn's scroll disposition (opponent target -> their hand,
+    // self-target -> stays in the caster's active area) and broadcasts the
+    // result. Used by whichever client actually picked the destination. Does
+    // NOT resolve the caster's onSelectionEffectComplete itself — the
+    // self-target caller does that right after calling this; the
+    // remote-target case is resolved on the caster's client when this
+    // broadcast arrives (see lobby.js's 'take-flight' handler).
+    finalizeTakeFlightChoice(casterIndex, targetPlayerIndex, scrollName, destX, destY) {
+        const targetName = (typeof getPlayerColorName === 'function')
+            ? getPlayerColorName(targetPlayerIndex)
+            : `Player ${targetPlayerIndex + 1}`;
+        updateStatus(`Take Flight! Teleported ${targetName} to a new location.`);
+        console.log(`🌬️ Take Flight: player ${targetPlayerIndex} teleported to (${destX.toFixed(1)}, ${destY.toFixed(1)})`);
+
+        // Disposition: opponent gets the scroll in their hand; self-target keeps it in active area
+        if (this.spellSystem && targetPlayerIndex !== casterIndex) {
+            const casterScrolls = this.spellSystem.playerScrolls[casterIndex];
+            if (casterScrolls?.active.has(scrollName)) {
+                casterScrolls.active.delete(scrollName);
+            }
+            this.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
+            this.spellSystem.playerScrolls[targetPlayerIndex].hand.add(scrollName);
+            this.spellSystem.updateScrollCount();
+            updateCommonAreaUI();
+            if (typeof window.ScrollPanelSystem?.renderPanel === 'function') {
+                window.ScrollPanelSystem.renderPanel('hand');
+            }
+        }
+        // If self-targeting, scroll stays in active area — no action needed
+
+        // Broadcast teleport + scroll disposition in multiplayer
+        if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+            broadcastGameAction('take-flight', {
+                casterIndex: casterIndex,
+                targetPlayerIndex: targetPlayerIndex,
+                scrollName: scrollName,
+                x: destX,
+                y: destY
+            });
+        }
+    },
+
+    // Every unoccupied hex that lies on a tile currently occupied by some
+    // OTHER player (not targetPlayerIndex themselves), excluding player tiles
+    // and face-down tiles. This is Take Flight's destination rule regardless
+    // of who's choosing (self or the target) — also used by game-ui.js's
+    // drop-handler validation and by the bot's take-flight driver.
+    getValidTakeFlightDestinations(targetPlayerIndex) {
+        if (typeof getAllHexagonPositions !== 'function' || typeof playerPositions === 'undefined') return [];
+        const hexPositions = getAllHexagonPositions();
+
+        // Tiles with at least one player OTHER than the mover standing on them
+        const occupiedTiles = new Set();
+        playerPositions.forEach((p, idx) => {
+            if (!p || idx === targetPlayerIndex) return;
+            const matching = hexPositions.find(pos => {
+                const dist = Math.sqrt(Math.pow(pos.x - p.x, 2) + Math.pow(pos.y - p.y, 2));
+                return dist < 5;
+            });
+            if (matching?.tiles) matching.tiles.forEach(t => occupiedTiles.add(t));
+        });
+        if (occupiedTiles.size === 0) return [];
+
+        return hexPositions.filter(pos => {
+            if (!pos.tiles || !pos.tiles.some(t => occupiedTiles.has(t))) return false;
+            if (typeof isPositionOnPlayerTile === 'function' && isPositionOnPlayerTile(pos.x, pos.y, hexPositions)) return false;
+            if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(pos.x, pos.y, hexPositions)) return false;
+
+            const hasStone = typeof placedStones !== 'undefined' && placedStones.some(s => {
+                const dist = Math.sqrt(Math.pow(s.x - pos.x, 2) + Math.pow(s.y - pos.y, 2));
+                return dist < 5;
+            });
+            if (hasStone) return false;
+
+            const hasPlayer = playerPositions.some(p => {
+                if (!p) return false;
+                const dist = Math.sqrt(Math.pow(p.x - pos.x, 2) + Math.pow(p.y - pos.y, 2));
+                return dist < 5;
+            });
+            if (hasPlayer) return false;
+
+            return true;
+        });
+    },
+
+    isValidTakeFlightDestination(targetPlayerIndex, x, y) {
+        return this.getValidTakeFlightDestinations(targetPlayerIndex).some(pos => {
+            const dist = Math.sqrt(Math.pow(pos.x - x, 2) + Math.pow(pos.y - y, 2));
+            return dist < 5;
+        });
     },
 
     // Fire V - Arson: Destroy stone from opponent pool

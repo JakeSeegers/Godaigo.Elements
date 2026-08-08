@@ -689,12 +689,13 @@
     //      AND THEN calls window.takeFlightState.onComplete(x, y), which
     //      only finalizes scroll disposition/broadcast. Mirror BOTH calls
     //      exactly — onComplete alone would leave the pawn never actually
-    //      moved. Any hex on the grid works as a destination (no
-    //      revealed/tile-type restriction, unlike Excavate) — stones, other
-    //      players, and opponents' tile origins all block it, but a direct
-    //      teleport to the target's OWN tile is legal and correctly triggers
-    //      a win via placePlayer()'s own checkWinCondition() call once all 5
-    //      elements are activated.
+    //      moved. Destination must be an unoccupied hex on a tile currently
+    //      occupied by ANOTHER player (not a player tile) — the same rule
+    //      ScrollEffects.getValidTakeFlightDestinations() enforces for humans,
+    //      reused here so the bot never proposes a drop the handler would
+    //      reject. Since v1 only ever self-targets, that means the bot's own
+    //      pawn has to already be near an opponent for Take Flight to have
+    //      anywhere legal to go.
     // ----------------------------------------------------------------
     function driveTakeFlightPlayerModal() {
         const modal = document.getElementById('take-flight-player-modal');
@@ -712,23 +713,10 @@
         const s = snap();
         const target = s.players[tf.targetPlayerIndex];
         if (!target) return false;
-        const grid = window.BotState?.hexGrid?.() || [];
-        const candidates = grid.filter(h => {
-            if (typeof placedStones !== 'undefined' && placedStones.some(st => dist(st, h) < 5)) return false;
-            if (typeof playerPositions !== 'undefined' &&
-                playerPositions.some((p, idx) => p && idx !== tf.targetPlayerIndex && dist(p, h) < 5)) return false;
-            // A teleport may NEVER land on a face-down tile (it doesn't reveal
-            // it — landing there is illegal, same rule the human drop handler
-            // now enforces). isPositionOnFlippedTile also excludes shared bridge
-            // hexes that touch any unflipped tile.
-            if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(h.x, h.y, grid)) return false;
-            // Nor may it land on another player's tile origin — same rule
-            // ordinary movement enforces (canPlayerMoveToHex's
-            // isOpponentTileCenter), mirrored here so the bot can't use Take
-            // Flight to do what stepping can't.
-            if (typeof isOpponentTileCenter === 'function' && isOpponentTileCenter(h.x, h.y, tf.targetPlayerIndex)) return false;
-            return true;
-        });
+        const se = window.spellSystem?.scrollEffects;
+        const candidates = se?.getValidTakeFlightDestinations
+            ? se.getValidTakeFlightDestinations(tf.targetPlayerIndex)
+            : [];
         if (!candidates.length) return false;
 
         // When still exploring, aim TOWARD the nearest hidden tile — but the
