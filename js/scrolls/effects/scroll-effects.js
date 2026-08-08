@@ -1018,7 +1018,7 @@ const ScrollEffects = {
          */
         WIND_SCROLL_4: {
             name: 'Take Flight',
-            description: "Select a player to teleport. If you target yourself, you choose where to land; if you target another player, they choose instead. Destination must be an unoccupied hex on a tile occupied by another player. Cannot target player tiles. Cancels if no valid destination exists. If targeting an opponent, Take Flight goes to their hand; if targeting yourself, it stays in your active area.",
+            description: "Select a player to teleport. If you target yourself, you choose where to land; if you target another player, they choose instead. Destination must be an unoccupied hex on a tile occupied by another player. Cannot target player tiles. Cancels if no valid destination exists.",
             isCounter: false,
             priority: 4,
 
@@ -4598,11 +4598,11 @@ const ScrollEffects = {
         });
     },
 
-    // Moves the pawn's scroll disposition (opponent target -> their hand,
-    // self-target -> stays in the caster's active area) and broadcasts the
-    // result. Used by whichever client actually picked the destination. Does
-    // NOT resolve the caster's onSelectionEffectComplete itself — the
-    // self-target caller does that right after calling this; the
+    // Moves the pawn and broadcasts the result. Used by whichever client
+    // actually picked the destination. The scroll itself always stays in the
+    // caster's active area regardless of who was targeted — no hand/common-area
+    // disposition change. Does NOT resolve the caster's onSelectionEffectComplete
+    // itself — the self-target caller does that right after calling this; the
     // remote-target case is resolved on the caster's client when this
     // broadcast arrives (see lobby.js's 'take-flight' handler).
     finalizeTakeFlightChoice(casterIndex, targetPlayerIndex, scrollName, destX, destY) {
@@ -4612,23 +4612,7 @@ const ScrollEffects = {
         updateStatus(`Take Flight! Teleported ${targetName} to a new location.`);
         console.log(`🌬️ Take Flight: player ${targetPlayerIndex} teleported to (${destX.toFixed(1)}, ${destY.toFixed(1)})`);
 
-        // Disposition: opponent gets the scroll in their hand; self-target keeps it in active area
-        if (this.spellSystem && targetPlayerIndex !== casterIndex) {
-            const casterScrolls = this.spellSystem.playerScrolls[casterIndex];
-            if (casterScrolls?.active.has(scrollName)) {
-                casterScrolls.active.delete(scrollName);
-            }
-            this.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
-            this.spellSystem.playerScrolls[targetPlayerIndex].hand.add(scrollName);
-            this.spellSystem.updateScrollCount();
-            updateCommonAreaUI();
-            if (typeof window.ScrollPanelSystem?.renderPanel === 'function') {
-                window.ScrollPanelSystem.renderPanel('hand');
-            }
-        }
-        // If self-targeting, scroll stays in active area — no action needed
-
-        // Broadcast teleport + scroll disposition in multiplayer
+        // Broadcast teleport in multiplayer
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
             broadcastGameAction('take-flight', {
                 casterIndex: casterIndex,

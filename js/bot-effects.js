@@ -677,19 +677,19 @@
     // ----------------------------------------------------------------
     // Take Flight (WIND_SCROLL_4) — two steps:
     //   1. take-flight-player-modal: pick a target. v1 ALWAYS targets
-    //      SELF — self-targeting is a clean, downside-free "teleport
-    //      anywhere unoccupied" (the scroll just stays in the caster's
-    //      active area, per the effect text) with no strategic tradeoff to
-    //      model. Opponent-targeting has a real one (denial value vs.
-    //      handing them a scroll for their hand) that's out of scope for
-    //      v1 — deliberately not attempted here rather than guessed at.
+    //      SELF — the scroll now always stays in the caster's active area
+    //      regardless of target (no more hand-vs-active tradeoff to weigh),
+    //      but opponent-targeting is still skipped in v1: the destination is
+    //      now chosen by the TARGET, not the caster (see
+    //      ScrollEffects.enterTakeFlightChoiceAsTarget), and there's no bot
+    //      logic yet for a bot-controlled target to pick its own landing hex.
     //   2. Drag-drop: NOT a selectionMode.handleXClick() — the real drop
     //      handler (game-ui.js) does double duty: it moves the pawn itself
     //      (placePlayer() for self, movePlayerVisually() for an opponent)
     //      AND THEN calls window.takeFlightState.onComplete(x, y), which
-    //      only finalizes scroll disposition/broadcast. Mirror BOTH calls
-    //      exactly — onComplete alone would leave the pawn never actually
-    //      moved. Destination must be an unoccupied hex on a tile currently
+    //      only finalizes the broadcast. Mirror BOTH calls exactly —
+    //      onComplete alone would leave the pawn never actually moved.
+    //      Destination must be an unoccupied hex on a tile currently
     //      occupied by ANOTHER player (not a player tile) — the same rule
     //      ScrollEffects.getValidTakeFlightDestinations() enforces for humans,
     //      reused here so the bot never proposes a drop the handler would

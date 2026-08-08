@@ -2041,7 +2041,7 @@
             // Take Flight (Wind IV): teleport a player to a new position
             gameChannel.on('broadcast', { event: 'take-flight' }, ({ payload }) => {
                 console.log('📄 Received take-flight:', payload);
-                const { casterIndex: tfCaster, targetPlayerIndex, scrollName: tfScroll, x, y } = payload;
+                const { casterIndex: tfCaster, targetPlayerIndex, x, y } = payload;
 
                 // Move the pawn
                 if (typeof movePlayerVisually === 'function') {
@@ -2058,21 +2058,8 @@
                 }
                 console.log(`🌬️ Take Flight: player ${targetPlayerIndex} teleported to (${x.toFixed(1)}, ${y.toFixed(1)})`);
 
-                // Sync scroll disposition: remove from caster's active, add to opponent's hand
-                if (tfCaster !== undefined && tfScroll && targetPlayerIndex !== tfCaster && window.spellSystem) {
-                    const casterScrolls = window.spellSystem.playerScrolls[tfCaster];
-                    if (casterScrolls?.active.has(tfScroll)) {
-                        casterScrolls.active.delete(tfScroll);
-                    }
-                    window.spellSystem.ensurePlayerScrollsStructure(targetPlayerIndex);
-                    window.spellSystem.playerScrolls[targetPlayerIndex].hand.add(tfScroll);
-                    window.spellSystem.updateScrollCount();
-                    if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
-                    if (typeof window.ScrollPanelSystem?.renderPanel === 'function') {
-                        window.ScrollPanelSystem.renderPanel('hand');
-                    }
-                    console.log(`🌬️ Take Flight scroll sync: ${tfScroll} moved to player ${targetPlayerIndex}'s hand`);
-                }
+                // No scroll disposition sync needed — Take Flight always stays
+                // in the caster's active area, regardless of who was targeted.
 
                 // If I'm the caster and was waiting on the target to choose
                 // their own landing hex (real-multiplayer opponent-target
