@@ -22,20 +22,11 @@ High-level task list for the Godaigo game project. Update this as you complete o
 
 - **End-of-turn scroll overflow** – Modal to resolve hand/active overflow; “make space” flow (active → common, then hand → active).
 - **Scroll / UI** – Stone formation display, common area/opponent popout toggles, Shifting Sands fix, spell selection close button, scroll state validation, Inspiring Draught fix, initial stone counts for testing.
+- **Shifting Sands (Earth II) – ability rule change** – Tiles with stones are still ineligible, but a tile with exactly one player is now a valid swap target (the player is carried along and recentered on the tile after the swap); tiles with 2+ players remain ineligible. Updated `scroll-definitions.js` description, swap eligibility/validation and `performTileSwap` in `scroll-effects.js`, and the multiplayer `tile-swap` receiver in `lobby.js` to recenter the carried player on other clients. Heavy Stomp (tile flip) keeps the old stricter no-players rule.
 
 ---
 
 ## 🔲 To do / Backlog
-
-### **Shifting Sands (Earth II) – ability rule change**
-- New intended text: *"Select two tiles to swap their positions. Tile must be unoccupied by stones. If there is one player on that tile, move them to the center of the tile. Cannot target a tile with multiple players on it."*
-- Current text (`js/scrolls/scroll-definitions.js`, `EARTH_SCROLL_EFFECTS[2].description`): "Select two tiles to swap their positions. Tiles must have no stones or players on them." — i.e. today **any** player on a tile makes it ineligible.
-- Behavior delta to implement in `js/scrolls/effects/scroll-effects.js`:
-  - [ ] Stone check stays as-is (a tile with any stones is still ineligible).
-  - [ ] Player check changes from boolean (`tileHasPlayers`) to a **count**: 0 or 1 player → eligible; 2+ players → ineligible. Update all call sites: eligible-tile filter (~line 2349), initial click validation (~line 2108), and the re-validate-before-swap checks for both tiles (~lines 2142, 2149, 2187, 2191).
-  - [ ] When a tile being swapped has exactly one player on it, after the swap, snap that player's position to the destination tile's center (new step in `performTileSwap`).
-  - [ ] Update the description string in `scroll-definitions.js` to the new intended text once implemented.
-  - [ ] Update `docs/game-design-document.md` if/when it gets per-scroll ability text.
 
 ### **Complete ability code for all scrolls (Water, Fire, Wind, Void, Catacomb)**
 - Implement or finish the **effect logic** for every scroll in `js/scrolls/effects/scroll-effects.js` so each scroll’s ability works as designed.

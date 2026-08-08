@@ -2515,7 +2515,7 @@
             // Listen for tile swap events (Shifting Sands scroll effect)
             gameChannel.on('broadcast', { event: 'tile-swap' }, ({ payload }) => {
                 console.log('📄 Received tile swap:', payload);
-                const { tile1Id, tile2Id, tile1NewPos, tile2NewPos } = payload;
+                const { tile1Id, tile2Id, tile1NewPos, tile2NewPos, movedPlayers } = payload;
 
                 const tile1 = placedTiles.find(t => t.id === tile1Id);
                 const tile2 = placedTiles.find(t => t.id === tile2Id);
@@ -2533,6 +2533,17 @@
                     }
                     if (tile2.element) {
                         tile2.element.setAttribute('transform', `translate(${tile2.x}, ${tile2.y}) rotate(${tile2.rotation || 0})`);
+                    }
+
+                    // Recenter any player that was carried along with its tile
+                    if (movedPlayers && movedPlayers.length > 0) {
+                        movedPlayers.forEach(mp => {
+                            if (typeof movePlayerVisually === 'function') {
+                                movePlayerVisually(mp.playerIndex, mp.newX, mp.newY, 0);
+                            } else if (typeof window !== 'undefined' && typeof window.movePlayerVisually === 'function') {
+                                window.movePlayerVisually(mp.playerIndex, mp.newX, mp.newY, 0);
+                            }
+                        });
                     }
 
                     updateStatus('Tiles were swapped by Shifting Sands!');

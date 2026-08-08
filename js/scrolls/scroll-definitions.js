@@ -60,7 +60,7 @@ function rotateHex(q, r, steps) {
 // Earth scroll effect definitions
 const EARTH_SCROLL_EFFECTS = {
     1: { name: 'Iron Stance', description: 'Counter the most recently cast scroll. That scroll is cancelled.', isCounter: true },
-    2: { name: 'Shifting Sands', description: 'Select two tiles to swap their positions. Tiles must have no stones or players on them.' },
+    2: { name: 'Shifting Sands', description: "Select two tiles to swap their positions. Tile must be unoccupied by stones. If there is one player on that tile, move them to the center of the tile. Cannot target a tile with multiple players on it." },
     3: { name: "Mason's Savvy", description: 'Draw up to 5 earth stones. This turn, place earth stones within 5 hexes of player.' },
     4: { name: 'Heavy Stomp', description: 'Select a tile to flip. Hidden tiles are revealed (draw scroll). Revealed tiles become hidden.' },
     5: { name: 'Avalanche', description: 'This turn, place any stones anywhere on the board (not just adjacent).' }
