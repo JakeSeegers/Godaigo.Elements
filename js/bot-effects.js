@@ -677,12 +677,10 @@
     // ----------------------------------------------------------------
     // Take Flight (WIND_SCROLL_4) — two steps:
     //   1. take-flight-player-modal: pick a target. v1 ALWAYS targets
-    //      SELF — the scroll now always stays in the caster's active area
-    //      regardless of target (no more hand-vs-active tradeoff to weigh),
-    //      but opponent-targeting is still skipped in v1: the destination is
-    //      now chosen by the TARGET, not the caster (see
-    //      ScrollEffects.enterTakeFlightChoiceAsTarget), and there's no bot
-    //      logic yet for a bot-controlled target to pick its own landing hex.
+    //      SELF — the scroll always stays in the caster's active area
+    //      regardless of target (no hand-vs-active tradeoff to weigh), but
+    //      opponent-targeting is still skipped in v1: modeling "is it worth
+    //      spending this to reposition an opponent" is out of scope for v1.
     //   2. Drag-drop: NOT a selectionMode.handleXClick() — the real drop
     //      handler (game-ui.js) does double duty: it moves the pawn itself
     //      (placePlayer() for self, movePlayerVisually() for an opponent)
@@ -691,11 +689,16 @@
     //      onComplete alone would leave the pawn never actually moved.
     //      Destination must be an unoccupied hex on a tile currently
     //      occupied by ANOTHER player (not a player tile) — the same rule
-    //      ScrollEffects.getValidTakeFlightDestinations() enforces for humans,
-    //      reused here so the bot never proposes a drop the handler would
-    //      reject. Since v1 only ever self-targets, that means the bot's own
-    //      pawn has to already be near an opponent for Take Flight to have
-    //      anywhere legal to go.
+    //      ScrollEffects.getValidTakeFlightDestinations() enforces for
+    //      humans, reused here so the bot never proposes a drop the handler
+    //      would reject. driveTakeFlightDrag() resolves ANY open
+    //      take-flight-drag selection, not just self-targeted ones — in
+    //      local/arena play (isMultiplayer false) an opponent-target cast
+    //      still drives the drag on the SAME page, so this also stands in
+    //      for a bot-controlled opponent's choice (see the roll below). Real
+    //      multiplayer opponent-targeting a bot-controlled remote seat is
+    //      NOT covered: bots here aren't separate network clients, so
+    //      nothing answers a 'take-flight-choose-request' sent to one.
     // ----------------------------------------------------------------
     function driveTakeFlightPlayerModal() {
         const modal = document.getElementById('take-flight-player-modal');
@@ -719,20 +722,11 @@
             : [];
         if (!candidates.length) return false;
 
-        // When still exploring, aim TOWARD the nearest hidden tile — but the
-        // filtered candidates land on a legal (revealed/empty) hex ADJACENT to
-        // it, never on the face-down tile itself, so the pawn can walk on to
-        // reveal it next turn.
-        let goal = null;
-        if (ELEMENTS.every(el => target.activated.includes(el))) {
-            goal = s.tiles.find(t => t.isPlayerTile && t.playerIndex === tf.targetPlayerIndex);
-        } else {
-            const hidden = s.tiles.filter(t => !t.revealed && !t.isPlayerTile);
-            goal = hidden.length ? hidden.reduce((a, b) => (!a || dist(target, b) < dist(target, a)) ? b : a, null) : null;
-        }
-        const dest = goal
-            ? candidates.reduce((a, b) => (!a || dist(goal, b) < dist(goal, a)) ? b : a, null)
-            : candidates[0];
+        // v1: roll a random valid destination rather than modeling which one
+        // is actually best (same "no clear strategic value model" reasoning
+        // driveTileSwap uses for Shifting Sands) — good enough to always
+        // respond instead of stalling, refine later if it matters.
+        const dest = candidates[Math.floor(Math.random() * candidates.length)];
 
         if (tf.targetPlayerIndex === activePlayerIndex) {
             placePlayer(dest.x, dest.y);
