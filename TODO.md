@@ -27,6 +27,16 @@ High-level task list for the Godaigo game project. Update this as you complete o
 
 ## 🔲 To do / Backlog
 
+### **Shifting Sands (Earth II) – ability rule change**
+- New intended text: *"Select two tiles to swap their positions. Tile must be unoccupied by stones. If there is one player on that tile, move them to the center of the tile. Cannot target a tile with multiple players on it."*
+- Current text (`js/scrolls/scroll-definitions.js`, `EARTH_SCROLL_EFFECTS[2].description`): "Select two tiles to swap their positions. Tiles must have no stones or players on them." — i.e. today **any** player on a tile makes it ineligible.
+- Behavior delta to implement in `js/scrolls/effects/scroll-effects.js`:
+  - [ ] Stone check stays as-is (a tile with any stones is still ineligible).
+  - [ ] Player check changes from boolean (`tileHasPlayers`) to a **count**: 0 or 1 player → eligible; 2+ players → ineligible. Update all call sites: eligible-tile filter (~line 2349), initial click validation (~line 2108), and the re-validate-before-swap checks for both tiles (~lines 2142, 2149, 2187, 2191).
+  - [ ] When a tile being swapped has exactly one player on it, after the swap, snap that player's position to the destination tile's center (new step in `performTileSwap`).
+  - [ ] Update the description string in `scroll-definitions.js` to the new intended text once implemented.
+  - [ ] Update `docs/game-design-document.md` if/when it gets per-scroll ability text.
+
 ### **Complete ability code for all scrolls (Water, Fire, Wind, Void, Catacomb)**
 - Implement or finish the **effect logic** for every scroll in `js/scrolls/effects/scroll-effects.js` so each scroll’s ability works as designed.
 - **Water (5):** I–III and V have effects; **IV (Wandering River)** is broken (see above). Ensure all five are correct.
