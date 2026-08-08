@@ -178,7 +178,7 @@ const ScrollEffects = {
          */
         EARTH_SCROLL_2: {
             name: 'Shifting Sands',
-            description: 'Select two tiles to swap their positions. Tiles must have no stones or players on them.',
+            description: "Select two tiles to swap their positions. Tile must be unoccupied by stones. If there is one player on that tile, move them to the center of the tile. Cannot target a tile with multiple players on it.",
             isCounter: false,
             priority: 2,
 
@@ -2163,8 +2163,10 @@ const ScrollEffects = {
         const self = this;
         console.log(`🔀 Entering tile swap mode for player ${casterIndex}`);
 
-        // Get eligible tiles (no stones, no players, not player tiles)
-        const eligibleTiles = this.getEligibleTilesForSwap();
+        // Get eligible tiles (no stones, at most one player, not player tiles).
+        // Note: this is Shifting-Sands-specific — Telekinesis/Heavy Stomp still use
+        // the stricter getEligibleTilesForSwap()/getEligibleTilesForFlip() (no players at all).
+        const eligibleTiles = this.getEligibleTilesForShiftingSands();
         console.log(`   Found ${eligibleTiles.length} eligible tiles for swap`);
 
         if (eligibleTiles.length < 2) {
@@ -2195,17 +2197,17 @@ const ScrollEffects = {
             handleTileClick(tile) {
                 console.log(`🔀 Tile clicked for swap: ${tile.id}`);
 
-                // Re-validate: tile must be unoccupied (no stones, no players) at click time
-                if (self.tileHasStones(tile) || self.tileHasPlayers(tile)) {
-                    console.log(`   Tile ${tile.id} has stones or players - cannot swap`);
-                    updateStatus('Cannot swap: tile has stones or players on it.');
+                // Re-validate at click time: no stones, and at most one player
+                if (!self.isTileEligibleForShiftingSands(tile)) {
+                    console.log(`   Tile ${tile.id} has stones or multiple players - cannot swap`);
+                    updateStatus('Cannot swap: tile has stones or multiple players on it.');
                     return;
                 }
 
                 // Must also be in initial eligible set (e.g. not a player tile)
                 if (!eligibleTiles.find(t => t.id === tile.id)) {
                     console.log(`   Tile ${tile.id} is NOT eligible`);
-                    updateStatus('Cannot swap: tile has stones or players on it.');
+                    updateStatus('Cannot swap: tile has stones or multiple players on it.');
                     return;
                 }
 
@@ -2230,15 +2232,15 @@ const ScrollEffects = {
                 } else if (selectedTiles.length === 2) {
                     // Re-validate both tiles before swapping (state may have changed)
                     const t1 = selectedTiles[0], t2 = selectedTiles[1];
-                    if (self.tileHasStones(t1) || self.tileHasPlayers(t1)) {
-                        updateStatus('Cannot swap: first tile now has stones or players on it.');
+                    if (!self.isTileEligibleForShiftingSands(t1)) {
+                        updateStatus('Cannot swap: first tile now has stones or multiple players on it.');
                         selectedTiles.length = 0;
                         self.selectionMode.cleanup();
                         self.selectionMode = null;
                         return;
                     }
-                    if (self.tileHasStones(t2) || self.tileHasPlayers(t2)) {
-                        updateStatus('Cannot swap: second tile now has stones or players on it.');
+                    if (!self.isTileEligibleForShiftingSands(t2)) {
+                        updateStatus('Cannot swap: second tile now has stones or multiple players on it.');
                         selectedTiles.length = 0;
                         self.selectionMode.cleanup();
                         self.selectionMode = null;
@@ -2274,15 +2276,19 @@ const ScrollEffects = {
     },
 
     performTileSwap(tile1, tile2) {
-        // Only swap unoccupied tiles (no stones, no players)
-        if (this.tileHasStones(tile1) || this.tileHasPlayers(tile1)) {
-            updateStatus('Cannot swap: tile has stones or players on it.');
+        // Only swap tiles with no stones and at most one player on them
+        if (!this.isTileEligibleForShiftingSands(tile1) || !this.isTileEligibleForShiftingSands(tile2)) {
+            updateStatus('Cannot swap: a tile has stones or multiple players on it.');
             return;
         }
-        if (this.tileHasStones(tile2) || this.tileHasPlayers(tile2)) {
-            updateStatus('Cannot swap: tile has stones or players on it.');
-            return;
-        }
+
+        // Capture each tile's lone occupant (if any) BEFORE positions change, so they can
+        // travel with their tile and be recentered on it once it lands in its new spot.
+        const carriedPlayers = [];
+        [tile1, tile2].forEach(tile => {
+            const occupants = this.getPlayersOnTile(tile);
+            if (occupants.length === 1) carriedPlayers.push({ playerIndex: occupants[0], tile });
+        });
 
         // Swap positions
         const tempX = tile1.x;
@@ -2301,13 +2307,20 @@ const ScrollEffects = {
             tile2.element.setAttribute('transform', `translate(${tile2.x}, ${tile2.y}) rotate(${tile2.rotation || 0})`);
         }
 
+        // Recenter any carried player onto their tile's new position
+        const movedPlayers = carriedPlayers.map(({ playerIndex, tile }) => {
+            this.recenterPlayerOnTile(playerIndex, tile);
+            return { playerIndex, newX: tile.x, newY: tile.y };
+        });
+
         // Broadcast in multiplayer
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
             broadcastGameAction('tile-swap', {
                 tile1Id: tile1.id,
                 tile2Id: tile2.id,
                 tile1NewPos: { x: tile1.x, y: tile1.y },
-                tile2NewPos: { x: tile2.x, y: tile2.y }
+                tile2NewPos: { x: tile2.x, y: tile2.y },
+                movedPlayers: movedPlayers
             });
         }
 
@@ -2317,7 +2330,7 @@ const ScrollEffects = {
         this.unhighlightTile(tile1);
         this.unhighlightTile(tile2);
 
-        updateStatus('Tiles swapped!');
+        updateStatus(movedPlayers.length > 0 ? 'Tiles swapped! A player was carried along and recentered.' : 'Tiles swapped!');
         console.log(`🔀 Swapped tiles: ${tile1.id} <-> ${tile2.id}`);
     },
 
@@ -2434,6 +2447,8 @@ const ScrollEffects = {
     // HELPER FUNCTIONS
     // ============================================
 
+    // Used by Telekinesis (drag highlighting) and Heavy Stomp (via getEligibleTilesForFlip).
+    // Keeps the strict "no players at all" rule — Shifting Sands has its own looser rule below.
     getEligibleTilesForSwap() {
         if (typeof placedTiles === 'undefined') return [];
 
@@ -2454,6 +2469,22 @@ const ScrollEffects = {
     getEligibleTilesForFlip() {
         // Same criteria as swap
         return this.getEligibleTilesForSwap();
+    },
+
+    // Shifting Sands (Earth II) only: a tile is a valid swap target if it has no stones
+    // and at most one player on it. A single occupant is carried along with the tile and
+    // recentered on it (see performTileSwap); a tile with 2+ players cannot be targeted.
+    // Deliberately separate from getEligibleTilesForSwap(), which Telekinesis and Heavy
+    // Stomp still use with the stricter "no players at all" rule.
+    isTileEligibleForShiftingSands(tile) {
+        if (tile.isPlayerTile) return false;
+        if (this.tileHasStones(tile)) return false;
+        return this.getPlayersOnTile(tile).length <= 1;
+    },
+
+    getEligibleTilesForShiftingSands() {
+        if (typeof placedTiles === 'undefined') return [];
+        return placedTiles.filter(tile => this.isTileEligibleForShiftingSands(tile));
     },
 
     // Wandering River: any non-player tile (revealed or unrevealed) can be transformed
@@ -2479,16 +2510,36 @@ const ScrollEffects = {
     },
 
     tileHasPlayers(tile) {
-        if (typeof playerPositions === 'undefined') return false;
+        return this.getPlayersOnTile(tile).length > 0;
+    },
+
+    // Indices (into playerPositions) of every player standing on this tile
+    getPlayersOnTile(tile) {
+        if (typeof playerPositions === 'undefined') return [];
 
         // Match tileHasStones / findTileAtPosition radius
         const tileRadius = typeof TILE_SIZE !== 'undefined' ? TILE_SIZE * 4 : 80;
 
-        return playerPositions.some(pos => {
-            if (!pos) return false;
+        const indices = [];
+        playerPositions.forEach((pos, index) => {
+            if (!pos) return;
             const dist = Math.sqrt(Math.pow(pos.x - tile.x, 2) + Math.pow(pos.y - tile.y, 2));
-            return dist < tileRadius;
+            if (dist < tileRadius) indices.push(index);
         });
+        return indices;
+    },
+
+    // Snap a player's pawn to a tile's center (e.g. after Shifting Sands carries them along)
+    recenterPlayerOnTile(playerIndex, tile) {
+        if (typeof playerPositions === 'undefined') return;
+        const player = playerPositions[playerIndex];
+        if (!player) return;
+
+        player.x = tile.x;
+        player.y = tile.y;
+        if (player.element) {
+            player.element.setAttribute('transform', `translate(${tile.x}, ${tile.y})`);
+        }
     },
 
     highlightTiles(tiles, color) {

@@ -22,6 +22,7 @@ High-level task list for the Godaigo game project. Update this as you complete o
 
 - **End-of-turn scroll overflow** – Modal to resolve hand/active overflow; “make space” flow (active → common, then hand → active).
 - **Scroll / UI** – Stone formation display, common area/opponent popout toggles, Shifting Sands fix, spell selection close button, scroll state validation, Inspiring Draught fix, initial stone counts for testing.
+- **Shifting Sands (Earth II) – ability rule change** – Tiles with stones are still ineligible, but a tile with exactly one player is now a valid swap target (the player is carried along and recentered on the tile after the swap); tiles with 2+ players remain ineligible. Added dedicated `isTileEligibleForShiftingSands()` / `getEligibleTilesForShiftingSands()` in `scroll-effects.js` rather than loosening the shared `getEligibleTilesForSwap()` — Telekinesis (drag highlighting) and Heavy Stomp (`getEligibleTilesForFlip()`) both still call the shared function and keep the old, stricter no-players rule. Updated `scroll-definitions.js` description and the multiplayer `tile-swap` receiver in `lobby.js` to recenter the carried player on other clients (same `movedPlayers` shape as the existing `telekinesis-move` handler).
 
 ---
 
