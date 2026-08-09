@@ -195,7 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             window.withStatusActor(entry.casterIndex, () => {
                                 spellSystem.scrollEffects.execute(scrollName, entry.casterIndex, {
                                     spell: scrollDef,
-                                    triggeringScroll: entry.triggeringScroll
+                                    triggeringScroll: entry.triggeringScroll,
+                                    eventId: entry.eventId || null
                                 });
                             });
 
@@ -272,7 +273,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 spellSystem.scrollEffects.execute(scrollName, counterCasterIdx, {
                                     spell: scrollDef,
                                     scrollName: scrollName,
-                                    triggeringScroll: entry.triggeringScroll
+                                    triggeringScroll: entry.triggeringScroll,
+                                    eventId: entry.eventId || null
                                 });
                             });
 
@@ -337,6 +339,24 @@ document.addEventListener('DOMContentLoaded', () => {
                             counterScrolls.active.delete(scrollName);
                             spellSystem.discardToCommonArea(scrollName);
                         }
+                    }
+                    spellSystem.updateScrollCount();
+                    if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+                } else if (entry.result === 'counter-negated') {
+                    // Psychic was negated — the original caster paid the ransom to
+                    // keep their scroll. No effect executes (no steal is queued —
+                    // resolveResponseStack() never called execute() for this entry),
+                    // and it does NOT count as a void activation (judgment call, easy
+                    // to flip — see response-window.js's ransom prompt). Psychic was
+                    // still legitimately cast, so it moves to the common area same as
+                    // a normal counter would.
+                    const counterCasterIdx = entry.casterIndex;
+                    console.log(`Counter negated (ransom paid): ${scrollName}, counter-caster: ${counterCasterIdx}`);
+                    spellSystem.ensurePlayerScrollsStructure(counterCasterIdx);
+                    const counterScrolls = spellSystem.playerScrolls[counterCasterIdx];
+                    if (counterScrolls.active.has(scrollName)) {
+                        counterScrolls.active.delete(scrollName);
+                        spellSystem.discardToCommonArea(scrollName);
                     }
                     spellSystem.updateScrollCount();
                     if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
