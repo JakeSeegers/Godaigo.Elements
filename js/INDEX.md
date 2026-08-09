@@ -103,6 +103,12 @@ Position 0 = `(0,0)` (center). For 1-player tutorial: 6 tiles, positions 0–5. 
 - `updateReadyButton()` hides ready button for host
 - `updatePlayerList()` shows Start button when `totalCount >= 2` (no longer requires `hostIsReady`)
 
+### Take Flight broadcast events (opponent-target hand-off)
+- `take-flight-choose-request` — caster → the target's own client (real multiplayer opponent-target only). Receiver: if `myPlayerIndex === targetPlayerIndex`, drives the human drag UI (`ScrollEffects.enterTakeFlightChoiceAsTarget`); else falls back to `BotDriver.resolveTakeFlightChoice()` if the target is a lobby-added bot on a DIFFERENT client than the sender.
+- `take-flight-cancel-request` — either side cancelling; tears down whichever end (caster waiting, or target mid-drag) is still open.
+- `take-flight` — the result (existing event, payload now has no scroll-disposition fields since that rule was dropped). The receiver ALSO resolves the caster's own `window.pendingTakeFlightCompletion` → `onSelectionEffectComplete` when this is the answer to a request that client sent.
+- **Gotcha**: `gameChannel` is `broadcast:{self:false}` (see `supabase.channel('game-room-...')` near the top of lobby.js) — a client never receives its own broadcasts. This is why the request/response pair above ONLY works when the target truly is a different client. When the SAME client is both caster and the bot's driving host (the common single-browser "host adds a bot, plays as the human too" setup), `scroll-effects.js`'s `enterTakeFlightMode()` detects that case up front (`isHost && isMultiplayer && BotDriver.isBot(targetPlayerIndex)`) and resolves it synchronously instead, never sending a request that could never come back.
+
 ---
 
 ## tutorial-mode.js — Deep Notes
@@ -168,8 +174,10 @@ window.SoundSystem          // SFX + login music
 window.JoytoneBridge        // adaptive music (onTileRevealed, setMuted, setVolume, togglePopup)
 window.BotState             // bot observation/actuation (snapshot, legalActions, applyAction)
 window.BotSystem            // bot strategy (step, turn, rank, WEIGHTS)
-window.BotDriver            // multiplayer bot player driver (host client only)
+window.BotEffects           // bot-effects.js: driveSelection(), decideResponse(), driveTransmute(), rankedElements()
+window.BotDriver            // multiplayer bot player driver (host client only) — isBot(i), resolveTakeFlightChoice(), ...
 window.isBotUsername(u)     // true when a players-row username marks a bot (🤖 prefix)
+window.pendingTakeFlightCompletion  // {casterIndex, targetPlayerIndex, completionPayload} | null — set on the CASTER's client while waiting for a real-multiplayer opponent-target's choice to come back (see js/scrolls/INDEX.md § Selection modes)
 
 // Debug
 window.dumpGameDebug()      // full state dump

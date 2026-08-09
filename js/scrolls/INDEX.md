@@ -110,12 +110,14 @@ Examples: `callToAdventure` (draw stones on tile flip), `respirate` (wind return
 Some scrolls pause normal gameplay to collect player input:
 - `enterScrollSacrificeMode()` — player picks a scroll from hand to discard (Sacrificial Pyre)
 - `tileMoveMode` on `window` — player picks tiles to move (Telekinesis)
-- `takeFlightState` on `window` — player picks pawn to move (Take Flight / Breath of Power)
+- `takeFlightState` on `window` — the CHOOSER drags the target pawn to a hex. Set up by `_enterTakeFlightDrag()`, called either directly (self-target, or opponent-target outside real multiplayer — the caster drives it) or from `enterTakeFlightChoiceAsTarget()` (real-multiplayer opponent-target — the TARGET's own client drives it instead). `window.pendingTakeFlightCompletion` on the CASTER's client (`{casterIndex, targetPlayerIndex, completionPayload}`) is how the caster's `onSelectionEffectComplete` gets resolved once the target's choice comes back over the `take-flight` broadcast — see lobby.js § Take Flight below.
 
 ### Scroll-specific gotchas
 - **Sacrificial Pyre (FIRE_SCROLL_3)**: checks hand size before entering sacrifice mode. Returns `cancelled:true` if hand is empty. Previously granted fire win-con on empty hand — fixed.
 - **Heavy Stomp (EARTH_SCROLL_3)**: calls `performTileFlip()` in scroll-effects.js (NOT `revealTile()`). Remote flips use `flipTileVisually()`. Only `revealTile()` grants +1 AP for catacomb tiles and fires tutorial hooks.
 - **Wandering River (WATER_SCROLL_X)**: uses `getEffectiveTileElement(tile)` to override shrine type for scroll drawing. Check this before assuming `tile.shrineType` is canonical.
+- **Shifting Sands (EARTH_SCROLL_2)**: eligibility is `isTileEligibleForShiftingSands()`/`getEligibleTilesForShiftingSands()` — deliberately NOT the same as the shared `getEligibleTilesForSwap()` that Telekinesis (drag highlighting) and Heavy Stomp (`getEligibleTilesForFlip()`) still use. A tile with stones is ineligible either way, but Shifting Sands allows a tile with exactly ONE player (carried along + recentered via `recenterPlayerOnTile()` after the swap); 2+ players still blocks it. Don't "fix" Telekinesis/Heavy Stomp to match this — they intentionally kept the old stricter no-players rule.
+- **Take Flight (WIND_SCROLL_4)**: destination must be an unoccupied hex on a tile CURRENTLY OCCUPIED BY ANOTHER PLAYER (not a player tile) — `getValidTakeFlightDestinations()`/`isValidTakeFlightDestination()`, shared by the human drop-handler (game-ui.js) and the bot's `driveTakeFlightDrag()` (bot-effects.js, now a uniform-random pick, no strategic model). Cancels with no drag UI at all if no valid destination exists. Self-target: caster chooses. Opponent-target: the TARGET chooses — see the `takeFlightState` entry above and lobby.js § Take Flight for the multiplayer hand-off and the bot-driver same-client special case. The scroll always stays in the caster's active area now — the old "opponent target → scroll moves to their hand" disposition rule was dropped.
 
 ---
 

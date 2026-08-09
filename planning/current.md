@@ -92,6 +92,79 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **SHIFTING SANDS (Earth II): allow single-player tiles, recenter the
+  carried player** — `js/scrolls/effects/scroll-effects.js`,
+  `js/scrolls/scroll-definitions.js`, `js/lobby.js`, `TODO.md`, on branch
+  `claude/missing-video-filename-sc1ajm` (the branch GitHub Pages actually
+  deploys from — see CLAUDE.md's PROJECT SNAPSHOT, which had drifted to a
+  stale `4.10.progresscheck` and is now corrected). User request: a tile
+  with stones is still ineligible for the tile-swap, but a tile with
+  exactly ONE player is now a valid swap target instead of being blocked
+  outright — the player is carried along with their tile and recentered on
+  it after the swap; a tile with 2+ players remains ineligible. New
+  `isTileEligibleForShiftingSands()` / `getEligibleTilesForShiftingSands()`
+  deliberately kept SEPARATE from the shared `getEligibleTilesForSwap()`,
+  which Telekinesis (drag highlighting) and Heavy Stomp
+  (`getEligibleTilesForFlip()`) still use with the old, stricter no-players
+  rule — this change is scoped to Shifting Sands only. The multiplayer
+  `tile-swap` receiver in lobby.js now also recenters the carried player on
+  other clients (same `movedPlayers` shape the existing `telekinesis-move`
+  handler already used).
+- **TAKE FLIGHT (Wind IV): full redesign — destination rule, who chooses,
+  dropped the hand-disposition rule** —
+  `js/scrolls/effects/scroll-effects.js`, `js/scrolls/scroll-definitions.js`,
+  `js/game-ui.js`, `js/lobby.js`, `js/bot-effects.js`, `js/bot-driver.js`,
+  `TODO.md`, same branch as above, several iterations across one session
+  as the design got refined through user feedback:
+  1. New destination rule: must be an unoccupied hex on a tile CURRENTLY
+     OCCUPIED BY ANOTHER PLAYER (not a player tile) — replaces the old
+     "anywhere unoccupied, but not another player's tile centre" rule.
+     Cancels with no drag UI shown at all if no valid destination exists
+     for the chosen target. Shared eligibility lives in
+     `getValidTakeFlightDestinations()` / `isValidTakeFlightDestination()`
+     (scroll-effects.js) — used by the human drop-handler (game-ui.js) AND
+     the bot's `driveTakeFlightDrag()` (bot-effects.js), so neither can
+     propose an illegal drop.
+  2. Who chooses the destination changed: self-target still lets the
+     CASTER choose (as before). Opponent-target now hands the choice to
+     the TARGET instead. In real multiplayer where the target is a
+     genuinely different client, that's an actual hand-off: caster
+     broadcasts `take-flight-choose-request`, the target's own client runs
+     the drag UI (`enterTakeFlightChoiceAsTarget`) and broadcasts the
+     result back (`take-flight`, existing event/receiver reused), which
+     the caster's client resolves via a stashed
+     `window.pendingTakeFlightCompletion` → `onSelectionEffectComplete`;
+     either side can cancel via `take-flight-cancel-request`.
+  3. Bots added via the lobby's "Add Bot" button (bot-driver.js — a real
+     `players` row, host's browser drives it via `asBot()` impersonation)
+     are a COMPLETELY DIFFERENT system from bot.js/BotArena's Shift+B /
+     arena-sim tools and initially fell through the cracks entirely — took
+     two follow-up fixes to actually close: (a)
+     `BotDriver.resolveTakeFlightChoice()` (bot-driver.js) resolves a
+     request when a DIFFERENT client drives the targeted bot; but (b) the
+     ACTUAL real-world repro turned out to be the common single-browser
+     case (host = caster = bot-driving client, all one browser) — the
+     broadcast round-trip can NEVER work there no matter what, because
+     lobby.js's `gameChannel` is `broadcast:{self:false}` (a client never
+     receives its own sends). Fixed by having `enterTakeFlightMode()`
+     detect `isHost && isMultiplayer && BotDriver.isBot(targetPlayerIndex)`
+     up front and skip the broadcast entirely for that case, resolving
+     synchronously via `BotEffects.driveSelection()` right after opening
+     the local selection — no network round-trip involved. Lesson: don't
+     assume the fix that makes conceptual sense (cross-client hand-off) is
+     the one covering the actual test setup — ask, or check for a
+     same-client short-circuit, before declaring it fixed.
+  4. `driveTakeFlightDrag()` (bot-effects.js) now rolls a uniform-random
+     valid destination instead of its old goal-seeking-toward-hidden-tiles
+     heuristic, so it always responds instead of only working for
+     self-targeting.
+  5. Dropped the "opponent target → scroll moves to their hand"
+     disposition rule entirely (separate follow-up user request) — the
+     scroll now always stays in the caster's active area regardless of
+     who's targeted (removed from `finalizeTakeFlightChoice()` and the
+     matching `lobby.js` sync block).
+  See `TODO.md`'s Take Flight entries for the same breakdown in narrower,
+  file-by-file form.
 - **SCARCE TILES MODE: host-configurable N-1 tiles per element instead of N**
   — `js/game-core.js`, `js/lobby.js`, `index.html`, `js/INDEX.md`, Supabase
   migration `add_scarce_tiles_to_game_room`. User request: the tile deck
@@ -2168,4 +2241,4 @@ None — all changes committed and pushed.
 
 ---
 
-*Last updated: 2026-07-14 (latest: bots can no longer place stones on the empty space left by a Telekinesis/Shifting-Sands-moved tile — applyAction('placeStone') now requires a real board hex and planValid() re-checks plan cells against the live grid; before that: catacomb teleport ping-pong is now penalized in the weights (teleportRevisitPenalty — return hops score -55, fresh hops keep +5) and the arena gained a second stall detector — 15 rounds with no one casting anything restarts the round, catching the free-teleport loops the elemental-tile camping detector can't see; before that: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; corrected a stale planning note — opponent-awareness Track B, generalizing playGame()/run()/evolve() past 2 players, was actually already done via the earlier N-player playMatch() unification, just never marked as such; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
+*Last updated: 2026-08-09 (latest: Shifting Sands now allows swapping a tile with one player on it — carried along + recentered, 2+ players still blocks it — and Take Flight was redesigned: destination must be an unoccupied hex on a tile occupied by another player, opponent-targets now choose their own landing hex instead of the caster picking for them (real-multiplayer client hand-off, plus a same-client short-circuit for bots added via the lobby's Add Bot button, since that broadcast round-trip can never complete when broadcast:{self:false} and the caster IS the bot's driving host), and the old hand-vs-active-area scroll disposition rule was dropped entirely — full breakdown in "Last Committed Work" above, branch `claude/missing-video-filename-sc1ajm`; before that: 2026-07-14, bots can no longer place stones on the empty space left by a Telekinesis/Shifting-Sands-moved tile — applyAction('placeStone') now requires a real board hex and planValid() re-checks plan cells against the live grid; before that: catacomb teleport ping-pong is now penalized in the weights (teleportRevisitPenalty — return hops score -55, fresh hops keep +5) and the arena gained a second stall detector — 15 rounds with no one casting anything restarts the round, catching the free-teleport loops the elemental-tile camping detector can't see; before that: fixed the host's response window being auto-cleared when a lobby bot submitted its pass/response first — UI teardown in response-window.js is now gated on the local human, not whoever's submission this client happened to process; before that: arena trap-loop stall restart — two bots each camped on an elemental tile for 7 straight turns now aborts and replays the round with a derived seed instead of grinding to the 200-turn cap; corrected a stale planning note — opponent-awareness Track B, generalizing playGame()/run()/evolve() past 2 players, was actually already done via the earlier N-player playMatch() unification, just never marked as such; also merged: the Bot Training panel now has a persistent corner popup showing live scenario/progress that survives the main modal being closed, plus a new "End Early" control (BotArena.endEarly(), distinct from the existing hard Stop) that cuts a training/breeding run short while still running the confirmation match or downloading the champion with whatever was reached so far; Stage 2.5 scroll-effect driving is now FULLY COMPLETE — Excavate, Take Flight, and Telekinesis were the last 3, all genuinely drag-only or previously misfiled as such, driven by calling the exact same functions the real UI drop handlers call rather than simulating drag events; earlier this session: Control the Current (needed a waitForQuiescence() architecture change for its persistent whole-turn nature), 3 more selection effects (Wandering River, Arson, Plunder), a stale-doc cleanup that corrected the "elemental lockout" bug's root-cause diagnosis, the catacomb/Freedom teleport bot action (closing Track C), void-stone-value weights, and the Bot Training modal rebuild with population lineage tracking — see "Last Committed Work" above for full details on each)*
