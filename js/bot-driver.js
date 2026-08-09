@@ -256,6 +256,43 @@
     }
 
     // ----------------------------------------------------------------
+    // Take Flight: a caster targeted a bot-controlled player for the
+    // "opponent chooses their own destination" flow (see
+    // ScrollEffects.enterTakeFlightChoiceAsTarget / the
+    // 'take-flight-choose-request' broadcast in lobby.js). Unlike a bot's
+    // own turn or a response window, this arrives as a one-shot broadcast
+    // rather than something the 700ms watcher below would ever notice on
+    // its own — lobby.js's listener calls this directly the moment the
+    // request comes in, the same way it hands off to
+    // enterTakeFlightChoiceAsTarget when the target is the LOCAL human
+    // player instead of a bot. Same impersonation discipline as
+    // driveBotTurn(): briefly become the bot so any myPlayerIndex-based
+    // logic downstream (broadcasts, status text) reads correctly, then roll
+    // a random valid destination — no strategic model, same reasoning
+    // bot-effects.js's driveTakeFlightDrag() uses for its own v1 pick.
+    // ----------------------------------------------------------------
+    async function resolveTakeFlightChoice(casterIndex, targetPlayerIndex, scrollName) {
+        if (!iAmDriver() || !botIndexSet().has(targetPlayerIndex)) return;
+        const se = window.spellSystem?.scrollEffects;
+        if (typeof se?.getValidTakeFlightDestinations !== 'function' ||
+            typeof se?.finalizeTakeFlightChoice !== 'function') return;
+
+        await asBot(targetPlayerIndex, async () => {
+            const candidates = se.getValidTakeFlightDestinations(targetPlayerIndex);
+            if (!candidates.length) {
+                log(`Bot ${targetPlayerIndex}: no valid Take Flight destination — cancelling`);
+                if (typeof broadcastGameAction === 'function') {
+                    broadcastGameAction('take-flight-cancel-request', { casterIndex, targetPlayerIndex });
+                }
+                return;
+            }
+            const dest = candidates[Math.floor(Math.random() * candidates.length)];
+            log(`Bot ${targetPlayerIndex}: rolling a Take Flight destination (${candidates.length} candidates)`);
+            se.finalizeTakeFlightChoice(casterIndex, targetPlayerIndex, scrollName, dest.x, dest.y);
+        });
+    }
+
+    // ----------------------------------------------------------------
     // Watcher: fires the right driver action whenever a bot is the
     // active player on the host's client.
     // ----------------------------------------------------------------
@@ -299,6 +336,7 @@
         driverRealIndex: () => driverRealIndex,
         getDriverAP: () => driverAP ? (driverAP.currentAP + driverAP.voidAP) : 0,
         spendDriverAP,
+        resolveTakeFlightChoice,
         _placeBotTile: placeBotTile,
         _driveBotTurn: driveBotTurn,
     };

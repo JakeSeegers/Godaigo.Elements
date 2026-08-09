@@ -2085,13 +2085,22 @@
 
             // Take Flight: caster targeted ME with an opponent-target — my own
             // client drives the destination choice (see
-            // ScrollEffects.enterTakeFlightChoiceAsTarget).
+            // ScrollEffects.enterTakeFlightChoiceAsTarget). If the target is
+            // a bot instead (added via the lobby's Add Bot button), it has no
+            // client of its own to receive this — the host's BotDriver
+            // resolves it on the bot's behalf instead (see
+            // BotDriver.resolveTakeFlightChoice in bot-driver.js).
             gameChannel.on('broadcast', { event: 'take-flight-choose-request' }, ({ payload }) => {
                 console.log('📄 Received take-flight-choose-request:', payload);
                 const { casterIndex: tfCaster, targetPlayerIndex, scrollName: tfScroll } = payload;
-                if (typeof myPlayerIndex === 'undefined' || myPlayerIndex === null || myPlayerIndex !== targetPlayerIndex) return;
-                if (spellSystem?.scrollEffects?.enterTakeFlightChoiceAsTarget) {
-                    spellSystem.scrollEffects.enterTakeFlightChoiceAsTarget(tfCaster, targetPlayerIndex, tfScroll);
+                if (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null && myPlayerIndex === targetPlayerIndex) {
+                    if (spellSystem?.scrollEffects?.enterTakeFlightChoiceAsTarget) {
+                        spellSystem.scrollEffects.enterTakeFlightChoiceAsTarget(tfCaster, targetPlayerIndex, tfScroll);
+                    }
+                    return;
+                }
+                if (window.BotDriver?.resolveTakeFlightChoice) {
+                    window.BotDriver.resolveTakeFlightChoice(tfCaster, targetPlayerIndex, tfScroll);
                 }
             });
 
