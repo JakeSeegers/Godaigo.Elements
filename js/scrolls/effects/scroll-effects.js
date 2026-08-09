@@ -4463,7 +4463,19 @@ const ScrollEffects = {
                 return;
             }
 
-            const handOffToTarget = targetPlayerIndex !== casterIndex &&
+            // A bot added via the lobby's Add Bot button has no client of its
+            // own — THIS client (if it's the host) already drives it via
+            // BotDriver's asBot() impersonation. Resolving that case through
+            // the broadcast hand-off below would never work: lobby.js's
+            // gameChannel is configured with broadcast:{self:false} (it
+            // doesn't receive its own sends), so a request this same client
+            // sent to itself would never come back. Treat it like a local
+            // pick instead — see the driveTakeFlightDrag() call below.
+            const targetIsBotIDrive = typeof isHost !== 'undefined' && isHost &&
+                typeof isMultiplayer !== 'undefined' && isMultiplayer &&
+                typeof window.BotDriver?.isBot === 'function' && window.BotDriver.isBot(targetPlayerIndex);
+
+            const handOffToTarget = !targetIsBotIDrive && targetPlayerIndex !== casterIndex &&
                 typeof isMultiplayer !== 'undefined' && isMultiplayer;
 
             if (handOffToTarget) {
@@ -4512,6 +4524,19 @@ const ScrollEffects = {
                 },
                 onCancelled: () => updateStatus('Take Flight cancelled.')
             });
+
+            // Nobody is going to manually drag a bot's pawn — resolve it
+            // immediately via the bot driver instead of sitting in the
+            // "drag to choose" state forever. driveSelection() dispatches on
+            // selectionMode.type — 'take-flight-drag', just set up above —
+            // to bot-effects.js's driveTakeFlightDrag(), which reads
+            // window.takeFlightState, rolls a random valid destination, and
+            // calls its onComplete (== onDone above) synchronously, so this
+            // still goes through the exact same finalize +
+            // onSelectionEffectComplete path as a human's own self-target pick.
+            if (targetIsBotIDrive && typeof window.BotEffects?.driveSelection === 'function') {
+                window.BotEffects.driveSelection();
+            }
         };
 
         showPlayerModal();
