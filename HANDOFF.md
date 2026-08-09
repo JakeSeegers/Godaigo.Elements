@@ -10,12 +10,20 @@ depth.
 ---
 
 ## 0. FIRST — sync git (the user's local ref is stale)
-Work lives on branch `claude/game-testing-player-count-0oxsn6`. The user's local
+> **Branch pointer updated 2026-08-09** — the branch below
+> (`claude/game-testing-player-count-0oxsn6`) is fully merged into
+> `claude/missing-video-filename-sc1ajm` (checked: 0 commits ahead, 149
+> behind) and is now the current canonical branch — see
+> `planning/current.md`'s Active Branch note for how that was confirmed.
+> Substitute `claude/missing-video-filename-sc1ajm` everywhere below;
+> everything else in this file (tooling, house rules) is still accurate.
+
+Work lives on branch `claude/missing-video-filename-sc1ajm`. The user's local
 `origin/...` pointer is behind, so a plain `git reset --hard origin/...` keeps
 snapping back to an old commit. Fetch that branch explicitly and reset to exactly
 what you fetched:
 ```
-git fetch origin claude/game-testing-player-count-0oxsn6
+git fetch origin claude/missing-video-filename-sc1ajm
 git reset --hard FETCH_HEAD
 git log --oneline -1
 ```
@@ -93,7 +101,7 @@ Resume the same command each chunk. Read the verdict each time:
   paths — so it's a faithful test; the one thing it doesn't exercise is real
   multiplayer code paths, so MP-specific bugs still need a live look.)
 - Update `planning/current.md` after meaningful work (newest entry on top).
-- Develop on `claude/game-testing-player-count-0oxsn6`; commit + push there.
+- Develop on `claude/missing-video-filename-sc1ajm`; commit + push there (see the note at the top of §0 — the branch this used to say is now merged into it).
 - Recent known-good fixes to be aware of: Take Flight can no longer teleport onto
   face-down tiles; the hillClimb confirm gate rejects 5-5 "ties" as noise (needs a
   real margin); `loadCommunityChampion()` honors the pin flag so a pinned local

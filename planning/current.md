@@ -6,11 +6,34 @@
 ---
 
 ## Active Branch
-`claude/game-starting-tiles-mode-aabsrh` → remote: `JakeSeegers/Godaigo.Elements`
+`claude/missing-video-filename-sc1ajm` → remote: `JakeSeegers/Godaigo.Elements`
+— confirmed as the single canonical branch (2026-08-09): this is what GitHub
+Pages actually deploys (Settings → Pages), and it's a superset of every other
+branch's real work. `claude/game-starting-tiles-mode-aabsrh` (this file's
+previous pointer) was checked and is dead: its only 2 commits beyond the
+shared ancestor with sc1ajm are trivial manual asset uploads (an image, a
+video rename) already superseded by sc1ajm's own later fix for the same
+thing; everything substantive it ever had (Scarce Tiles Mode) is already
+included in sc1ajm via that shared ancestor — verified present in
+`js/game-core.js`/`js/lobby.js` on sc1ajm. No session is currently running
+against aabsrh (checked via `list_sessions` — the two that touched it,
+01LB18X and 01AzhV69, are both idle/disconnected; 01AzhV69 is in fact the
+session that forked aabsrh into sc1ajm in the first place and pushed all the
+boot-splash work). Treat any other `claude/*` branch on this repo as either
+merged, superseded, or a genuinely separate feature with its own open PR —
+not a silent fork of current work — until checked the same way.
 
-## Open question in progress: weight-tuning ceiling vs. missing feature (HANDOFF.md §3)
-No code changes yet — investigation only, picking up HANDOFF's "are we at the
-ceiling, or does the bot need a new sense" question.
+## Open question — SUPERSEDED, needs re-anchoring if resumed: weight-tuning
+## ceiling vs. missing feature (HANDOFF.md §3)
+Investigated on the now-dead `aabsrh` branch, before sc1ajm's subsequent
+boot-splash and scroll-ability work existed. Not known to be invalidated by
+that work (Take Flight/Shifting Sands don't touch the bot evaluator), but
+the investigation itself (hillclimb session state, `tools/.cache/hc-session-
+anchored1.json`) lives against aabsrh's code, not sc1ajm's — re-verify
+against sc1ajm before trusting the session-resume command below if this
+gets picked back up. Kept here as read-only research context, not live work.
+No code changes were made — investigation only, picking up HANDOFF's "are we
+at the ceiling, or does the bot need a new sense" question.
 
 **anchored1 hillclimb session, 4 rounds so far (720 games):** 3 promotions
 (rounds 1, 3, 4), one round with no challenger clearing the bar (round 2).
