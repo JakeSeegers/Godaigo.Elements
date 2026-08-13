@@ -5389,6 +5389,13 @@ function clearPlayerPath() {
                 playerGroup.addEventListener('mousedown', (e) => {
                     // Only draggable if this is the active player
                     const currentIdx = playerPositions.findIndex(p => p && p.element === playerGroup);
+                    const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
+                    if (tf && tf.active && tf.targetPlayerIndex === currentIdx) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        startPlayerDrag(e, { playerIndex: currentIdx, ignoreTurnCheck: true, isTakeFlight: true });
+                        return;
+                    }
                     if (currentIdx === activePlayerIndex) {
                         e.stopPropagation();
                         e.preventDefault();
@@ -5403,6 +5410,24 @@ function clearPlayerPath() {
 	                // Mirror mousedown behavior: only active player can be dragged
 	                const currentIdx = playerPositions.findIndex(p => p && p.element === playerGroup);
 	                console.log(`   currentIdx=${currentIdx}, activePlayerIndex=${activePlayerIndex}`);
+	                {
+	                    const tf = (typeof window !== 'undefined') ? window.takeFlightState : null;
+	                    if (tf && tf.active && tf.targetPlayerIndex === currentIdx) {
+	                        isDraggingPlayer = true;
+	                        e.stopPropagation();
+	                        e.preventDefault();
+	                        const t = e.touches[0];
+	                        console.log('   ✅ Starting take-flight drag from touch (path2)');
+	                        startPlayerDrag({
+	                            clientX: t.clientX,
+	                            clientY: t.clientY,
+	                            button: 0,
+	                            preventDefault: () => {},
+	                            stopPropagation: () => {}
+	                        }, { playerIndex: currentIdx, ignoreTurnCheck: true, isTakeFlight: true });
+	                        return;
+	                    }
+	                }
 	                if (currentIdx === activePlayerIndex) {
                     // Set flag IMMEDIATELY to prevent other handlers from interfering
                     isDraggingPlayer = true;

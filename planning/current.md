@@ -137,16 +137,30 @@ reach/beat it from here.
     `ScrollPanelSystem.refresh()`, so a panel left open across a turn
     change kept showing stale (buttonless) cards until manually toggled.
     Added the refresh call in both places.
-  - **REWORDED (not re-verified) — Take Flight (Wind IV)**: user reported
-    it "didn't work properly" again and supplied new wording verbatim:
-    "Target player must move to an unoccupied hex on an elemental or
-    catacomb tile of their choice. That tile must be occupied by another
-    player." Applied to `js/scrolls/scroll-definitions.js` as a text-only
-    change — did NOT re-verify `getValidTakeFlightDestinations()`
-    (`js/scrolls/effects/scroll-effects.js`) against this playtest's
-    actual behavior, since no repro steps or log entries for a Take
-    Flight cast were available in the attached log. If it misbehaves
-    again, capture who was targeted and what destinations were offered.
+  - **FIXED (after a follow-up clarification) — Take Flight (Wind IV)
+    stalled because the target couldn't drag their own pawn**: initially
+    just reworded the description per the user's supplied text ("Target
+    player must move to an unoccupied hex on an elemental or catacomb
+    tile of their choice. That tile must be occupied by another player.",
+    `js/scrolls/scroll-definitions.js`, text-only). User then clarified
+    what actually went wrong: "the other player was never granted the
+    actual ability to move to another tile, which stalled the spell and
+    caused the other to have to cancel." That pinned down a real bug —
+    `placePlayer()` (`js/game-core.js`) rebuilds a player's pawn `<g>`
+    element (with fresh listeners) via three different code paths, and
+    only two of them (initial creation; `movePlayerVisually()` for
+    another player's broadcast move) check `window.takeFlightState` in
+    their `mousedown`/`touchstart` handlers to allow dragging a non-active
+    player's pawn when they're the current Take Flight target. The third
+    path — re-rendering the ACTIVE player's own pawn after their own
+    move — never had that check, and since a player's pawn is always
+    last rendered via that path (right after their last move), by the
+    time someone else's turn came around and targeted them, their pawn's
+    listener had no way to recognize the target-drag request. Clicking
+    did nothing (the click was then silently swallowed by the board's
+    generic `selectionMode` handler, which has no case for
+    `take-flight-drag`). Fixed by adding the same `takeFlightState`
+    bypass to that third path's handlers, mirroring the other two.
   - **LOGGED, not fixed — duplicate scroll (Psychic in hand AND common
     area simultaneously)**: real, `validateScrollState()` already detects
     this class of bug but only self-heals for non-host clients (host is
