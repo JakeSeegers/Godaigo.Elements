@@ -115,6 +115,50 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-08-13 PLAYTEST GLITCH TRIAGE** — user ran a real 4-player multiplayer
+  game (2 human + 2 bot, action log attached) and reported five things.
+  Investigated and fixed two, reworded one, logged two for follow-up:
+  - **FIXED — undo let you keep a scroll's effect for free**:
+    `executeSpell()` (`js/game-core.js`) spent AP and applied real,
+    broadcast-worthy effects on cast but never cleared the one-step undo
+    (`lastMove`/`window.lastScrollAction`) left from whatever move/
+    stone-place/stone-break/scroll-move happened right before the cast —
+    so Undo afterward silently reversed that PRIOR action (free AP/stone
+    refund) while the scroll's real effect stayed applied. Matches the
+    user's own suspicion ("undo... after I activated a scroll"). Now
+    cleared the instant AP is spent for the cast, same as the existing
+    clear on tile reveal.
+  - **FIXED — scroll panel Activate/Move buttons vanishing until closed
+    and reopened**: `_buildCard()` (`js/scroll-panels.js`) gates the whole
+    button row on `canModify` (`activePlayerIndex === myPlayerIndex`)
+    computed only at render time. Neither `js/lobby.js` broadcast handler
+    that updates `activePlayerIndex` — normal `turn-change`, or the
+    periodic `turn-sync` desync-correction listener — called
+    `ScrollPanelSystem.refresh()`, so a panel left open across a turn
+    change kept showing stale (buttonless) cards until manually toggled.
+    Added the refresh call in both places.
+  - **REWORDED (not re-verified) — Take Flight (Wind IV)**: user reported
+    it "didn't work properly" again and supplied new wording verbatim:
+    "Target player must move to an unoccupied hex on an elemental or
+    catacomb tile of their choice. That tile must be occupied by another
+    player." Applied to `js/scrolls/scroll-definitions.js` as a text-only
+    change — did NOT re-verify `getValidTakeFlightDestinations()`
+    (`js/scrolls/effects/scroll-effects.js`) against this playtest's
+    actual behavior, since no repro steps or log entries for a Take
+    Flight cast were available in the attached log. If it misbehaves
+    again, capture who was targeted and what destinations were offered.
+  - **LOGGED, not fixed — duplicate scroll (Psychic in hand AND common
+    area simultaneously)**: real, `validateScrollState()` already detects
+    this class of bug but only self-heals for non-host clients (host is
+    always assumed authoritative — a host-side desync never corrects
+    itself). Root cause of how it got duplicated in the first place not
+    confirmed — the attached action log didn't cover the moment it
+    happened. Full writeup with two traced-but-unconfirmed candidate
+    mechanisms in `TODO.md`'s new "Duplicate scroll bug" entry.
+  - **LOGGED, unverified — "didn't get fire stones after ending turn on a
+    shrine"**: single report, the reporting user (host) was themselves
+    skeptical. Not investigated — no repro steps to anchor it. See
+    `TODO.md`'s new "To verify" section.
 - **SHIFTING SANDS (Earth II): allow single-player tiles, recenter the
   carried player** — `js/scrolls/effects/scroll-effects.js`,
   `js/scrolls/scroll-definitions.js`, `js/lobby.js`, `TODO.md`, on branch

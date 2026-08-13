@@ -2290,6 +2290,13 @@
                 updateEndTurnButtonVisibility();
             updateDeckIndicatorVisibility();
                 updateOpponentPanel(); // Update opponent panel on turn change
+                // Rebuild any open scroll panel cards — their Activate/Move buttons are
+                // gated on activePlayerIndex (canModify in scroll-panels.js's _buildCard),
+                // computed only at render time. Without this, a panel left open through a
+                // turn change keeps showing cards built while it was someone else's turn
+                // (buttons missing even though it's now yours) until manually closed and
+                // reopened forces a fresh render.
+                if (window.ScrollPanelSystem) window.ScrollPanelSystem.refresh();
 
                 if (isPlacementPhase) {
                     // During placement, update status for tile placement
@@ -3326,6 +3333,9 @@
                     console.warn(`⚠️ DESYNC CORRECTED: Local activePlayerIndex was ${activePlayerIndex}, host says ${playerIndex}`);
                     activePlayerIndex = playerIndex;
                     updateTurnDisplay();
+                    // Same reasoning as the turn-change handler: an open scroll panel's
+                    // Activate/Move buttons are gated on activePlayerIndex at render time.
+                    if (window.ScrollPanelSystem) window.ScrollPanelSystem.refresh();
                 }
 
                 if (typeof turnNumber === 'number' && lastReceivedTurnNumber !== turnNumber) {

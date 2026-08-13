@@ -1480,6 +1480,17 @@
                 }
                 // Spend AP first (may be reduced by buffs)
                 spendAP(cost);
+
+                // Casting a scroll is committed the instant AP is spent — its effects can
+                // touch other players' state and get broadcast in multiplayer, so it must
+                // not be reversible. Clear any leftover one-step undo from BEFORE this cast
+                // (a move / stone-place / stone-break / scroll-move done earlier this turn);
+                // otherwise Undo silently reverses that PRIOR action while leaving the
+                // scroll's real effects in place — refunding AP/stones for free. Mirrors the
+                // existing clear on tile reveal (also irreversible) further down this file.
+                lastMove = null;
+                window.lastScrollAction = null;
+
                 if (typeof window !== 'undefined' && window.logScrollEvent) {
                     window.logScrollEvent('cast_execute', {
                         playerIndex: activePlayerIndex,
