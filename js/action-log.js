@@ -82,7 +82,7 @@
     // whitelist to the highest-signal types so the download stays succinct ──
     const WHITELISTED_SCROLL_EVENTS = new Set([
         'cast_execute', 'effect_execute', 'response_resolved', 'original_countered', 'original_resolved',
-        'response_counter', 'sacrificial_pyre_response_opened', 'sacrificial_pyre_response_submitted',
+        'response_counter', 'counter_negated', 'sacrificial_pyre_response_opened', 'sacrificial_pyre_response_submitted',
     ]);
     const prevLogScrollEvent = window.logScrollEvent;
     window.logScrollEvent = function (type, details) {
