@@ -22,7 +22,15 @@ const ScrollPanelSystem = (() => {
     const DEFAULTS = {
         hand:   { x: 20,  y: 100, w: 520, h: 420, collapsed: false, autofit: true },
         active: { x: 20,  y: 540, w: 520, h: 420, collapsed: false, autofit: true },
-        common: { x: 560, y: 100, w: 760, h: 420, collapsed: false, autofit: true }
+        common: { x: 560, y: 100, w: 760, h: 420, collapsed: false, autofit: true },
+        // Same floating-panel chrome as the three above, but none of them use
+        // the scroll-card autofit formula (AUTOFIT_CARD_W/H) — their content
+        // isn't scroll cards, so autofit stays off (see createPanel's
+        // opts.noAutofit) and these sizes are just a reasonable starting
+        // point the player can resize by hand.
+        gamelog:         { x: 20,  y: 100, w: 300, h: 220, collapsed: false, autofit: false },
+        opponents:       { x: 900, y: 100, w: 280, h: 420, collapsed: false, autofit: false },
+        elementalstones: { x: 340, y: 480, w: 640, h: 100, collapsed: false, autofit: false },
     };
 
     const panels = {};      // { id → { el, state, open } }
@@ -50,55 +58,88 @@ const ScrollPanelSystem = (() => {
     }
 
     // ---- Panel creation ----
-    function createPanel(id, title) {
+    // opts:
+    //   panelId  — use this as the outer element's id instead of 'fsp-'+id.
+    //              Needed when OTHER code already has hard id references into
+    //              a panel being migrated to this system (elemental-stones-panel's
+    //              stone-return drag logic, right-panel — see game-ui.js).
+    //   bodyEl   — reuse this EXISTING element as the .fsp-body instead of
+    //              creating one fresh, preserving its own id/children/classes
+    //              (new-opponent-cards' population code, elemental-stones-body's
+    //              stone cards). Its own id wins over bodyId/the default
+    //              convention if it already has one.
+    //   bodyId   — id to give a freshly-created body div (ignored if bodyEl
+    //              already has an id). Defaults to 'fsp-body-'+id, same as
+    //              every panel before this option existed.
+    //   noBadge  — omit the capacity badge (hand/active/common only concept).
+    //   noAutofit — force autofit off and omit the autofit button; content
+    //              here isn't scroll cards, so the AUTOFIT_CARD_W/H formula
+    //              (fitPanel) would size the panel completely wrong for it.
+    function createPanel(id, title, opts = {}) {
         const stored = loadStored()[id] || {};
         const state  = { ...DEFAULTS[id], ...stored };
         _clampToViewport(state);
-        panels[id]   = { el: null, state, open: false };
+        if (opts.noAutofit) state.autofit = false;
 
         const el = document.createElement('div');
-        el.className    = 'fsp';
-        el.id           = 'fsp-' + id;
+        el.className     = 'fsp';
+        el.id            = opts.panelId || ('fsp-' + id);
         el.dataset.panel = id;
         el.style.cssText = `left:${state.x}px; top:${state.y}px; width:${state.w}px;`;
         if (!state.collapsed) el.style.height = state.h + 'px';
 
-        el.innerHTML = `
-            <div class="fsp-header" data-drag-handle>
-                <span class="fsp-title">${title}</span>
-                <span class="fsp-badge" id="fsp-badge-${id}">0/0</span>
-                <button class="fsp-btn fsp-autofit-btn"  title="Auto-fit height to content">↕</button>
-                <button class="fsp-btn fsp-collapse-btn" title="Collapse / expand">−</button>
-                <button class="fsp-btn fsp-close-btn"    title="Close">✕</button>
-            </div>
-            <div class="fsp-body" id="fsp-body-${id}"></div>
-            <div class="fsp-compact" id="fsp-compact-${id}" style="display:none;"></div>
-            <div class="fsp-resize-handle" title="Drag to resize"></div>
+        const header = document.createElement('div');
+        header.className = 'fsp-header';
+        header.setAttribute('data-drag-handle', '');
+        header.innerHTML = `
+            <span class="fsp-title">${title}</span>
+            ${opts.noBadge ? '' : `<span class="fsp-badge" id="fsp-badge-${id}">0/0</span>`}
+            ${opts.noAutofit ? '' : `<button class="fsp-btn fsp-autofit-btn" title="Auto-fit height to content">↕</button>`}
+            <button class="fsp-btn fsp-collapse-btn" title="Collapse / expand">−</button>
+            <button class="fsp-btn fsp-close-btn"    title="Close">✕</button>
         `;
+        el.appendChild(header);
+
+        const bodyEl = opts.bodyEl || document.createElement('div');
+        bodyEl.classList.add('fsp-body');
+        if (!bodyEl.id) bodyEl.id = opts.bodyId || ('fsp-body-' + id);
+        el.appendChild(bodyEl);
+
+        const compact = document.createElement('div');
+        compact.className   = 'fsp-compact';
+        compact.id           = 'fsp-compact-' + id;
+        compact.style.display = 'none';
+        el.appendChild(compact);
+
+        const handle = document.createElement('div');
+        handle.className = 'fsp-resize-handle';
+        handle.title      = 'Drag to resize';
+        el.appendChild(handle);
 
         document.body.appendChild(el);
-        panels[id].el = el;
+        panels[id] = { el, state, open: false, bodyId: bodyEl.id, dockBtnId: opts.dockBtnId || ('panel-btn-' + id) };
 
         // Apply saved collapsed state
         if (state.collapsed) _applyCollapsed(id, true);
 
         // Wire buttons
-        el.querySelector('.fsp-close-btn').addEventListener('click', e => { e.stopPropagation(); closePanel(id); });
-        el.querySelector('.fsp-collapse-btn').addEventListener('click', e => { e.stopPropagation(); toggleCollapse(id); });
+        header.querySelector('.fsp-close-btn').addEventListener('click', e => { e.stopPropagation(); closePanel(id); });
+        header.querySelector('.fsp-collapse-btn').addEventListener('click', e => { e.stopPropagation(); toggleCollapse(id); });
 
-        const autofitBtn = el.querySelector('.fsp-autofit-btn');
-        if (state.autofit !== false) autofitBtn.classList.add('fsp-autofit-active');
-        autofitBtn.addEventListener('click', e => { e.stopPropagation(); setAutofit(id, !panels[id].state.autofit); });
+        const autofitBtn = header.querySelector('.fsp-autofit-btn');
+        if (autofitBtn) {
+            if (state.autofit !== false) autofitBtn.classList.add('fsp-autofit-active');
+            autofitBtn.addEventListener('click', e => { e.stopPropagation(); setAutofit(id, !panels[id].state.autofit); });
+        }
 
         // Hide resize handle immediately if autofit is on and panel isn't collapsed
         if (state.autofit !== false && !state.collapsed) {
-            const handle = el.querySelector('.fsp-resize-handle');
-            if (handle) handle.style.display = 'none';
+            handle.style.display = 'none';
         }
 
         // Drag & resize
-        _makeDraggable(el, el.querySelector('[data-drag-handle]'), id);
-        _makeResizable(el, el.querySelector('.fsp-resize-handle'), id);
+        _makeDraggable(el, header, id);
+        _makeResizable(el, handle, id);
 
         return el;
     }
@@ -179,9 +220,9 @@ const ScrollPanelSystem = (() => {
     // (fsp-compact), so the button actually has a purpose: a quick glance at
     // what's in hand/active/common without the full card real estate.
     function _applyCollapsed(id, collapsed) {
-        const { el, state } = panels[id];
+        const { el, state, bodyId } = panels[id];
         state.collapsed = collapsed;
-        const body    = document.getElementById('fsp-body-' + id);
+        const body    = document.getElementById(bodyId || ('fsp-body-' + id));
         const compact = document.getElementById('fsp-compact-' + id);
         const handle  = el.querySelector('.fsp-resize-handle');
         const btn     = el.querySelector('.fsp-collapse-btn');
@@ -214,6 +255,17 @@ const ScrollPanelSystem = (() => {
     }
 
     // ---- Open / close ----
+    // Syncs the associated dock/HUD button's lit (fsp-dock-btn-open) state
+    // right here, not just from each button's own click handler — a panel
+    // can also close via its own header ✕ button (createPanel's
+    // .fsp-close-btn wiring calls closePanel(id) directly), which used to
+    // leave the dock button stuck lit since nothing else updated it.
+    function _syncDockBtn(id) {
+        const p = panels[id];
+        const btn = p && document.getElementById(p.dockBtnId || ('panel-btn-' + id));
+        if (btn) btn.classList.toggle('fsp-dock-btn-open', !!p.open);
+    }
+
     function openPanel(id) {
         const p = panels[id];
         if (!p) return;
@@ -225,6 +277,7 @@ const ScrollPanelSystem = (() => {
         p.open = true;
         p.el.style.display = 'flex';
         renderPanel(id);
+        _syncDockBtn(id);
     }
 
     function closePanel(id) {
@@ -232,6 +285,7 @@ const ScrollPanelSystem = (() => {
         if (!p) return;
         p.open = false;
         p.el.style.display = 'none';
+        _syncDockBtn(id);
     }
 
     function toggle() {
@@ -505,7 +559,7 @@ const ScrollPanelSystem = (() => {
     function fitPanel(id) {
         const p      = panels[id];
         if (!p || !p.el || p.state.collapsed || p.state.autofit === false) return;
-        const body   = document.getElementById('fsp-body-' + id);
+        const body   = document.getElementById(p.bodyId || ('fsp-body-' + id));
         const header = p.el.querySelector('.fsp-header');
         if (!body || !header) return;
 
@@ -533,9 +587,17 @@ const ScrollPanelSystem = (() => {
     }
 
     // ---- Render ----
+    // Scroll-card panels only (hand/active/common) — gamelog/opponents/
+    // elementalstones manage their own content entirely (game-log-ui.js,
+    // game-ui.js) and must never have this touch their body: it does an
+    // unconditional body.innerHTML = '' below, and refresh() calls this for
+    // every OPEN panel, so without this guard opening the Game Log or
+    // Opponent Status panel would get its content silently wiped the next
+    // time anything calls refresh() (e.g. after any hand/active/common change).
     function renderPanel(id) {
+        if (id !== 'hand' && id !== 'active' && id !== 'common') return;
         const sp   = window.spellSystem;
-        const body = document.getElementById('fsp-body-' + id);
+        const body = document.getElementById(panels[id]?.bodyId || ('fsp-body-' + id));
         if (!body || !sp) return;
 
         body.innerHTML = '';
@@ -677,11 +739,15 @@ const ScrollPanelSystem = (() => {
             });
         });
 
-        // Override spellSystem.showInventory so Transmute and other callers use panels
+        // Override spellSystem.showInventory so Transmute and other callers use panels.
+        // Scoped to the three scroll-card panels explicitly (NOT
+        // Object.keys(panels)) — gamelog/opponents/elementalstones aren't
+        // "inventory" and must not get force-opened just because Transmute
+        // wants to show the player their scrolls.
         const hookSpell = () => {
             if (!window.spellSystem) return false;
             window.spellSystem.showInventory = () => {
-                Object.keys(panels).forEach(id => { if (!panels[id].open) openPanel(id); });
+                ['hand', 'active', 'common'].forEach(id => { if (!panels[id].open) openPanel(id); });
                 refresh();
             };
             return true;
@@ -691,11 +757,57 @@ const ScrollPanelSystem = (() => {
             const t = setInterval(() => { if (hookSpell()) clearInterval(t); }, 400);
         }
 
+        // ── Non-scroll floating panels: Game Log, Opponent Status, Elemental
+        // Stones — same drag/resize/collapse/close chrome as Hand/Active/
+        // Common, but each keeps content other code already depends on by id
+        // (game-log-ui.js's game-log-content, game-ui.js's new-opponent-cards
+        // and elemental-stones-panel/.stone-card drag-return logic) — see
+        // createPanel()'s opts. All three default OPEN (unlike hand/active/
+        // common, which start closed) since they're ambient info, not an
+        // inventory opened on demand — matches how .right-panel/
+        // .game-log-panel/#elemental-stones-panel behaved before this panel
+        // system existed.
+        createPanel('gamelog', 'Game Log', {
+            bodyId: 'game-log-content',
+            noBadge: true,
+            noAutofit: true,
+        });
+        createPanel('opponents', 'Opponent Status', {
+            panelId: 'right-panel',
+            bodyEl: document.getElementById('new-opponent-cards'),
+            noBadge: true,
+            noAutofit: true,
+        });
+        createPanel('elementalstones', 'Elemental Stones', {
+            panelId: 'elemental-stones-panel',
+            bodyEl: document.getElementById('elemental-stones-body'),
+            dockBtnId: 'elemental-stones-btn', // doesn't follow the panel-btn-{id} convention
+            noBadge: true,
+            noAutofit: true,
+        });
+        // openPanel() itself lights up each one's dock button (_syncDockBtn) —
+        // no need to touch the classList here too.
+        openPanel('gamelog');
+        openPanel('opponents');
+        openPanel('elementalstones');
+
+        ['gamelog', 'opponents', 'elementalstones'].forEach(id => {
+            const btn = document.getElementById(panels[id].dockBtnId);
+            if (!btn) return;
+            btn.addEventListener('click', e => {
+                e.preventDefault();
+                if (panels[id].open) { closePanel(id); } else { openPanel(id); }
+            });
+        });
+
         // ── Hover preview: enlarged card that floats outside the panel ──────
         _initCardHoverPreview();
 
         // Expose globally
-        window.ScrollPanelSystem = { toggle, refresh, openPanel, closePanel, animateCardMove, animateCardToDeck };
+        window.ScrollPanelSystem = {
+            toggle, refresh, openPanel, closePanel, animateCardMove, animateCardToDeck,
+            isOpen: id => !!panels[id]?.open,
+        };
     }
 
     // ---- Hover preview panel ----

@@ -24,15 +24,23 @@
 // Movement is collapsed to one summary line per (turn, player) instead of
 // one line per hex stepped into — see pendingMove/flushPendingMove().
 //
-// LOAD ORDER: after action-log.js (needs window.ActionLog.onRecord/entries).
+// LOAD ORDER: after action-log.js (needs window.ActionLog.onRecord/entries)
+// AND after scroll-panels.js, whose init() creates #game-log-content (see
+// createPanel('gamelog', ...) there) before this file's own DOMContentLoaded
+// handler runs — both listen on the same event, so registration order
+// (i.e. script tag order in index.html) is what makes this reliable; in
+// practice it barely matters since onRecord() only ever fires during real
+// gameplay, long after both have finished initializing.
 // ============================================================
 
 (function () {
     'use strict';
 
-    const PANEL_ID = 'game-log-panel';
+    // The panel itself (drag/resize/collapse/close/open, the
+    // #panel-btn-gamelog toggle button) is now built and wired entirely by
+    // js/scroll-panels.js's createPanel('gamelog', 'Game Log', {bodyId:
+    // 'game-log-content', ...}) — this file only ever writes into that body.
     const CONTENT_ID = 'game-log-content';
-    const BTN_ID = 'panel-btn-gamelog';
 
     // Same name→hex mapping used elsewhere (multiplayer-state.js's
     // updateTurnDisplay, etc.) — not imported from anywhere shared, just
@@ -194,34 +202,7 @@
         if (line) appendLine(line.html, line.className);
     }
 
-    // ---- Toggle button (beside #status, not the bottom dock — see index.html)
-    // and the panel's own header close button — both drive the same open/
-    // closed state, kept in sync via setOpen() rather than each toggling
-    // independently. ----
-    function wireToggle() {
-        const btn = document.getElementById(BTN_ID);
-        const panel = document.getElementById(PANEL_ID);
-        const closeBtn = document.getElementById('game-log-close-btn');
-        if (!btn || !panel || btn.dataset.wired) return;
-        btn.dataset.wired = '1';
-
-        function setOpen(open) {
-            panel.style.display = open ? 'flex' : 'none';
-            btn.classList.toggle('fsp-dock-btn-open', open);
-            btn.textContent = open ? 'Hide Log' : 'Show Log';
-        }
-
-        btn.addEventListener('click', () => setOpen(panel.style.display === 'none'));
-        if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
-
-        // Open by default — matches the panel's own default (display:flex,
-        // no inline style, same as .right-panel) and the button's initial
-        // fsp-dock-btn-open class set in index.html.
-        setOpen(true);
-    }
-
     function init() {
-        wireToggle();
         // Backfill anything already recorded (normally empty this early —
         // defensive only) before subscribing for live updates.
         if (window.ActionLog?.entries) {

@@ -295,6 +295,12 @@
                     <button id="leave-game" class="danger" style="display: none;">Leave</button>
                     <button class="hud-stone-info-btn" onclick="showStoneInfoPopup()" title="Stone types &amp; abilities">Elemental Reference</button>
                     <button class="hud-stone-info-btn" onclick="showScrollReferencePopup()" title="All scrolls &amp; effects">Scroll Reference</button>
+                    <!-- Lives in the HUD bar (not .status-bar) specifically because this
+                         row sits above where the floating panels (.right-panel,
+                         .game-log-panel) start — anywhere lower risks getting covered by
+                         one of them, which is exactly what happened when this button was
+                         in .status-bar under .right-panel. See js/game-log-ui.js. -->
+                    <button id="panel-btn-gamelog" class="hud-stone-info-btn" title="Show/hide the game log">Game Log</button>
                 </div>
             </div>
 
@@ -341,14 +347,8 @@
         </div>
 
         <!-- BOARD AREA (Center) -->
-        <!-- Status bar anchored below the HUD. #status itself is untouched
-             (updateStatus() in game-ui.js sets its textContent directly) —
-             the toggle button for the Game Log panel (js/game-log-ui.js)
-             lives beside it in this wrapper instead of inside it. -->
-        <div class="status-bar" id="status-bar">
-            <div id="status">Ready to play</div>
-            <button id="panel-btn-gamelog" class="status-bar-btn fsp-dock-btn-open" title="Show/hide the game log">Hide Log</button>
-        </div>
+        <!-- Status bar anchored below the HUD. -->
+        <div id="status">Ready to play</div>
 
         <!-- .board-area stays exactly as it always was — same grid slot,
              same CSS, no visible content — it's kept only as an empty
@@ -371,34 +371,29 @@
             </div>
         </div>
 
-        <!-- RIGHT PANEL (Opponents/Players) — a floating panel like Hand/Active/Common
-             (js/scroll-panels.js), toggled by #panel-btn-opponents in the dock. Defaults
-             open (unlike those, which default closed) since it's ambient status info. -->
-        <div class="right-panel" id="right-panel">
-            <div class="panel-header">
-                <span class="panel-title">Opponent Status</span>
-            </div>
-            <div class="panel-content" id="new-opponent-cards">
-                <!-- Player cards will be populated dynamically -->
-            </div>
+        <!-- Opponent Status content — the #right-panel wrapper (drag/resize/collapse/
+             close chrome, same as Hand/Active/Common) is now built by
+             js/scroll-panels.js's createPanel('opponents', ..., {panelId:'right-panel',
+             bodyEl: this div}), toggled by #panel-btn-opponents in the dock. Kept id
+             #new-opponent-cards unchanged — that's all game-ui.js's population code
+             looks up. Defaults open (unlike Hand/Active/Common) since it's ambient
+             status info. -->
+        <div class="panel-content" id="new-opponent-cards">
+            <!-- Player cards will be populated dynamically -->
         </div>
 
-        <!-- GAME LOG PANEL — a readable, colour-coded history of public actions
-             (moves, placements, casts, effects, counters), mirrored to the left of
-             .right-panel. Toggled by #panel-btn-gamelog beside #status, not a dock
-             button, since it's ambient history rather than an inventory. Defaults
+        <!-- Game Log content — the panel wrapper is built by js/scroll-panels.js's
+             createPanel('gamelog', 'Game Log', {bodyId:'game-log-content', noBadge:true,
+             noAutofit:true}), toggled by #panel-btn-gamelog next to "Scroll Reference"
+             in the HUD bar (a floating panel started under .right-panel in the dock/
+             status-bar area used to get visually covered by it — the HUD bar sits
+             above where any floating panel starts, so it can't happen there). Defaults
              open for the same reason .right-panel does. Populated live by
-             js/game-log-ui.js from js/action-log.js's existing record() hooks —
-             never shows discardScroll or anything else that would reveal another
-             player's hand. -->
-        <div class="game-log-panel" id="game-log-panel">
-            <div class="panel-header">
-                <span class="panel-title">Game Log</span>
-                <button class="fsp-btn" id="game-log-close-btn" title="Close">✕</button>
-            </div>
-            <div class="panel-content game-log-content" id="game-log-content">
-                <!-- Log lines appended live by js/game-log-ui.js -->
-            </div>
+             js/game-log-ui.js from js/action-log.js's existing record() hooks — never
+             shows discardScroll or anything else that would reveal another player's
+             hand. -->
+        <div id="game-log-content">
+            <!-- Log lines appended live by js/game-log-ui.js -->
         </div>
 
         <!-- BOTTOM DOCK -->
@@ -429,9 +424,14 @@
 
         </div>
 
-        <!-- ELEMENTAL STONES PANEL (slide-up, same mechanism as the Colours panel) -->
-        <div id="elemental-stones-panel">
-            <div class="es-body">
+        <!-- ELEMENTAL STONES content — the actual #elemental-stones-panel wrapper
+             (id kept exactly for game-ui.js's isPointOverElementalStonesPanel()/
+             stone-return drag logic) is now built by js/scroll-panels.js
+             (createPanel('elementalstones', ..., {panelId:'elemental-stones-panel',
+             bodyEl: this div})), giving it the same draggable/resizable/
+             collapsible/closeable chrome as Hand/Active/Common. Content stays a
+             horizontal row (.fsp-body's own default layout). -->
+            <div class="es-body" id="elemental-stones-body">
                 <div class="stone-card" id="new-earth-deck" data-element="earth">
                     <svg width="26" height="26">
                         <circle cx="13" cy="13" r="10" fill="#69d83a" class="stone-piece"/>
@@ -478,7 +478,6 @@
                     <div class="es-return-label">Return Stone</div>
                 </div>
             </div>
-        </div>
     </div>
 
     <!-- OLD GAME CONTAINER (hidden, kept for JS compatibility) -->

@@ -17,33 +17,10 @@
             // Setup scroll deck UI
             initializeScrollDeckUI();
 
-            // Elemental Stones popout: same slide-up mechanism as the Colours panel.
-            // No header/close button — the dock button is the only open/close control.
-            const elementalStonesBtn = document.getElementById('elemental-stones-btn');
-            const elementalStonesPanel = document.getElementById('elemental-stones-panel');
-            if (elementalStonesBtn && elementalStonesPanel) {
-                elementalStonesBtn.addEventListener('click', () => {
-                    elementalStonesPanel.classList.toggle('open');
-                });
-            }
-
-
-            // Opponent Status panel: a dock-button-driven floating panel, same
-            // open/close model as Hand/Active/Common (js/scroll-panels.js) \u2014
-            // style.display toggling so it has zero layout footprint when
-            // closed. Unlike those it defaults to OPEN since it's ambient
-            // status info, not an inventory opened on demand.
-            const opponentPanelBtn = document.getElementById('panel-btn-opponents');
-            const opponentPanel = document.getElementById('right-panel');
-            if (opponentPanelBtn && opponentPanel) {
-                opponentPanelBtn.addEventListener('click', () => {
-                    const isOpen = opponentPanel.style.display !== 'none';
-                    opponentPanel.style.display = isOpen ? 'none' : 'flex';
-                    opponentPanelBtn.classList.toggle('fsp-dock-btn-open', !isOpen);
-                });
-                opponentPanel.style.display = 'flex';
-                opponentPanelBtn.classList.add('fsp-dock-btn-open');
-            }
+            // Elemental Stones and Opponent Status panels are both built and wired
+            // entirely by js/scroll-panels.js's init() now (createPanel('elementalstones', ...)/
+            // createPanel('opponents', ...)) — same draggable/resizable/collapsible/
+            // closeable chrome as Hand/Active/Common.
 
             // Initial HUD update
             updateHUD();
@@ -687,7 +664,11 @@
         // source/deck pool that returnStoneToPool() manages.
         function isPointOverElementalStonesPanel(clientX, clientY) {
             const panel = document.getElementById('elemental-stones-panel');
-            if (!panel || !panel.classList.contains('open')) return false;
+            // Open state now comes from js/scroll-panels.js's panel system
+            // (createPanel('elementalstones', ...)) instead of an 'open' CSS
+            // class — the panel is draggable/resizable/closeable now, not a
+            // fixed slide-up bar.
+            if (!panel || !window.ScrollPanelSystem?.isOpen('elementalstones')) return false;
             const rect = panel.getBoundingClientRect();
             return clientX >= rect.left && clientX <= rect.right &&
                    clientY >= rect.top && clientY <= rect.bottom;
