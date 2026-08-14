@@ -194,22 +194,30 @@
         if (line) appendLine(line.html, line.className);
     }
 
-    // ---- Toggle button (beside #status, not the bottom dock — see index.html) ----
+    // ---- Toggle button (beside #status, not the bottom dock — see index.html)
+    // and the panel's own header close button — both drive the same open/
+    // closed state, kept in sync via setOpen() rather than each toggling
+    // independently. ----
     function wireToggle() {
         const btn = document.getElementById(BTN_ID);
         const panel = document.getElementById(PANEL_ID);
+        const closeBtn = document.getElementById('game-log-close-btn');
         if (!btn || !panel || btn.dataset.wired) return;
         btn.dataset.wired = '1';
-        btn.addEventListener('click', () => {
-            const isOpen = panel.style.display !== 'none';
-            panel.style.display = isOpen ? 'none' : 'flex';
-            btn.classList.toggle('fsp-dock-btn-open', !isOpen);
-            btn.textContent = isOpen ? 'Show Log' : 'Hide Log';
-        });
+
+        function setOpen(open) {
+            panel.style.display = open ? 'flex' : 'none';
+            btn.classList.toggle('fsp-dock-btn-open', open);
+            btn.textContent = open ? 'Hide Log' : 'Show Log';
+        }
+
+        btn.addEventListener('click', () => setOpen(panel.style.display === 'none'));
+        if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
+
         // Open by default — matches the panel's own default (display:flex,
         // no inline style, same as .right-panel) and the button's initial
         // fsp-dock-btn-open class set in index.html.
-        panel.style.display = 'flex';
+        setOpen(true);
     }
 
     function init() {
