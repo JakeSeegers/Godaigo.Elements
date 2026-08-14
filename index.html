@@ -341,8 +341,14 @@
         </div>
 
         <!-- BOARD AREA (Center) -->
-        <!-- Status bar anchored below the HUD -->
-        <div id="status">Ready to play</div>
+        <!-- Status bar anchored below the HUD. #status itself is untouched
+             (updateStatus() in game-ui.js sets its textContent directly) —
+             the toggle button for the Game Log panel (js/game-log-ui.js)
+             lives beside it in this wrapper instead of inside it. -->
+        <div class="status-bar" id="status-bar">
+            <div id="status">Ready to play</div>
+            <button id="panel-btn-gamelog" class="status-bar-btn fsp-dock-btn-open" title="Show/hide the game log">Hide Log</button>
+        </div>
 
         <!-- .board-area stays exactly as it always was — same grid slot,
              same CSS, no visible content — it's kept only as an empty
@@ -374,6 +380,23 @@
             </div>
             <div class="panel-content" id="new-opponent-cards">
                 <!-- Player cards will be populated dynamically -->
+            </div>
+        </div>
+
+        <!-- GAME LOG PANEL — a readable, colour-coded history of public actions
+             (moves, placements, casts, effects, counters), mirrored to the left of
+             .right-panel. Toggled by #panel-btn-gamelog beside #status, not a dock
+             button, since it's ambient history rather than an inventory. Defaults
+             open for the same reason .right-panel does. Populated live by
+             js/game-log-ui.js from js/action-log.js's existing record() hooks —
+             never shows discardScroll or anything else that would reveal another
+             player's hand. -->
+        <div class="game-log-panel" id="game-log-panel">
+            <div class="panel-header">
+                <span class="panel-title">Game Log</span>
+            </div>
+            <div class="panel-content game-log-content" id="game-log-content">
+                <!-- Log lines appended live by js/game-log-ui.js -->
             </div>
         </div>
 
@@ -613,6 +636,7 @@
     <script src="js/bot-driver.js" charset="UTF-8"></script>
     <script src="js/bot-arena.js" charset="UTF-8"></script>
     <script src="js/action-log.js" charset="UTF-8"></script>
+    <script src="js/game-log-ui.js" charset="UTF-8"></script>
     <script>
     (function() {
         const _clickSnd = new Audio('sounds/clicksounds.mp3');

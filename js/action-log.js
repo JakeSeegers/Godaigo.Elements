@@ -20,6 +20,13 @@
     const MAX_ENTRIES = 3000;
     const log = [];
 
+    // Subscribers notified with each entry as it's recorded — js/game-log-ui.js
+    // uses this to render the player-facing readable log live, instead of
+    // polling entries() or duplicating any of the hooks below. A listener
+    // throwing must never break recording itself.
+    const listeners = [];
+    function onRecord(fn) { if (typeof fn === 'function') listeners.push(fn); }
+
     // Optional roster override for LOCAL games (multiplayer games derive the
     // roster from allPlayersData). BotArena.spectate sets this so bot-vs-bot
     // spectator logs label every actor correctly.
@@ -43,13 +50,17 @@
     function record(type, extra) {
         try {
             const player = (typeof activePlayerIndex !== 'undefined') ? activePlayerIndex : null;
-            log.push(Object.assign({
+            const entry = Object.assign({
                 turn: (typeof currentTurnNumber !== 'undefined') ? currentTurnNumber : null,
                 player,
                 actor: player != null ? actorLabel(player) : null,
                 type,
-            }, extra));
+            }, extra);
+            log.push(entry);
             if (log.length > MAX_ENTRIES) log.shift();
+            for (const fn of listeners) {
+                try { fn(entry); } catch (e) { console.warn('⚠️ [ActionLog] onRecord listener failed:', e); }
+            }
         } catch (e) {
             console.warn('⚠️ [ActionLog] record failed:', e);
         }
@@ -150,6 +161,6 @@
 
     function clear() { log.length = 0; }
 
-    window.ActionLog = { record, download, clear, setRoster, entries: () => log.slice() };
+    window.ActionLog = { record, download, clear, setRoster, onRecord, entries: () => log.slice() };
     console.log('📋 [ActionLog] Loaded — window.ActionLog.download() or the cheat panel button');
 })();
