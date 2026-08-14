@@ -19,13 +19,71 @@ const ScrollEffects = {
     // transition (local End Turn + remote turn-change handler).
     responseScrollUsedThisTurn: false,
 
+    // Caster of whichever scroll effect is currently resolving — set at the
+    // top of every execute() call (the single funnel all scroll effects run
+    // through, human or bot). Used only by the bot-modal flash guard below
+    // to tell whether the modal that's about to appear belongs to a bot.
+    _activeCasterIndex: null,
+
     // Initialize the effects system
     init(spellSystem) {
         this.spellSystem = spellSystem;
         this.activeBuffs = {};
         this.selectionMode = null;
         this.responseScrollUsedThisTurn = false;
+        this._installBotModalFlashGuard();
         console.log('📜 Scroll Effects system initialized');
+    },
+
+    // Is this player slot a bot? Same check as ResponseWindowSystem.isBotPlayer —
+    // duplicated locally rather than reached-into, since scroll-effects.js
+    // doesn't otherwise depend on response-window.js.
+    isBotCaster(playerIndex) {
+        if (playerIndex === null || playerIndex === undefined) return false;
+        try {
+            if (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData)) {
+                const p = allPlayersData.find(p => p.player_index === playerIndex);
+                if (p && typeof window.isBotUsername === 'function') {
+                    return window.isBotUsername(p.username);
+                }
+            }
+        } catch (e) { /* solo/tutorial mode has no allPlayersData */ }
+        return false;
+    },
+
+    // Suppresses the on-screen flash of a bot's own choice modal (Create,
+    // Scholar's Insight, element/opponent pickers, Transmute, etc. — every
+    // id in EFFECT_MODAL_IDS). bot-effects.js drives these by finding the
+    // REAL DOM elements a human would click and calling their real click
+    // handlers — it doesn't reimplement scroll rules — so the modal
+    // genuinely mounts to document.body and, without this, genuinely
+    // paints for a frame before the bot's synchronous drive-then-cancel
+    // cycle tears it down again. That's especially visible to the host,
+    // who is usually the one rendering the bot's turn, and it gives away
+    // what the bot is about to pick.
+    //
+    // A MutationObserver on document.body catches each modal the instant
+    // it's appended — its callback runs as a microtask, flushed before the
+    // next paint — and hides it (display:none, not removal) when the
+    // scroll being resolved belongs to a bot (_activeCasterIndex). Hiding
+    // rather than removing keeps every id/selector bot-effects.js looks
+    // up intact, and HTMLElement.click() fires its handlers regardless of
+    // display:none, so the bot still drives the modal exactly as before —
+    // it's just never visible while it does.
+    _installBotModalFlashGuard() {
+        if (this._modalFlashObserver || typeof document === 'undefined' || !document.body) return;
+        const self = this;
+        this._modalFlashObserver = new MutationObserver((mutations) => {
+            if (!self.isBotCaster(self._activeCasterIndex)) return;
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === 1 && self.EFFECT_MODAL_IDS.includes(node.id)) {
+                        node.style.display = 'none';
+                    }
+                }
+            }
+        });
+        this._modalFlashObserver.observe(document.body, { childList: true });
     },
 
     // Clear turn-based buffs (called on End Turn)
@@ -144,6 +202,9 @@ const ScrollEffects = {
 
     // Execute a scroll's effect
     execute(scrollName, casterIndex, context = {}) {
+        // See _installBotModalFlashGuard: tracks who any choice modal that
+        // appears next belongs to, so it can be hidden if that's a bot.
+        this._activeCasterIndex = casterIndex;
         const effect = this.getEffect(scrollName);
         if (!effect) {
             console.warn(`No effect defined for scroll: ${scrollName}`);
