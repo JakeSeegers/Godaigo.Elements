@@ -106,6 +106,13 @@
     // ---- Turn headers ----
     let lastHeaderTurn = null;
 
+    // Re-fits the panel to its (now taller) content when autofit is on —
+    // js/scroll-panels.js's fitPanel() itself is a no-op when it's off, or
+    // when the panel is currently collapsed, so this is always safe to call.
+    function _fit() {
+        window.ScrollPanelSystem?.fitPanel?.('gamelog');
+    }
+
     function ensureTurnHeader(entry) {
         if (entry.turn == null || entry.turn === lastHeaderTurn) return;
         lastHeaderTurn = entry.turn;
@@ -117,6 +124,7 @@
         div.innerHTML = `Turn ${entry.turn} — ${playerSpan(entry.player)}${botTag}`;
         content.appendChild(div);
         content.scrollTop = content.scrollHeight;
+        _fit();
     }
 
     function appendLine(html, className) {
@@ -127,6 +135,7 @@
         div.innerHTML = html;
         content.appendChild(div);
         content.scrollTop = content.scrollHeight;
+        _fit();
     }
 
     // ---- Entry -> line. Returns null to omit. ----

@@ -23,13 +23,16 @@ const ScrollPanelSystem = (() => {
         hand:   { x: 20,  y: 100, w: 520, h: 420, collapsed: false, autofit: true },
         active: { x: 20,  y: 540, w: 520, h: 420, collapsed: false, autofit: true },
         common: { x: 560, y: 100, w: 760, h: 420, collapsed: false, autofit: true },
-        // Same floating-panel chrome as the three above, but none of them use
-        // the scroll-card autofit formula (AUTOFIT_CARD_W/H) — their content
-        // isn't scroll cards, so autofit stays off (see createPanel's
-        // opts.noAutofit) and these sizes are just a reasonable starting
-        // point the player can resize by hand.
-        gamelog:         { x: 20,  y: 100, w: 300, h: 220, collapsed: false, autofit: false },
-        opponents:       { x: 900, y: 100, w: 280, h: 420, collapsed: false, autofit: false },
+        // Same floating-panel chrome as the three above. None of these three
+        // use the scroll-card autofit formula (AUTOFIT_CARD_W/H is sized for
+        // fixed 230x400 cards) — gamelog/opponents get the generic content-fit
+        // instead (_fitPanelToContent), autofit ON by default same as
+        // hand/active/common. Elemental Stones is a fixed 5-card horizontal
+        // row with nothing to fit as content changes, so it opts out
+        // entirely (createPanel's opts.noAutofit). w/h below are just a
+        // reasonable starting point before the first autofit/manual resize.
+        gamelog:         { x: 20,  y: 100, w: 300, h: 220, collapsed: false, autofit: true },
+        opponents:       { x: 900, y: 100, w: 280, h: 420, collapsed: false, autofit: true },
         elementalstones: { x: 340, y: 480, w: 640, h: 100, collapsed: false, autofit: false },
     };
 
@@ -277,6 +280,13 @@ const ScrollPanelSystem = (() => {
         p.open = true;
         p.el.style.display = 'flex';
         renderPanel(id);
+        // renderPanel() already calls fitPanel() itself for hand/active/common
+        // (redundant-but-harmless to call again here); it early-returns for
+        // everything else, so this is the only fitPanel() call gamelog/
+        // opponents get on open — sizes them to whatever content already
+        // rendered before this open (their own code re-fits on every new
+        // line/card after this).
+        fitPanel(id);
         _syncDockBtn(id);
     }
 
@@ -556,12 +566,22 @@ const ScrollPanelSystem = (() => {
     const AUTOFIT_GAP    = 8;
     const AUTOFIT_PAD    = 16;   // 8px left + 8px right body padding
 
+    // hand/active/common lay out a horizontal row of FIXED-size scroll cards,
+    // so "fit to content" means solving width from card count. Everything
+    // else registered on this system (gamelog/opponents) is a vertical list
+    // of variable, unpredictably-sized content (log lines, opponent cards) —
+    // wrong panel for that same formula, so they get a generic content-fit
+    // instead (_fitPanelToContent below).
+    const SCROLL_CARD_PANELS = new Set(['hand', 'active', 'common']);
+
     function fitPanel(id) {
         const p      = panels[id];
         if (!p || !p.el || p.state.collapsed || p.state.autofit === false) return;
         const body   = document.getElementById(p.bodyId || ('fsp-body-' + id));
         const header = p.el.querySelector('.fsp-header');
         if (!body || !header) return;
+
+        if (!SCROLL_CARD_PANELS.has(id)) { _fitPanelToContent(p, body, header); return; }
 
         // Count rendered cards (empty → 1 child fsp-empty div → minimum 1-card width)
         const n = Math.max(1, body.children.length);
@@ -571,6 +591,23 @@ const ScrollPanelSystem = (() => {
         p.el.style.width  = w + 'px';
         p.el.style.height = h + 'px';
         p.state.w = w;
+        p.state.h = h;
+    }
+
+    // Generic content-fit: snap HEIGHT to the body's actual rendered content
+    // (header + content + a little padding), leaving width as whatever the
+    // panel is currently sized to (these bodies wrap/scroll vertically, not
+    // horizontally, so width isn't a function of item count the way scroll
+    // cards' row is). Capped between MIN_H and 50% of the viewport — gamelog
+    // especially grows unbounded over a long game, and without a ceiling
+    // autofit would keep stretching the panel instead of letting
+    // .fsp-body's own overflow-y:auto (see CSS) take over past a reasonable
+    // size.
+    function _fitPanelToContent(p, body, header) {
+        const MIN_H = 120;
+        const maxH  = Math.round(window.innerHeight * 0.5);
+        const h = Math.min(maxH, Math.max(MIN_H, header.offsetHeight + body.scrollHeight + 16));
+        p.el.style.height = h + 'px';
         p.state.h = h;
     }
 
@@ -762,21 +799,34 @@ const ScrollPanelSystem = (() => {
         // Common, but each keeps content other code already depends on by id
         // (game-log-ui.js's game-log-content, game-ui.js's new-opponent-cards
         // and elemental-stones-panel/.stone-card drag-return logic) — see
-        // createPanel()'s opts. All three default OPEN (unlike hand/active/
-        // common, which start closed) since they're ambient info, not an
-        // inventory opened on demand — matches how .right-panel/
-        // .game-log-panel/#elemental-stones-panel behaved before this panel
-        // system existed.
+        // createPanel()'s opts.
+        //
+        // createPanel() itself just builds the DOM (appended to document.body,
+        // starts closed) — it must NOT be opened here. init() runs at page
+        // DOMContentLoaded, long before a game exists: the login screen, the
+        // splash video, and the multiplayer lobby all happen first, and these
+        // three are position:fixed elements with no relation to .game-layout's
+        // own display:none-until-.active gating, so opening them here would
+        // float them over all of that too (a real bug this project hit).
+        // openAmbientPanels(), exposed below, is what actually opens them —
+        // called from game-ui.js's initializeNewUI(), which only ever runs
+        // once a game has actually started (see lobby.js's startGame()/
+        // startMultiplayerGame()). Hand/Active/Common need no such call: they
+        // default closed and only ever open from their own dock button click,
+        // which isn't reachable before a game exists either (same
+        // .game-layout gating covers the dock bar those buttons live in).
+        // Game Log/Opponent Status get autofit ON by default (_fitPanelToContent
+        // — the generic, non-scroll-card fit added alongside them), same ↕
+        // button hand/active/common show. Elemental Stones keeps noAutofit —
+        // it's a fixed 5-card horizontal row, nothing to fit as content changes.
         createPanel('gamelog', 'Game Log', {
             bodyId: 'game-log-content',
             noBadge: true,
-            noAutofit: true,
         });
         createPanel('opponents', 'Opponent Status', {
             panelId: 'right-panel',
             bodyEl: document.getElementById('new-opponent-cards'),
             noBadge: true,
-            noAutofit: true,
         });
         createPanel('elementalstones', 'Elemental Stones', {
             panelId: 'elemental-stones-panel',
@@ -785,11 +835,6 @@ const ScrollPanelSystem = (() => {
             noBadge: true,
             noAutofit: true,
         });
-        // openPanel() itself lights up each one's dock button (_syncDockBtn) —
-        // no need to touch the classList here too.
-        openPanel('gamelog');
-        openPanel('opponents');
-        openPanel('elementalstones');
 
         ['gamelog', 'opponents', 'elementalstones'].forEach(id => {
             const btn = document.getElementById(panels[id].dockBtnId);
@@ -807,7 +852,25 @@ const ScrollPanelSystem = (() => {
         window.ScrollPanelSystem = {
             toggle, refresh, openPanel, closePanel, animateCardMove, animateCardToDeck,
             isOpen: id => !!panels[id]?.open,
+            openAmbientPanels,
+            // Re-fits a panel to its current content when autofit is on for it
+            // (a no-op otherwise) — call after appending to gamelog's body or
+            // re-rendering opponents' cards, same as hand/active/common get
+            // via renderPanel()'s own internal fitPanel() call.
+            fitPanel,
         };
+    }
+
+    // Opens the three ambient/always-visible panels — called from
+    // game-ui.js's initializeNewUI() once a game has actually started (see
+    // the long comment above their createPanel() calls for why this can't
+    // just happen in init() itself). Safe to call more than once (e.g. a
+    // rematch/new game) — openPanel() on an already-open panel is a no-op
+    // beyond re-clamping its position.
+    function openAmbientPanels() {
+        ['gamelog', 'opponents', 'elementalstones'].forEach(id => {
+            if (panels[id]) openPanel(id);
+        });
     }
 
     // ---- Hover preview panel ----

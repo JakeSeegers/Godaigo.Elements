@@ -382,19 +382,22 @@
             <!-- Player cards will be populated dynamically -->
         </div>
 
-        <!-- Game Log content — the panel wrapper is built by js/scroll-panels.js's
-             createPanel('gamelog', 'Game Log', {bodyId:'game-log-content', noBadge:true,
-             noAutofit:true}), toggled by #panel-btn-gamelog next to "Scroll Reference"
-             in the HUD bar (a floating panel started under .right-panel in the dock/
-             status-bar area used to get visually covered by it — the HUD bar sits
-             above where any floating panel starts, so it can't happen there). Defaults
-             open for the same reason .right-panel does. Populated live by
-             js/game-log-ui.js from js/action-log.js's existing record() hooks — never
-             shows discardScroll or anything else that would reveal another player's
-             hand. -->
-        <div id="game-log-content">
-            <!-- Log lines appended live by js/game-log-ui.js -->
-        </div>
+        <!-- Game Log has no static markup here at all — unlike Opponent Status/
+             Elemental Stones above (which pass an EXISTING element as opts.bodyEl
+             to preserve ids other code depends on), createPanel('gamelog', 'Game
+             Log', {bodyId:'game-log-content', ...}) builds its body fresh, since
+             nothing else needs a hard reference into it. A static
+             <div id="game-log-content"> here as well would create a duplicate id —
+             document.getElementById would then resolve to THIS orphaned, unstyled,
+             normal-document-flow copy instead of the one actually inside the panel
+             (a real bug this project hit: log lines rendered as plain text at the
+             bottom of the page, panel staying empty). Toggled by #panel-btn-gamelog
+             next to "Scroll Reference" in the HUD bar (a floating panel started
+             under .right-panel in the dock/status-bar area used to get visually
+             covered by it — the HUD bar sits above where any floating panel starts,
+             so it can't happen there). Populated live by js/game-log-ui.js from
+             js/action-log.js's existing record() hooks — never shows discardScroll
+             or anything else that would reveal another player's hand. -->
 
         <!-- BOTTOM DOCK -->
         <div class="dock-bar">

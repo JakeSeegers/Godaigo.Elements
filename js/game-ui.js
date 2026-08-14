@@ -17,10 +17,27 @@
             // Setup scroll deck UI
             initializeScrollDeckUI();
 
-            // Elemental Stones and Opponent Status panels are both built and wired
-            // entirely by js/scroll-panels.js's init() now (createPanel('elementalstones', ...)/
-            // createPanel('opponents', ...)) — same draggable/resizable/collapsible/
-            // closeable chrome as Hand/Active/Common.
+            // Game Log/Opponent Status/Elemental Stones are built (but left
+            // CLOSED) by js/scroll-panels.js's init() at page load — same
+            // draggable/resizable/collapsible/closeable chrome as Hand/Active/
+            // Common. Opening them is deliberately NOT done there (that runs at
+            // DOMContentLoaded, before login/the splash screen/the lobby even
+            // exist) and not immediately here either: initializeNewUI() itself
+            // runs at game START, which for multiplayer means the tile-placement
+            // phase is still ahead — a real bug this project hit was these three
+            // floating over the "place your starting tile" overlay. Poll the same
+            // isPlacementPhase flag updatePlacementTileOverlay() already polls
+            // every 300ms below, and open them the moment it's false. It's only
+            // ever true for multiplayer to begin with (local games never set it —
+            // see multiplayer-state.js), so local play opens them immediately,
+            // same as before.
+            (function openAmbientPanelsWhenReady() {
+                if (typeof isPlacementPhase !== 'undefined' && isPlacementPhase) {
+                    setTimeout(openAmbientPanelsWhenReady, 300);
+                    return;
+                }
+                window.ScrollPanelSystem?.openAmbientPanels?.();
+            })();
 
             // Initial HUD update
             updateHUD();
@@ -965,6 +982,11 @@
 
             // Update HUD
             if (typeof updateHUD === 'function') updateHUD();
+
+            // Re-fit the Opponent Status panel to its (now different) card
+            // count — js/scroll-panels.js's fitPanel() is a no-op when
+            // autofit is off for it or it's collapsed, so always safe to call.
+            window.ScrollPanelSystem?.fitPanel?.('opponents');
         }
 
         function clearBoard(skipConfirm = false) {
