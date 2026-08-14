@@ -160,3 +160,14 @@ Same rule applies to stone conflict on the board.
 ### Stack resolution
 - Response resolves BEFORE the original cast takes effect
 - A response cannot itself be responded to (no counter-counter)
+
+### One response scroll per turn
+- Every response/counter scroll definition carries `oncePerTurn: true`
+  (set in `scroll-definitions.js` effect maps, propagated in `generateElementalScrolls`).
+- Only ONE such scroll may actually resolve per turn — total, across all players.
+- Guard flag: `ScrollEffects.responseScrollUsedThisTurn`. Set when a `oncePerTurn`
+  scroll resolves (`resolveResponseStack()` on the arbitrator; the `response-resolved`
+  broadcast handler in `lobby.js` for other clients). Reset in `clearTurnBuffs()`,
+  which fires on every client at each turn transition.
+- Enforced in `canPlayerRespond()`/`canPlayerBluff()`: once the flag is set, flagged
+  scrolls are excluded, so later response windows in the same turn auto-pass.

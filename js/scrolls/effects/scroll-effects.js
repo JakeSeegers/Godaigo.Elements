@@ -12,16 +12,26 @@ const ScrollEffects = {
     // Current selection mode state
     selectionMode: null,
 
+    // One-per-turn response scroll guard. Set true when a scroll flagged
+    // `oncePerTurn` (all response/counter scrolls) actually resolves during a
+    // turn; blocks any further response-scroll casts until the turn changes.
+    // Reset by clearTurnBuffs(), which fires on every client at each turn
+    // transition (local End Turn + remote turn-change handler).
+    responseScrollUsedThisTurn: false,
+
     // Initialize the effects system
     init(spellSystem) {
         this.spellSystem = spellSystem;
         this.activeBuffs = {};
         this.selectionMode = null;
+        this.responseScrollUsedThisTurn = false;
         console.log('📜 Scroll Effects system initialized');
     },
 
     // Clear turn-based buffs (called on End Turn)
     clearTurnBuffs() {
+        // Reset the one-per-turn response guard for the incoming turn.
+        this.responseScrollUsedThisTurn = false;
         Object.keys(this.activeBuffs).forEach(key => {
             if (this.activeBuffs[key]?.expiresThisTurn) {
                 if (key === 'controlTheCurrent' && this.selectionMode?.type === 'water-transform') {

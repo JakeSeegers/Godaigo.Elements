@@ -59,7 +59,7 @@ function rotateHex(q, r, steps) {
 
 // Earth scroll effect definitions
 const EARTH_SCROLL_EFFECTS = {
-    1: { name: 'Iron Stance', description: 'Counter the most recently activated scroll. That scroll is cancelled.', isCounter: true },
+    1: { name: 'Iron Stance', description: 'Counter the most recently activated scroll. That scroll is cancelled.', isCounter: true, oncePerTurn: true },
     2: { name: 'Shifting Sands', description: "Select two tiles to swap their positions. Tile must be unoccupied by stones. If there is one player on that tile, move them to the center of the tile. Cannot target a tile with multiple players on it." },
     3: { name: "Mason's Savvy", description: 'Draw up to 5 earth stones. This turn, place earth stones within 5 hexes of player.' },
     4: { name: 'Heavy Stomp', description: 'Select a tile to flip. Hidden tiles are revealed (draw scroll). Revealed tiles become hidden.' },
@@ -68,7 +68,7 @@ const EARTH_SCROLL_EFFECTS = {
 
 // Water scroll effect definitions
 const WATER_SCROLL_EFFECTS = {
-    1: { name: 'Reflect', description: 'Duplicate the effect of the scroll that was last activated this turn.', isResponse: true },
+    1: { name: 'Reflect', description: 'Duplicate the effect of the scroll that was last activated this turn.', isResponse: true, oncePerTurn: true },
     2: { name: 'Refreshing Thought', description: 'Draw a Catacomb scroll.' },
     3: { name: 'Inspiring Draught', description: 'Draw 2 scrolls from any decks, then put 1 back and shuffle that deck.' },
     4: { name: 'Wandering River', description: 'Select a tile. Until your next turn, that tile counts as any element type you choose.' },
@@ -77,7 +77,7 @@ const WATER_SCROLL_EFFECTS = {
 
 // Fire scroll effect definitions
 const FIRE_SCROLL_EFFECTS = {
-    1: { name: 'Unbidden Lamplight', description: 'Response: Send the triggering scroll to your hand after it resolves (scroll still resolves).', isResponse: true },
+    1: { name: 'Unbidden Lamplight', description: 'Response: Send the triggering scroll to your hand after it resolves (scroll still resolves).', isResponse: true, oncePerTurn: true },
     2: { name: 'Burning Motivation', description: 'Until end of turn, gain 2 AP for each stone you place. Stacks if activated multiple times.' },
     3: { name: 'Sacrificial Pyre', description: 'Activate any scroll in your hand (ignoring pattern). The scroll goes to the common area.' },
     4: { name: 'Transmute', description: 'Discard any number of stones or scrolls to regain 2 AP each.' },
@@ -86,7 +86,7 @@ const FIRE_SCROLL_EFFECTS = {
 
 // Void scroll effect definitions
 const VOID_SCROLL_EFFECTS = {
-    1: { name: 'Psychic', description: "Counter the previous scroll, then play it during your turn — unless its caster pays 2 AP to negate Psychic. Move Psychic to the common area.", isCounter: true },
+    1: { name: 'Psychic', description: "Counter the previous scroll, then play it during your turn — unless its caster pays 2 AP to negate Psychic. Move Psychic to the common area.", isCounter: true, oncePerTurn: true },
     2: { name: "Scholar's Insight", description: 'Search through a Scroll Deck and add a scroll of your choice to your hand. Shuffle that deck afterwards.' },
     3: { name: 'Simplify', description: 'Scrolls cost 1 AP for you to activate until the beginning of your next turn.' },
     4: { name: 'Telekinesis', description: 'Move a tile unoccupied by stones or players. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.' },
@@ -95,7 +95,7 @@ const VOID_SCROLL_EFFECTS = {
 
 // Wind scroll effect definitions
 const WIND_SCROLL_EFFECTS = {
-    1: { name: 'Sigh of Recollection', description: 'Draw a scroll and a stone of the type that was just activated, if available. Draw one stone of each if it was a Catacomb scroll.', isResponse: true },
+    1: { name: 'Sigh of Recollection', description: 'Draw a scroll and a stone of the type that was just activated, if available. Draw one stone of each if it was a Catacomb scroll.', isResponse: true, oncePerTurn: true },
     2: { name: 'Respirate', description: 'Draw 2 wind stones. At end of turn, return all your wind stones to the source pools.' },
     3: { name: 'Breath of Power', description: 'Until end of turn, you may move adjacent stones to another adjacent empty space.' },
     4: { name: 'Take Flight', description: "Select a player to teleport. If you target yourself, you choose where to land; if you target another player, they choose instead. Destination must be an unoccupied hex on a tile occupied by another player. Cannot target player tiles. Cancels if no valid destination exists." },
@@ -137,12 +137,14 @@ function generateElementalScrolls() {
             };
 
             let isResponse = false;
+            let oncePerTurn = false;
             if (effectMaps[element] && effectMaps[element][level + 1]) {
                 const effect = effectMaps[element][level + 1];
                 name = effect.name;
                 description = effect.description;
                 isCounter = effect.isCounter || false;
                 isResponse = effect.isResponse || false;
+                oncePerTurn = effect.oncePerTurn || false;
             } else {
                 name = `${element.charAt(0).toUpperCase() + element.slice(1)} Scroll ${toRoman(level + 1)}`;
                 description = `Stand in pattern to gain +${level + 1} ${element} stones (2 AP)`;
@@ -160,6 +162,9 @@ function generateElementalScrolls() {
                 canCounter: isCounter ? 'any' : null,
                 // Fire I (Unbidden Lamplight) is a response scroll (shows in response window but doesn't cancel)
                 isResponse: isResponse,
+                // Response/counter scrolls flagged oncePerTurn may only be cast once per turn
+                // (one total across all players — see ResponseWindowSystem enforcement)
+                oncePerTurn: oncePerTurn,
                 hasEffect: !!(effectMaps[element] && effectMaps[element][level + 1]) // Flag to indicate this scroll has a special effect
             };
         });

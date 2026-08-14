@@ -149,12 +149,22 @@ class ResponseWindowSystem {
             return { canRespond: false, validScrolls: [], reason: 'Player position not found' };
         }
 
+        // One-per-turn guard: once any oncePerTurn response scroll has resolved this
+        // turn (by anyone), no further oncePerTurn scrolls may be cast until next turn.
+        const responseLimitReached = !!this.spellSystem?.scrollEffects?.responseScrollUsedThisTurn;
+
         for (const scrollName of allCastableScrolls) {
             const patternOk = this.checkPatternForPlayer(scrollName, playerIndex);
             if (patternOk) {
                 const scrollDef = this.spellSystem.patterns[scrollName];
                 const isCounter = scrollDef?.canCounter === 'any';
                 const isResponse = scrollDef?.isResponse === true;
+
+                // Skip scrolls locked out by the one-per-turn limit
+                if (responseLimitReached && scrollDef?.oncePerTurn) {
+                    console.log(`  ↳ ${scrollName}: skipped — a response scroll was already cast this turn`);
+                    continue;
+                }
 
                 // Only include scrolls that are counter scrolls OR response scrolls
                 // Regular scrolls can't be cast as responses
@@ -190,6 +200,11 @@ class ResponseWindowSystem {
                     const scrollDef = this.spellSystem.patterns[scrollName];
                     const isCounter = scrollDef?.canCounter === 'any';
                     const isResponse = scrollDef?.isResponse === true;
+                    // Skip scrolls locked out by the one-per-turn limit
+                    if (responseLimitReached && scrollDef?.oncePerTurn) {
+                        console.log(`  ↳ ${scrollName} (hand): skipped — a response scroll was already cast this turn`);
+                        continue;
+                    }
                     if (isCounter || isResponse) {
                         const cost = this.spellSystem?.getSpellCost ? this.spellSystem.getSpellCost(scrollDef, playerIndex) : 2;
                         if (playerAP < cost) {
@@ -295,10 +310,15 @@ class ResponseWindowSystem {
         //
         // Opponents see: "they have a [element] scroll in hand + that element's response formation is up."
         // They cannot tell the specific scroll — hence the deception.
+        // Once the one-per-turn limit is reached, no oncePerTurn scroll can be played,
+        // so a bluff built on one is not credible — skip those below.
+        const responseLimitReached = !!this.spellSystem?.scrollEffects?.responseScrollUsedThisTurn;
+
         for (const [scrollName, scrollDef] of Object.entries(this.spellSystem.patterns || {})) {
             const isCounter  = scrollDef?.canCounter === 'any';
             const isResponse = scrollDef?.isResponse  === true;
             if (!isCounter && !isResponse) continue;
+            if (responseLimitReached && scrollDef?.oncePerTurn) continue;
             if (!handElements.has(scrollDef.element)) continue;
             if (this.checkPatternForPlayer(scrollName, playerIndex)) {
                 return true;
@@ -1496,6 +1516,12 @@ class ResponseWindowSystem {
         // Process responses first (FIFO - they were added in order)
         for (const entry of responses) {
             const scrollDef = entry.scrollData?.definition || this.spellSystem?.patterns?.[entry.scrollData?.name];
+
+            // A oncePerTurn response/counter scroll is resolving — lock out further
+            // response scrolls for the rest of this turn (one total per turn).
+            if (scrollDef?.oncePerTurn && this.spellSystem?.scrollEffects) {
+                this.spellSystem.scrollEffects.responseScrollUsedThisTurn = true;
+            }
 
             if (ransomPaid && entry.isCounter && entry.scrollData?.name === 'VOID_SCROLL_1') {
                 // Ransom paid: Psychic is negated — no counter, no steal, and its
