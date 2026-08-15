@@ -87,6 +87,19 @@ const ScrollPanelSystem = (() => {
     //              — for anything else it's just an empty box, so the button
     //              doesn't do anything useful (Elemental Stones' own reason
     //              for opting out).
+    //   autoHeight — no inline width/height at all, ever (ignores DEFAULTS
+    //              and any stored size) — the flex column just hugs its
+    //              content's natural size via plain CSS. For a panel whose
+    //              content is fixed and never varies, there's nothing to
+    //              size beyond what the browser already computes for free.
+    //              Pair with noResize (below) — a panel with no resize
+    //              handle should never end up with a stray inline size either.
+    //   noResize — omit the resize handle entirely. Without this, an
+    //              accidental drag can lock in a taller/wider-than-content
+    //              size forever (_makeResizable's Math.max(100, ...) floor
+    //              means even a 1px nudge sets a 100px minimum height) —
+    //              exactly what caused Elemental Stones' reported "big
+    //              bottom margin" even after autoHeight was added.
     function createPanel(id, title, opts = {}) {
         const stored = loadStored()[id] || {};
         const state  = { ...DEFAULTS[id], ...stored };
@@ -97,14 +110,20 @@ const ScrollPanelSystem = (() => {
         el.className     = 'fsp';
         el.id            = opts.panelId || ('fsp-' + id);
         el.dataset.panel = id;
-        el.style.cssText = `left:${state.x}px; top:${state.y}px; width:${state.w}px;`;
-        // opts.autoHeight: skip the inline height so the flex column just
-        // hugs its content's natural size instead (simplest possible fix
-        // for a panel whose content is one fixed-size row — nothing to
-        // "fit" beyond what CSS already does for free) — UNLESS the user
-        // has already manually resized it (stored.h present), which still
-        // wins here same as every other panel.
-        if (!state.collapsed && !(opts.autoHeight && stored.h === undefined)) el.style.height = state.h + 'px';
+        // opts.autoHeight (paired with opts.noResize below — a panel with no
+        // way to resize should never end up with a stray inline height
+        // either): no inline width/height at all, ever, regardless of any
+        // stored state — the flex column just hugs its content's natural
+        // size via normal CSS. For a fixed single-row panel like Elemental
+        // Stones there's nothing to "fit" beyond what CSS does for free,
+        // and no benefit to ever being taller/wider than that.
+        if (opts.autoHeight) {
+            el.style.left = state.x + 'px';
+            el.style.top  = state.y + 'px';
+        } else {
+            el.style.cssText = `left:${state.x}px; top:${state.y}px; width:${state.w}px;`;
+            if (!state.collapsed) el.style.height = state.h + 'px';
+        }
 
         const header = document.createElement('div');
         header.className = 'fsp-header';
@@ -129,10 +148,18 @@ const ScrollPanelSystem = (() => {
         compact.style.display = 'none';
         el.appendChild(compact);
 
-        const handle = document.createElement('div');
-        handle.className = 'fsp-resize-handle';
-        handle.title      = 'Drag to resize';
-        el.appendChild(handle);
+        // opts.noResize: no handle at all — for a panel whose size is
+        // always exactly its (fixed, unchanging) content, a resize handle
+        // only invites an accidental drag that locks in a taller-than-
+        // needed height forever (Math.max(100, ...) in _makeResizable
+        // means even a 1px nudge sets a 100px floor) — Elemental Stones'
+        // reported "big bottom margin" was exactly that.
+        const handle = opts.noResize ? null : document.createElement('div');
+        if (handle) {
+            handle.className = 'fsp-resize-handle';
+            handle.title      = 'Drag to resize';
+            el.appendChild(handle);
+        }
 
         document.body.appendChild(el);
         panels[id] = { el, state, open: false, bodyId: bodyEl.id, dockBtnId: opts.dockBtnId || ('panel-btn-' + id) };
@@ -152,13 +179,13 @@ const ScrollPanelSystem = (() => {
         }
 
         // Hide resize handle immediately if autofit is on and panel isn't collapsed
-        if (state.autofit !== false && !state.collapsed) {
+        if (handle && state.autofit !== false && !state.collapsed) {
             handle.style.display = 'none';
         }
 
         // Drag & resize
         _makeDraggable(el, header, id);
-        _makeResizable(el, handle, id);
+        if (handle) _makeResizable(el, handle, id);
 
         return el;
     }
@@ -852,6 +879,7 @@ const ScrollPanelSystem = (() => {
             noAutofit: true,
             noCollapse: true, // collapsing here would just show an empty box — nothing populates fsp-compact-elementalstones
             autoHeight: true, // one fixed-size row of stone cards — no fixed pixel guess to keep in sync, just hug it
+            noResize: true,   // nothing to gain from resizing fixed content — see createPanel()'s opts doc
         });
 
         ['gamelog', 'opponents', 'elementalstones'].forEach(id => {
