@@ -3561,7 +3561,11 @@ label, .hud-ap-label, .hud-ap-value {
     flex-direction: column;
     min-width: 180px;
     min-height: 60px;
-    background: var(--bg-panel, #1d1831);
+    /* Translucent (90% opaque), not a flat opacity: on the whole element —
+       that would also fade text/icons/buttons, hurting readability. Only
+       the background lets a little of the board show through; content
+       stays fully legible. */
+    background: color-mix(in srgb, var(--bg-panel, #1d1831) 90%, transparent);
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(148,88,244,0.08);
