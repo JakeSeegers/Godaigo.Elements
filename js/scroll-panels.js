@@ -81,6 +81,13 @@ const ScrollPanelSystem = (() => {
     //   noAutofit — force autofit off and omit the autofit button; content
     //              here isn't scroll cards, so the AUTOFIT_CARD_W/H formula
     //              (fitPanel) would size the panel completely wrong for it.
+    //   lockAutofit — the opposite: force autofit PERMANENTLY ON (ignoring
+    //              any stored false — there's no benefit to it ever being
+    //              off) and omit the button, since there's nothing useful
+    //              for it to toggle. Pairs naturally with noResize — the
+    //              resize handle is already hidden whenever autofit is on
+    //              (see below), so with no way to ever turn autofit off,
+    //              it would just be permanently unreachable dead UI.
     //   noCollapse — omit the collapse (−) button. Collapsing swaps the body
     //              for #fsp-compact-{id} (see _applyCollapsed), which is only
     //              ever populated for scroll-card panels (_renderCompactList)
@@ -105,6 +112,7 @@ const ScrollPanelSystem = (() => {
         const state  = { ...DEFAULTS[id], ...stored };
         _clampToViewport(state);
         if (opts.noAutofit) state.autofit = false;
+        if (opts.lockAutofit) state.autofit = true;
 
         const el = document.createElement('div');
         el.className     = 'fsp';
@@ -131,7 +139,7 @@ const ScrollPanelSystem = (() => {
         header.innerHTML = `
             <span class="fsp-title">${title}</span>
             ${opts.noBadge ? '' : `<span class="fsp-badge" id="fsp-badge-${id}">0/0</span>`}
-            ${opts.noAutofit ? '' : `<button class="fsp-btn fsp-autofit-btn" title="Auto-fit height to content">↕</button>`}
+            ${(opts.noAutofit || opts.lockAutofit) ? '' : `<button class="fsp-btn fsp-autofit-btn" title="Auto-fit height to content">↕</button>`}
             ${opts.noCollapse ? '' : `<button class="fsp-btn fsp-collapse-btn" title="Collapse / expand">−</button>`}
             <button class="fsp-btn fsp-close-btn"    title="Close">✕</button>
         `;
@@ -865,11 +873,15 @@ const ScrollPanelSystem = (() => {
         createPanel('gamelog', 'Game Log', {
             bodyId: 'game-log-content',
             noBadge: true,
+            lockAutofit: true, // always-fit content — no benefit to ever turning it off, so no toggle button either
+            noResize: true,    // resize handle is unreachable anyway once autofit can never be turned off
         });
         createPanel('opponents', 'Opponent Status', {
             panelId: 'right-panel',
             bodyEl: document.getElementById('new-opponent-cards'),
             noBadge: true,
+            lockAutofit: true,
+            noResize: true,
         });
         createPanel('elementalstones', 'Elemental Stones', {
             panelId: 'elemental-stones-panel',
@@ -942,8 +954,13 @@ const ScrollPanelSystem = (() => {
             if (throbberEl) { throbberEl.remove(); throbberEl = null; }
         }
 
-        // anchorEl: the hovered element (for positioning + the spinner).
-        function showPreview(scrollName, anchorEl) {
+        // anchorEl: the hovered element (for positioning + the spinner). area:
+        // the real hand/active/common area it belongs to, when known (see
+        // findHoverable) — passed through to _buildCard so the preview shows
+        // the SAME "Move to Active/Common Area"/"Activate" buttons the real
+        // card has, not just an inert copy. Left undefined for surfaces where
+        // it isn't meaningful (opponent cards aren't the viewer's to move).
+        function showPreview(scrollName, anchorEl, area) {
             if (scrollName === currentScrollName) return; // already tracking this scroll — don't restart the timer
             currentScrollName = scrollName;
             clearTimeout(hideTimer);
@@ -976,8 +993,11 @@ const ScrollPanelSystem = (() => {
             showTimer = setTimeout(() => {
                 clearThrobber();
 
-                // 'preview' isn't hand/active/common, so _buildCard() adds no action buttons
-                const card = _buildCard(scrollName, 'preview');
+                // Real area (hand/active/common) → _buildCard adds the same
+                // Move to Active/Common Area / Activate buttons the actual
+                // card has. Falls back to 'preview' (no action buttons) when
+                // the area isn't known/meaningful (opponent cards).
+                const card = _buildCard(scrollName, area || 'preview');
                 if (!card) return;
                 card.style.height = 'auto'; // preview is not height-constrained
 
@@ -1018,22 +1038,37 @@ const ScrollPanelSystem = (() => {
         function findHoverable(target) {
             const fspCard = target.closest('.fsp-card');
             if (fspCard && fspCard.closest('.fsp') && fspCard.dataset.scrollName) {
-                return { el: fspCard, scrollName: fspCard.dataset.scrollName };
+                return { el: fspCard, scrollName: fspCard.dataset.scrollName, area: fspCard.dataset.area };
             }
             const compactRow = target.closest('.fsp-compact-row');
             if (compactRow && compactRow.closest('.fsp') && compactRow.dataset.scrollName) {
-                return { el: compactRow, scrollName: compactRow.dataset.scrollName };
+                // The compact list doesn't tag its own rows with an area (unlike
+                // .fsp-card) — but it only ever renders inside hand/active/common,
+                // and createPanel() already tags the panel itself (dataset.panel),
+                // so read it from there instead of threading a new attribute through.
+                const area = compactRow.closest('.fsp')?.dataset.panel;
+                return { el: compactRow, scrollName: compactRow.dataset.scrollName, area };
             }
             const oppCard = target.closest('.opponent-scroll-card[data-scroll-name]');
-            if (oppCard) return { el: oppCard, scrollName: oppCard.dataset.scrollName };
+            if (oppCard) return { el: oppCard, scrollName: oppCard.dataset.scrollName }; // no area — it's an opponent's scroll, not the viewer's to move
             return null;
         }
 
         // Delegation — works for dynamically rendered cards/rows
         document.addEventListener('mouseover', e => {
             const hit = findHoverable(e.target);
-            if (hit) showPreview(hit.scrollName, hit.el);
+            if (hit) showPreview(hit.scrollName, hit.el, hit.area);
         });
+        // Clicking one of the preview's own action buttons (Move to Active/
+        // Common Area, Activate — see showPreview's area param) changes the
+        // real hand/active/common state via the same handlers the actual
+        // card uses, but the floating preview itself has no other reason to
+        // know it should close now that the card it was describing just
+        // moved out from under it. Capture phase so this fires before the
+        // button's own click handler's setTimeout-deferred refresh() runs.
+        preview.addEventListener('click', e => {
+            if (e.target.closest('.fsp-card-btn')) hidePreview();
+        }, true);
         document.addEventListener('mouseout', e => {
             const hit = findHoverable(e.target);
             if (hit) {

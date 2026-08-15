@@ -3686,7 +3686,11 @@ label, .hud-ap-label, .hud-ap-value {
 /* ---- Body ---- */
 .fsp-body {
     flex: 1;
-    overflow-x: auto;
+    /* No horizontal scrollbar — autofit already sizes the panel to fit every
+       card's width, and hovering any card already shows the full preview,
+       so side-to-side scrolling through a cramped row never served a
+       purpose the preview didn't already cover. */
+    overflow-x: hidden;
     overflow-y: hidden;
     padding: 8px;
     display: flex;
@@ -3698,13 +3702,7 @@ label, .hud-ap-label, .hud-ap-value {
        already-opaque parent. Not a flat opacity: on the element, which
        would also fade card text/icons/buttons and hurt readability. */
     background: color-mix(in srgb, var(--bg-panel, #1d1831) 90%, transparent);
-    /* Custom scrollbar */
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148,88,244,0.4) transparent;
 }
-.fsp-body::-webkit-scrollbar { height: 4px; }
-.fsp-body::-webkit-scrollbar-track { background: transparent; }
-.fsp-body::-webkit-scrollbar-thumb { background: rgba(148,88,244,0.4); border-radius: 2px; }
 
 .fsp-empty {
     color: #ccc;
