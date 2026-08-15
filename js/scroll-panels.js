@@ -896,13 +896,15 @@ const ScrollPanelSystem = (() => {
             panelId: 'right-panel',
             bodyEl: document.getElementById('new-opponent-cards'),
             noBadge: true,
-            // Unlike Hand/Active/Common (locked — no benefit to ever toggling
-            // off a fixed-size scroll-card grid) opponent cards' natural
-            // count/height changes far less predictably player to player, so
-            // this one keeps the real toggle: autofit ON by default
-            // (DEFAULTS.opponents.autofit), but the ↕ button and resize
-            // handle are both back so it can be switched off and dragged to
-            // a manual size, same as before it was locked.
+            // Autofit stays on permanently (opponent cards' natural height
+            // changes player to player, so auto-sizing is genuinely useful
+            // here) but there's no benefit to a visible toggle for it — same
+            // reasoning as Hand/Active/Common. lockAutofit keeps the
+            // functionality without the button; noResize follows because the
+            // handle would be unreachable dead UI once autofit can never be
+            // switched off.
+            lockAutofit: true,
+            noResize: true,
         });
         createPanel('elementalstones', 'Elemental Stones', {
             panelId: 'elemental-stones-panel',
