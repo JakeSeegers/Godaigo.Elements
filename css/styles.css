@@ -3603,6 +3603,7 @@ label, .hud-ap-label, .hud-ap-value {
     font-weight: 600;
     letter-spacing: 0.4px;
     color: #e0d8f8;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8); /* same reason as .fsp-btn — header is only 5% opaque now */
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
@@ -3640,7 +3641,18 @@ label, .hud-ap-label, .hud-ap-value {
 .fsp-btn {
     background: none;
     border: 1px solid transparent;
-    color: #777;
+    /* Header background is now only 5% opaque (see .fsp-header) — the old
+       dim #777 could disappear against whatever's showing through behind
+       it. A consistent, always-visible accent colour regardless of
+       backdrop, plus a true black outline (layered text-shadows, not just
+       a soft drop shadow) so it stays readable against a light board tile
+       too, not just dark ones. */
+    color: #f7c396;
+    text-shadow:
+        -1px -1px 0 #000,
+         1px -1px 0 #000,
+        -1px  1px 0 #000,
+         1px  1px 0 #000;
     font-family: var(--font-sans);
     font-size: 10px;
     font-weight: 500;
