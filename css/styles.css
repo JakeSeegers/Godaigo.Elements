@@ -591,10 +591,14 @@ body {
    ('elementalstones', ..., {panelId:'elemental-stones-panel', bodyEl:
    #elemental-stones-body})), so #elemental-stones-panel itself gets all its
    chrome (position, background, border, drag/resize/collapse/close) from
-   the shared .fsp rules. .es-body only needs its own content-layout tuning
-   now — it already sits inside .fsp-body, whose own default flex-direction:
-   row gives the horizontal stone row without any override needed here.
+   the shared .fsp rules. .es-body's row layout comes from .fsp-body's own
+   default flex-direction: row; its padding is tightened here — .fsp-body's
+   8px-all-round default (sized for a scroll-card grid) left visibly loose
+   top/bottom margins around one row of compact stone cards.
    ================================================================ */
+.es-body {
+    padding: 4px 8px;
+}
 .es-body .stone-card {
     flex: 1;
     position: relative;

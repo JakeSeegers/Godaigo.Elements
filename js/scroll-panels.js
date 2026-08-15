@@ -18,22 +18,25 @@ const ScrollPanelSystem = (() => {
         wind: '#ffce00', void: '#9458f4', catacomb: '#9b59b6'
     };
 
-    // Default positions — hand/active stacked left, common to the right
+    // Default positions — matches a reference layout the user arranged and
+    // asked to become the default for a fresh session (screenshot-estimated
+    // pixel coordinates, clamped to whatever viewport actually loads via
+    // _clampToViewport). Hand/Active/Common default COLLAPSED (compact
+    // Name/Type/Level list) — that was part of "like this", not just position.
     const DEFAULTS = {
-        hand:   { x: 20,  y: 100, w: 520, h: 420, collapsed: false, autofit: true },
-        active: { x: 20,  y: 540, w: 520, h: 420, collapsed: false, autofit: true },
-        common: { x: 560, y: 100, w: 760, h: 420, collapsed: false, autofit: true },
+        hand:   { x: 8,   y: 50,  w: 200, h: 95,  collapsed: true,  autofit: true },
+        active: { x: 8,   y: 150, w: 200, h: 85,  collapsed: true,  autofit: true },
+        common: { x: 8,   y: 240, w: 270, h: 135, collapsed: true,  autofit: true },
         // Same floating-panel chrome as the three above. None of these three
         // use the scroll-card autofit formula (AUTOFIT_CARD_W/H is sized for
         // fixed 230x400 cards) — gamelog/opponents get the generic content-fit
         // instead (_fitPanelToContent), autofit ON by default same as
         // hand/active/common. Elemental Stones is a fixed 5-card horizontal
         // row with nothing to fit as content changes, so it opts out
-        // entirely (createPanel's opts.noAutofit). w/h below are just a
-        // reasonable starting point before the first autofit/manual resize.
-        gamelog:         { x: 20,  y: 100, w: 300, h: 220, collapsed: false, autofit: true },
-        opponents:       { x: 900, y: 100, w: 280, h: 420, collapsed: false, autofit: true },
-        elementalstones: { x: 340, y: 480, w: 640, h: 100, collapsed: false, autofit: false },
+        // entirely (createPanel's opts.noAutofit).
+        gamelog:         { x: 380,  y: 40, w: 270, h: 195, collapsed: false, autofit: true },
+        opponents:       { x: 1685, y: 60, w: 315, h: 485, collapsed: false, autofit: true },
+        elementalstones: { x: 8,   y: 790, w: 730, h: 90,  collapsed: false, autofit: false },
     };
 
     const panels = {};      // { id → { el, state, open } }
@@ -78,6 +81,12 @@ const ScrollPanelSystem = (() => {
     //   noAutofit — force autofit off and omit the autofit button; content
     //              here isn't scroll cards, so the AUTOFIT_CARD_W/H formula
     //              (fitPanel) would size the panel completely wrong for it.
+    //   noCollapse — omit the collapse (−) button. Collapsing swaps the body
+    //              for #fsp-compact-{id} (see _applyCollapsed), which is only
+    //              ever populated for scroll-card panels (_renderCompactList)
+    //              — for anything else it's just an empty box, so the button
+    //              doesn't do anything useful (Elemental Stones' own reason
+    //              for opting out).
     function createPanel(id, title, opts = {}) {
         const stored = loadStored()[id] || {};
         const state  = { ...DEFAULTS[id], ...stored };
@@ -98,7 +107,7 @@ const ScrollPanelSystem = (() => {
             <span class="fsp-title">${title}</span>
             ${opts.noBadge ? '' : `<span class="fsp-badge" id="fsp-badge-${id}">0/0</span>`}
             ${opts.noAutofit ? '' : `<button class="fsp-btn fsp-autofit-btn" title="Auto-fit height to content">↕</button>`}
-            <button class="fsp-btn fsp-collapse-btn" title="Collapse / expand">−</button>
+            ${opts.noCollapse ? '' : `<button class="fsp-btn fsp-collapse-btn" title="Collapse / expand">−</button>`}
             <button class="fsp-btn fsp-close-btn"    title="Close">✕</button>
         `;
         el.appendChild(header);
@@ -127,7 +136,8 @@ const ScrollPanelSystem = (() => {
 
         // Wire buttons
         header.querySelector('.fsp-close-btn').addEventListener('click', e => { e.stopPropagation(); closePanel(id); });
-        header.querySelector('.fsp-collapse-btn').addEventListener('click', e => { e.stopPropagation(); toggleCollapse(id); });
+        const collapseBtn = header.querySelector('.fsp-collapse-btn');
+        if (collapseBtn) collapseBtn.addEventListener('click', e => { e.stopPropagation(); toggleCollapse(id); });
 
         const autofitBtn = header.querySelector('.fsp-autofit-btn');
         if (autofitBtn) {
@@ -834,6 +844,7 @@ const ScrollPanelSystem = (() => {
             dockBtnId: 'elemental-stones-btn', // doesn't follow the panel-btn-{id} convention
             noBadge: true,
             noAutofit: true,
+            noCollapse: true, // collapsing here would just show an empty box — nothing populates fsp-compact-elementalstones
         });
 
         ['gamelog', 'opponents', 'elementalstones'].forEach(id => {
