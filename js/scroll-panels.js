@@ -661,7 +661,20 @@ const ScrollPanelSystem = (() => {
     function _fitPanelToContent(p, body, header) {
         const MIN_H = 120;
         const maxH  = Math.round(window.innerHeight * 0.5);
-        const h = Math.min(maxH, Math.max(MIN_H, header.offsetHeight + body.scrollHeight + 16));
+        // .fsp-body is `flex: 1`, so it always stretches to fill whatever
+        // height the panel currently has — scrollHeight on a flex-stretched
+        // element is never less than its own (stretched) clientHeight, so
+        // reading it directly just echoes the panel's *current* size back
+        // instead of the content's natural size, and the panel could only
+        // ever grow, never shrink. Briefly drop the stretch so the body
+        // hugs its real content height, measure that, then restore it.
+        const prevFlex = body.style.flex, prevHeight = body.style.height;
+        body.style.flex = 'none';
+        body.style.height = 'auto';
+        const contentH = body.scrollHeight;
+        body.style.flex = prevFlex;
+        body.style.height = prevHeight;
+        const h = Math.min(maxH, Math.max(MIN_H, header.offsetHeight + contentH + 16));
         p.el.style.height = h + 'px';
         p.state.h = h;
     }
