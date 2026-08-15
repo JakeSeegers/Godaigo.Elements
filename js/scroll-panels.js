@@ -674,9 +674,23 @@ const ScrollPanelSystem = (() => {
         const contentH = body.scrollHeight;
         body.style.flex = prevFlex;
         body.style.height = prevHeight;
-        const h = Math.min(maxH, Math.max(MIN_H, header.offsetHeight + contentH + 16));
+        let h = Math.min(maxH, Math.max(MIN_H, header.offsetHeight + contentH + 16));
         p.el.style.height = h + 'px';
         p.state.h = h;
+
+        // contentH above was measured with no scrollbar present (the body
+        // was auto-height, so nothing overflowed). If applying that height
+        // back causes a scrollbar to appear (overflow-y: auto), it steals
+        // width from the body, which can wrap long text (e.g. a long
+        // opponent name) onto an extra line — needing MORE height than
+        // just measured a moment ago, clipping content and leaving it
+        // stuck at the resulting one-line-short size forever. Re-measure
+        // once against that now-scrollbar'd layout and grow to match.
+        if (body.scrollHeight > body.clientHeight + 1 && h < maxH) {
+            h = Math.min(maxH, Math.max(h, header.offsetHeight + body.scrollHeight + 16));
+            p.el.style.height = h + 'px';
+            p.state.h = h;
+        }
     }
 
     function setAutofit(id, on) {

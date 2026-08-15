@@ -916,7 +916,11 @@ body {
     border-left: 3px solid var(--text-muted);
     border-radius: 3px;
     padding: 8px 10px;
-    margin-bottom: 8px;
+    /* No margin-bottom here — the parent (#new-opponent-cards, a flex
+       column) already spaces children with its own `gap: 8px` (inherited
+       from .fsp-body). Adding a margin here too doubled every gap to 16px
+       and, worse, fed extra unaccounted-for height into the autofit math
+       in js/scroll-panels.js's _fitPanelToContent(). */
     box-shadow: none;
 }
 
