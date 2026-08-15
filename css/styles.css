@@ -4047,11 +4047,6 @@ label, .hud-ap-label, .hud-ap-value {
     transform: scale(1.15);
     transform-origin: top left;
 }
-/* No action buttons in the preview */
-.fsp-card-preview .fsp-card-actions {
-    display: none !important;
-}
-
 /* Keyboard-selected card highlight */
 .fsp-card-selected {
     background: rgba(255,255,255,0.09) !important;

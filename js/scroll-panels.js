@@ -949,6 +949,15 @@ const ScrollPanelSystem = (() => {
         let showTimer = null;
         let throbberEl = null;
         let currentScrollName = null; // which scroll we're hovering, so child mouseover events don't restart the timer
+        // The AREA a repeat hover resolves to is kept fresh even though the
+        // scrollName-match guard below skips restarting the timer/spinner for
+        // it — otherwise, whichever mouseover happened to be the FIRST one to
+        // start tracking a given scrollName permanently pins its area (even
+        // undefined/wrong) for every later hover of the same scroll, since
+        // the guard never lets a later, correct area overwrite it. The
+        // showTimer callback reads this variable at fire time, not a closed-
+        // over parameter, so it always uses whatever's most current.
+        let currentArea;
 
         function clearThrobber() {
             if (throbberEl) { throbberEl.remove(); throbberEl = null; }
@@ -961,7 +970,8 @@ const ScrollPanelSystem = (() => {
         // card has, not just an inert copy. Left undefined for surfaces where
         // it isn't meaningful (opponent cards aren't the viewer's to move).
         function showPreview(scrollName, anchorEl, area) {
-            if (scrollName === currentScrollName) return; // already tracking this scroll — don't restart the timer
+            currentArea = area; // kept fresh regardless of the guard below
+            if (scrollName === currentScrollName) return; // already tracking this scroll — don't restart the timer/spinner
             currentScrollName = scrollName;
             clearTimeout(hideTimer);
             clearTimeout(showTimer);
@@ -996,8 +1006,12 @@ const ScrollPanelSystem = (() => {
                 // Real area (hand/active/common) → _buildCard adds the same
                 // Move to Active/Common Area / Activate buttons the actual
                 // card has. Falls back to 'preview' (no action buttons) when
-                // the area isn't known/meaningful (opponent cards).
-                const card = _buildCard(scrollName, area || 'preview');
+                // the area isn't known/meaningful (opponent cards). Reads
+                // currentArea (kept fresh on every hover, see showPreview)
+                // rather than this closure's own `area` param, which could
+                // be stale/wrong if THIS particular call was the one that
+                // skipped past the scrollName-match guard above.
+                const card = _buildCard(scrollName, currentArea || 'preview');
                 if (!card) return;
                 card.style.height = 'auto'; // preview is not height-constrained
 
