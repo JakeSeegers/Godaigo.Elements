@@ -34,7 +34,7 @@ const ScrollPanelSystem = (() => {
         // hand/active/common. Elemental Stones is a fixed 5-card horizontal
         // row with nothing to fit as content changes, so it opts out
         // entirely (createPanel's opts.noAutofit).
-        gamelog:         { x: 380,  y: 40, w: 270, h: 195, collapsed: false, autofit: true },
+        gamelog:         { x: 380,  y: 40, w: 270, h: 98,  collapsed: false, autofit: false },
         opponents:       { x: 1685, y: 60, w: 315, h: 485, collapsed: false, autofit: true },
         elementalstones: { x: 8,   y: 790, w: 730, h: 90,  collapsed: false, autofit: false },
     };
@@ -878,8 +878,15 @@ const ScrollPanelSystem = (() => {
         createPanel('gamelog', 'Game Log', {
             bodyId: 'game-log-content',
             noBadge: true,
-            lockAutofit: true, // always-fit content — no benefit to ever turning it off, so no toggle button either
-            noResize: true,    // resize handle is unreachable anyway once autofit can never be turned off
+            // Unlike Opponent Status, autofit permanently on doesn't actually
+            // serve Game Log well: new lines keep arriving all game, so a
+            // locked-on fit would fight any manual size the player picks,
+            // re-growing right back on the next entry — there's no stable
+            // "fits the content" size to lock onto. Manual resize only (same
+            // as Elemental Stones) — noAutofit skips the fit machinery and
+            // its button entirely; game-log-ui.js's own fitPanel() calls
+            // become harmless no-ops once autofit is off.
+            noAutofit: true,
         });
         createPanel('opponents', 'Opponent Status', {
             panelId: 'right-panel',
