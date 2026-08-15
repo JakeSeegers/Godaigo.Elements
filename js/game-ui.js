@@ -977,7 +977,7 @@
                 cardsContainer.innerHTML = '<div style="color: #ccc; font-size: 12px; text-align: center;">Waiting for opponents...</div>';
             }
             if (newCardsContainer && newCardsContainer.children.length === 0) {
-                newCardsContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 20px;">Waiting for opponents...</div>';
+                newCardsContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 20px; opacity: 0.5;">Waiting for opponents...</div>';
             }
 
             // Update HUD

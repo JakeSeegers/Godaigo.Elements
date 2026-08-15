@@ -3703,11 +3703,12 @@ label, .hud-ap-label, .hud-ap-value {
     flex-direction: row;
     align-items: flex-start;
     gap: 8px;
-    /* Translucent (90% opaque) — moved here from .fsp itself so the header
-       (much more transparent, see .fsp-header) isn't layered on top of an
-       already-opaque parent. Not a flat opacity: on the element, which
-       would also fade card text/icons/buttons and hurt readability. */
-    background: color-mix(in srgb, var(--bg-panel, #1d1831) 90%, transparent);
+    /* Translucent (45% opaque — halved from the original 90% per request)
+       — moved here from .fsp itself so the header (much more transparent,
+       see .fsp-header) isn't layered on top of an already-opaque parent.
+       Not a flat opacity: on the element, which would also fade card
+       text/icons/buttons and hurt readability. */
+    background: color-mix(in srgb, var(--bg-panel, #1d1831) 45%, transparent);
 }
 
 .fsp-empty {
@@ -3716,6 +3717,7 @@ label, .hud-ap-label, .hud-ap-value {
     text-align: center;
     padding: 20px 8px;
     font-style: italic;
+    opacity: 0.5;
 }
 
 /* ---- Collapsed compact list: Name / Type / Level, one line each ---- */
@@ -3723,7 +3725,7 @@ label, .hud-ap-label, .hud-ap-value {
     padding: 4px 2px;
     max-height: 160px;
     overflow-y: auto;
-    background: color-mix(in srgb, var(--bg-panel, #1d1831) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-panel, #1d1831) 45%, transparent);
 }
 .fsp-compact-row {
     display: flex;
@@ -3758,6 +3760,7 @@ label, .hud-ap-label, .hud-ap-value {
     text-align: center;
     padding: 8px;
     font-style: italic;
+    opacity: 0.5;
 }
 
 /* ---- Resize handle ---- */
