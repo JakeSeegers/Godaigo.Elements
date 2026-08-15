@@ -23,21 +23,25 @@ const ScrollPanelSystem = (() => {
     // pixel coordinates, clamped to whatever viewport actually loads via
     // _clampToViewport). Hand/Active/Common default COLLAPSED (compact
     // Name/Type/Level list) — that was part of "like this", not just position.
+    // User-captured layout (console snapshot combining localStorage's
+    // x/y/w/h/collapsed/autofit with a live ScrollPanelSystem.isOpen() read
+    // per panel — see js/INDEX.md) taken as the new default wholesale,
+    // including collapsed and open state, not just position. w/h are moot
+    // for any panel whose autofit is on (hand/active/common/opponents) or
+    // that uses opts.autoHeight (elementalstones) — both recompute their own
+    // size from content on render/creation regardless of what's stored here
+    // — kept anyway for completeness/documentation.
     const DEFAULTS = {
-        hand:   { x: 8,   y: 50,  w: 200, h: 95,  collapsed: true,  autofit: true },
-        active: { x: 8,   y: 150, w: 200, h: 85,  collapsed: true,  autofit: true },
-        common: { x: 8,   y: 240, w: 270, h: 135, collapsed: true,  autofit: true },
-        // Same floating-panel chrome as the three above. None of these three
-        // use the scroll-card autofit formula (AUTOFIT_CARD_W/H is sized for
-        // fixed 230x400 cards) — gamelog/opponents get the generic content-fit
-        // instead (_fitPanelToContent), autofit ON by default same as
-        // hand/active/common. Elemental Stones is a fixed 5-card horizontal
-        // row with nothing to fit as content changes, so it opts out
-        // entirely (createPanel's opts.noAutofit).
-        gamelog:         { x: 380,  y: 40, w: 270, h: 98,  collapsed: false, autofit: false },
-        opponents:       { x: 1685, y: 60, w: 315, h: 485, collapsed: false, autofit: true },
-        elementalstones: { x: 8,   y: 790, w: 730, h: 90,  collapsed: false, autofit: false },
+        hand:   { x: 0,    y: 95,  w: 484, h: 446, collapsed: true,  autofit: true },
+        active: { x: 0,    y: 164, w: 484, h: 446, collapsed: true,  autofit: true },
+        common: { x: 0,    y: 240, w: 722, h: 446, collapsed: true,  autofit: true },
+        gamelog:         { x: 1184, y: 103, w: 235, h: 195, collapsed: false, autofit: false },
+        opponents:       { x: 1429, y: 92,  w: 273, h: 461, collapsed: false, autofit: true },
+        elementalstones: { x: 1,    y: 761, w: 628, h: 100, collapsed: false, autofit: false },
     };
+    // All six now default OPEN (not just the three ambient ones) — see
+    // openAmbientPanels()/init()'s call site below.
+    const DEFAULT_OPEN_IDS = ['hand', 'active', 'common', 'gamelog', 'opponents', 'elementalstones'];
 
     const panels = {};      // { id → { el, state, open } }
     let initialized = false;
@@ -931,14 +935,17 @@ const ScrollPanelSystem = (() => {
         };
     }
 
-    // Opens the three ambient/always-visible panels — called from
-    // game-ui.js's initializeNewUI() once a game has actually started (see
-    // the long comment above their createPanel() calls for why this can't
-    // just happen in init() itself). Safe to call more than once (e.g. a
-    // rematch/new game) — openPanel() on an already-open panel is a no-op
-    // beyond re-clamping its position.
+    // Opens every panel that defaults open (DEFAULT_OPEN_IDS — currently
+    // all six, per the user's captured layout) — called from game-ui.js's
+    // initializeNewUI() once a game has actually started (see the long
+    // comment above the createPanel() calls for why this can't just happen
+    // in init() itself). Safe to call more than once (e.g. a rematch/new
+    // game) — openPanel() on an already-open panel is a no-op beyond
+    // re-clamping its position. Hand/Active/Common default open now too,
+    // but collapsed (see DEFAULTS) — a compact glance, not the full card
+    // grid, until the player expands one.
     function openAmbientPanels() {
-        ['gamelog', 'opponents', 'elementalstones'].forEach(id => {
+        DEFAULT_OPEN_IDS.forEach(id => {
             if (panels[id]) openPanel(id);
         });
     }
