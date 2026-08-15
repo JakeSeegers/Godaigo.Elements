@@ -813,9 +813,14 @@ const ScrollPanelSystem = (() => {
         if (initialized) return;
         initialized = true;
 
-        createPanel('hand',   'Hand');
-        createPanel('active', 'Active');
-        createPanel('common', 'Common');
+        // Same reasoning as Game Log/Opponent Status: autofit was already on
+        // by default with no benefit to ever turning it off, so lock it on
+        // and drop the now-pointless toggle button + the resize handle
+        // (already permanently hidden whenever autofit is on, so with no way
+        // to ever disable it the handle would just be unreachable dead UI).
+        createPanel('hand',   'Hand',   { lockAutofit: true, noResize: true });
+        createPanel('active', 'Active', { lockAutofit: true, noResize: true });
+        createPanel('common', 'Common', { lockAutofit: true, noResize: true });
 
         // Wire the three dock panel buttons
         ['hand', 'active', 'common'].forEach(id => {
