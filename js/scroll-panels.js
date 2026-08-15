@@ -896,8 +896,13 @@ const ScrollPanelSystem = (() => {
             panelId: 'right-panel',
             bodyEl: document.getElementById('new-opponent-cards'),
             noBadge: true,
-            lockAutofit: true,
-            noResize: true,
+            // Unlike Hand/Active/Common (locked — no benefit to ever toggling
+            // off a fixed-size scroll-card grid) opponent cards' natural
+            // count/height changes far less predictably player to player, so
+            // this one keeps the real toggle: autofit ON by default
+            // (DEFAULTS.opponents.autofit), but the ↕ button and resize
+            // handle are both back so it can be switched off and dragged to
+            // a manual size, same as before it was locked.
         });
         createPanel('elementalstones', 'Elemental Stones', {
             panelId: 'elemental-stones-panel',
