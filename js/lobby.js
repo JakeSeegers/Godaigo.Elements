@@ -3613,8 +3613,11 @@
             console.log('🔄 Resetting game back to lobby');
 
             // Close all floating scroll panels so they don't bleed into the lobby
+            // (all six — gamelog/opponents/elementalstones joined hand/active/common
+            // on this same FSP system later and were missing from this list, which
+            // is why they kept showing over the lobby after leaving a game).
             if (typeof ScrollPanelSystem !== 'undefined') {
-                ['hand', 'active', 'common'].forEach(id => ScrollPanelSystem.closePanel(id));
+                ['hand', 'active', 'common', 'gamelog', 'opponents', 'elementalstones'].forEach(id => ScrollPanelSystem.closePanel(id));
             }
 
             // Remove self from DB and stop heartbeat — prevents ghost rooms
