@@ -3561,11 +3561,15 @@ label, .hud-ap-label, .hud-ap-value {
     flex-direction: column;
     min-width: 180px;
     min-height: 60px;
-    /* Translucent (90% opaque), not a flat opacity: on the whole element —
-       that would also fade text/icons/buttons, hurting readability. Only
-       the background lets a little of the board show through; content
-       stays fully legible. */
-    background: color-mix(in srgb, var(--bg-panel, #1d1831) 90%, transparent);
+    /* No background here on purpose — it used to be here, but the header's
+       own (much more transparent) background would then paint on TOP of
+       this already-90%-opaque layer instead of instead of it, so the two
+       nested translucencies compounded into something that read as "still
+       dark and solid" no matter how transparent the header's own tint was.
+       The 90%-opaque look now lives on .fsp-body/.fsp-compact directly (see
+       below), so the header is a true sibling with its own independent,
+       genuinely-more-see-through background instead of a thin layer over
+       an opaque one. */
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(148,88,244,0.08);
@@ -3584,7 +3588,9 @@ label, .hud-ap-label, .hud-ap-value {
     align-items: center;
     gap: 6px;
     padding: 6px 8px;
-    background: rgba(255,255,255,0.05);
+    /* 95% translucent = only 5% opaque — the header should be MORE
+       see-through than .fsp's own 90%-opaque body, not less. */
+    background: color-mix(in srgb, var(--bg-panel, #1d1831) 5%, transparent);
     border-bottom: 1px solid rgba(255,255,255,0.08);
     cursor: grab;
     user-select: none;
@@ -3675,6 +3681,11 @@ label, .hud-ap-label, .hud-ap-value {
     flex-direction: row;
     align-items: flex-start;
     gap: 8px;
+    /* Translucent (90% opaque) — moved here from .fsp itself so the header
+       (much more transparent, see .fsp-header) isn't layered on top of an
+       already-opaque parent. Not a flat opacity: on the element, which
+       would also fade card text/icons/buttons and hurt readability. */
+    background: color-mix(in srgb, var(--bg-panel, #1d1831) 90%, transparent);
     /* Custom scrollbar */
     scrollbar-width: thin;
     scrollbar-color: rgba(148,88,244,0.4) transparent;
@@ -3696,6 +3707,7 @@ label, .hud-ap-label, .hud-ap-value {
     padding: 4px 2px;
     max-height: 160px;
     overflow-y: auto;
+    background: color-mix(in srgb, var(--bg-panel, #1d1831) 90%, transparent);
 }
 .fsp-compact-row {
     display: flex;

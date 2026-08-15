@@ -98,7 +98,13 @@ const ScrollPanelSystem = (() => {
         el.id            = opts.panelId || ('fsp-' + id);
         el.dataset.panel = id;
         el.style.cssText = `left:${state.x}px; top:${state.y}px; width:${state.w}px;`;
-        if (!state.collapsed) el.style.height = state.h + 'px';
+        // opts.autoHeight: skip the inline height so the flex column just
+        // hugs its content's natural size instead (simplest possible fix
+        // for a panel whose content is one fixed-size row — nothing to
+        // "fit" beyond what CSS already does for free) — UNLESS the user
+        // has already manually resized it (stored.h present), which still
+        // wins here same as every other panel.
+        if (!state.collapsed && !(opts.autoHeight && stored.h === undefined)) el.style.height = state.h + 'px';
 
         const header = document.createElement('div');
         header.className = 'fsp-header';
@@ -845,6 +851,7 @@ const ScrollPanelSystem = (() => {
             noBadge: true,
             noAutofit: true,
             noCollapse: true, // collapsing here would just show an empty box — nothing populates fsp-compact-elementalstones
+            autoHeight: true, // one fixed-size row of stone cards — no fixed pixel guess to keep in sync, just hug it
         });
 
         ['gamelog', 'opponents', 'elementalstones'].forEach(id => {
