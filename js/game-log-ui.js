@@ -106,6 +106,22 @@
     // ---- Turn headers ----
     let lastHeaderTurn = null;
 
+    // ---- Repeat-line multiplier ----
+    // Consecutive identical lines ("Placed an earth stone" three times in a
+    // row) collapse into one line with a "×N" suffix instead of repeating
+    // verbatim — a signature (className+html) identifies "identical", so a
+    // change in stone type/scroll/wording always breaks the streak. Reset on
+    // every new turn header (see ensureTurnHeader) so a streak never spans a
+    // turn boundary — a fresh turn's first action must never just bump last
+    // turn's count. baseHtml is kept separate from the element's rendered
+    // innerHTML so re-rendering with an incremented count never compounds
+    // the previous "×N" into the text itself.
+    let lastLine = null; // { el, signature, baseHtml, count } | null
+
+    function _multiplierSuffix(count) {
+        return count > 1 ? ` <span class="gl-mult">×${count}</span>` : '';
+    }
+
     // Re-fits the panel to its (now taller) content when autofit is on —
     // js/scroll-panels.js's fitPanel() itself is a no-op when it's off, or
     // when the panel is currently collapsed, so this is always safe to call.
@@ -116,6 +132,7 @@
     function ensureTurnHeader(entry) {
         if (entry.turn == null || entry.turn === lastHeaderTurn) return;
         lastHeaderTurn = entry.turn;
+        lastLine = null; // a new turn's first line must never extend last turn's streak
         const content = document.getElementById(CONTENT_ID);
         if (!content) return;
         const botTag = entry.actor === 'bot' ? ' (bot)' : '';
@@ -130,11 +147,22 @@
     function appendLine(html, className) {
         const content = document.getElementById(CONTENT_ID);
         if (!content) return;
+        const signature = className + '|' + html;
+
+        if (lastLine && lastLine.signature === signature && lastLine.el.isConnected) {
+            lastLine.count++;
+            lastLine.el.innerHTML = lastLine.baseHtml + _multiplierSuffix(lastLine.count);
+            content.scrollTop = content.scrollHeight;
+            _fit();
+            return;
+        }
+
         const div = document.createElement('div');
         div.className = 'gl-line ' + className;
         div.innerHTML = html;
         content.appendChild(div);
         content.scrollTop = content.scrollHeight;
+        lastLine = { el: div, signature, baseHtml: html, count: 1 };
         _fit();
     }
 

@@ -901,6 +901,12 @@ body {
     font-weight: 600;
 }
 
+.gl-mult {
+    color: var(--accent-gold);
+    font-weight: 700;
+    font-size: 0.9em;
+}
+
 .opponent-card {
     background: #0e0e1a;
     border: 2px solid #333;
