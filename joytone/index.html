@@ -6014,6 +6014,64 @@ init();
   function setVolume(v) { _volume = Math.max(0, Math.min(1, +v || 0)); applyBridgeGain(); }
   function setMute(m)   { _muted = !!m; applyBridgeGain(); }
 
+  // ── Dynamic tension → BPM + BITS/RATE/DEREZ ─────────────────────────
+  // Driven by js/joytone-bridge.js's setTension(), itself driven by
+  // game-core.js's updateMusicTension(). tension is 0..1 game progress
+  // (0 = game start, 1 = full progress / win) — everything below is a
+  // straight-line interpolation of that one value, so BPM and the crunch
+  // controls always move together and both land on their end values
+  // exactly at tension=1 with no separate "win" special-case needed.
+  //
+  // RATE's slider (#mc-derez-rate) is a 0..1 fraction of a 2000-22050Hz
+  // sweep, not a literal Hz value — see applyDeRezFx()/derezRateLabel()
+  // above. FULL_RATE_HZ is what slider value 1 ("full") maps to under
+  // that same formula (2000 + 20050*1); interpolating in Hz space and
+  // converting back to the slider's own fraction keeps this in sync with
+  // whatever that sweep is, rather than hardcoding a second copy of it.
+  const FULL_RATE_HZ = 2000 + 20050 * 1; // 22050 — matches applyDeRezFx()'s sweep at rate=1
+  const CRUNCH_RATE_HZ = 2600;
+
+  function setTension(tension) {
+    tension = Math.max(0, Math.min(1, +tension || 0));
+
+    // BPM: 94 at tension 0 → 115 at tension 1.
+    const bpm = Math.round(Math.max(94, Math.min(115, 94 + tension * 21)));
+    project.tempo = bpm;
+    const bpmInput = document.getElementById('bpm-input');
+    if (bpmInput) bpmInput.value = bpm;
+    Object.values(activeTracks()).forEach(t => trackEngines[t.id]?.apply(t));
+
+    // BITS: 16 (clean) at tension 0 → 8 (crunchy) at tension 1.
+    const bits = Math.round(16 - tension * 8);
+    // DEREZ: 0% at tension 0 → 100% at tension 1.
+    const derezPercent = Math.round(tension * 100);
+    const mix = derezPercent / 100;
+    // RATE: FULL_RATE_HZ at tension 0 → 2600Hz at tension 1, converted to
+    // the slider's 0..1 fraction (clamped to the slider's own 0.03..1 range).
+    const rateHz = Math.round(FULL_RATE_HZ - tension * (FULL_RATE_HZ - CRUNCH_RATE_HZ));
+    const rateSlider = Math.max(0.03, Math.min(1, (rateHz - 2000) / 20050));
+
+    project.masterFx.derezBits = bits;
+    project.masterFx.derezRate = rateSlider;
+    project.masterFx.derezMix  = mix;
+
+    const bitsInput = document.getElementById('mc-derez-bits');
+    const bitsVal    = document.getElementById('mc-derez-bits-val');
+    const rateInput  = document.getElementById('mc-derez-rate');
+    const rateVal    = document.getElementById('mc-derez-rate-val');
+    const mixInput   = document.getElementById('mc-derez-mix');
+    const mixVal     = document.getElementById('mc-derez-mix-val');
+    if (bitsInput) bitsInput.value = bits;
+    if (bitsVal)   bitsVal.textContent = bits === 16 ? '16' : bits + 'b';
+    if (rateInput) rateInput.value = rateSlider;
+    if (rateVal)   rateVal.textContent = derezRateLabel(rateSlider);
+    if (mixInput)  mixInput.value = mix;
+    if (mixVal)    mixVal.textContent = mix === 0 ? 'off' : derezPercent + '%';
+
+    applyDeRezFx();
+    saveProject();
+  }
+
   // Game over / back to lobby: silence and require a fresh boot next game
   function stopAll() {
     stopPlayback();
@@ -6066,7 +6124,7 @@ init();
     }
   }, true);
 
-  window.JoytoneAPI = { boot, addTileTheme, setVolume, setMute, setPower, stop: stopAll, unlock, onShown, onHidden, getState };
+  window.JoytoneAPI = { boot, addTileTheme, setVolume, setMute, setPower, setTension, stop: stopAll, unlock, onShown, onHidden, getState };
 })();
 </script>
 

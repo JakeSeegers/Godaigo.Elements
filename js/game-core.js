@@ -6110,13 +6110,55 @@ function clearPlayerPath() {
             return !hasEscape;
         }
 
+        // ============================================================
+        // DYNAMIC MUSIC TENSION — drives Joytone's BPM + BITS/RATE/DEREZ
+        // ============================================================
+        // Each player has 6 progress steps: up to 5 for activated scrolls
+        // (objectives — same count checkWinCondition below requires), +1 for
+        // having returned to their own shrine once all 5 are done (the
+        // "return trip" leg of the win condition, via isPlayerAtOwnShrine).
+        function getPlayerProgressScore(playerIndex) {
+            const scrolls = (typeof spellSystem !== 'undefined' && spellSystem)
+                ? spellSystem.playerScrolls?.[playerIndex] : null;
+            const objectives = Math.min(scrolls?.activated?.size || 0, 5);
+            const returned = (objectives >= 5 && isPlayerAtOwnShrine(playerIndex)) ? 1 : 0;
+            return objectives + returned; // 0-6
+        }
+
+        // leaderScore (furthest-along player, 0-6) and partyAverage (mean of
+        // everyone's 0-6 score) are both already per-player scales, so
+        // tension never depends on headcount — a 2-player and a 5-player
+        // game with the same leader progress land on close to the same
+        // tension/BPM. Forwarded to js/joytone-bridge.js, which threads it
+        // into the iframe's JoytoneAPI.setTension().
+        function updateMusicTension() {
+            if (!window.JoytoneBridge || !totalPlayers || totalPlayers < 1) return;
+            let leaderScore = 0, sum = 0;
+            for (let i = 0; i < totalPlayers; i++) {
+                const score = getPlayerProgressScore(i);
+                if (score > leaderScore) leaderScore = score;
+                sum += score;
+            }
+            const partyAverage = sum / totalPlayers;
+            const tension = Math.max(0, Math.min(1, (leaderScore * 6 + partyAverage * 2) / 48));
+            window.JoytoneBridge.setTension(tension);
+        }
+        window.updateMusicTension = updateMusicTension;
+
         // Single win-condition gate. Returns true when the win fired.
         // Safe to call repeatedly from any path: showLevelComplete and
         // handleGameOver both guard against double-fire.
         // opts.announce — when the elements are complete but the pawn is
         // not home yet, prompt the local player to return to their shrine
         // (used by activation-time callers; movement callers stay quiet).
+        // Also the single connection point for updateMusicTension() above:
+        // this already fires after every scroll activation (objective
+        // complete) AND after every move (catches the return-trip leg
+        // arriving home), so recomputing tension here — before the early
+        // returns below — covers both trigger points the task calls for
+        // without scattering calls across every activation/movement site.
         function checkWinCondition(playerIndex, opts = {}) {
+            updateMusicTension();
             if (playerIndex === null || playerIndex === undefined) return false;
             const scrolls = (typeof spellSystem !== 'undefined' && spellSystem)
                 ? spellSystem.playerScrolls?.[playerIndex] : null;

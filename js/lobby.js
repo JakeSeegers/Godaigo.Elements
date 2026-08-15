@@ -3753,6 +3753,12 @@
             isPlacementPhase = true;
             console.log(`🎮 Placement phase initialized: activePlayerIndex=${activePlayerIndex}, totalPlayers=${totalPlayers}, myPlayerIndex=${myPlayer.player_index}`);
 
+            // Reset dynamic music tension to its game-start baseline (94 BPM,
+            // clean BITS/RATE/DEREZ) now that totalPlayers is known — every
+            // player's progress score is 0 at this point, so this just makes
+            // that explicit rather than waiting for the first checkWinCondition().
+            if (typeof updateMusicTension === 'function') updateMusicTension();
+
             // Set up broadcast channel for game actions
             setupGameBroadcast();
 

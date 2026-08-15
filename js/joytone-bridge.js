@@ -239,6 +239,18 @@
         api()?.setVolume(volume);
     }
 
+    // ── Dynamic music tension (BPM + BITS/RATE/DEREZ) ───────────────────
+    // Driven by game-core.js's updateMusicTension(), called after every
+    // objective activation and every move (catching the return-trip leg).
+    // tension is a per-game-progress 0..1 value, independent of player
+    // count — see game-core.js's getPlayerProgressScore/updateMusicTension
+    // for how it's derived from leader/party progress. Not per-player
+    // (unlike mute/volume): everyone's soundtrack should track the same
+    // shared game tension, same as the tile-riff playlist itself.
+    function setTension(t) {
+        api()?.setTension(t);
+    }
+
     // ── Shift+J+T popup shortcut ─────────────────────────────────────────
     const held = new Set();
     function onKeyDown(e) {
@@ -291,6 +303,7 @@
         isMuted: () => muted,
         getVolume: () => volume,
         togglePopup,
+        setTension,
         _onChildPowerChanged,
         _state: () => api()?.getState(),
     };
