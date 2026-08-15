@@ -32,9 +32,9 @@ const ScrollPanelSystem = (() => {
     // size from content on render/creation regardless of what's stored here
     // — kept anyway for completeness/documentation.
     const DEFAULTS = {
-        hand:   { x: 0,    y: 95,  w: 484, h: 446, collapsed: true,  autofit: true },
-        active: { x: 0,    y: 164, w: 484, h: 446, collapsed: true,  autofit: true },
-        common: { x: 0,    y: 240, w: 722, h: 446, collapsed: true,  autofit: true },
+        hand:   { x: 0,    y: 89,  w: 484, h: 446, collapsed: true,  autofit: true },
+        active: { x: 2,    y: 175, w: 484, h: 446, collapsed: true,  autofit: true },
+        common: { x: 0,    y: 280, w: 722, h: 446, collapsed: true,  autofit: true },
         gamelog:         { x: 1184, y: 103, w: 235, h: 195, collapsed: false, autofit: false },
         opponents:       { x: 1429, y: 92,  w: 273, h: 461, collapsed: false, autofit: true },
         elementalstones: { x: 1,    y: 761, w: 628, h: 100, collapsed: false, autofit: false },
