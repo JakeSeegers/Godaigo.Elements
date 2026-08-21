@@ -115,6 +115,30 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **CONNECTIVITY & PERFORMANCE, HOTFIX: connection-monitor's own health-check
+  ping was 401'ing** — `js/connection-monitor.js`, `js/INDEX.md`. User pasted
+  a real page-load console (the fastest possible feedback loop — caught same
+  session as ship). Root cause: `runPing()`'s `fetch('{SUPABASE_URL}/auth/v1/health')`
+  sent no headers at all — Supabase's API gateway (Kong) requires the
+  project's `apikey` header on every endpoint under that domain, including
+  this one, even though the endpoint itself needs no user session/RLS
+  context. Result: every ping (page load + every ~12s after) 401'd — a
+  scary-looking, recurring auth-failure line in the console, and "Health
+  check returned HTTP 401" would have shown in the badge's own error detail
+  if anyone clicked it — directly undercutting the whole point of this
+  feature (clear, non-confusing connection signal), on the very first real
+  page load. The monitor still worked correctly through this (any HTTP
+  response, even non-2xx, still counts as "reachable" by design), so it
+  wasn't a functional break, but it was exactly the kind of noise this
+  session exists to eliminate. Fix: added the `apikey` header (reads
+  `SUPABASE_ANON_KEY`, already declared by `multiplayer-state.js`, same
+  shared-script-scope pattern as `SUPABASE_URL`). `node --check` clean.
+  Not independently re-verified against the live endpoint (still no
+  outbound access from this sandbox) — reasoning: this is the exact same
+  header shape every other Supabase call in this codebase already sends
+  successfully (e.g. the `beforeunload` handler's raw `fetch` in lobby.js),
+  so there's no new uncertainty being introduced, just the one header this
+  file was missing.
 - **CONNECTIVITY & PERFORMANCE, FOLLOW-UP: found and fixed the actual root
   cause of the reported playtest breakage via live Supabase log analysis**
   — `js/lobby.js`. Same branch/task as the entry directly below; a second

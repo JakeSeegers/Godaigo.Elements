@@ -105,12 +105,21 @@
     }
 
     // ---- ping probe ----
-    // Hits Supabase Auth's dedicated health endpoint — unauthenticated, no
-    // RLS/table concerns, minimal payload, exists specifically for this.
-    // ANY http response (even a non-2xx) proves the round trip completed;
-    // that's what "is the connection workable" means here, not whether this
-    // one endpoint likes us. Only a network-level failure (timeout, DNS,
-    // connection refused) counts as a failed probe.
+    // Hits Supabase Auth's dedicated health endpoint — no session/RLS
+    // concerns (any logged-in-or-not visitor can probe it), minimal payload,
+    // exists specifically for this. It still sits behind Supabase's own API
+    // gateway (Kong) like every other endpoint on this domain, though, which
+    // rejects ANY request lacking the project's apikey header with a 401
+    // before the request even reaches Auth's own handler — found live
+    // (2026-08-21) via a real page-load console showing this ping itself
+    // 401'ing, right after shipping it. Not a gap RLS/auth-session would
+    // close (this key is the public anon key, already embedded in this same
+    // page's own JS) — just the one header the gateway actually checks.
+    // ANY http response (even a non-2xx, if the gateway ever changes shape
+    // again) still proves the round trip completed; that's what "is the
+    // connection workable" means here, not whether this one endpoint likes
+    // us. Only a network-level failure (timeout, DNS, connection refused)
+    // counts as a failed probe.
     async function runPing() {
         if (typeof SUPABASE_URL === 'undefined' || typeof fetch !== 'function') return;
         const startedAt = Date.now();
@@ -120,6 +129,7 @@
             const resp = await fetch(SUPABASE_URL + '/auth/v1/health', {
                 method: 'GET',
                 cache: 'no-store',
+                headers: (typeof SUPABASE_ANON_KEY !== 'undefined') ? { 'apikey': SUPABASE_ANON_KEY } : {},
                 signal: controller ? controller.signal : undefined
             });
             if (timeoutId) clearTimeout(timeoutId);
