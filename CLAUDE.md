@@ -42,46 +42,57 @@ CLAUDE.md  (you are here)
 ## SCRIPT LOAD ORDER (index.html)
 Order matters — later scripts depend on earlier ones.
 
+> Resynced 2026-08 against the actual `<script>` tags in index.html (a
+> connectivity/performance audit found this list had drifted: `config.js`
+> is listed below as script #1 but is dead — never actually loaded, see its
+> own file-header comment and js/INDEX.md; `tutorial.js` was listed as #2
+> but the file no longer exists on disk; `scroll-panels.js`, `boot-splash.js`
+> and `effects-system.js` are real, loaded scripts that were simply missing
+> from this list entirely). If this list and index.html ever disagree again,
+> index.html is the source of truth — verify with it before trusting this.
+
 ```
-1. config.js               ← Supabase client, STONE_TYPES, PLAYER_COLORS, TILE_SIZE
-2. tutorial.js             ← Old 7-step modal tutorial (session-dismiss only)
-3. scroll-definitions.js   ← SCROLL_DECKS, SCROLL_DEFINITIONS globals
-4. scroll-effects.js       ← ScrollEffects namespace (depends on scroll-definitions)
-5. response-window.js      ← ResponseWindowSystem (depends on scroll-effects)
-6. multiplayer-state.js    ← Shared MP state (myPlayerId, currentGameId, etc.)
-6b. sounds.js              ← window.SoundSystem — SFX + login music
-6c. joytone-bridge.js      ← window.JoytoneBridge — adaptive music via hidden joytone/ iframe (Shift+J+T popup)
-7. game-core.js            ← SpellSystem, placeTile, revealTile, addAP, movement
-8. game-ui.js              ← HUD, drag-drop handlers, panel toggles, scroll deck UI
-9. parallax.js             ← Animated background (no game deps)
-10. gamification.js        ← window.gami — XP/gold/profiles (depends on Supabase)
-11. crt-overlay.js         ← CRT canvas effects (no game deps)
-12. gamification-ui.js     ← Profile modal UI (depends on gamification.js)
-13. lobby.js               ← Auth, room management, startGame() (depends on game-core)
-14. tutorial-mode.js       ← Interactive tutorial (depends on lobby.js + game-core.js)
-15. emoji-system.js        ← Emoji reactions (depends on gamification.js)
-16. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
-17. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
-17b. bot-sim.js            ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
-17c. bot-effects.js        ← window.BotEffects — Stage 2.5 scroll-effect usage: driveSelection() (tile-flip,
+1. boot-splash.js          ← Studio/logo intro video (chroma-keyed canvas), plays once per page load. No game deps — loads first.
+2. scroll-definitions.js   ← SCROLL_DECKS, SCROLL_DEFINITIONS globals
+3. scroll-effects.js       ← ScrollEffects namespace (depends on scroll-definitions)
+4. response-window.js      ← ResponseWindowSystem (depends on scroll-effects)
+5. multiplayer-state.js    ← Shared MP state (myPlayerId, currentGameId, etc.) + the REAL Supabase client/URL/key (config.js is dead — see above)
+6. connection-monitor.js   ← window.ConnectionMonitor — network health badge + isWorkable() gate (depends only on multiplayer-state.js's SUPABASE_URL)
+7. sounds.js               ← window.SoundSystem — SFX + login music
+8. joytone-bridge.js       ← window.JoytoneBridge — adaptive music via hidden joytone/ iframe (Shift+J+T popup)
+9. game-core.js            ← SpellSystem, placeTile, revealTile, addAP, movement. Also the REAL home of TILE_SIZE/STONE_TYPES/PLAYER_COLORS/etc. (config.js is dead — see above)
+10. effects-system.js      ← window.effectsSystem — sprite/particle visual effect definitions (fire, etc.), no game logic
+11. game-ui.js             ← HUD, drag-drop handlers, panel toggles, scroll deck UI
+12. scroll-panels.js       ← window.ScrollPanelSystem — shared floating-panel chrome (Hand/Active/Common/Game Log/Opponent Status/Elemental Stones)
+13. parallax.js            ← Animated background (no game deps)
+14. gamification.js        ← window.gami — XP/gold/profiles (depends on Supabase)
+15. crt-overlay.js         ← CRT canvas effects (no game deps)
+16. gamification-ui.js     ← Profile modal UI (depends on gamification.js)
+17. lobby.js               ← Auth, room management, startGame() (depends on game-core)
+18. tutorial-mode.js       ← Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
+19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
+20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
+21. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
+22. bot-sim.js             ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
+23. bot-effects.js         ← window.BotEffects — Stage 2.5 scroll-effect usage: driveSelection() (tile-flip,
                              scorched-earth, tile-swap, Create, Scholar's Insight, Quick Reflexes, Sacrificial
                              Pyre, Inspiring Draught), driveTransmute() (open-ended discard-for-AP modal),
                              decideResponse() (response-scroll respond/pass — both arena and real multiplayer,
                              wired from bot.js and bot-driver.js respectively)
-18. bot.js                 ← window.BotSystem — utility-scored bot + optional lookahead (WEIGHTS.searchDepth, default 0);
+24. bot.js                 ← window.BotSystem — utility-scored bot + optional lookahead (WEIGHTS.searchDepth, default 0);
                              Shift+R = one step, Shift+B = full turn; waitForQuiescence() tries BotEffects
                              before cancelling a selection it can't drive
-19. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
+25. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
                              host's client impersonates the bot's index to drive its turns
-19b. bot-arena.js          ← window.BotArena — self-play arena (bot-vs-bot local games, weight evolution).
+26. bot-arena.js           ← window.BotArena — self-play arena (bot-vs-bot local games, weight evolution).
                              Shared playMatch() core for 2-5 players (calls ensureLocalMode() so a stale
                              isMultiplayer identity from an incomplete online-game leave never kills a local
                              match); run/evolve/spectate all support opts.visual (watch instead of muted-fast)
                              and evolve supports opts.nPlayers (2-5). Roadmap for smarter stages: docs/bot-roadmap.md
-19c. action-log.js         ← window.ActionLog — in-memory record of every meaningful action this session
+27. action-log.js          ← window.ActionLog — in-memory record of every meaningful action this session
                              (human AND bot); record()/onRecord() feed both the hidden dev cheat-panel's
                              "Download Action Log" button and game-log-ui.js's player-facing panel
-19d. game-log-ui.js        ← Player-facing readable "Game Log" panel (#game-log-panel, left side), built
+28. game-log-ui.js         ← Player-facing readable "Game Log" panel (#game-log-panel, left side), built
                              from ActionLog.onRecord() — colour-coded, collapses movement, never shows
                              discardScroll or anything else that would reveal another player's hand
 ```

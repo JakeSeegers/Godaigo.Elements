@@ -94,6 +94,39 @@ High-level task list for the Godaigo game project. Update this as you complete o
   from the start rather than copying this pattern — see that entry in
   `planning/current.md`.
 
+### Connectivity / performance
+- [ ] **Live playtest under real degraded network conditions** — the
+  connection-monitor work (see `planning/current.md`'s "CONNECTIVITY &
+  PERFORMANCE" entry) was verified by static code review + `node --check`
+  only; this sandbox has no outbound network access to the live Supabase
+  project. Confirm the badge/gate/reconnect logic actually behaves
+  correctly with a real bad connection (throttled devtools network, or a
+  genuinely flaky wifi) before considering it fully proven out.
+- [ ] **Turn-sync/common-area-sync/heartbeat/disconnect-sweep frequencies
+  reviewed but left unchanged** — `turnSyncInterval` (5s), `commonAreaSyncInterval`
+  (10s), `_heartbeatInterval`/`_disconnectMonitorInterval` (15s each) are all
+  additional host-side or per-player background chatter in `game-core.js`/
+  `lobby.js`, same family as the turn-timeout/scroll-state-sync/last-man-
+  standing intervals that WERE reduced in that pass. Not touched because
+  they seemed reasonably paced already, not because they're provably fine —
+  worth a second look if connection issues persist after the fixes above.
+- [ ] **`js/config.js` is confirmed dead code** — never loaded by `index.html`,
+  every constant duplicated in files that ARE loaded (see the file's own
+  header comment and `js/INDEX.md`). Left in place since deleting it wasn't
+  in scope of the connectivity/performance pass that found it — worth an
+  explicit decision (delete vs. keep as reference) rather than leaving it
+  to keep silently misleading whoever next trusts CLAUDE.md's file map.
+- [ ] **`.planning/` directory appears stale/abandoned** — found while fixing
+  the `js/tutorial.js` doc drift above: `.planning/REQUIREMENTS.md` /
+  `ROADMAP.md` / `PROJECT.md` still track "delete js/tutorial.js" as a
+  pending cleanup item, but the file is already gone from disk and
+  `index.html` — the deletion happened without that tracking system being
+  updated (or through a different workflow entirely). This is a separate,
+  dot-prefixed directory from the `planning/current.md` this project's own
+  CLAUDE.md points to as the session-start file — not touched here since
+  it's unclear whether it's still in active use; worth clarifying with the
+  user whether it should be reconciled or removed.
+
 ### Code quality & docs
 - [ ] **TODO/FIXME in code** – Search codebase for inline TODOs and either implement or move to this file.
 - [ ] **Tests** – Unit or integration tests for SpellSystem, scroll effects, turn/overflow logic.
@@ -120,4 +153,4 @@ High-level task list for the Godaigo game project. Update this as you complete o
 
 ---
 
-*Last updated: added Economy/purchases backlog item — emoji/cosmetics purchases persist to localStorage instead of the database, found while building Bot Tycoon capture stones.*
+*Last updated: added Connectivity/performance backlog items — live-playtest verification still needed for the connection-monitor work, plus flagged-not-fixed chatter intervals, dead `js/config.js`, and a stale `.planning/` tracking dir found along the way.*

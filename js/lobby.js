@@ -1289,6 +1289,12 @@
                       filter: `id=eq.${currentGameId}` },
                     (payload) => {
                         console.log('Game room update:', payload);
+                        // Keep game-core.js's local cache fresh so checkTurnTimeout()'s
+                        // once-a-second host loop never has to hit the DB just to read
+                        // this — see hostTrackedRoomStatus's declaration for why.
+                        if (payload.new && payload.new.status) {
+                            hostTrackedRoomStatus = payload.new.status;
+                        }
                         if (payload.new && payload.new.status === 'playing') {
                             handleGameStart();
                         } else if (payload.new && payload.new.status === 'finished') {
@@ -1508,6 +1514,31 @@
             if (!isHost) {
                 alert('Only the host can start the game!');
                 return;
+            }
+
+            // Connection gate: the host is the single worst place to start a game
+            // from with a bad connection — every enforcement loop that follows
+            // (turn timer, disconnect sweep, scroll-state sync) is host-only, so
+            // a struggling host connection breaks the game for everyone in the
+            // room, not just themselves. See js/connection-monitor.js.
+            if (window.ConnectionMonitor && !window.ConnectionMonitor.isWorkable()) {
+                const connStatus = window.ConnectionMonitor.getStatus();
+                if (!connStatus.browserOnline || connStatus.quality === 'offline') {
+                    alert('⚠️ You appear to be offline right now, so the game can\'t start. Check your connection and try again.');
+                    return;
+                }
+                const proceed = await new Promise((resolve) => {
+                    showRetroConfirm(
+                        '⚠️ Weak Connection',
+                        [
+                            'Your connection looks unstable right now' + (connStatus.lastError ? ' (' + _esc(connStatus.lastError) + ')' : '') + '.',
+                            'Starting a game like this often causes desyncs, false kicks, or stuck turns for everyone in the room.',
+                            'Start anyway?'
+                        ],
+                        () => resolve(true)
+                    );
+                });
+                if (!proceed) return; // Cancel just closes the dialog — nothing to clean up
             }
 
             // Disable the button immediately to prevent double-clicks
@@ -1966,6 +1997,7 @@
         })();
 
         let gameChannel = null; // Global reference to the game broadcast channel
+        let _gameChannelReconnectAttempts = 0; // Backoff counter for the auto-reconnect below; reset on a fresh join or a successful SUBSCRIBED
 
         // Set up broadcast channel for real-time game synchronization
         // Scroll-state validation interval — one per game channel. Must be
@@ -1973,14 +2005,29 @@
         // in this tab, and an untracked interval here permanently stacks
         // (N games = N validators + N duplicate sync broadcasts every 3s).
         let scrollStateSyncInterval = null;
+        // Last snapshot actually SENT (not just computed) — lets the interval
+        // below skip broadcasting when nothing changed since last tick instead
+        // of unconditionally re-sending the full scroll state to every client
+        // every 3 seconds for the entire game. Reset per game so a stale
+        // snapshot from a previous game can never suppress game 2's first sync.
+        let _lastBroadcastScrollSnapshot = null;
+        let _scrollSyncTicksSinceBroadcast = 0;
         function stopScrollStateSync() {
             if (scrollStateSyncInterval) {
                 clearInterval(scrollStateSyncInterval);
                 scrollStateSyncInterval = null;
             }
+            _lastBroadcastScrollSnapshot = null;
+            _scrollSyncTicksSinceBroadcast = 0;
         }
 
-        function setupGameBroadcast() {
+        // isReconnectAttempt: true only when THIS function's own auto-reconnect
+        // (below, in the subscribe() status callback) is rebuilding a dropped
+        // channel — every other caller is a genuine fresh join, which should
+        // reset the backoff counter. Keeping this as a param (not touching the
+        // one pre-existing call site) means the normal join path is unchanged.
+        function setupGameBroadcast(isReconnectAttempt) {
+            if (!isReconnectAttempt) _gameChannelReconnectAttempts = 0;
             stopScrollStateSync();
             if (gameChannel) {
                 gameChannel.unsubscribe();
@@ -3442,7 +3489,17 @@
                 }
             });
 
-            // Aggressive scroll state validation and sync (every 3 seconds)
+            // Scroll state validation every 3 seconds (host is authoritative).
+            // PERF: this used to broadcast the full scroll-state snapshot to
+            // every client UNCONDITIONALLY on every tick, forever, for the
+            // entire game — real network traffic (a Realtime message every
+            // client must receive and parse) even on turns where nothing
+            // whatsoever changed. Now it only broadcasts when the snapshot
+            // actually differs from the last one sent, with a slower (every
+            // 5th tick, ~15s) unconditional resend kept as a heartbeat safety
+            // net in case a client missed the change-triggered broadcast —
+            // preserves the original "eventually consistent even under
+            // message loss" guarantee while cutting the common-case chatter.
             scrollStateSyncInterval = setInterval(() => {
                 if (!isMultiplayer || !spellSystem) return;
 
@@ -3452,7 +3509,14 @@
                 // If I'm the host (player 0), broadcast authoritative state
                 if (myPlayerIndex === 0) {
                     const snapshot = spellSystem.getScrollStateSnapshot();
-                    broadcastGameAction('scroll-state-sync', { snapshot });
+                    const snapshotJSON = JSON.stringify(snapshot);
+                    _scrollSyncTicksSinceBroadcast++;
+                    const changed = snapshotJSON !== _lastBroadcastScrollSnapshot;
+                    if (changed || _scrollSyncTicksSinceBroadcast >= 5) {
+                        broadcastGameAction('scroll-state-sync', { snapshot });
+                        _lastBroadcastScrollSnapshot = snapshotJSON;
+                        _scrollSyncTicksSinceBroadcast = 0;
+                    }
                 }
 
                 // If errors found and I'm not the host, immediately request sync
@@ -3460,7 +3524,7 @@
                     console.warn('⚠️  Errors detected - immediately requesting sync from host');
                     broadcastGameAction('scroll-state-sync-request', { playerIndex: myPlayerIndex });
                 }
-            }, 3000); // Every 3 seconds (more aggressive)
+            }, 3000);
 
             // Listen for game reset (placement timeout or other critical errors)
             gameChannel.on('broadcast', { event: 'game-reset' }, ({ payload }) => {
@@ -3531,18 +3595,55 @@
                 });
             });
 
-            // Subscribe to the channel, then announce our presence
+            // Subscribe to the channel, then announce our presence.
+            // Reports every status (not just SUBSCRIBED) to ConnectionMonitor and
+            // retries with backoff on an unexpected drop. Previously CHANNEL_ERROR/
+            // TIMED_OUT/CLOSED did nothing at all here — no log, no UI signal, no
+            // retry — the game channel just went silently dead until a player
+            // noticed nothing was syncing anymore.
+            const thisChannel = gameChannel;
             gameChannel.subscribe((status) => {
+                if (window.ConnectionMonitor) window.ConnectionMonitor.reportChannelStatus('game', status);
                 if (status === 'SUBSCRIBED') {
                     console.log('Connected to game broadcast channel');
+                    _gameChannelReconnectAttempts = 0;
                     gameChannel.track({ playerIndex: myPlayerIndex, playerId: myPlayerId });
+                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                    console.warn('⚠️ Game broadcast channel status:', status);
+                    // Only react if this callback still belongs to the CURRENTLY
+                    // active channel. setupGameBroadcast() always replaces the
+                    // module-level `gameChannel` wholesale — including as part of
+                    // ITS OWN reconnect retry below — and that replacement's own
+                    // unsubscribe() of the old channel can itself surface as a
+                    // 'CLOSED' status here. Without this identity check, that
+                    // ordinary teardown would look identical to an unexpected drop
+                    // and schedule a redundant second reconnect on top of a channel
+                    // that's already being rebuilt. Also covers a deliberate leave
+                    // (gameChannel set to null or reassigned elsewhere) for free.
+                    if (!isMultiplayer || gameChannel !== thisChannel) return;
+                    if (_gameChannelReconnectAttempts >= 5) {
+                        updateStatus('⚠️ Lost connection to the game and couldn\'t reconnect. Your view may be out of sync — try refreshing.');
+                        return;
+                    }
+                    const delay = Math.min(30000, 2000 * Math.pow(2, _gameChannelReconnectAttempts));
+                    _gameChannelReconnectAttempts++;
+                    updateStatus(`⚠️ Connection to game dropped — reconnecting (attempt ${_gameChannelReconnectAttempts})…`);
+                    setTimeout(() => {
+                        if (!isMultiplayer || gameChannel !== thisChannel) return;
+                        setupGameBroadcast(true);
+                    }, delay);
                 }
             });
         }
 
         // ----------------------------------------------------------------
         // Last-man-standing poll — bulletproof fallback for disconnect win.
-        // Runs every 5 s for every player (not just host).
+        // Runs every 20 s for every player (not just host) — this is a
+        // fallback path (Presence's 'leave' event, below, is the fast path
+        // and fires near-instantly), so it doesn't need to be aggressive;
+        // it previously ran every 5s, meaning every connected client queried
+        // the `players` table 12x/minute each for the entire game, for a
+        // condition that changes at most a handful of times per game.
         // Independent of Presence / Realtime subscription delivery.
         // ----------------------------------------------------------------
         let _lmsInterval = null;
@@ -3565,7 +3666,7 @@
                         }
                     }
                 } catch (e) { /* ignore transient network errors */ }
-            }, 5000);
+            }, 20000);
         }
 
         function stopLastManStandingPoll() {
@@ -3688,11 +3789,21 @@
                 payload._timestamp = Date.now();
             }
 
-            gameChannel.send({
+            // .send() resolves 'ok' | 'timed out' | 'error' — every call site here
+            // treats this as fire-and-forget (matches the rest of this codebase's
+            // broadcast usage), but a failed send is exactly the kind of thing that
+            // should move the connection badge instead of vanishing into the void.
+            const sendResult = gameChannel.send({
                 type: 'broadcast',
                 event: event,
                 payload: payload
             });
+            if (sendResult && typeof sendResult.then === 'function' && window.ConnectionMonitor) {
+                sendResult.then(result => {
+                    if (result === 'ok') window.ConnectionMonitor.reportSendSuccess();
+                    else window.ConnectionMonitor.reportSendFailure(event, result);
+                }).catch(() => {});
+            }
         }
 
         // R2 (docs/bot-roadmap.md, Runtime Track): persist whose turn it is so a

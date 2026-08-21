@@ -1,3 +1,16 @@
+// ⚠️ DEAD FILE — NOT LOADED BY index.html. Found during a connectivity/
+// performance audit (2026-08): every constant below is duplicated in a file
+// that IS actually loaded, and this one has no <script src="js/config.js">
+// tag anywhere in the repo (verified: index.html and every other *.html
+// file). Editing this file has zero effect on the live game — don't spend
+// time here expecting a change to show up. Real, live locations:
+//   - SUPABASE_URL / SUPABASE_ANON_KEY / supabase client → js/multiplayer-state.js
+//   - TILE_SIZE / SNAP_THRESHOLD / STONE_SIZE / STONE_TYPES / PLAYER_COLORS /
+//     sourcePool / stone & source pool capacities / toRoman() → js/game-core.js
+// Kept in place rather than deleted since removing it wasn't asked for and
+// this audit's scope was connectivity/perf, not a repo cleanup pass — but
+// treat it as historical, not authoritative. See js/INDEX.md and CLAUDE.md's
+// Script Load Order, which previously (wrongly) listed this as script #1.
 // ========================================
 // SUPABASE MULTIPLAYER SETUP
 // ========================================

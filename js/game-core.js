@@ -2521,6 +2521,11 @@
         // Track player activity for timeout/kick system
         let playerLastActivity = {}; // { playerId: timestamp }
         let activityCheckInterval = null;
+        // Host's locally-tracked copy of game_room.status, kept fresh by lobby.js's
+        // gameRoomSubscription postgres_changes handler (fires on every status
+        // change from any source, including other clients/RPCs). checkTurnTimeout()
+        // below reads this instead of querying the DB every second — see its comment.
+        let hostTrackedRoomStatus = 'waiting';
         let gameInactivityTimeout = 120000;
         // Turn timer settings (reuses gameInactivityTimeout as the turn time limit, in ms)
         let kickOnTurnTimeout = true;
@@ -5741,19 +5746,23 @@ function clearPlayerPath() {
             if (!isHost) return;
             if (!gameInactivityTimeout || gameInactivityTimeout === 0) return; // disabled
 
-            // Only enforce during active game
-            const { data: room, error: roomErr } = await supabase
-                .from('game_room')
-                .select('status')
-                .eq('id', currentGameId)
-                .single();
+            // PERF: this used to `await supabase.from('game_room').select('status')`
+            // on every single tick of a 1-second interval — a full network round
+            // trip, every second, for the entire duration of every hosted game,
+            // purely to re-check something that changes rarely. hostTrackedRoomStatus
+            // (game-core.js state, kept fresh by lobby.js's gameRoomSubscription
+            // postgres_changes handler, which fires on every real status change from
+            // any source) gives the same answer with zero network cost on the
+            // common path — a real DB write still happens below whenever this
+            // function actually decides to kick/reset someone.
+            if (hostTrackedRoomStatus !== 'playing') return;
 
-            if (roomErr) {
-                console.warn('⚠️ Turn timeout: failed to read room status', roomErr);
-                return;
-            }
-
-            if (!room || room.status !== 'playing') return;
+            // Skip enforcement entirely while the connection looks unhealthy —
+            // "elapsed" time and hostTrackedRoomStatus are only as trustworthy as
+            // the realtime feed keeping them fresh, and kicking/resetting players
+            // off a host-side connectivity blip is exactly the kind of confusing,
+            // seemingly-random breakage this exists to prevent.
+            if (window.ConnectionMonitor && !window.ConnectionMonitor.isWorkable()) return;
 
             const now = Date.now();
             const elapsed = now - (turnStartedAtMs || now);
@@ -5796,6 +5805,11 @@ function clearPlayerPath() {
 
                 if (resetErr) {
                     console.error('❌ Failed to reset game room:', resetErr);
+                } else {
+                    // Update the local cache immediately rather than waiting on the
+                    // realtime echo — otherwise a tick landing before that echo
+                    // arrives would still see 'playing' and re-enter this branch.
+                    hostTrackedRoomStatus = 'waiting';
                 }
 
                 // Wait a moment for DELETE event to propagate to all clients
@@ -5934,6 +5948,11 @@ function clearPlayerPath() {
 
             // Ensure we have a baseline turn start
             if (!turnStartedAtMs) turnStartedAtMs = Date.now();
+
+            // Monitoring only ever starts once a game is genuinely underway —
+            // seed the local cache so checkTurnTimeout() has a correct answer
+            // before the first gameRoomSubscription update arrives.
+            hostTrackedRoomStatus = 'playing';
 
             // Host enforces every second
             if (isHost) {

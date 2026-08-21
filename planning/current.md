@@ -115,6 +115,121 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **CONNECTIVITY & PERFORMANCE: connection-health monitor + reduced network
+  chatter** — new `js/connection-monitor.js`, plus `js/lobby.js`,
+  `js/game-core.js`, `css/components.css`, `index.html`, `js/INDEX.md`,
+  `CLAUDE.md`, `js/config.js`, on branch `claude/game-connectivity-performance-8r1zml`
+  (not yet merged into the canonical deploy branch above). User report: a
+  playtest with a friend broke in confusing ways; theory was poor-connection
+  handling plus "feature creep" (too many inefficient background processes).
+  Both held up under investigation.
+  **Root causes found (not hypothetical — read/traced in the actual code):**
+  (1) Zero connectivity awareness anywhere: no `navigator.onLine` checks, no
+  `online`/`offline` listeners, and `gameChannel.subscribe()`'s status
+  callback only ever handled `'SUBSCRIBED'` — `CHANNEL_ERROR`/`TIMED_OUT`/
+  `CLOSED` did nothing at all (no log, no UI, no retry), so a dropped
+  realtime connection just went silently dead mid-game. (2) Every
+  network call across lobby.js/game-core.js's ~10 background intervals
+  (heartbeat, disconnect sweep, last-man-standing poll, turn timer,
+  scroll-state sync) swallowed failures into `console.log`/`catch{}` only —
+  invisible to a player without devtools open, exactly the "confusing
+  failures" reported. (3) Real inefficiency: the host's turn-timer loop
+  (`checkTurnTimeout`) did a full `supabase.from('game_room').select('status')`
+  round trip on a plain 1-second `setInterval`, for the ENTIRE duration of
+  every hosted game, just to re-check something that changes rarely — the
+  single biggest chatter source found. (4) `scrollStateSyncInterval`
+  unconditionally broadcast the full scroll-state snapshot to every client
+  every 3 seconds regardless of whether anything had changed. (5)
+  Last-man-standing poll ran every 5s **per connected player** querying the
+  `players` table, despite its own comment calling it an explicitly
+  secondary fallback to Presence's near-instant 'leave' event. (6) `js/config.js`
+  — the file CLAUDE.md's own Script Load Order and js/INDEX.md confidently
+  described as script #1 (Supabase client + game constants) — is not
+  loaded by `index.html` at all (verified: no matching `<script src>`
+  anywhere in the repo); every constant it defines is independently
+  duplicated in `multiplayer-state.js`/`game-core.js`, which ARE loaded.
+  Purely a documentation/dead-code hazard (the game works fine off the
+  duplicates), not a functional bug, but exactly the kind of accumulated
+  drift that makes future debugging harder — flagged and fixed rather than
+  left for someone to trust the stale docs and edit the wrong file.
+  CLAUDE.md's Script Load Order had also drifted for unrelated reasons
+  (`tutorial.js` listed but the file no longer exists; `scroll-panels.js`/
+  `boot-splash.js`/`effects-system.js` real and loaded but undocumented) —
+  resynced against index.html's actual `<script>` tags while in there.
+  **What was built:** `js/connection-monitor.js` (`window.ConnectionMonitor`,
+  loads right after `multiplayer-state.js` since it only needs
+  `SUPABASE_URL`) — browser online/offline listeners, a 12s unauthenticated
+  ping against Supabase Auth's dedicated `/auth/v1/health` endpoint
+  (latency + reachability, sidesteps any RLS/auth-state question since
+  literally any HTTP response proves the round trip works), and
+  `reportChannelStatus()`/`reportSendFailure()`/`reportSendSuccess()` for
+  lobby.js to feed in realtime/broadcast outcomes. Produces one debounced
+  `quality` state (`good`/`fair`/`poor`/`offline`, 2 consistent samples to
+  move except instant on a real browser offline event) shown via an
+  always-on bottom-left HUD badge (click to expand latency/last-error
+  detail) and `isWorkable()` (false when offline, or poor for >8s).
+  Deliberately kept game-state-ignorant — pure observe+report, no reach-into
+  lobby/game logic — since the rest of this codebase's multiplayer sync is
+  already large and fragile (see this file's own scroll-state-desync
+  history below); other files opt into calling it rather than it reaching
+  into them.
+  **Wired into lobby.js:** `hostStartGame()` now gates on
+  `ConnectionMonitor.isWorkable()` — hard-blocks (alert) if genuinely
+  offline, otherwise a `showRetroConfirm()` "start anyway?" warning (the
+  host is the worst-case single point of failure: every enforcement loop
+  is host-only, so a bad HOST connection breaks the game for the whole
+  room, not just themselves) — this is the concrete "prevent the game from
+  running when connection is completely unworkable" ask.
+  `gameChannel.subscribe()`'s status callback now handles all four statuses:
+  reports each to ConnectionMonitor, and on an unexpected `CHANNEL_ERROR`/
+  `TIMED_OUT`/`CLOSED` retries `setupGameBroadcast(true)` with exponential
+  backoff (2s→30s cap, 5 attempts) before giving up with a visible status
+  message — guarded by channel-object identity (`gameChannel !== thisChannel`)
+  so the function's OWN deliberate unsubscribe-and-rebuild (both on a fresh
+  join and on its own retry) can never be mistaken for an unexpected drop
+  and double-schedule a redundant reconnect. `broadcastGameAction()` now
+  reads `.send()`'s resolved result (`'ok'|'timed out'|'error'`, previously
+  ignored everywhere) and feeds failures to the monitor, non-blocking —
+  every existing fire-and-forget call site is unchanged.
+  **Wired into game-core.js:** `checkTurnTimeout()` no longer queries the DB
+  every second — reads a new `hostTrackedRoomStatus` local (seeded
+  `'playing'` in `startTurnTimerMonitoring()`, kept fresh by lobby.js's
+  existing `gameRoomSubscription` postgres_changes handler on every real
+  status change) instead, and skips enforcement entirely while
+  `!ConnectionMonitor.isWorkable()` — a host with a temporarily bad
+  connection no longer kicks/resets players off possibly-stale local
+  timing, which is itself a plausible root cause for "friend got kicked/
+  reset for no visible reason" during the reported playtest.
+  **Reduced chatter (kept the same eventual-consistency guarantees,
+  changed only frequency/redundancy):** scroll-state-sync now diffs the
+  snapshot's JSON against the last one actually broadcast and skips sending
+  when unchanged, with a forced resend every 5th tick (~15s) kept as a
+  heartbeat safety net for a client that missed the change-triggered
+  broadcast. Last-man-standing poll lengthened 5s → 20s (still just the
+  fallback path — Presence's 'leave' event is the fast path it backs up).
+  Turn-sync (5s)/common-area-sync (10s) broadcasts and the 15s heartbeat/
+  disconnect-sweep intervals were reviewed and deliberately left alone —
+  reasonable as-is, not part of this pass.
+  **Verification — scope, stated plainly:** this sandbox has no outbound
+  network access to unpkg.com or the live Supabase project (confirmed via
+  curl — proxy 403, matching an earlier session's identical finding on a
+  different sandbox), and no `node_modules`/Playwright installed, so no
+  live-browser or headless run was possible this session, unlike most
+  other entries in this file. Verified instead by: `node --check` syntax
+  validation on every changed/new JS file; full re-reads of every changed
+  function tracing control flow by hand (including a real bug caught this
+  way before it shipped — the first draft of the reconnect guard compared
+  `currentGameId` instead of channel-object identity, which would have
+  double-scheduled a reconnect against `setupGameBroadcast()`'s own
+  deliberate unsubscribe-and-rebuild; fixed to compare `gameChannel !==
+  thisChannel` instead); and confirming every new/duplicated global
+  (`SUPABASE_URL`, `hostTrackedRoomStatus`, `_esc`, `showRetroConfirm`) is
+  actually in scope at its use site given this codebase's shared-top-level-
+  script-scope model (classic, non-module `<script>` tags loaded in order —
+  see Script Load Order). **Not done this session, flagged rather than
+  silently skipped:** an actual live playtest confirming the fixes hold up
+  under real degraded-network conditions — recommended as the next step
+  before considering this closed.
 - **SHIFTING SANDS (Earth II): allow single-player tiles, recenter the
   carried player** — `js/scrolls/effects/scroll-effects.js`,
   `js/scrolls/scroll-definitions.js`, `js/lobby.js`, `TODO.md`, on branch
