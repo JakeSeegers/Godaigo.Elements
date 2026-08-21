@@ -176,8 +176,21 @@ reach/beat it from here.
   above and the one already fixed in the prior entry — every one of those
   hot-path `players`/`game_room` queries pays this extra tax. Standard,
   low-risk, semantics-preserving fix (Supabase's own recommended migration
-  pattern) — not applied without the user's go-ahead since it's a live prod
-  change. Also flagged separately: `admin_delete_user`/`admin_list_users`
+  pattern). **UPDATE — user confirmed via AskUserQuestion ("Apply it now"):
+  applied as migration `fix_auth_rls_initplan_performance`** (all 13 flagged
+  policies, exact `pg_policies` definitions read first so every rewrite
+  preserves the original condition byte-for-byte, just wrapping the auth
+  call). Verified two ways: `get_advisors` re-run shows zero
+  `auth_rls_initplan` warnings remaining (only the pre-existing, deliberately
+  untouched `unindexed_foreign_keys` INFO items are left); a `pg_policies`
+  re-read confirms every policy's `qual`/`with_check` now reads
+  `(( SELECT auth.uid() AS uid) = ...)`/`(( SELECT auth.role() AS role) = ...)`
+  — identical logic to before (same columns, same roles, same command),
+  matching the pattern of `user_activities`'s "Users can view own activities"
+  policy, which turned out to already be correctly wrapped from an earlier,
+  unrelated session — confirming this is the established correct pattern for
+  this project, not a new convention being introduced.
+  Also flagged separately, still unapplied: `admin_delete_user`/`admin_list_users`
   are callable by any `authenticated` user, not just admins — a genuine
   security question, explicitly called out as OUT OF SCOPE for this
   connectivity/performance pass rather than touched unprompted.

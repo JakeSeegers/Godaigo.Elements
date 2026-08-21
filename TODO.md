@@ -95,14 +95,17 @@ High-level task list for the Godaigo game project. Update this as you complete o
   `planning/current.md`.
 
 ### Connectivity / performance
-- [ ] **Apply the RLS `auth.<fn>()` → `(select auth.<fn>())` performance fix**
-  — found via `mcp__Supabase__get_advisors` (live project `lovybwpypkaarstnvkbz`):
-  15 RLS policies across `players`/`game_room`/`user_activities`/
-  `bot_champion_weights`/`deployed_bots`/`captured_bots`/`void_knight`
-  re-evaluate the auth check per ROW instead of once per query — a
-  documented Postgres anti-pattern, standard low-risk fix, but a LIVE
-  PRODUCTION migration — not applied without explicit user go-ahead. See
-  `planning/current.md`'s "CONNECTIVITY & PERFORMANCE, FOLLOW-UP" entry.
+- [x] **RLS `auth.<fn>()` → `(select auth.<fn>())` performance fix — APPLIED**
+  — user confirmed go-ahead; migration `fix_auth_rls_initplan_performance`
+  applied to the live project (`lovybwpypkaarstnvkbz`) rewriting all 13
+  flagged policies across `players`/`game_room`/`user_activities`/
+  `bot_champion_weights`/`deployed_bots`/`captured_bots`/`void_knight`.
+  Verified both ways: `get_advisors` re-run shows zero `auth_rls_initplan`
+  warnings left (only the pre-existing, untouched `unindexed_foreign_keys`
+  INFO items remain), and a `pg_policies` re-read confirms every policy's
+  logical condition is unchanged — same columns, same roles, same command —
+  just wrapped. See `planning/current.md`'s "CONNECTIVITY & PERFORMANCE,
+  FOLLOW-UP" entry for the exact before/after.
 - [ ] **`admin_delete_user`/`admin_list_users` callable by any signed-in
   user** — found via the same advisor scan, unrelated to connectivity/perf.
   Deliberately not investigated further (didn't check whether either
@@ -176,4 +179,4 @@ High-level task list for the Godaigo game project. Update this as you complete o
 
 ---
 
-*Last updated: confirmed the actual root cause of the 8/20 playtest breakage via live Supabase log analysis (a postgres_changes fan-out bug in the players-subscription handler, now fixed) and flagged two new live-project findings (an RLS performance fix awaiting go-ahead, an admin-RPC access question) — see Connectivity/performance.*
+*Last updated: confirmed the actual root cause of the 8/20 playtest breakage via live Supabase log analysis (a postgres_changes fan-out bug in the players-subscription handler, now fixed), applied the RLS auth_rls_initplan performance migration to the live project with user confirmation (verified via get_advisors + pg_policies), and flagged one remaining live-project finding (an admin-RPC access question) — see Connectivity/performance.*
