@@ -115,6 +115,42 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **CONNECTIVITY & PERFORMANCE, REAL PLAYTEST FINDING: currentTurnNumber
+  never updated on receiving clients (turn-change/turn-sync handlers)** —
+  `js/lobby.js`. Found from actual `godaigoTest.diag()` output during a real
+  4-player (2 human + 2 bot) game: host's console showed
+  `currentTurnNumber: 10`, the guest's showed `currentTurnNumber: 4` —
+  inverted against `lastReceivedTurnNumber` on each side (4 vs 10). Traced
+  to a real, pre-existing gap unrelated to anything else in this session's
+  work: both the `turn-change` and `turn-sync` broadcast receivers correct
+  `lastReceivedTurnNumber` on a mismatch (that's the desync-detection math)
+  but never wrote the same correction into `currentTurnNumber` — the
+  variable `action-log.js` actually tags every logged action with. Grepped
+  every use of `currentTurnNumber` to confirm impact before fixing: all 4
+  increment sites are on the client CAUSING a turn advance (host enforcing
+  timeout, or the active player's own End Turn), never on a receiver: so a
+  non-host client's `currentTurnNumber` silently freezes at whatever it was
+  last set to directly (0 at join, or wherever it stopped being the one
+  advancing turns, e.g. after a host handoff) while `lastReceivedTurnNumber`
+  keeps correctly climbing via broadcasts. Confirmed NOT gameplay-affecting
+  — nothing in win-condition/AP/placement logic reads `currentTurnNumber`,
+  only `action-log.js` (silently mistags that client's own Game Log turn
+  headers) and `bot-driver.js`'s host-only turn-number logging (unaffected,
+  host's own value is always correct). Fix: both handlers now also set
+  `currentTurnNumber = payload.turnNumber` / `= turnNumber` alongside the
+  existing `lastReceivedTurnNumber` correction. `node --check` clean.
+  **The other two things that surfaced in this same real-playtest session,
+  both already resolved without a code change:** (1) the scroll-state/
+  tile-board/players comparison hashes from `godaigoTest.diag()` matched
+  EXACTLY between both clients, 13 minutes apart during real play — the
+  actual positive confirmation this whole body of work was aiming for. (2)
+  the connection-monitor 401 (previous entry) was STILL showing on one of
+  the two consoles — but the OTHER console's `diag()` output showed
+  `lastError: null`, same live game, same live Supabase project, proving
+  it's a stale-code/stale-cache issue on that one browser specifically
+  (confirmed the apikey-header fix is genuinely present at the current
+  commit), not a real regression — told the user to hard-refresh/re-pull
+  rather than chasing a ghost.
 - **CONNECTIVITY & PERFORMANCE, HOTFIX: connection-monitor's own health-check
   ping was 401'ing** — `js/connection-monitor.js`, `js/INDEX.md`. User pasted
   a real page-load console (the fastest possible feedback loop — caught same

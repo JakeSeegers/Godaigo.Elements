@@ -2317,6 +2317,16 @@
                     }
 
                     lastReceivedTurnNumber = payload.turnNumber;
+                    // Found via a real playtest's godaigoTest.diag() output (2026-08-21):
+                    // this receiver corrected lastReceivedTurnNumber (used only for the
+                    // desync-detection math above) but never wrote the same correction into
+                    // currentTurnNumber — the variable action-log.js actually tags each
+                    // logged action with. Left unfixed, a non-host client's own Game Log
+                    // panel silently drifts to the wrong turn-number header the moment it's
+                    // no longer the one advancing turns itself (e.g. after a host handoff).
+                    // Not gameplay-affecting — nothing in win-condition/AP/placement logic
+                    // reads currentTurnNumber — just a stale label.
+                    currentTurnNumber = payload.turnNumber;
                 }
 
                 activePlayerIndex = payload.playerIndex;
@@ -3404,6 +3414,7 @@
                 if (typeof turnNumber === 'number' && lastReceivedTurnNumber !== turnNumber) {
                     console.warn(`⚠️ DESYNC CORRECTED: Local turn was ${lastReceivedTurnNumber}, host says ${turnNumber}`);
                     lastReceivedTurnNumber = turnNumber;
+                    currentTurnNumber = turnNumber; // see the matching turn-change handler's comment above for why
 
                     // If it's now our turn, reset AP — the normal turn-change broadcast
                     // that does this was missed due to the reconnect
