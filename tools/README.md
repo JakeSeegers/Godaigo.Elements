@@ -1,3 +1,15 @@
+## Multiplayer console diagnostics
+
+`console-diagnostics.js` is a paste-into-devtools-console tool for a real
+multiplayer playtest (not loaded by `index.html`). Open the game in two
+browsers, join the same room, paste the whole file into both consoles, then
+run `godaigoTest.diag()` in both and compare the printed fingerprint numbers
+to spot a desync, or `godaigoTest.trafficAudit(30)` to watch actual network
+request volume for 30 seconds — see the file's own header comment for the
+full usage guide.
+
+---
+
 # Bot Training, Step by Step
 
 Train the game's bot weights on your own computer, in the background, with no
