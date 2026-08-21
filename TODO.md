@@ -95,6 +95,29 @@ High-level task list for the Godaigo game project. Update this as you complete o
   `planning/current.md`.
 
 ### Connectivity / performance
+- [ ] **Apply the RLS `auth.<fn>()` → `(select auth.<fn>())` performance fix**
+  — found via `mcp__Supabase__get_advisors` (live project `lovybwpypkaarstnvkbz`):
+  15 RLS policies across `players`/`game_room`/`user_activities`/
+  `bot_champion_weights`/`deployed_bots`/`captured_bots`/`void_knight`
+  re-evaluate the auth check per ROW instead of once per query — a
+  documented Postgres anti-pattern, standard low-risk fix, but a LIVE
+  PRODUCTION migration — not applied without explicit user go-ahead. See
+  `planning/current.md`'s "CONNECTIVITY & PERFORMANCE, FOLLOW-UP" entry.
+- [ ] **`admin_delete_user`/`admin_list_users` callable by any signed-in
+  user** — found via the same advisor scan, unrelated to connectivity/perf.
+  Deliberately not investigated further (didn't check whether either
+  function has an internal guard like `nuke_all_rooms`'s `is_hermit()`) —
+  flagged rather than silently left, explicitly out of scope for this pass.
+- [x] **Root cause of the 8/20 playtest breakage — CONFIRMED via live Supabase
+  logs, not just theory.** `subscribeToLobby()`'s `players` postgres_changes
+  handler re-ran two full `select *` queries on EVERY row a change touched —
+  and `updateHeartbeat()`'s bot-sweep PATCH touches N bot rows in one
+  statement, which Realtime fans out into N separate change events. Real
+  logs showed 16 near-identical queries in ~600ms following one heartbeat
+  tick, repeating every ~15s for a ~49-minute session across 4 recreated
+  game rooms. Fixed: `js/lobby.js`'s `scheduleHostAndListRefresh()` debounces
+  that handler's tail (300ms trailing). See `planning/current.md` for the
+  full evidence trail.
 - [ ] **Live playtest under real degraded network conditions** — the
   connection-monitor work (see `planning/current.md`'s "CONNECTIVITY &
   PERFORMANCE" entry) was verified by static code review + `node --check`
@@ -153,4 +176,4 @@ High-level task list for the Godaigo game project. Update this as you complete o
 
 ---
 
-*Last updated: added Connectivity/performance backlog items — live-playtest verification still needed for the connection-monitor work, plus flagged-not-fixed chatter intervals, dead `js/config.js`, and a stale `.planning/` tracking dir found along the way.*
+*Last updated: confirmed the actual root cause of the 8/20 playtest breakage via live Supabase log analysis (a postgres_changes fan-out bug in the players-subscription handler, now fixed) and flagged two new live-project findings (an RLS performance fix awaiting go-ahead, an admin-RPC access question) — see Connectivity/performance.*

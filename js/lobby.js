@@ -1110,6 +1110,51 @@
             }
         }
 
+        // Debounces the players-subscription handler's "who's host + refresh
+        // list" tail (below). Found via live log analysis (2026-08-21, a
+        // connectivity/performance audit investigating a broken playtest):
+        // Supabase Realtime's postgres_changes fires once PER ROW a statement
+        // touches, not once per statement. updateHeartbeat()'s host-only bot
+        // sweep (`players.update(...).like('username', BOT_PREFIX+'%')`) is a
+        // single PATCH that can touch several bot rows at once — every ~15s,
+        // for the entire session — and each row generates its own separate
+        // event here, each re-running two full `select *` queries. Live logs
+        // from an actual playtest showed 13-16 near-identical queries firing
+        // within ~600ms of a single heartbeat tick, repeating for the whole
+        // session, entirely independent of connection quality. A trailing
+        // debounce collapses any such burst (regardless of its cause — this
+        // fixes the general amplification, not just the bot-sweep case) into
+        // exactly one refresh, ~300ms after the burst quiets down.
+        let _playerListRefreshDebounce = null;
+        function scheduleHostAndListRefresh() {
+            if (_playerListRefreshDebounce) clearTimeout(_playerListRefreshDebounce);
+            _playerListRefreshDebounce = setTimeout(async () => {
+                _playerListRefreshDebounce = null;
+                // Update our local isHost status when players change.
+                // Check if we're now the oldest non-bot player (host) within this room
+                if (myPlayerId) {
+                    const { data: allPlayers } = await supabase
+                        .from('players')
+                        .select('*')
+                        .eq('game_id', currentGameId)
+                        .order('created_at', { ascending: true });
+
+                    if (allPlayers && allPlayers.length > 0) {
+                        const wasHost = isHost;
+                        isHost = determineHostRow(allPlayers)?.id === myPlayerId;
+
+                        // Notify if we became host
+                        if (!wasHost && isHost) {
+                            console.log('You are now the host.');
+                            startDisconnectMonitor();
+                        }
+                    }
+                }
+
+                updatePlayerList();
+            }, 300);
+        }
+
         // Subscribe to lobby updates
         function subscribeToLobby() {
             // Unsubscribe from any existing channels first
@@ -1255,28 +1300,9 @@
                             }
                         }
 
-                        // Update our local isHost status when players change
-                        // Check if we're now the oldest non-bot player (host) within this room
-                        if (myPlayerId) {
-                            const { data: allPlayers } = await supabase
-                                .from('players')
-                                .select('*')
-                                .eq('game_id', currentGameId)
-                                .order('created_at', { ascending: true });
-
-                            if (allPlayers && allPlayers.length > 0) {
-                                const wasHost = isHost;
-                                isHost = determineHostRow(allPlayers)?.id === myPlayerId;
-
-                                // Notify if we became host
-                                if (!wasHost && isHost) {
-                                    console.log('You are now the host.');
-                                    startDisconnectMonitor();
-                                }
-                            }
-                        }
-
-                        updatePlayerList();
+                        // Debounced — see scheduleHostAndListRefresh()'s own comment for why
+                        // this can't just run inline here anymore.
+                        scheduleHostAndListRefresh();
                     }
                 )
                 .subscribe();

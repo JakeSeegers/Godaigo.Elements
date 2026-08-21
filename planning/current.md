@@ -115,6 +115,76 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **CONNECTIVITY & PERFORMANCE, FOLLOW-UP: found and fixed the actual root
+  cause of the reported playtest breakage via live Supabase log analysis**
+  — `js/lobby.js`. Same branch/task as the entry directly below; a second
+  pass after the user asked "you can access the supabase project though,
+  right?" — they were right to ask, and it unlocked real evidence instead
+  of code-reading inference. Confirmed via `mcp__Supabase__*` tools (a
+  separate access channel from raw HTTP, which IS blocked in this sandbox —
+  same pattern as using the GitHub MCP server instead of the `gh` CLI here).
+  **User supplied the playtest time (8/20 ~5:10)** with no timezone given;
+  found the actual session by querying `edge_logs` hourly request counts
+  across 8/19-8/21 UTC rather than guessing an offset — zero traffic 8/19,
+  a small login/lobby ramp 8/20 18:00-21:00 UTC, then a massive spike
+  (4165 req/hr) at 8/20 22:00 UTC tapering off by 8/21 00:00 — consistent
+  with US Eastern (5:10pm EDT ≈ 21:10 UTC, matching the ramp-in before the
+  real game traffic explosion at 22:00 UTC/6pm EDT).
+  **Root cause, confirmed from raw log evidence (not inferred):** one
+  specific burst — 16 near-identical `GET .../players?select=*&game_id=eq.693&order=created_at.asc`
+  requests, ALL from the same browser (identical user-agent), spanning only
+  ~600ms — immediately followed a `PATCH .../players?game_id=eq.693&username=like.%F0%9F%A4%96%25`
+  (URL-decoded: `username=like.🤖%`) at 22:25:38.955 — the exact shape of
+  `updateHeartbeat()`'s host-only bot-last_seen sweep
+  (`.update({last_seen}).eq('game_id',...).like('username', BOT_PREFIX+'%')`).
+  Supabase Realtime's `postgres_changes` fires once PER ROW a SQL statement
+  touches (Postgres logical replication semantics), not once per statement —
+  so one heartbeat tick's multi-row bot sweep fans out into that many
+  separate change events on `subscribeToLobby()`'s `players` subscription,
+  and its handler's tail (an inline "am I now host" `select *` query,
+  followed by `updatePlayerList()`'s own near-identical `select *` query)
+  ran in full for EVERY one of them — 2 duplicate full-table-shape queries
+  × N bot rows, all within milliseconds, repeating every ~15s heartbeat
+  tick for the ENTIRE session (observed continuously from 22:23 to 23:12
+  UTC — ~49 minutes — across FOUR different `game_id`s: 692, 693, 695, 696,
+  consistent with the user having to repeatedly recreate the room, i.e.
+  "many things broken"). Entirely independent of connection quality — this
+  would happen identically on a perfect connection, just adds more requests
+  for a flaky one to fail on top of. Status codes for the whole session were
+  overwhelmingly 200/204/201/202 (no error storm) — the bug is pure volume/
+  amplification, not failed requests.
+  **Fix:** debounce the handler's reactive tail (`scheduleHostAndListRefresh()`,
+  300ms trailing debounce) instead of running it inline per-event — collapses
+  ANY burst of near-simultaneous `players` change events, regardless of what
+  caused it (the observed bot-sweep case, or any other future multi-row
+  write), into exactly one refresh ~300ms after the burst quiets down.
+  Deliberately scoped to ONLY the tail (host-check + `updatePlayerList()`) —
+  the two DELETE-event branches (kicked / another player left) keep running
+  immediately and unchanged, since those are rare, meaningful, discrete
+  events where a coalescing delay isn't needed and isn't worth the risk of
+  touching. 300ms was chosen from the actual observed burst timing (16
+  events spread across ~600ms, largest single gap ~87ms — comfortably under
+  300ms, so a trailing debounce reliably coalesces the whole burst into one
+  fire rather than firing partway through it).
+  **Also found via `get_advisors` (not yet fixed — flagged for the user,
+  live production DB change, asked before touching it):** 15 RLS policies
+  across `players`/`game_room`/`user_activities`/`bot_champion_weights`/
+  `deployed_bots`/`captured_bots`/`void_knight` call `auth.<fn>()` directly
+  in the policy instead of `(select auth.<fn>())` — a documented Postgres
+  RLS performance anti-pattern (re-evaluates the auth check per ROW instead
+  of once per query). Compounds directly with the query-volume problem
+  above and the one already fixed in the prior entry — every one of those
+  hot-path `players`/`game_room` queries pays this extra tax. Standard,
+  low-risk, semantics-preserving fix (Supabase's own recommended migration
+  pattern) — not applied without the user's go-ahead since it's a live prod
+  change. Also flagged separately: `admin_delete_user`/`admin_list_users`
+  are callable by any `authenticated` user, not just admins — a genuine
+  security question, explicitly called out as OUT OF SCOPE for this
+  connectivity/performance pass rather than touched unprompted.
+  **Verification:** same limits as the entry below (no live browser this
+  session) — but THIS fix's root cause, unlike the rest of that entry, is
+  confirmed from actual production log evidence of the exact failure
+  happening, not just static-code inference. `node --check` clean.
 - **CONNECTIVITY & PERFORMANCE: connection-health monitor + reduced network
   chatter** — new `js/connection-monitor.js`, plus `js/lobby.js`,
   `js/game-core.js`, `css/components.css`, `index.html`, `js/INDEX.md`,
