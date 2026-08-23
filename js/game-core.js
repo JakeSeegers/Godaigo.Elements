@@ -4495,7 +4495,14 @@
                 tileGroup.setAttribute('data-shrine', shrineType);
             }
 
+            // Hidden (face-down) tiles show a generic "unflipped" overlay — never the
+            // real shrine art, so the element stays unknown to the player until revealed.
+            if (flipped && shrineType !== 'player') {
+                addTileOverlay(tileGroup, 'unflipped');
+            }
+
             // Check if this is the player tile
+            let tilePlayerColorName = null;
             if (shrineType === 'player') {
                 isPlayerTile = true;
 
@@ -4527,6 +4534,12 @@
                         assignedColor = '#fff'; // Fallback to white
                         playerColor = assignedColor;
                     }
+                }
+
+                // Each player color gets its own tile-image overlay (see window.tileOverlaySettings).
+                tilePlayerColorName = Object.keys(PLAYER_COLORS).find(name => PLAYER_COLORS[name] === assignedColor) || null;
+                if (tilePlayerColorName) {
+                    addTileOverlay(tileGroup, `player_${tilePlayerColorName}`);
                 }
 
                 // Add color tint overlay to player tile
@@ -4637,7 +4650,8 @@
                 element: tileGroup,
                 shrineType: shrineType,
                 isPlayerTile: isPlayerTile,
-                playerIndex: isPlayerTile ? tilePlayerIndex : null // Track which player owns this tile
+                playerIndex: isPlayerTile ? tilePlayerIndex : null, // Track which player owns this tile
+                playerColorName: isPlayerTile ? tilePlayerColorName : null // For tile-overlay lookups
             });
 
             updateTileClasses();
@@ -4863,11 +4877,22 @@
             wind:     { src: 'images/Tiles/pixelwind.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
             void:     { src: 'images/Tiles/pixelvoid.png',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
             catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -1,  rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 1.0 },
+            // Hidden (unrevealed) tile back — shown while a tile is face-down, before it is flipped.
+            unflipped: { src: 'images/Tiles/unflippedtile.png', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
+            // Player tiles — one entry per player color, each can carry its own unique image.
+            player_purple: { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
+            player_yellow: { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
+            player_red:    { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
+            player_blue:   { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
+            player_green:  { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
         };
 
         const ELEMENT_TINTS = {
             earth: '#4a8a2a', fire: '#cc2200', water: '#1a6ab5',
-            wind:  '#c8a800', void: '#6a30b0', catacomb: '#888888'
+            wind:  '#c8a800', void: '#6a30b0', catacomb: '#888888',
+            unflipped: '#333333',
+            player_purple: PLAYER_COLORS.purple, player_yellow: PLAYER_COLORS.yellow,
+            player_red: PLAYER_COLORS.red, player_blue: PLAYER_COLORS.blue, player_green: PLAYER_COLORS.green,
         };
 
         function makeTileHexPoints(R) {
@@ -4947,18 +4972,30 @@
             document.querySelectorAll('[id^="tile-overlay-clip-"]').forEach(el => el.closest('defs')?.remove());
             if (typeof placedTiles !== 'undefined') {
                 placedTiles.forEach(tile => {
-                    if (!tile.flipped && tile.shrineType && tile.element) {
-                        const shrineMarker = tile.element.querySelector('.shrine-marker');
-                        const tileGraphic = tile.element.querySelector('g[transform^="rotate"]');
-                        // addTileOverlay appends to end; move overlay before shrineMarker to get correct order:
-                        // tileGraphic → overlay → strokeClone → shrineMarker
-                        addTileOverlay(tile.element, tile.shrineType);
-                        const overlay = tile.element.querySelector('.tile-overlay');
-                        if (overlay && shrineMarker) tile.element.insertBefore(overlay, shrineMarker);
-                        if (tileGraphic) {
-                            const strokeClone = createStrokeOnlyClone(tileGraphic);
-                            tile.element.insertBefore(strokeClone, shrineMarker);
-                        }
+                    if (!tile.element) return;
+                    // Resolve which overlay key applies: player tiles use their own
+                    // per-color key, hidden tiles use the generic 'unflipped' back,
+                    // and revealed shrine tiles use their element key.
+                    let overlayKey = null;
+                    if (tile.isPlayerTile) {
+                        overlayKey = tile.playerColorName ? `player_${tile.playerColorName}` : null;
+                    } else if (tile.flipped) {
+                        overlayKey = 'unflipped';
+                    } else if (tile.shrineType) {
+                        overlayKey = tile.shrineType;
+                    }
+                    if (!overlayKey) return;
+
+                    const shrineMarker = tile.element.querySelector('.shrine-marker');
+                    const tileGraphic = tile.element.querySelector('g[transform^="rotate"]');
+                    // addTileOverlay appends to end; move overlay right after the base tile
+                    // graphic to get correct order: tileGraphic → overlay → strokeClone → shrineMarker/tint/symbols
+                    addTileOverlay(tile.element, overlayKey);
+                    const overlay = tile.element.querySelector('.tile-overlay');
+                    if (overlay && tileGraphic) tile.element.insertBefore(overlay, tileGraphic.nextSibling);
+                    if (tileGraphic) {
+                        const strokeClone = createStrokeOnlyClone(tileGraphic);
+                        tile.element.insertBefore(strokeClone, overlay ? overlay.nextSibling : (shrineMarker || null));
                     }
                 });
             }
@@ -5205,6 +5242,7 @@
             // Create flipped (hidden) tile graphic
             const tileGraphic = createTileGroup(TILE_SIZE, tile.rotation, true);
             tileGroup.appendChild(tileGraphic);
+            addTileOverlay(tileGroup, 'unflipped');
 
             // Add mousedown handler for tile dragging
             tileGroup.addEventListener('mousedown', (e) => {

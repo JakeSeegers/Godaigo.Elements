@@ -4982,7 +4982,20 @@ document.getElementById('undo-move').onclick = function() {
                 overlaySection.appendChild(overlayBody);
 
                 const ELEMENTS = ['earth', 'fire', 'water', 'wind', 'void', 'catacomb'];
-                const EL_COLORS = { earth:'#69d83a', fire:'#ed1b43', water:'#5894f4', wind:'#ffce00', void:'#9458f4', catacomb:'#aaa' };
+                // 'unflipped' = the face-down tile back shown before a tile is revealed.
+                // 'player_*' = one overlay per player color, each can carry its own unique image.
+                const SPECIAL = ['unflipped', 'player_purple', 'player_yellow', 'player_red', 'player_blue', 'player_green'];
+                const ALL_CATEGORIES = [...ELEMENTS, ...SPECIAL];
+                const EL_COLORS = {
+                    earth:'#69d83a', fire:'#ed1b43', water:'#5894f4', wind:'#ffce00', void:'#9458f4', catacomb:'#aaa',
+                    unflipped:'#888888',
+                    player_purple:'#9458f4', player_yellow:'#ffce00', player_red:'#ed1b43', player_blue:'#5894f4', player_green:'#69d83a',
+                };
+                const PILL_LABELS = {
+                    unflipped: '🂠 unflipped',
+                    player_purple: '♟ purple', player_yellow: '♟ yellow', player_red: '♟ red',
+                    player_blue: '♟ blue', player_green: '♟ green',
+                };
                 let selectedEl = 'earth';
 
                 // Element selector pills
@@ -4999,8 +5012,26 @@ document.getElementById('undo-move').onclick = function() {
                 });
                 overlayBody.appendChild(pillRow);
 
+                // Special-category pills: unflipped tile back + per-player tiles
+                const specialLabel = document.createElement('div');
+                specialLabel.textContent = 'Unflipped / Player Tiles:';
+                specialLabel.style.cssText = 'font-size:10px;color:#888;margin-top:2px;';
+                overlayBody.appendChild(specialLabel);
+
+                const specialPillRow = document.createElement('div');
+                specialPillRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
+                SPECIAL.forEach(key => {
+                    const pill = document.createElement('button');
+                    pill.textContent = PILL_LABELS[key] || key;
+                    pill.style.cssText = `padding:2px 6px;border-radius:10px;border:1px solid ${EL_COLORS[key]};background:#1a1a2e;color:${EL_COLORS[key]};font-size:11px;cursor:pointer;`;
+                    pill.onclick = () => { selectedEl = key; refreshOverlayControls(); highlightPill(); };
+                    pills[key] = pill;
+                    specialPillRow.appendChild(pill);
+                });
+                overlayBody.appendChild(specialPillRow);
+
                 function highlightPill() {
-                    ELEMENTS.forEach(el => {
+                    ALL_CATEGORIES.forEach(el => {
                         pills[el].style.background = el === selectedEl ? EL_COLORS[el] : '#1a1a2e';
                         pills[el].style.color = el === selectedEl ? '#111' : EL_COLORS[el];
                     });
@@ -5092,8 +5123,16 @@ document.getElementById('undo-move').onclick = function() {
                             if (!tileEl) return;
                             const tileId = parseInt(tileEl.getAttribute('data-tile-id'));
                             const tile = (typeof placedTiles !== 'undefined') && placedTiles.find(t => t.id === tileId);
-                            if (tile && tile.shrineType && tile.shrineType !== 'player') {
-                                selectedEl = tile.shrineType;
+                            let key = null;
+                            if (tile && tile.isPlayerTile) {
+                                key = tile.playerColorName ? `player_${tile.playerColorName}` : null;
+                            } else if (tile && tile.flipped) {
+                                key = 'unflipped';
+                            } else if (tile && tile.shrineType) {
+                                key = tile.shrineType;
+                            }
+                            if (key) {
+                                selectedEl = key;
                                 highlightPill();
                                 refreshOverlayControls();
                             }
@@ -5166,7 +5205,10 @@ document.getElementById('undo-move').onclick = function() {
                                 `rotation:  ${tile.rotation ?? 0}`,
                                 `isPlayer:  ${tile.isPlayerTile || false}`,
                             ];
-                            const overlay = window.tileOverlaySettings?.[tile.shrineType];
+                            const overlayKey = tile.isPlayerTile
+                                ? (tile.playerColorName ? `player_${tile.playerColorName}` : null)
+                                : (tile.flipped ? 'unflipped' : tile.shrineType);
+                            const overlay = window.tileOverlaySettings?.[overlayKey];
                             if (overlay) {
                                 lines.push(`overlay:   x=${overlay.x} y=${overlay.y} r=${overlay.rotation} s=${overlay.scale}`);
                                 lines.push(`           op=${overlay.opacity} tint=${overlay.tintOpacity}`);
