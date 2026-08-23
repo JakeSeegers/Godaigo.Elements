@@ -3458,7 +3458,7 @@
             ghostTile.appendChild(tile);
             viewport.appendChild(ghostTile);
 
-            showLegalPlacementHighlights('player-tile');
+            showLegalPlacementHighlights('player-tile', null, previewUpcomingPlayerTileColor());
         }
 
         function getAllHexagonPositions() {
@@ -4244,7 +4244,21 @@
             if (g && g.parentNode) g.parentNode.removeChild(g);
         }
 
-        function showLegalPlacementHighlights(mode, excludeTileId = null) {
+        // What color to tint a player tile's legal-slot highlights before it's
+        // placed — mirrors placeTile()'s own color-assignment logic (the
+        // multiplayer pre-assigned-playerColor branch and the local rank-order
+        // branch) exactly, but read-only: it must NOT mutate playerColor or
+        // gameSessionColors, since the drag can still be cancelled.
+        function previewUpcomingPlayerTileColor() {
+            if (isMultiplayer && playerColor) {
+                return PLAYER_COLORS[playerColor] || playerColor; // name or already-hex
+            }
+            const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
+            const playerIndex = playerPositions.length;
+            return playerIndex < 5 ? PLAYER_COLORS[colorRankOrder[playerIndex]] : '#fff';
+        }
+
+        function showLegalPlacementHighlights(mode, excludeTileId = null, color = null) {
             clearLegalPlacementHighlights();
             if (typeof viewport === 'undefined' || !viewport) return;
 
@@ -4273,6 +4287,7 @@
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.setAttribute('id', 'legal-placement-highlights');
             g.setAttribute('class', 'legal-placement-highlights');
+            if (color) g.style.setProperty('--legal-hex-color', color);
 
             candidates.forEach(pos => {
                 const occupied = placedTiles.some(t =>
@@ -4294,7 +4309,15 @@
                 g.appendChild(hex);
             });
 
-            viewport.appendChild(g);
+            // Keep the highlight layer UNDER the ghost tile that follows the
+            // cursor (SVG paints later siblings on top) — otherwise the glow
+            // hexes sit above the dragged tile and it visibly slides beneath
+            // them instead of the other way around.
+            if (typeof ghostTile !== 'undefined' && ghostTile && ghostTile.parentNode === viewport) {
+                viewport.insertBefore(g, ghostTile);
+            } else {
+                viewport.appendChild(g);
+            }
         }
 
         function tileHasStones(tileId) {
