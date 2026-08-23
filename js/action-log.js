@@ -10,6 +10,21 @@
 // logScrollEvent hook) rather than any one caller's code, so it captures
 // both without touching bot.js / bot-state.js / game-ui.js's own logic.
 //
+// IMPORTANT for multiplayer: those hooks only fire on the client that
+// actually PERFORMS the action. Casts/effects/responses are still captured
+// correctly on every client because spellSystem.scrollEffects.execute()
+// genuinely reruns on receipt of a scroll-resolution broadcast (lobby.js) —
+// but movement and stone placement are applied on receipt through separate,
+// purely-visual functions (movePlayerVisually/placeStoneVisually) that
+// never touch broadcastPlayerMovement/placeStone. Real remote players'
+// moves and stone placements would silently never appear in another
+// client's Game Log without lobby.js's 'player-move'/'stone-place'
+// broadcast handlers calling record() directly, which they now do — this
+// went unnoticed for a while because a lobby-added bot's turns are driven
+// by the HOST'S OWN browser impersonating it (bot-driver.js's asBot()), so
+// a bot's moves/stones already ran through the normal local hooks and
+// never exposed the gap the way a second real human client does.
+//
 // LOAD ORDER: last (after bot-driver.js) so everything it wraps already
 // exists as a global by the time this file runs.
 // ============================================================
@@ -47,9 +62,14 @@
         return 'human';
     }
 
-    function record(type, extra) {
+    // playerIndexOverride: use the payload's own playerIndex instead of the
+    // ambient activePlayerIndex — needed by lobby.js's broadcast RECEIVE
+    // handlers (see below), where activePlayerIndex could theoretically lag
+    // one turn-change behind the actor the payload actually names.
+    function record(type, extra, playerIndexOverride) {
         try {
-            const player = (typeof activePlayerIndex !== 'undefined') ? activePlayerIndex : null;
+            const player = (playerIndexOverride != null) ? playerIndexOverride
+                : (typeof activePlayerIndex !== 'undefined') ? activePlayerIndex : null;
             const entry = Object.assign({
                 turn: (typeof currentTurnNumber !== 'undefined') ? currentTurnNumber : null,
                 player,

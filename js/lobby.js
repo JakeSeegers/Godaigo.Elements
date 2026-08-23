@@ -2230,6 +2230,9 @@
                 console.log('📄 Received stone placement:', payload);
                 const { x, y, stoneType } = payload;
                 placeStoneVisually(x, y, stoneType);
+                // No playerIndex in this payload (stones are always placed by
+                // the active player) — record() falls back to activePlayerIndex.
+                window.ActionLog?.record('placeStone', { x: +x.toFixed(1), y: +y.toFixed(1), stoneType });
             });
 
             // Listen for stone move events
@@ -2272,6 +2275,9 @@
                     window._remotePlayerCosmetics[playerIndex] = cosmetics;
                 }
                 movePlayerVisually(playerIndex, x, y, apSpent);
+                // Explicit playerIndex from the payload, not the ambient
+                // activePlayerIndex — see the override note in action-log.js.
+                window.ActionLog?.record('move', { x: +x.toFixed(1), y: +y.toFixed(1), apSpent }, playerIndex);
                 // Defensively flip any hidden tiles at the destination.
                 // This ensures tile reveals are visible even if the tile-flip broadcast
                 // arrives out of order or is lost. Uses the shared deck state to determine
