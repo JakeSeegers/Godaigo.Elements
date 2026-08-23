@@ -5254,7 +5254,10 @@
 
             // The tile has already been removed from placedTiles above, so the
             // board is already in its "post-move" state — no excludeTileId needed.
-            showLegalPlacementHighlights('telekinesis');
+            // White, not a player color: Telekinesis moves an existing board
+            // tile, which has no player-identity meaning the way a player tile
+            // placement does.
+            showLegalPlacementHighlights('telekinesis', null, '#ffffff');
         }
 
         let isDraggingPlayer = false;
