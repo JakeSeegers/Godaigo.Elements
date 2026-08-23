@@ -186,6 +186,7 @@ const ScrollEffects = {
         // Safety: clear telekinesis state in case turn auto-advanced without cleanup
         if (window.telekinesisState) { window.telekinesisState = null; window.tileMoveMode = false; }
         if (window.finishTelekinesis) { window.finishTelekinesis = null; }
+        if (typeof clearLegalPlacementHighlights === 'function') clearLegalPlacementHighlights();
     },
 
     // Get the effect handler for a scroll

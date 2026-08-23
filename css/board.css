@@ -72,6 +72,27 @@ svg {
     opacity: 0.4;
 }
 
+/* Faint glowing outlines over every empty slot a tile-in-hand or a
+   Telekinesis move could legally land on. Shown for the duration of a drag
+   (see showLegalPlacementHighlights() / clearLegalPlacementHighlights() in
+   game-core.js). */
+.legal-placement-highlights {
+    pointer-events: none;
+}
+
+.legal-placement-hex {
+    fill: rgba(230, 199, 156, 0.12);
+    stroke: var(--accent-gold, #e6c79c);
+    stroke-width: 2;
+    opacity: 0.55;
+    animation: legalPlacementPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes legalPlacementPulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.75; }
+}
+
 .shrine-marker {
     pointer-events: none;
 }

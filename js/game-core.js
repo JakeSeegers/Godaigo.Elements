@@ -3457,6 +3457,8 @@
             const tile = createTileGroup(TILE_SIZE, 0, false);
             ghostTile.appendChild(tile);
             viewport.appendChild(ghostTile);
+
+            showLegalPlacementHighlights('player-tile');
         }
 
         function getAllHexagonPositions() {
@@ -4122,7 +4124,7 @@
             return { x: x, y: y, valid: false };
         }
 
-        function findNearestSnapPoint(x, y, isPlayerTile = false) {
+        function findNearestSnapPoint(x, y, isPlayerTile = false, excludeTileId = null) {
             const largeHexSize = TILE_SIZE * 4;
             const hexCoords = pixelToHex(x, y, largeHexSize);
             const snapPos = hexToPixel(hexCoords.q, hexCoords.r, largeHexSize);
@@ -4149,11 +4151,17 @@
                     console.log(`✅ Player tile at (${snapPos.x.toFixed(1)}, ${snapPos.y.toFixed(1)}) touches ${touchingUnrevealedCount} unrevealed tiles`);
                 }
 
-                // TELEKINESIS RULE: Must touch at least 1 other tile
+                // TELEKINESIS RULE: Must touch at least 2 other tiles (matches the
+                // "Tiles must touch 2+ others" status text and the drag-fail message
+                // shown to players — this used to say "1+" here, which let a tile land
+                // on a spot touching only a single neighbor). excludeTileId lets a
+                // caller checking a spot adjacent to the tile's OWN original position
+                // (e.g. the bot's dry-run destination search) skip counting that tile
+                // as a neighbor of its own vacated spot.
                 if (window.telekinesisState && window.telekinesisState.active) {
-                    const touchingCount = countTouchingTiles(snapPos.x, snapPos.y);
-                    if (touchingCount < 1) {
-                        console.log(`❌ Telekinesis: tile at (${snapPos.x.toFixed(1)}, ${snapPos.y.toFixed(1)}) touches ${touchingCount} tile(s), need 1+`);
+                    const touchingCount = countTouchingTiles(snapPos.x, snapPos.y, excludeTileId);
+                    if (touchingCount < 2) {
+                        console.log(`❌ Telekinesis: tile at (${snapPos.x.toFixed(1)}, ${snapPos.y.toFixed(1)}) touches ${touchingCount} tile(s), need 2+`);
                         return { x: x, y: y, snapped: false };
                     }
                     console.log(`✅ Telekinesis: tile at (${snapPos.x.toFixed(1)}, ${snapPos.y.toFixed(1)}) touches ${touchingCount} tiles`);
@@ -4199,8 +4207,12 @@
             return unrevealedCount;
         }
 
-        // Count ALL adjacent tiles (revealed or unrevealed) — used by Telekinesis
-        function countTouchingTiles(tileX, tileY) {
+        // Count ALL adjacent tiles (revealed or unrevealed) — used by Telekinesis.
+        // excludeTileId skips a specific tile id when scanning for neighbors — pass
+        // the tile currently being considered for a move so a candidate spot right
+        // next to that tile's OWN (soon-to-be-vacated) position doesn't get credited
+        // with "touching" a neighbor that won't actually be there once it moves.
+        function countTouchingTiles(tileX, tileY, excludeTileId = null) {
             const largeHexSize = TILE_SIZE * 4;
             const tileHex = pixelToHex(tileX, tileY, largeHexSize);
             const adjacentOffsets = [
@@ -4211,12 +4223,59 @@
             adjacentOffsets.forEach(offset => {
                 const adjPos = hexToPixel(tileHex.q + offset.q, tileHex.r + offset.r, largeHexSize);
                 const found = placedTiles.find(t => {
+                    if (excludeTileId !== null && t.id === excludeTileId) return false;
                     const dist = Math.sqrt(Math.pow(t.x - adjPos.x, 2) + Math.pow(t.y - adjPos.y, 2));
                     return dist < TILE_SIZE;
                 });
                 if (found) count++;
             });
             return count;
+        }
+
+        // ----------------------------------------------------------------
+        // LEGAL PLACEMENT HIGHLIGHTS — faint glowing hex outlines shown at
+        // every empty slot a drag-in-progress could legally land on. Computed
+        // once when the drag starts (not tracked per-frame) since the set of
+        // legal slots only changes when the board changes, not when the
+        // cursor moves. Used for player-tile placement and Telekinesis moves.
+        // ----------------------------------------------------------------
+        function clearLegalPlacementHighlights() {
+            const g = document.getElementById('legal-placement-highlights');
+            if (g && g.parentNode) g.parentNode.removeChild(g);
+        }
+
+        function showLegalPlacementHighlights(mode, excludeTileId = null) {
+            clearLegalPlacementHighlights();
+            if (typeof viewport === 'undefined' || !viewport) return;
+
+            const hexPositions = getAllHexagonPositions();
+            const points = makeTileHexPoints(TILE_SIZE * 4); // full tile-sized outline
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('id', 'legal-placement-highlights');
+            g.setAttribute('class', 'legal-placement-highlights');
+
+            hexPositions.forEach(pos => {
+                const occupied = placedTiles.some(t =>
+                    Math.sqrt(Math.pow(t.x - pos.x, 2) + Math.pow(t.y - pos.y, 2)) < TILE_SIZE);
+                if (occupied) return;
+
+                let legal = false;
+                if (mode === 'player-tile') {
+                    legal = countTouchingUnrevealedTiles(pos.x, pos.y) >= 2;
+                } else if (mode === 'telekinesis') {
+                    legal = countTouchingTiles(pos.x, pos.y, excludeTileId) >= 2;
+                }
+                if (!legal) return;
+
+                const hex = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                hex.setAttribute('points', points);
+                hex.setAttribute('class', 'legal-placement-hex');
+                hex.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+                g.appendChild(hex);
+            });
+
+            viewport.appendChild(g);
         }
 
         function tileHasStones(tileId) {
@@ -5137,6 +5196,10 @@
             const tileContent = createTileGroup(TILE_SIZE, draggedTileRotation, draggedTileFlipped);
             ghostTile.appendChild(tileContent);
             viewport.appendChild(ghostTile);
+
+            // The tile has already been removed from placedTiles above, so the
+            // board is already in its "post-move" state — no excludeTileId needed.
+            showLegalPlacementHighlights('telekinesis');
         }
 
         let isDraggingPlayer = false;

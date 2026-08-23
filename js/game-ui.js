@@ -1222,7 +1222,7 @@
                 const world = screenToWorld(screenX, screenY);
 
                 const isPlayerTile = (draggedTileShrineType === 'player');
-                const snapResult = findNearestSnapPoint(world.x, world.y, isPlayerTile);
+                const snapResult = findNearestSnapPoint(world.x, world.y, isPlayerTile, draggedTileId);
                 if (snapResult.snapped) {
                     if (window.shouldDebugLog ? window.shouldDebugLog('placeTile', 500) : true) {
                         console.log(`📍 Placing tile: rotation=${draggedTileRotation}, flipped=${draggedTileFlipped}, shrine=${draggedTileShrineType}`);
@@ -1311,6 +1311,7 @@
                 draggedTileId = null;
                 draggedTileOriginalPos = null;
                 snapIndicator.classList.remove('active');
+                if (typeof clearLegalPlacementHighlights === 'function') clearLegalPlacementHighlights();
             } else if (isDraggingStone && ghostStone) {
                 const { x: screenX, y: screenY } = getBoardScreenXY(e.clientX, e.clientY);
                 const world = screenToWorld(screenX, screenY);
@@ -1912,7 +1913,7 @@
 
                 if (isDraggingTile && ghostTile) {
                     const isPlayerTile = (draggedTileShrineType === 'player');
-                    const snapResult = findNearestSnapPoint(world.x, world.y, isPlayerTile);
+                    const snapResult = findNearestSnapPoint(world.x, world.y, isPlayerTile, draggedTileId);
                     if (snapResult.snapped) {
                         console.log(`Placing tile: rotation=${draggedTileRotation}, flipped=${draggedTileFlipped}, shrine=${draggedTileShrineType}`);
                         const tileId = placeTile(snapResult.x, snapResult.y, draggedTileRotation, draggedTileFlipped, draggedTileShrineType, false, false, draggedTileId);
@@ -1984,6 +1985,7 @@
                     draggedTileId = null;
                     draggedTileOriginalPos = null;
                     snapIndicator.classList.remove('active');
+                    if (typeof clearLegalPlacementHighlights === 'function') clearLegalPlacementHighlights();
                 } else if (isDraggingStone && ghostStone) {
                     // Remove ghost FIRST — prevents orphaned ghost stamps if anything below throws
                     viewport.removeChild(ghostStone);

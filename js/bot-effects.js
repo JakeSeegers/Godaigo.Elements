@@ -748,7 +748,7 @@
     // placedTiles + DOM, same as a human's mousedown) then placeTile()
     // with the SAME tile id (drop — re-adds it at the new position via
     // findNearestSnapPoint(), which already enforces Telekinesis's
-    // "must touch 1 other tile" rule internally whenever
+    // "must touch 2+ other tiles" rule internally whenever
     // window.telekinesisState.active is true — see game-core.js), plus
     // the move-counter/broadcast bookkeeping the real mouseup handler
     // does inline since there's no separate function for it.
@@ -781,7 +781,11 @@
             const hex = pixelToHex(t.x, t.y, largeHexSize);
             for (const [dq, dr] of offsets) {
                 const p = hexToPixel(hex.q + dq, hex.r + dr, largeHexSize);
-                const snapResult = findNearestSnapPoint(p.x, p.y, false);
+                // excludeTileId=t.id: t hasn't been picked up yet at this point, so
+                // without this it would count itself as a neighbor of its own
+                // about-to-be-vacated position and pass the touch-count check
+                // regardless of whether the destination has any OTHER real neighbor.
+                const snapResult = findNearestSnapPoint(p.x, p.y, false, t.id);
                 if (snapResult.snapped) { tile = t; destination = { x: snapResult.x, y: snapResult.y }; break; }
             }
             if (destination) break;
