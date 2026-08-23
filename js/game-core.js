@@ -4287,7 +4287,15 @@
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.setAttribute('id', 'legal-placement-highlights');
             g.setAttribute('class', 'legal-placement-highlights');
-            if (color) g.style.setProperty('--legal-hex-color', color);
+
+            // Color set as real SVG presentation attributes, not a CSS custom
+            // property — a var() chain that ever resolves to an invalid token
+            // makes `fill` fall back to ITS OWN initial value, which is opaque
+            // BLACK per the SVG spec, not "no color at all". That's what was
+            // actually happening: the highlights were rendering as solid black
+            // hexes instead of a translucent tint. Setting fill/stroke directly
+            // here removes any such fallback chain from the picture entirely.
+            const hexColor = color || '#e6c79c'; // falls back to the gold accent
 
             candidates.forEach(pos => {
                 const occupied = placedTiles.some(t =>
@@ -4306,6 +4314,11 @@
                 hex.setAttribute('points', points);
                 hex.setAttribute('class', 'legal-placement-hex');
                 hex.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+                hex.setAttribute('fill', hexColor);
+                hex.setAttribute('fill-opacity', '0.16'); // translucent — background shows through
+                hex.setAttribute('stroke', hexColor);
+                hex.setAttribute('stroke-width', '2');
+                hex.style.filter = `drop-shadow(0 0 6px ${hexColor})`;
                 g.appendChild(hex);
             });
 
