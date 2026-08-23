@@ -4248,14 +4248,33 @@
             clearLegalPlacementHighlights();
             if (typeof viewport === 'undefined' || !viewport) return;
 
-            const hexPositions = getAllHexagonPositions();
-            const points = makeTileHexPoints(TILE_SIZE * 4); // full tile-sized outline
+            // Candidate centers = large-hex-grid neighbors of every existing tile
+            // (same geometry countTouchingTiles/countTouchingUnrevealedTiles and
+            // driveTelekinesis's own destination search already use) — NOT
+            // getAllHexagonPositions(), which returns fine-grained sub-hex points
+            // spaced ~TILE_SIZE apart for stone/player positioning. Drawing a
+            // full tile-sized outline at every one of those densely-packed points
+            // was the earlier bug: dozens of oversized, overlapping shapes that
+            // didn't correspond to real tile-placement centers at all.
+            const largeHexSize = TILE_SIZE * 4;
+            const offsets = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+            const candidates = new Map();
+            placedTiles.forEach(tile => {
+                const hex = pixelToHex(tile.x, tile.y, largeHexSize);
+                offsets.forEach(([dq, dr]) => {
+                    const p = hexToPixel(hex.q + dq, hex.r + dr, largeHexSize);
+                    const key = `${Math.round(p.x)},${Math.round(p.y)}`;
+                    if (!candidates.has(key)) candidates.set(key, p);
+                });
+            });
+
+            const points = makeTileHexPoints(largeHexSize); // full tile-sized outline
 
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.setAttribute('id', 'legal-placement-highlights');
             g.setAttribute('class', 'legal-placement-highlights');
 
-            hexPositions.forEach(pos => {
+            candidates.forEach(pos => {
                 const occupied = placedTiles.some(t =>
                     Math.sqrt(Math.pow(t.x - pos.x, 2) + Math.pow(t.y - pos.y, 2)) < TILE_SIZE);
                 if (occupied) return;

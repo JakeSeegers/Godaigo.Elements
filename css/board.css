@@ -81,16 +81,16 @@ svg {
 }
 
 .legal-placement-hex {
-    fill: rgba(230, 199, 156, 0.12);
+    fill: rgba(230, 199, 156, 0.06);
     stroke: var(--accent-gold, #e6c79c);
     stroke-width: 2;
-    opacity: 0.55;
+    filter: drop-shadow(0 0 6px rgba(230, 199, 156, 0.7));
     animation: legalPlacementPulse 1.8s ease-in-out infinite;
 }
 
 @keyframes legalPlacementPulse {
-    0%, 100% { opacity: 0.35; }
-    50% { opacity: 0.75; }
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.7; }
 }
 
 .shrine-marker {
