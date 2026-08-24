@@ -18,6 +18,19 @@ const ScrollPanelSystem = (() => {
         wind: '#ffce00', void: '#9458f4', catacomb: '#9b59b6'
     };
 
+    // Static reference text for the Elemental Stones panel's hover preview —
+    // replaces the old click-to-open "Elemental Reference" popup (index.html's
+    // #stone-info-overlay / showStoneInfoPopup(), both removed). Read by
+    // _buildStoneCard() below via the same hover-preview plumbing _buildCard()
+    // already uses for scroll cards.
+    const STONE_INFO = {
+        earth: { name: 'Earth', rank: 5, cost: 5, ability: 'Cannot be walked through.', interaction: null },
+        water: { name: 'Water', rank: 4, cost: 4, ability: 'Adopts the ability of an adjacent Earth or Wind stone.', interaction: null },
+        fire:  { name: 'Fire',  rank: 3, cost: 3, ability: 'Stones other than Void or Fire are destroyed if adjacent to them.', interaction: 'Countered by: Void stones' },
+        wind:  { name: 'Wind',  rank: 2, cost: 2, ability: 'Costs zero AP to walk through.', interaction: null },
+        void:  { name: 'Void',  rank: 1, cost: 1, ability: 'Nullifies the effects of adjacent stones. Can be spent as action points from your inventory.', interaction: 'Counters: adjacent stone effects' },
+    };
+
     // Default positions — matches a reference layout the user arranged and
     // asked to become the default for a fresh session (screenshot-estimated
     // pixel coordinates, clamped to whatever viewport actually loads via
@@ -612,6 +625,60 @@ const ScrollPanelSystem = (() => {
         return card;
     }
 
+    // Builds a read-only .fsp-card for the hover preview over an Elemental
+    // Stones panel .stone-card — same visual family as _buildCard()'s scroll
+    // cards (shares .fsp-card/-header/-icon/-title/-name/-meta/-desc CSS),
+    // just no pattern diagram or action buttons since a stone isn't something
+    // you activate.
+    function _buildStoneCard(element) {
+        const info = STONE_INFO[element];
+        if (!info) return null;
+        const color   = EL_COLORS[element] || '#888';
+        const iconSrc = window.STONE_TYPES?.[element]?.img || '';
+
+        const card = document.createElement('div');
+        card.className = 'fsp-card';
+        card.style.setProperty('--el-color', color);
+
+        const hdr = document.createElement('div');
+        hdr.className = 'fsp-card-header';
+        if (iconSrc) {
+            const icon = document.createElement('img');
+            icon.src = iconSrc;
+            icon.className = 'fsp-card-icon';
+            icon.alt = element;
+            hdr.appendChild(icon);
+        }
+
+        const titleWrap = document.createElement('div');
+        titleWrap.className = 'fsp-card-title';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'fsp-card-name';
+        nameEl.textContent = info.name;
+        titleWrap.appendChild(nameEl);
+        const metaEl = document.createElement('span');
+        metaEl.className = 'fsp-card-meta';
+        metaEl.textContent = `Rank ${info.rank} · ${info.cost} AP`;
+        titleWrap.appendChild(metaEl);
+        hdr.appendChild(titleWrap);
+        card.appendChild(hdr);
+
+        const desc = document.createElement('div');
+        desc.className = 'fsp-card-desc';
+        desc.textContent = info.ability;
+        card.appendChild(desc);
+
+        if (info.interaction) {
+            const note = document.createElement('div');
+            note.className = 'fsp-card-desc';
+            note.style.cssText = `color:${color}; opacity:0.75; font-style:italic; margin-top:6px;`;
+            note.textContent = info.interaction;
+            card.appendChild(note);
+        }
+
+        return card;
+    }
+
     // ---- Autofit ----
     // Width  = body_padding + n_cards × card_width + (n_cards−1) × gap
     // Height = header_height + card_height + body_padding
@@ -1001,39 +1068,32 @@ const ScrollPanelSystem = (() => {
         let hideTimer = null;
         let showTimer = null;
         let throbberEl = null;
-        let currentScrollName = null; // which scroll we're hovering, so child mouseover events don't restart the timer
+        // 'scroll:<name>' or 'stone:<element>' — which card we're hovering,
+        // so child mouseover events don't restart the timer.
+        let currentKey = null;
         // The AREA a repeat hover resolves to is kept fresh even though the
-        // scrollName-match guard below skips restarting the timer/spinner for
-        // it — otherwise, whichever mouseover happened to be the FIRST one to
-        // start tracking a given scrollName permanently pins its area (even
-        // undefined/wrong) for every later hover of the same scroll, since
-        // the guard never lets a later, correct area overwrite it. The
-        // showTimer callback reads this variable at fire time, not a closed-
-        // over parameter, so it always uses whatever's most current.
+        // currentKey guard in _showCardPreview skips restarting the timer/
+        // spinner for it — otherwise, whichever mouseover happened to be the
+        // FIRST one to start tracking a given scroll permanently pins its
+        // area (even undefined/wrong) for every later hover of the same
+        // scroll, since the guard never lets a later, correct area overwrite
+        // it. The showTimer callback reads this variable at fire time, not a
+        // closed-over parameter, so it always uses whatever's most current.
         let currentArea;
 
         function clearThrobber() {
             if (throbberEl) { throbberEl.remove(); throbberEl = null; }
         }
 
-        // anchorEl: the hovered element (for positioning + the spinner). area:
-        // the real hand/active/common area it belongs to, when known (see
-        // findHoverable) — passed through to _buildCard so the preview shows
-        // the SAME "Move to Active/Common Area"/"Activate" buttons the real
-        // card has, not just an inert copy. Left undefined for surfaces where
-        // it isn't meaningful (opponent cards aren't the viewer's to move).
-        function showPreview(scrollName, anchorEl, area) {
-            currentArea = area; // kept fresh regardless of the guard below
-            if (scrollName === currentScrollName) return; // already tracking this scroll — don't restart the timer/spinner
-            currentScrollName = scrollName;
+        // Shared by scroll cards and stone cards: shows a spinner near
+        // anchorEl, then after 500ms builds the preview via buildFn() and
+        // positions it next to the hovered element's panel.
+        function _showCardPreview(key, anchorEl, elColor, buildFn) {
+            if (key === currentKey) return; // already tracking this card — don't restart the timer/spinner
+            currentKey = key;
             clearTimeout(hideTimer);
             clearTimeout(showTimer);
             clearThrobber();
-
-            const sp = window.spellSystem;
-            const element = (sp && typeof sp.getScrollElement === 'function')
-                ? sp.getScrollElement(scrollName) : 'earth';
-            const elColor = EL_COLORS[element] || '#888';
 
             // Show a small spinner near the hovered element for 500ms before the preview appears
             const anchorRect = anchorEl.getBoundingClientRect();
@@ -1056,15 +1116,7 @@ const ScrollPanelSystem = (() => {
             showTimer = setTimeout(() => {
                 clearThrobber();
 
-                // Real area (hand/active/common) → _buildCard adds the same
-                // Move to Active/Common Area / Activate buttons the actual
-                // card has. Falls back to 'preview' (no action buttons) when
-                // the area isn't known/meaningful (opponent cards). Reads
-                // currentArea (kept fresh on every hover, see showPreview)
-                // rather than this closure's own `area` param, which could
-                // be stale/wrong if THIS particular call was the one that
-                // skipped past the scrollName-match guard above.
-                const card = _buildCard(scrollName, currentArea || 'preview');
+                const card = buildFn();
                 if (!card) return;
                 card.style.height = 'auto'; // preview is not height-constrained
 
@@ -1094,18 +1146,49 @@ const ScrollPanelSystem = (() => {
             }, 500); // 500ms hover delay
         }
 
+        // anchorEl: the hovered element (for positioning + the spinner). area:
+        // the real hand/active/common area it belongs to, when known (see
+        // findHoverable) — passed through to _buildCard so the preview shows
+        // the SAME "Move to Active/Common Area"/"Activate" buttons the real
+        // card has, not just an inert copy. Left undefined for surfaces where
+        // it isn't meaningful (opponent cards aren't the viewer's to move).
+        function showPreview(scrollName, anchorEl, area) {
+            currentArea = area; // kept fresh regardless of the currentKey guard in _showCardPreview
+            const sp = window.spellSystem;
+            const element = (sp && typeof sp.getScrollElement === 'function')
+                ? sp.getScrollElement(scrollName) : 'earth';
+            const elColor = EL_COLORS[element] || '#888';
+            // Real area → _buildCard adds the same Move to Active/Common Area
+            // / Activate buttons the actual card has. Falls back to 'preview'
+            // (no action buttons) when the area isn't known/meaningful
+            // (opponent cards). Reads currentArea (kept fresh above) rather
+            // than this closure's own `area` param, which could be stale/
+            // wrong if THIS call was the one that skipped past the
+            // currentKey guard in _showCardPreview.
+            _showCardPreview(`scroll:${scrollName}`, anchorEl, elColor, () => _buildCard(scrollName, currentArea || 'preview'));
+        }
+
+        // Elemental Stones panel hover — replaces the old click-to-open
+        // "Elemental Reference" popup. Same preview mechanism as scroll
+        // cards, built from STONE_INFO via _buildStoneCard() instead of a
+        // scroll definition.
+        function showStonePreview(element, anchorEl) {
+            const elColor = EL_COLORS[element] || '#888';
+            _showCardPreview(`stone:${element}`, anchorEl, elColor, () => _buildStoneCard(element));
+        }
+
         function hidePreview() {
-            currentScrollName = null;
+            currentKey = null;
             clearTimeout(showTimer);
             clearThrobber();
             hideTimer = setTimeout(() => { preview.style.display = 'none'; }, 80);
         }
 
-        // Find the nearest hoverable ancestor of any of the three kinds, if any.
+        // Find the nearest hoverable ancestor of any of the four kinds, if any.
         function findHoverable(target) {
             const fspCard = target.closest('.fsp-card');
             if (fspCard && fspCard.closest('.fsp') && fspCard.dataset.scrollName) {
-                return { el: fspCard, scrollName: fspCard.dataset.scrollName, area: fspCard.dataset.area };
+                return { kind: 'scroll', el: fspCard, scrollName: fspCard.dataset.scrollName, area: fspCard.dataset.area };
             }
             const compactRow = target.closest('.fsp-compact-row');
             if (compactRow && compactRow.closest('.fsp') && compactRow.dataset.scrollName) {
@@ -1114,17 +1197,21 @@ const ScrollPanelSystem = (() => {
                 // and createPanel() already tags the panel itself (dataset.panel),
                 // so read it from there instead of threading a new attribute through.
                 const area = compactRow.closest('.fsp')?.dataset.panel;
-                return { el: compactRow, scrollName: compactRow.dataset.scrollName, area };
+                return { kind: 'scroll', el: compactRow, scrollName: compactRow.dataset.scrollName, area };
             }
             const oppCard = target.closest('.opponent-scroll-card[data-scroll-name]');
-            if (oppCard) return { el: oppCard, scrollName: oppCard.dataset.scrollName }; // no area — it's an opponent's scroll, not the viewer's to move
+            if (oppCard) return { kind: 'scroll', el: oppCard, scrollName: oppCard.dataset.scrollName }; // no area — it's an opponent's scroll, not the viewer's to move
+            const stoneCard = target.closest('.stone-card[data-element]');
+            if (stoneCard) return { kind: 'stone', el: stoneCard, element: stoneCard.dataset.element };
             return null;
         }
 
         // Delegation — works for dynamically rendered cards/rows
         document.addEventListener('mouseover', e => {
             const hit = findHoverable(e.target);
-            if (hit) showPreview(hit.scrollName, hit.el, hit.area);
+            if (!hit) return;
+            if (hit.kind === 'stone') showStonePreview(hit.element, hit.el);
+            else showPreview(hit.scrollName, hit.el, hit.area);
         });
         // Clicking one of the preview's own action buttons (Move to Active/
         // Common Area, Activate — see showPreview's area param) changes the
