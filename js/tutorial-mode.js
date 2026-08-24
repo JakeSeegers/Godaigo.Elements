@@ -388,18 +388,36 @@ const TutorialMode = (function () {
         showStep(0);
     }
 
+    // Reuses the real multiplayer #leave-game button (top-left HUD bar) instead
+    // of a separate fixed-position button — that button used to float over
+    // other UI (Elemental Stones panel / dock bar depending on layout). Same
+    // spot, same styling, just repointed at the tutorial's own exit instead
+    // of the multiplayer leaveGame() flow.
     function showExitButton() {
         if (exitBtnEl) return;
-        const btn = document.createElement('button');
-        btn.className = 'tmode-exit-persistent';
-        btn.textContent = 'Exit Tutorial';
-        btn.addEventListener('click', finish);
-        document.body.appendChild(btn);
+        const btn = document.getElementById('leave-game');
+        if (!btn) return;
+        btn.textContent  = 'Exit Tutorial';
+        btn.style.display = 'inline-block';
+        // The old dedicated exit button sat at z-index:8650 specifically so
+        // it stayed clickable above a blocking spotlight overlay (z-index
+        // 8600 — see showSpotlight()). #leave-game normally sits at the
+        // HUD bar's much lower z-index, so it needs the same lift here or
+        // it'd become unclickable the moment a blocking step starts.
+        btn.style.position = 'relative';
+        btn.style.zIndex   = '8650';
+        btn.onclick = finish;
         exitBtnEl = btn;
     }
 
     function hideExitButton() {
-        if (exitBtnEl) { exitBtnEl.remove(); exitBtnEl = null; }
+        if (!exitBtnEl) return;
+        exitBtnEl.style.display  = 'none';
+        exitBtnEl.style.position = '';
+        exitBtnEl.style.zIndex   = '';
+        exitBtnEl.onclick = null;
+        exitBtnEl.textContent = 'Leave';
+        exitBtnEl = null;
     }
 
     /** Called from game-core.js placeTile() when the local player drops their tile. */
