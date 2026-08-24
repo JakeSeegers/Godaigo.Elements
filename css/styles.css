@@ -288,6 +288,10 @@ body {
 }
 .hud-stone-info-btn:hover { border-color: var(--accent-gold); color: var(--accent-gold); }
 
+#panel-btn-opponents, #panel-btn-gamelog, #leave-game {
+    font-size: 24px;
+}
+
 .hud-badges {
     display: flex;
     gap: var(--space-sm);

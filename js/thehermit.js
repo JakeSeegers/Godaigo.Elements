@@ -94,15 +94,13 @@
     let spacerCounter = 0;
     const MIN_SPACER = 8, MAX_SPACER = 240, SPACER_STEP = 8;
 
-    function createSpacer(width) {
-        width = Math.min(MAX_SPACER, Math.max(MIN_SPACER, width || 24));
-        const el = document.createElement('div');
-        el.className = 'hermit-spacer';
-        el.id = 'hermit-spacer-' + (Date.now().toString(36)) + '-' + (spacerCounter++);
-        el.dataset.hermitSpacer = '1';
-        el.dataset.hermitSpacerWidth = String(width);
-        Object.assign(el.style, { width: width + 'px', flexShrink: '0', alignSelf: 'stretch', position: 'relative' });
-
+    // Adds the −/+/× controls to a spacer div if it doesn't already have
+    // them — shared by createSpacer() (brand new spacer) and enterEditMode()
+    // (a spacer that was hardcoded straight into index.html as static HTML,
+    // e.g. by copying a previous export, and so never went through
+    // createSpacer() to get its controls built in the first place).
+    function attachSpacerControls(el) {
+        if (el.querySelector(':scope > .hermit-spacer-controls')) return;
         const controls = document.createElement('div');
         controls.className = 'hermit-spacer-controls';
         Object.assign(controls.style, {
@@ -130,7 +128,17 @@
         controls.appendChild(ctrlBtn('+', 'Grow', () => resizeSpacer(el, SPACER_STEP)));
         controls.appendChild(ctrlBtn('×', 'Remove spacer', () => { el.remove(); saveCurrentLayout(); }));
         el.appendChild(controls);
+    }
 
+    function createSpacer(width) {
+        width = Math.min(MAX_SPACER, Math.max(MIN_SPACER, width || 24));
+        const el = document.createElement('div');
+        el.className = 'hermit-spacer';
+        el.id = 'hermit-spacer-' + (Date.now().toString(36)) + '-' + (spacerCounter++);
+        el.dataset.hermitSpacer = '1';
+        el.dataset.hermitSpacerWidth = String(width);
+        Object.assign(el.style, { width: width + 'px', flexShrink: '0', alignSelf: 'stretch', position: 'relative' });
+        attachSpacerControls(el);
         if (editing) wireDraggable(el);
         return el;
     }
@@ -260,7 +268,11 @@
         normalizeDOM();
         document.body.classList.add('hermit-edit-mode');
         allTrackedIds().forEach(id => { const el = document.getElementById(id); if (el) wireDraggable(el); });
-        document.querySelectorAll('[data-hermit-spacer]').forEach(wireDraggable);
+        // attachSpacerControls is a no-op if the controls are already there
+        // (spacers created via the panel this session) — it only does real
+        // work for a spacer hardcoded straight into index.html, which never
+        // went through createSpacer().
+        document.querySelectorAll('[data-hermit-spacer]').forEach(el => { attachSpacerControls(el); wireDraggable(el); });
         ZONES.forEach(zone => {
             const container = zoneEl(zone);
             if (!container) return;

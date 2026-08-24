@@ -290,20 +290,26 @@
     <div class="game-layout" id="game-layout">
         <!-- TOP HUD BAR -->
         <div class="hud-bar">
+            <!-- .hud-player wrapper flattened (TheHermit does this at runtime
+                 anyway — see js/thehermit.js normalizeDOM()) so the spacer
+                 below can sit directly between the two buttons. -->
             <div class="hud-section left">
-                <div class="hud-player">
-                    <button id="leave-game" class="danger" style="display: none;">Leave</button>
-                    <button id="scroll-reference-btn" class="hud-stone-info-btn" onclick="showScrollReferencePopup()" title="All scrolls &amp; effects">Scroll Reference</button>
-                    <!-- Lives in the HUD bar (not .status-bar) specifically because this
-                         row sits above where the floating panels (.right-panel,
-                         .game-log-panel) start — anywhere lower risks getting covered by
-                         one of them, which is exactly what happened when this button was
-                         in .status-bar under .right-panel. See js/game-log-ui.js. -->
-                    <button id="panel-btn-gamelog" class="hud-stone-info-btn" title="Show/hide the game log">Game Log</button>
-                </div>
+                <button id="leave-game" class="danger" style="display: none;">Leave</button>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="24" style="width:24px;flex-shrink:0;align-self:stretch;position:relative;"></div>
+                <button id="scroll-reference-btn" class="hud-stone-info-btn" onclick="showScrollReferencePopup()" title="All scrolls &amp; effects">Scroll Reference</button>
+                <!-- Lives in the HUD bar (not .status-bar) specifically because this
+                     row sits above where the floating panels (.right-panel,
+                     .game-log-panel) start — anywhere lower risks getting covered by
+                     one of them, which is exactly what happened when this button was
+                     in .status-bar under .right-panel. See js/game-log-ui.js.
+                     Not in the last TheHermit export (same as dock-actions'
+                     hud-scroll-decks-pips/panel-btn-opponents) — kept, appended
+                     at the end. -->
+                <button id="panel-btn-gamelog" class="hud-stone-info-btn" title="Show/hide the game log">Game Log</button>
             </div>
 
             <div class="hud-section center">
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="192" style="width:192px;flex-shrink:0;align-self:stretch;position:relative;"></div>
                 <div class="hud-shrine-progress" id="hud-shrine-progress" title="Shrine progress">
                     <span class="shrine-dot" id="shrine-dot-earth" data-element="earth" title="Earth"></span>
                     <span class="shrine-dot" id="shrine-dot-water" data-element="water" title="Water"></span>
@@ -311,6 +317,8 @@
                     <span class="shrine-dot" id="shrine-dot-wind"  data-element="wind"  title="Wind"></span>
                     <span class="shrine-dot" id="shrine-dot-void"  data-element="void"  title="Void"></span>
                 </div>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="24" style="width:24px;flex-shrink:0;align-self:stretch;position:relative;"></div>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="24" style="width:24px;flex-shrink:0;align-self:stretch;position:relative;"></div>
             </div>
 
 <div class="hud-section right">
@@ -407,12 +415,19 @@
                  (not deleted) and appended at the end — move them with
                  TheHermit if you want them elsewhere. -->
             <div class="dock-actions">
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="24" style="width:24px;flex-shrink:0;align-self:stretch;position:relative;"></div>
                 <button id="elemental-stones-btn" title="Elemental Stones">Elemental Stones</button>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="104" style="width:104px;flex-shrink:0;align-self:stretch;position:relative;"></div>
                 <button id="panel-btn-hand">Hand&thinsp;(<span id="hand-count">0</span>)</button>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="16" style="width:16px;flex-shrink:0;align-self:stretch;position:relative;"></div>
                 <button id="panel-btn-active">Active&thinsp;(<span id="active-count">0</span>)</button>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="8" style="width:8px;flex-shrink:0;align-self:stretch;position:relative;"></div>
                 <button id="panel-btn-common">Common Area</button>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="88" style="width:88px;flex-shrink:0;align-self:stretch;position:relative;"></div>
                 <button id="undo-move">Undo Step</button>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="24" style="width:24px;flex-shrink:0;align-self:stretch;position:relative;"></div>
                 <button id="cast-spell" class="primary">Activate Scroll</button>
+                <div class="hermit-spacer" data-hermit-spacer="1" data-hermit-spacer-width="192" style="width:192px;flex-shrink:0;align-self:stretch;position:relative;"></div>
                 <div class="hud-player dock-turn-indicator" id="dock-turn-indicator">
                     <span class="player-dot" id="hud-player-dot"></span>
                     <span class="hud-player-name" id="hud-player-name">Your Turn</span>
