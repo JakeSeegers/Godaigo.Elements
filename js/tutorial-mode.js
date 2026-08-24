@@ -519,12 +519,11 @@ const TutorialMode = (function () {
         closeModal();
 
         const isCorner  = step.modalPos === 'corner';
-        const posStyle  = isCorner
-            ? 'align-items:flex-end; justify-content:flex-end; padding:16px 16px 112px 16px; background:none; pointer-events:none;'
-            : '';
-        const boxStyle  = isCorner
-            ? 'pointer-events:all; max-width:380px; border:2px solid var(--accent-gold,#d9b08c);'
-            : 'max-width:460px;';
+        // Positioning/sizing for the corner case (bottom padding to clear the
+        // dock bar, max-height + scroll so it can never grow past that) all
+        // lives in css/styles.css's .tutorial-modal.tutorial-corner rules now
+        // — no inline JS sizing to get out of sync or fail to run.
+        const boxStyle  = isCorner ? '' : 'max-width:460px;';
 
         const actionHints = {
             'move':          'Drag your pawn to the glowing tile to continue…',
@@ -550,7 +549,6 @@ const TutorialMode = (function () {
 
         const overlay = document.createElement('div');
         overlay.className = `tutorial-modal tutorial-tmode${isCorner ? ' tutorial-corner' : ''}`;
-        if (isCorner) overlay.style.cssText = posStyle;
 
         overlay.innerHTML = `
             <div class="tutorial-content" style="${boxStyle}">
