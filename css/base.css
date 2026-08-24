@@ -8,6 +8,15 @@
 body {
     margin: 0;
     padding: 0;
+    /* Pin body's own box to exactly the viewport. body's `filter` below makes
+       it the CSS containing block for every `position:fixed` descendant in
+       the whole app (filter/transform/perspective do this per spec) — without
+       an explicit height, body sizes to its content instead of the viewport,
+       so any fixed overlay's 100%/100vh-based sizing (tutorial popups, the
+       placement-tile overlay, etc.) silently drifts from what's actually
+       visible on screen. This is the root fix for that drift, not just a
+       tutorial-popup patch. */
+    height: 100vh;
     background: var(--bg-dark);
     font-family: var(--font-terminal);
     font-size: 32px;

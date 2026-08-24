@@ -40,6 +40,7 @@ const TutorialMode = (function () {
     let earthRevealed     = false;  // tracks whether the first tile reveal has been processed
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
     let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
+    let cornerResizeFn    = null;   // window 'resize'/'scroll' listener kept while a corner modal is open
 
     // ── New kinesthetic state ─────────────────────────────────────────────────
     let patternPollInterval  = null;   // setInterval for checkPattern polling
@@ -571,9 +572,49 @@ const TutorialMode = (function () {
 
         const btn = overlay.querySelector('.tmode-next');
         if (btn) btn.addEventListener('click', advance);
+
+        if (isCorner) {
+            pinCornerModalAboveDock(overlay);
+            cornerResizeFn = () => pinCornerModalAboveDock(overlay);
+            window.addEventListener('resize', cornerResizeFn);
+        }
+    }
+
+    // Belt-and-suspenders positioning for the corner popup: measures the real,
+    // on-screen (getBoundingClientRect — always true viewport pixels, unlike
+    // vh/percentage math) top edge of .dock-bar and the popup's own rendered
+    // bottom edge, then nudges the popup up with a transform if it's still
+    // sitting on/over the dock bar. This doesn't assume the CSS box-model
+    // math lines up with the visible viewport — it checks the actual
+    // rendered result and corrects it directly, so it holds regardless of
+    // window size, zoom, or any ancestor (e.g. body's CRT `filter` in
+    // base.css, which makes body the containing block for every
+    // position:fixed element on the page instead of the true viewport) that
+    // could otherwise throw off plain CSS positioning.
+    function pinCornerModalAboveDock(overlay) {
+        const content = overlay.querySelector('.tutorial-content');
+        const dock    = document.querySelector('.dock-bar');
+        if (!content || !dock) return;
+        const margin  = 16;
+        const dockTop = dock.getBoundingClientRect().top;
+
+        // Cap how tall the box can ever be, so long step text scrolls
+        // internally instead of pushing the bottom edge down past the dock.
+        content.style.maxHeight = Math.max(120, dockTop - margin * 2) + 'px';
+        content.style.overflowY = 'auto';
+        content.style.transform = 'none';
+
+        const overlap = content.getBoundingClientRect().bottom - (dockTop - margin);
+        if (overlap > 0) {
+            content.style.transform = `translateY(${-overlap}px)`;
+        }
     }
 
     function closeModal() {
+        if (cornerResizeFn) {
+            window.removeEventListener('resize', cornerResizeFn);
+            cornerResizeFn = null;
+        }
         if (!modalEl) return;
         modalEl.classList.add('tutorial-fade-out');
         const el = modalEl;
