@@ -401,7 +401,23 @@
         <!-- BOTTOM DOCK -->
         <div class="dock-bar">
             <!-- Center zone: action buttons -->
+            <!-- Order below is a TheHermit-exported layout (js/thehermit.js —
+                 Shift+H in-game) hardcoded in. hud-scroll-decks-pips and
+                 panel-btn-opponents weren't in that export, so they're kept
+                 (not deleted) and appended at the end — move them with
+                 TheHermit if you want them elsewhere. -->
             <div class="dock-actions">
+                <button id="elemental-stones-btn" title="Elemental Stones">Elemental Stones</button>
+                <button id="panel-btn-hand">Hand&thinsp;(<span id="hand-count">0</span>)</button>
+                <button id="panel-btn-active">Active&thinsp;(<span id="active-count">0</span>)</button>
+                <button id="panel-btn-common">Common Area</button>
+                <button id="undo-move">Undo Step</button>
+                <button id="cast-spell" class="primary">Activate Scroll</button>
+                <div class="hud-player dock-turn-indicator" id="dock-turn-indicator">
+                    <span class="player-dot" id="hud-player-dot"></span>
+                    <span class="hud-player-name" id="hud-player-name">Your Turn</span>
+                </div>
+                <button id="end-turn" class="hud-end-turn" style="display: none;">End Turn</button>
                 <div class="hud-scroll-decks-pips" id="hud-scroll-decks-pips" title="Scroll decks remaining">
                     <span class="scrolldeck-pip" id="scrolldeck-pip-earth" data-element="earth" title="Earth scrolls remaining"><img src="assets/earthscroll.png" alt="Earth" class="scrolldeck-pip-icon"><span class="scrolldeck-pip-count" id="scrolldeck-pip-earth-count">0</span></span>
                     <span class="scrolldeck-pip" id="scrolldeck-pip-water" data-element="water" title="Water scrolls remaining"><img src="assets/waterscroll.png" alt="Water" class="scrolldeck-pip-icon"><span class="scrolldeck-pip-count" id="scrolldeck-pip-water-count">0</span></span>
@@ -410,18 +426,7 @@
                     <span class="scrolldeck-pip" id="scrolldeck-pip-void" data-element="void" title="Void scrolls remaining"><img src="assets/voidscroll.png" alt="Void" class="scrolldeck-pip-icon"><span class="scrolldeck-pip-count" id="scrolldeck-pip-void-count">0</span></span>
                     <span class="scrolldeck-pip" id="scrolldeck-pip-catacomb" data-element="catacomb" title="Catacomb scrolls remaining"><img src="assets/catacombscroll.png" alt="Catacomb" class="scrolldeck-pip-icon"><span class="scrolldeck-pip-count" id="scrolldeck-pip-catacomb-count">0</span></span>
                 </div>
-                <button id="panel-btn-hand">Hand&thinsp;(<span id="hand-count">0</span>)</button>
-                <button id="panel-btn-active">Active&thinsp;(<span id="active-count">0</span>)</button>
-                <button id="panel-btn-common">Common Area</button>
                 <button id="panel-btn-opponents">Opponents</button>
-                <button id="cast-spell" class="primary">Activate Scroll</button>
-                <button id="undo-move">Undo Step</button>
-                <div class="hud-player dock-turn-indicator" id="dock-turn-indicator">
-                    <span class="player-dot" id="hud-player-dot"></span>
-                    <span class="hud-player-name" id="hud-player-name">Your Turn</span>
-                </div>
-                <button id="end-turn" class="hud-end-turn" style="display: none;">End Turn</button>
-                <button id="elemental-stones-btn" title="Elemental Stones">Elemental Stones</button>
             </div>
 
         </div>
