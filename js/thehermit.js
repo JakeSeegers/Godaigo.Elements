@@ -174,6 +174,18 @@
             const container = zoneEl(zone);
             const order = saved[zone.id];
             if (!container || !Array.isArray(order)) return;
+            // A zone can start with spacers already sitting in it — either
+            // hardcoded straight into index.html as a default layout, or
+            // left over from a previous applySavedLayout() call this same
+            // session. Neither corresponds to any entry in `order` (spacer
+            // entries carry no id to match against), so without clearing
+            // them first every spacer entry below would create a brand new
+            // element ON TOP of whatever was already there instead of
+            // reproducing the saved layout — exactly the "everything
+            // duplicated, tracked buttons wrenched out of the middle" bug
+            // this comment is here to stop reappearing. Saved data is the
+            // single source of truth for a zone once it has any.
+            container.querySelectorAll(':scope > [data-hermit-spacer]').forEach(el => el.remove());
             order.forEach(entry => {
                 if (entry && typeof entry === 'object' && entry.spacer) {
                     container.appendChild(createSpacer(entry.width));
