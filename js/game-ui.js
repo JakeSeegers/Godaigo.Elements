@@ -2,6 +2,20 @@
         // NEW UI FUNCTIONS
         // ============================================
 
+        // Shared "is the active player still mid placement-tile-overlay" check.
+        // isPlacementPhase is only ever set true by the real multiplayer lobby
+        // flow (startMultiplayerGame() in lobby.js) — the local startGame() path
+        // (used by both a manual local game and js/tutorial-mode.js) never
+        // touches it, so it stays permanently false/undefined there. Falling
+        // back to "has the active player placed a pawn yet" (same trick
+        // js/bot-state.js's legalActions() uses) makes this observable for
+        // local/tutorial games too, not just real multiplayer.
+        function isTilePlacementPending() {
+            if (typeof isPlacementPhase !== 'undefined' && isPlacementPhase) return true;
+            return typeof playerPositions !== 'undefined' && typeof activePlayerIndex !== 'undefined' &&
+                !playerPositions[activePlayerIndex];
+        }
+
         function initializeNewUI() {
             console.log('🎨 Initializing new UI...');
 
@@ -23,16 +37,15 @@
             // Common. Opening them is deliberately NOT done there (that runs at
             // DOMContentLoaded, before login/the splash screen/the lobby even
             // exist) and not immediately here either: initializeNewUI() itself
-            // runs at game START, which for multiplayer means the tile-placement
-            // phase is still ahead — a real bug this project hit was these three
-            // floating over the "place your starting tile" overlay. Poll the same
-            // isPlacementPhase flag updatePlacementTileOverlay() already polls
-            // every 300ms below, and open them the moment it's false. It's only
-            // ever true for multiplayer to begin with (local games never set it —
-            // see multiplayer-state.js), so local play opens them immediately,
-            // same as before.
+            // runs at game START, which means the tile-placement phase (and the
+            // #placement-tile-overlay it shows top-center, z-index 500) is still
+            // ahead — a real bug this project hit was these three (.fsp,
+            // z-index 800) floating over that overlay. Poll isTilePlacementPending()
+            // — same fallback updatePlacementTileOverlay() uses below, so this
+            // now waits correctly for local games and tutorial mode too, not
+            // just real multiplayer — and open them the moment it clears.
             (function openAmbientPanelsWhenReady() {
-                if (typeof isPlacementPhase !== 'undefined' && isPlacementPhase) {
+                if (isTilePlacementPending()) {
                     setTimeout(openAmbientPanelsWhenReady, 300);
                     return;
                 }
@@ -55,19 +68,7 @@
         function updatePlacementTileOverlay() {
             const overlay = document.getElementById('placement-tile-overlay');
             if (!overlay) return;
-            // isPlacementPhase is only ever set true by the real multiplayer
-            // lobby flow (startMultiplayerGame() in lobby.js) — the local
-            // startGame() path (used by both a manual local game and
-            // js/tutorial-mode.js) never touches it, so it stays
-            // permanently false/undefined there and this overlay never
-            // showed the starting tile to drag. Same "observable state"
-            // fallback already used in js/bot-state.js's legalActions():
-            // when the flag isn't meaningfully set, fall back to whether
-            // the active player has placed a pawn yet instead of trusting it.
-            const inPlacementPhase = (typeof isPlacementPhase !== 'undefined' && isPlacementPhase)
-                ? true
-                : (typeof playerPositions !== 'undefined' && !playerPositions[activePlayerIndex]);
-            const myPlacementTurn = inPlacementPhase &&
+            const myPlacementTurn = isTilePlacementPending() &&
                 (typeof isMultiplayer === 'undefined' || !isMultiplayer || myPlayerIndex === activePlayerIndex);
             const hasTiles = typeof playerTilesAvailable !== 'undefined' && playerTilesAvailable > 0;
             overlay.style.display = (myPlacementTurn && hasTiles) ? '' : 'none';

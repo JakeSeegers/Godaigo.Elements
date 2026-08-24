@@ -519,11 +519,14 @@ const TutorialMode = (function () {
         closeModal();
 
         const isCorner  = step.modalPos === 'corner';
+        // Bottom padding clears the .dock-bar (68px grid row, see css/styles.css'
+        // .game-layout grid-template-rows) so the corner popup never sits on top
+        // of the Hand/Active/Common/Activate Scroll/Undo Step/End Turn buttons.
         const posStyle  = isCorner
-            ? 'align-items:flex-end; justify-content:flex-end; padding:16px; background:none; pointer-events:none;'
+            ? 'align-items:flex-end; justify-content:flex-end; padding:16px 16px 88px 16px; background:none; pointer-events:none;'
             : '';
         const boxStyle  = isCorner
-            ? 'pointer-events:all; max-width:380px; border:2px solid var(--accent-gold,#d9b08c);'
+            ? 'pointer-events:all; max-width:380px; max-height:calc(100vh - 120px); overflow-y:auto; border:2px solid var(--accent-gold,#d9b08c);'
             : 'max-width:460px;';
 
         const actionHints = {
