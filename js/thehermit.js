@@ -22,7 +22,14 @@
 (function () {
     'use strict';
 
-    const STORAGE_KEY = 'godaigo_hermit_layout_v1';
+    // Bump this whenever the hardcoded ZONES/index.html default layout
+    // changes — same convention as scroll-panels.js's STORAGE_KEY. Without
+    // it, a browser with an OLDER saved layout keeps overriding the new
+    // hardcoded default forever (applySavedLayout() always wins over
+    // whatever order index.html itself has), which is exactly what
+    // happened going from the first hardcode to the spacer one: stale v1
+    // data silently clobbered the new defaults on reload.
+    const STORAGE_KEY = 'godaigo_hermit_layout_v2';
 
     // zone.id is just a label used in the exported JSON / localStorage —
     // zone.selector is how the container is actually found in the DOM.
