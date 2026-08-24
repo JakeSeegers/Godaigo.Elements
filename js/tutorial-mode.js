@@ -40,7 +40,6 @@ const TutorialMode = (function () {
     let earthRevealed     = false;  // tracks whether the first tile reveal has been processed
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
     let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
-    let cornerResizeFn    = null;   // window 'resize' listener kept while a corner modal is open
 
     // ── New kinesthetic state ─────────────────────────────────────────────────
     let patternPollInterval  = null;   // setInterval for checkPattern polling
@@ -520,27 +519,12 @@ const TutorialMode = (function () {
         closeModal();
 
         const isCorner  = step.modalPos === 'corner';
-        // Bottom padding must clear the .dock-bar (Hand/Active/Common/Activate
-        // Scroll/Undo Step/End Turn) — a hardcoded pixel guess doesn't hold up
-        // across window sizes/zoom levels, so this is measured live against
-        // the actual dock-bar element below via sizeCornerModal(), not baked
-        // in here. Start with a safe static fallback for the first paint.
         const posStyle  = isCorner
-            ? 'align-items:flex-end; justify-content:flex-end; padding:16px; background:none; pointer-events:none;'
+            ? 'align-items:flex-end; justify-content:flex-end; padding:16px 16px 112px 16px; background:none; pointer-events:none;'
             : '';
-        // Corner popup is a flex column with the header/footer pinned and only
-        // the body scrolling — .tutorial-body's default 24px font (sized for
-        // the big centered modal) was, on its own, tall enough to push the
-        // footer's action hint (the actual "what do I do now" instruction)
-        // out of the box entirely on short/narrow windows. Pinning header+
-        // footer means that hint is always visible even if the body needs
-        // to scroll.
         const boxStyle  = isCorner
-            ? 'pointer-events:all; max-width:380px; display:flex; flex-direction:column; border:2px solid var(--accent-gold,#d9b08c);'
+            ? 'pointer-events:all; max-width:380px; border:2px solid var(--accent-gold,#d9b08c);'
             : 'max-width:460px;';
-        const cornerBodyStyle = isCorner
-            ? 'flex:1 1 auto; overflow-y:auto; min-height:0; font-size:15px; line-height:1.45;'
-            : '';
 
         const actionHints = {
             'move':          'Drag your pawn to the glowing tile to continue…',
@@ -570,13 +554,13 @@ const TutorialMode = (function () {
 
         overlay.innerHTML = `
             <div class="tutorial-content" style="${boxStyle}">
-                <div class="tutorial-header" style="${isCorner ? 'flex:0 0 auto;' : ''}">
+                <div class="tutorial-header">
                     <span class="tutorial-step-label">Step ${currentStep + 1} of ${STEPS.length}</span>
                     <h3 class="tutorial-title">${step.title}</h3>
                 </div>
-                <div class="tutorial-body" style="${cornerBodyStyle}">${step.content}</div>
+                <div class="tutorial-body">${step.content}</div>
                 <div class="tutorial-footer"
-                     style="display:flex;justify-content:flex-end;margin-top:14px;gap:8px;${isCorner ? 'flex:0 0 auto;' : ''}">
+                     style="display:flex;justify-content:flex-end;margin-top:14px;gap:8px;">
                     ${footerHTML}
                 </div>
             </div>`;
@@ -589,33 +573,9 @@ const TutorialMode = (function () {
 
         const btn = overlay.querySelector('.tmode-next');
         if (btn) btn.addEventListener('click', advance);
-
-        if (isCorner) {
-            sizeCornerModal(overlay);
-            cornerResizeFn = () => sizeCornerModal(overlay);
-            window.addEventListener('resize', cornerResizeFn);
-        }
-    }
-
-    // Keeps the bottom-right tutorial popup clear of the dock bar and never
-    // taller than the viewport allows, regardless of window size/zoom/mobile
-    // breakpoint — measured against the real .dock-bar element instead of a
-    // hardcoded pixel guess, which drifted out of sync with the actual layout.
-    function sizeCornerModal(overlay) {
-        const content = overlay.querySelector('.tutorial-content');
-        if (!content) return;
-        const dock   = document.querySelector('.dock-bar');
-        const dockH  = dock ? dock.getBoundingClientRect().height : 72; // fallback matches css/styles.css .dock-bar
-        const margin = 16;
-        overlay.style.paddingBottom = (dockH + margin) + 'px';
-        content.style.maxHeight = Math.max(120, window.innerHeight - dockH - margin * 2) + 'px';
     }
 
     function closeModal() {
-        if (cornerResizeFn) {
-            window.removeEventListener('resize', cornerResizeFn);
-            cornerResizeFn = null;
-        }
         if (!modalEl) return;
         modalEl.classList.add('tutorial-fade-out');
         const el = modalEl;
