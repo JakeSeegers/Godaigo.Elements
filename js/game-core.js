@@ -4878,7 +4878,7 @@
             void:     { src: 'images/Tiles/pixelvoid.png',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
             catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -1,  rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 1.0 },
             // Hidden (unrevealed) tile back — shown while a tile is face-down, before it is flipped.
-            unflipped: { src: 'images/Tiles/unflippedtile.png', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
+            unflipped: { src: 'images/Tiles/unflippedtile.png', x: 0, y: 3, rotation: 90, scale: 1.8, opacity: 0.41, tintOpacity: 0 },
             // Player tiles — one entry per player color, each can carry its own unique image.
             player_purple: { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
             player_yellow: { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
