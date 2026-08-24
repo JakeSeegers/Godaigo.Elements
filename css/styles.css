@@ -3967,7 +3967,11 @@ label, .hud-ap-label, .hud-ap-value {
 /* ---- Hover preview card (floats outside the panel, no overflow clipping) ---- */
 .fsp-card-preview {
     position: fixed;
-    z-index: 1500;
+    /* Above #scroll-ref-overlay/other retro-dlg popups (z-index: 2000, set
+       inline in game-ui.js) now that hovering a row inside the Scroll
+       Reference popup can trigger this preview too — below the tutorial's
+       8500+ range, which never needs to compete with it. */
+    z-index: 2500;
     width: 480px;                  /* ~250% of the 300px panel card */
     max-height: calc(100vh - 24px);
     overflow-y: auto;

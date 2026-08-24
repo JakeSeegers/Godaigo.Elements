@@ -1201,6 +1201,11 @@ const ScrollPanelSystem = (() => {
             }
             const oppCard = target.closest('.opponent-scroll-card[data-scroll-name]');
             if (oppCard) return { kind: 'scroll', el: oppCard, scrollName: oppCard.dataset.scrollName }; // no area — it's an opponent's scroll, not the viewer's to move
+            // Scroll Reference popup's list rows (game-ui.js's showScrollReferencePopup) —
+            // browsing the full scroll index, not the viewer's own hand/active/common,
+            // so no area/action buttons here either.
+            const refRow = target.closest('.scroll-ref-row[data-scroll-name]');
+            if (refRow) return { kind: 'scroll', el: refRow, scrollName: refRow.dataset.scrollName };
             const stoneCard = target.closest('.stone-card[data-element]');
             if (stoneCard) return { kind: 'stone', el: stoneCard, element: stoneCard.dataset.element };
             return null;

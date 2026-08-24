@@ -3955,13 +3955,19 @@ document.getElementById('undo-move').onclick = function() {
                     if (!pattern) return;
 
                     const card = document.createElement('div');
+                    // scroll-ref-row + data-scrollName: recognized by
+                    // scroll-panels.js's findHoverable() so hovering shows
+                    // the same .fsp-card-preview a Hand/Active/Common card
+                    // shows (pattern diagram included) — see _buildCard()/
+                    // _initCardHoverPreview(). Replaces the old click-to-open
+                    // showScrollInfoPopup() pattern-only popup.
+                    card.className = 'scroll-ref-row';
+                    card.dataset.scrollName = scrollName;
                     card.style.cssText = `
                         border-left: 3px solid ${c}; background: ${c}0d;
                         border-radius: 0 4px 4px 0; padding: 10px 12px;
-                        margin-bottom: 8px; cursor: pointer;
+                        margin-bottom: 8px;
                     `;
-                    card.title = 'Click to see stone pattern';
-                    card.addEventListener('click', () => showScrollInfoPopup(scrollName, pattern, el));
 
                     // Name + level row
                     const nameRow = document.createElement('div');
@@ -3985,7 +3991,7 @@ document.getElementById('undo-move').onclick = function() {
                     card.appendChild(descEl);
 
                     const hint = document.createElement('div');
-                    hint.textContent = 'click for pattern';
+                    hint.textContent = 'hover for pattern';
                     hint.style.cssText = `font-family: var(--font-pixel); font-size: 9px; color: ${c}55; margin-top: 5px; letter-spacing: 1px;`;
                     card.appendChild(hint);
 
