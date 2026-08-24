@@ -205,17 +205,25 @@
     }
 
     function currentLayout() {
+        const tracked = allTrackedIds();
         const layout = {};
         ZONES.forEach(zone => {
             const container = zoneEl(zone);
             if (!container) { layout[zone.id] = []; return; }
-            // Filter against the static itemIds list (plus any spacer) —
-            // not the live data-hermit-item attribute, which is only set
-            // while edit mode is actually on, and this needs to work from
-            // the console (window.TheHermit.exportLayout()) without
-            // opening the panel first.
+            // Filter against the GLOBAL tracked-id list (plus any spacer) —
+            // not zone.itemIds, which only names each item's *default* home
+            // zone. A cross-zone drag (Opponents dragged from the dock into
+            // the HUD bar, say) is a real, supported move: the element is a
+            // live child of a DIFFERENT zone's container than its itemIds
+            // entry, so filtering against that zone's own list silently
+            // dropped it from the save/export every time — it was neither
+            // in the dock's live children nor recognized by the HUD zone's
+            // allowlist. Not the live data-hermit-item attribute either,
+            // which is only set while edit mode is actually on, and this
+            // needs to work from the console (window.TheHermit.exportLayout())
+            // without opening the panel first.
             layout[zone.id] = Array.from(container.children)
-                .filter(el => zone.itemIds.includes(el.id) || el.dataset.hermitSpacer !== undefined)
+                .filter(el => tracked.includes(el.id) || el.dataset.hermitSpacer !== undefined)
                 .map(serializeChild);
         });
         return layout;
@@ -284,7 +292,14 @@
     function enterEditMode() {
         if (editing) return;
         editing = true;
-        normalizeDOM();
+        // normalizeDOM() is deliberately NOT called here (only once, at
+        // script init, below). It forces every tracked item back into its
+        // *default* zone — correct as a one-time bootstrap before anything
+        // else has run, but if called again after a cross-zone drag (e.g.
+        // Opponents moved from the dock into the HUD bar earlier this same
+        // session), it would yank that item straight back to the dock the
+        // moment the editor is reopened, undoing a drag that never even
+        // left this page load.
         document.body.classList.add('hermit-edit-mode');
         allTrackedIds().forEach(id => { const el = document.getElementById(id); if (el) wireDraggable(el); });
         // attachSpacerControls is a no-op if the controls are already there
