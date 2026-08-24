@@ -528,9 +528,19 @@ const TutorialMode = (function () {
         const posStyle  = isCorner
             ? 'align-items:flex-end; justify-content:flex-end; padding:16px; background:none; pointer-events:none;'
             : '';
+        // Corner popup is a flex column with the header/footer pinned and only
+        // the body scrolling — .tutorial-body's default 24px font (sized for
+        // the big centered modal) was, on its own, tall enough to push the
+        // footer's action hint (the actual "what do I do now" instruction)
+        // out of the box entirely on short/narrow windows. Pinning header+
+        // footer means that hint is always visible even if the body needs
+        // to scroll.
         const boxStyle  = isCorner
-            ? 'pointer-events:all; max-width:380px; overflow-y:auto; border:2px solid var(--accent-gold,#d9b08c);'
+            ? 'pointer-events:all; max-width:380px; display:flex; flex-direction:column; border:2px solid var(--accent-gold,#d9b08c);'
             : 'max-width:460px;';
+        const cornerBodyStyle = isCorner
+            ? 'flex:1 1 auto; overflow-y:auto; min-height:0; font-size:15px; line-height:1.45;'
+            : '';
 
         const actionHints = {
             'move':          'Drag your pawn to the glowing tile to continue…',
@@ -560,13 +570,13 @@ const TutorialMode = (function () {
 
         overlay.innerHTML = `
             <div class="tutorial-content" style="${boxStyle}">
-                <div class="tutorial-header">
+                <div class="tutorial-header" style="${isCorner ? 'flex:0 0 auto;' : ''}">
                     <span class="tutorial-step-label">Step ${currentStep + 1} of ${STEPS.length}</span>
                     <h3 class="tutorial-title">${step.title}</h3>
                 </div>
-                <div class="tutorial-body">${step.content}</div>
+                <div class="tutorial-body" style="${cornerBodyStyle}">${step.content}</div>
                 <div class="tutorial-footer"
-                     style="display:flex;justify-content:flex-end;margin-top:14px;gap:8px;">
+                     style="display:flex;justify-content:flex-end;margin-top:14px;gap:8px;${isCorner ? 'flex:0 0 auto;' : ''}">
                     ${footerHTML}
                 </div>
             </div>`;
