@@ -293,7 +293,7 @@
             <div class="hud-section left">
                 <div class="hud-player">
                     <button id="leave-game" class="danger" style="display: none;">Leave</button>
-                    <button class="hud-stone-info-btn" onclick="showScrollReferencePopup()" title="All scrolls &amp; effects">Scroll Reference</button>
+                    <button id="scroll-reference-btn" class="hud-stone-info-btn" onclick="showScrollReferencePopup()" title="All scrolls &amp; effects">Scroll Reference</button>
                     <!-- Lives in the HUD bar (not .status-bar) specifically because this
                          row sits above where the floating panels (.right-panel,
                          .game-log-panel) start — anywhere lower risks getting covered by
@@ -321,7 +321,7 @@
                     <span class="ap-pip" data-pip="4"></span>
                     <span class="ap-pip" data-pip="5"></span>
                 </div>
-                <div class="hud-ap" title="Action Points">
+                <div class="hud-ap" id="hud-ap-container" title="Action Points">
                     <span class="hud-ap-value" id="hud-ap-value">5</span>
                     <span class="hud-ap-label">AP</span>
                     <span id="hud-void-ap" style="color: #9458f4; margin-left: 4px;"></span>
@@ -416,7 +416,7 @@
                 <button id="panel-btn-opponents">Opponents</button>
                 <button id="cast-spell" class="primary">Activate Scroll</button>
                 <button id="undo-move">Undo Step</button>
-                <div class="hud-player dock-turn-indicator">
+                <div class="hud-player dock-turn-indicator" id="dock-turn-indicator">
                     <span class="player-dot" id="hud-player-dot"></span>
                     <span class="hud-player-name" id="hud-player-name">Your Turn</span>
                 </div>
@@ -640,6 +640,7 @@
     <script src="js/bot-arena.js" charset="UTF-8"></script>
     <script src="js/action-log.js" charset="UTF-8"></script>
     <script src="js/game-log-ui.js" charset="UTF-8"></script>
+    <script src="js/thehermit.js" charset="UTF-8"></script>
     <script>
     (function() {
         const _clickSnd = new Audio('sounds/clicksounds.mp3');

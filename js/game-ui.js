@@ -4680,6 +4680,10 @@ document.getElementById('undo-move').onclick = function() {
                     if (typeof window.ActionLog?.download === 'function') window.ActionLog.download();
                     else updateStatus('Action log not available');
                 }));
+                panel.appendChild(makeBtn('🏹 TheHermit: Layout Editor (Shift+H)', () => {
+                    if (typeof window.TheHermit?.toggle === 'function') window.TheHermit.toggle();
+                    else updateStatus('TheHermit not available');
+                }));
 
                 // Place Anywhere toggle — uses the same globalPlacement buff as Avalanche,
                 // but with expiresThisTurn:false so it persists until toggled off.

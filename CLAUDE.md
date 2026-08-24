@@ -95,6 +95,9 @@ Order matters — later scripts depend on earlier ones.
 28. game-log-ui.js         ← Player-facing readable "Game Log" panel (#game-log-panel, left side), built
                              from ActionLog.onRecord() — colour-coded, collapses movement, never shows
                              discardScroll or anything else that would reveal another player's hand
+29. thehermit.js           ← window.TheHermit — dev tool, drag-to-reorder editor for the dock-bar/hud-bar
+                             buttons and indicators (Shift+H, or the cheat-panel button); persists the
+                             chosen order to localStorage and exports it as JSON for hardcoding back in
 ```
 
 ---
