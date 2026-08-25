@@ -1431,7 +1431,7 @@
 
                 if (totalCount < 2) {
                     statusDiv.textContent = 'Waiting for more players... (need at least 2)';
-                    statusDiv.style.color = '#999';
+                    statusDiv.style.color = '#9f34ad';
                 } else if (totalCount > 5) {
                     statusDiv.textContent = 'Too many players! Maximum is 5.';
                     statusDiv.style.color = '#f44336';
