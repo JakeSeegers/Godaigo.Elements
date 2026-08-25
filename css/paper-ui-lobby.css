@@ -166,6 +166,16 @@
 }
 #player-list > div:first-child { color: var(--pp-maroon); }
 
+/* Caps how tall the player list can grow as players/bots join — without
+   this, going from 2 to 5 rows pushes Ready/Start Game/Add Bot further
+   down the page each time, forcing a scroll to reach them. ~3 rows worth
+   before it scrolls internally instead; the rest of the lobby panel
+   (buttons included) stays put regardless of player count. */
+#players-container {
+  max-height: 168px;
+  overflow-y: auto;
+}
+
 .pp-player-row {
   padding: 10px;
   margin: 5px 0;
