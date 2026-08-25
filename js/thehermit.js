@@ -29,7 +29,7 @@
     // whatever order index.html itself has), which is exactly what
     // happened going from the first hardcode to the spacer one: stale v1
     // data silently clobbered the new defaults on reload.
-    const STORAGE_KEY = 'godaigo_hermit_layout_v2';
+    const STORAGE_KEY = 'godaigo_hermit_layout_v3';
 
     // zone.id is just a label used in the exported JSON / localStorage —
     // zone.selector is how the container is actually found in the DOM.
@@ -41,9 +41,9 @@
             id: 'dock-actions',
             selector: '.dock-actions',
             itemIds: [
-                'hud-scroll-decks-pips', 'panel-btn-hand', 'panel-btn-active',
-                'panel-btn-common', 'panel-btn-opponents', 'cast-spell',
-                'undo-move', 'dock-turn-indicator', 'end-turn', 'elemental-stones-btn',
+                'panel-btn-hand', 'panel-btn-active', 'panel-btn-common',
+                'cast-spell', 'undo-move', 'dock-turn-indicator', 'end-turn',
+                'elemental-stones-btn',
             ],
         },
         {
@@ -54,7 +54,13 @@
         {
             id: 'hud-center',
             selector: '.hud-section.center',
-            itemIds: ['hud-shrine-progress'],
+            // hud-scroll-decks-pips/panel-btn-opponents' default home moved
+            // here from dock-actions — this is just where normalizeDOM()
+            // resets a fresh browser (no saved layout yet) to; a saved
+            // cross-zone position (from either of these being dragged
+            // somewhere else) still wins once one exists, same as any
+            // other tracked item.
+            itemIds: ['hud-scroll-decks-pips', 'hud-shrine-progress', 'panel-btn-opponents'],
         },
         {
             id: 'hud-right',
