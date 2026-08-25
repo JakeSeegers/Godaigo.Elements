@@ -227,12 +227,9 @@
                         </label>
                     </div>
 
-                    <div style="margin-bottom: 10px;">
-                        <label style="display: flex; align-items: center; gap: 6px; font-size: 14px;" title="Only N-1 tiles of each element instead of N — not everyone will get to collect every element.">
-                            <input type="checkbox" id="scarce-tiles-mode">
-                            Scarce Tiles Mode (N-1 tiles per element)
-                        </label>
-                    </div>
+                    <!-- Scarce Tiles Mode (N-1 tiles per element) checkbox removed —
+                         it's the only mode now, always on. See hostStartGame()/
+                         startGame() in lobby.js and initializeDeck() in game-core.js. -->
 
                     <button id="host-start-button" onclick="hostStartGame()" style="padding: 10px 24px; font-size: 16px; width: 100%;">
                         Start Game

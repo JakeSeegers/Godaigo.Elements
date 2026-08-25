@@ -2878,7 +2878,9 @@
             };
         }
 
-        function initializeDeck(numPlayers = 1, seed = null, scarceTiles = false) {
+        // scarceTiles defaults true — it's the only mode now, no UI toggle left
+        // (see hostStartGame()/startGame() in lobby.js).
+        function initializeDeck(numPlayers = 1, seed = null, scarceTiles = true) {
             // Tutorial mode: use a fixed deck order so earth lands at the center position
             if (window.tutorialDeckOverride) {
                 tileDeck = [...window.tutorialDeckOverride];

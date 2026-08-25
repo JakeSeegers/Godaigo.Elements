@@ -1599,12 +1599,12 @@
                 const turnTimeLimit = parseInt(timeoutSelect.value, 10) * 1000; // seconds -> ms
                 const kickCheckbox = document.getElementById('kick-on-timeout');
                 const kickMode = !!(kickCheckbox && kickCheckbox.checked);
-                const scarceTilesCheckbox = document.getElementById('scarce-tiles-mode');
-                const scarceTiles = !!(scarceTilesCheckbox && scarceTilesCheckbox.checked);
+                // Scarce Tiles Mode (N-1 tiles per element) is the only mode now —
+                // the checkbox that used to toggle it is gone (see index.html).
+                const scarceTiles = true;
 
                 console.log('⚠️ Turn time limit set to:', turnTimeLimit / 1000, 'seconds');
                 console.log('👢 Kick on turn timeout:', kickMode);
-                console.log('🎴 Scarce tiles mode:', scarceTiles);
 
                 // Randomly assign player indices and colors
                 const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
@@ -1805,8 +1805,8 @@
                     console.log('👢 kickOnTurnTimeout:', kickOnTurnTimeout);
                 }
 
-                const scarceTiles = !!(room && room.scarce_tiles);
-                console.log('🎴 Scarce tiles mode:', scarceTiles);
+                // Always on now — see hostStartGame()'s own scarceTiles for why.
+                const scarceTiles = true;
 
                 // Set turn started time
                 if (room && room.turn_started_at) {
@@ -3865,7 +3865,8 @@
         }
 
         // Start multiplayer game
-        function startMultiplayerGame(allPlayers, sharedDeckSeed = null, scarceTiles = false) {
+        // scarceTiles defaults true — it's the only mode now, no UI toggle left.
+        function startMultiplayerGame(allPlayers, sharedDeckSeed = null, scarceTiles = true) {
             // Reset all per-game resources so leftover state from a previous session doesn't carry over
             if (typeof window.resetGameResources === 'function') {
                 window.resetGameResources();
@@ -3959,7 +3960,8 @@
 
 
         // Start game with selected number of players (local mode)
-        function startGame(numPlayers, scarceTiles = false) {
+        // scarceTiles defaults true — it's the only mode now, no UI toggle left.
+        function startGame(numPlayers, scarceTiles = true) {
             // Clear the board first (skip confirmation — startGame is always intentional)
             clearBoard(true);
 
