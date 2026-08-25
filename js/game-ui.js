@@ -7426,7 +7426,14 @@ document.getElementById('undo-move').onclick = function() {
                 btn.title = 'Developer menu (TheHermit only)';
                 Object.assign(btn.style, {
                     position: 'fixed',
-                    top: '12px',
+                    // Was top:12px, overlapping whatever sits at the very
+                    // start of .hud-section.left (used to clear it via the
+                    // old .hud-player wrapper's own padding; that wrapper's
+                    // gone now — see js/thehermit.js normalizeDOM()). Same
+                    // var(--hud-height)-relative pattern as
+                    // .placement-tile-overlay in css/styles.css, so this
+                    // still tracks the HUD bar's height across breakpoints.
+                    top: 'calc(var(--hud-height) + 8px)',
                     left: '12px',
                     zIndex: '10000',
                     width: '40px',
@@ -7447,7 +7454,9 @@ document.getElementById('undo-move').onclick = function() {
                 menu.id = 'hermit-menu';
                 Object.assign(menu.style, {
                     position: 'fixed',
-                    top: '58px',
+                    // Kept the same 46px gap below the button's own top that
+                    // 58-12 worked out to before it moved (see btn.style.top).
+                    top: 'calc(var(--hud-height) + 8px + 46px)',
                     left: '12px',
                     zIndex: '10000',
                     background: '#1a1a2e',
