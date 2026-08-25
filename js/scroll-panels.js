@@ -11,7 +11,12 @@ const ScrollPanelSystem = (() => {
     'use strict';
 
     // ---- Config ----
-    const CAPACITY    = { hand: 2, active: 2, common: 5 };
+    // common: 6, not 5 — spellSystem.commonArea holds one slot per element
+    // (earth/water/fire/wind/void/catacomb, see getCommonAreaScrolls() in
+    // game-core.js, and the "(N/6)" label the old inventory modal already
+    // used), so a full common area was 6 scrolls behaving completely
+    // normally, just past a badge/pulse threshold that was one element short.
+    const CAPACITY    = { hand: 2, active: 2, common: 6 };
     const STORAGE_KEY = 'godaigo_scroll_panels_v8';  // bumped — cards flex column, height 400, autofit on by default
     const EL_COLORS   = {
         earth: '#69d83a', water: '#5894f4', fire: '#ed1b43',
