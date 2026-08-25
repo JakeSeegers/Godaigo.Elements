@@ -179,6 +179,9 @@
 .pp-player-row {
   padding: 10px;
   margin: 5px 0;
+  /* No font-size set anywhere for this row otherwise, so it was inheriting
+     body's base 32px (base.css) — huge for a plain name in a list row. */
+  font-size: 15px;
   background: rgba(42, 42, 42, 0.55);
   border: 1.5px solid rgba(148, 88, 244, 0.35);
   border-radius: 3px;
