@@ -1010,23 +1010,9 @@
             xpLine.textContent = isWinner ? `+${xpAmt} XP  —  VICTORY` : `+${xpAmt} XP  —  GAME COMPLETE`;
             box.appendChild(xpLine);
 
-            // docs/bot-tycoon-proposal.md build-order step 6: real bots now
-            // carry a genuine source (players.bot_source_id → deployed_bots),
-            // so the winner can pick WHICH bot to try capturing instead of a
-            // generic "wild" placeholder. This is THIS overlay, not
-            // game-core.js's showLevelComplete(), because this is the one
-            // that actually stays on screen for multiplayer (see the note at
-            // the top of showLevelComplete() for why). isGenuineLocalWinner()
-            // already excludes a bot's own win (host-impersonation edge case),
-            // so no separate winnerIsBot check is needed here.
-            if (isWinner) {
-                const capturableBots = (typeof allPlayersData !== 'undefined' && Array.isArray(allPlayersData))
-                    ? allPlayersData.filter(p => window.isBotUsername?.(p.username) && p.bot_source_id != null)
-                    : [];
-                if (capturableBots.length && window.spellSystem?.buildCaptureSection) {
-                    box.appendChild(window.spellSystem.buildCaptureSection(capturableBots));
-                }
-            }
+            // (The personal-bot "capture a bot" picker was removed with the
+            // Bot Tycoon economy — bots are now the five fixed elemental
+            // bots, not something you collect. See js/bot-elements.js.)
 
             const lobbyBtn = document.createElement('button');
             lobbyBtn.textContent = 'Return to Lobby';
@@ -1459,15 +1445,11 @@
         // bot indices, so any number of bots (up to the room's 5-player
         // cap) works with no changes there.
         //
-        // docs/bot-tycoon-proposal.md build-order step 6: each bot now gets
-        // its own identity pulled from a random ACTIVE `deployed_bots` row
-        // (name shown in-game, weights stored on the row itself as
-        // `bot_weights`/`bot_source_id` — bot-driver.js's asBot() applies
-        // them for the duration of that bot's turn) instead of every seat
-        // silently sharing window.BotSystem.WEIGHTS. Falls back to the
-        // ORIGINAL generic "🤖 Bot N" / shared-weights behavior when no
-        // deployed bots exist yet (fresh install) or the query fails —
-        // additive, never blocks adding a bot.
+        // Each bot's ELEMENTAL identity (name + weights) is decided at game
+        // start, not here: a seat rolls its colour in hostStartGame() and the
+        // colour picks the element (js/bot-elements.js). So the lobby row is
+        // just a placeholder "🤖 Bot N" with no weights; hostStartGame()
+        // rewrites username / bot_weights / bot_source_id per rolled colour.
         async function addBotPlayer() {
             if (!isHost || !currentGameId) return;
             try {
@@ -1480,29 +1462,14 @@
                 if ((players || []).length >= 5) { alert('Room is full!'); return; }
                 const botCount = (players || []).filter(p => window.isBotUsername?.(p.username)).length;
 
-                let username = `${window.BOT_USERNAME_PREFIX || '🤖'} Bot ${botCount + 1}`;
-                let botWeights = null;
-                let botSourceId = null;
-                try {
-                    const { data: candidates } = await supabase
-                        .from('deployed_bots')
-                        .select('id, nickname, weights')
-                        .eq('is_active', true)
-                        .limit(50);
-                    if (candidates?.length) {
-                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
-                        username = `${window.BOT_USERNAME_PREFIX || '🤖'} ${pick.nickname}`;
-                        botWeights = pick.weights;
-                        botSourceId = pick.id;
-                    }
-                } catch (e) { /* fall back to the generic bot above */ }
+                const username = `${window.BOT_USERNAME_PREFIX || '🤖'} Bot ${botCount + 1}`;
 
                 await supabase.from('players').insert([{
                     username,
                     is_ready: true, // bots are always ready
                     game_id: currentGameId,
-                    bot_weights: botWeights,
-                    bot_source_id: botSourceId,
+                    bot_weights: null,
+                    bot_source_id: null,
                 }]);
                 console.log(`🤖 Bot added to lobby as "${username}"`);
                 updatePlayerList();
@@ -1610,6 +1577,28 @@
                 const colorRankOrder = ['purple', 'yellow', 'red', 'blue', 'green'];
                 const shuffledIndices = [...Array(players.length).keys()].sort(() => Math.random() - 0.5);
 
+                // Elemental bots: a bot seat's ROLLED COLOUR picks its element
+                // (js/bot-elements.js COLOR_ELEMENT). Resolve the shared brain
+                // (community champion) once and the five deployed_bots row ids,
+                // then each bot seat below gets its elemental name + a gentle
+                // per-element weight overlay. Must never throw — a failure here
+                // would abort game start; fall back to the plain placeholder.
+                let elementalBase = null;
+                let elementalOk = false;
+                if (window.BotElements) {
+                    try {
+                        const champRes = await supabase.from('bot_champion_weights')
+                            .select('weights').order('win_rate', { ascending: false, nullsFirst: false }).limit(1);
+                        elementalBase = champRes?.data?.[0]?.weights || null;
+                    } catch (e) { elementalBase = null; }
+                    if (!elementalBase) {
+                        console.warn('[elemental] champion fetch failed at game start — using local WEIGHTS');
+                        elementalBase = window.BotSystem?.WEIGHTS || window.BotSystem?.DEFAULT_WEIGHTS || {};
+                    }
+                    try { await window.BotElements.resolveIds(); } catch (e) {}
+                    elementalOk = true;
+                }
+
                 // Assign colors and indices to players BEFORE flipping game_room.status
                 // to 'playing'. The status flip fires the game_room Realtime subscription
                 // immediately — including on the HOST'S OWN tab, which races its own direct
@@ -1626,12 +1615,21 @@
                     const assignedIndex = shuffledIndices[i];
                     const assignedColor = colorRankOrder[assignedIndex];
 
+                    const update = { player_index: assignedIndex, color: assignedColor };
+
+                    if (elementalOk && window.isBotUsername?.(player.username)) {
+                        const el = window.BotElements.COLOR_ELEMENT[assignedColor];
+                        if (el) {
+                            update.username = `${window.BOT_USERNAME_PREFIX || '🤖'} ${window.BotElements.NAMES[el]}`;
+                            update.bot_weights = window.BotElements.elementalOverlay(elementalBase, el);
+                            const rowId = window.BotElements.idFor(el);
+                            if (rowId != null) update.bot_source_id = rowId;
+                        }
+                    }
+
                     const { error: assignError } = await supabase
                         .from('players')
-                        .update({
-                            player_index: assignedIndex,
-                            color: assignedColor
-                        })
+                        .update(update)
                         .eq('id', player.id);
 
                     if (assignError) {

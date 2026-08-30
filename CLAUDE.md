@@ -61,6 +61,7 @@ Order matters — later scripts depend on earlier ones.
 7. sounds.js               ← window.SoundSystem — SFX + login music
 8. joytone-bridge.js       ← window.JoytoneBridge — adaptive music via hidden joytone/ iframe (Shift+J+T popup)
 9. game-core.js            ← SpellSystem, placeTile, revealTile, addAP, movement. Also the REAL home of TILE_SIZE/STONE_TYPES/PLAYER_COLORS/etc. (config.js is dead — see above)
+9b. bot-elements.js        ← window.BotElements — the five fixed elemental bots: colour→element map, names, per-element weight "lean" overlays, runtime id resolution. No BotSystem dep at load. Must precede gamification-ui.js + lobby.js.
 10. effects-system.js      ← window.effectsSystem — sprite/particle visual effect definitions (fire, etc.), no game logic
 11. game-ui.js             ← HUD, drag-drop handlers, panel toggles, scroll deck UI
 12. scroll-panels.js       ← window.ScrollPanelSystem — shared floating-panel chrome (Hand/Active/Common/Game Log/Opponent Status/Elemental Stones)
@@ -141,7 +142,8 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `user_profiles` | gamification.js | XP, gold, level, stats |
 | `user_activities` | gamification.js | Activity log for rewards |
 | `badges` | gamification-ui.js | Badge ownership |
-| `bot_champion_weights` | bot.js, game-ui.js | Trained bot weight tables — append-only submission log; `win_rate` generated column ranks them. Best one auto-applied on load (bot.js), Start Training submits to it when logged in (game-ui.js). Not `game_state`/`shop_items` — those exist but are unused (0 rows). |
+| `bot_champion_weights` | bot.js, game-ui.js | THE single shared bot brain — append-only submission log; `win_rate` generated column ranks them. Best one auto-applied on load (bot.js); the auth-bar "Train Bot" button (hillclimb) submits + pays 25 gold on a confirmed win (game-ui.js `runHillClimbTraining`). |
+| `deployed_bots` | bot-elements.js, lobby.js, gamification-ui.js | Now holds exactly FIVE system-owned rows (`owner IS NULL`) = the elemental bots (`sql/elemental-bots-seed.sql`). Nicknames = Terran Sentinel / Tidewarden / Emberkin / Galewalker / The Void Knight. Client READ-only (public SELECT); ids resolved by nickname at runtime. `ladder.bot_id` FKs here. **Dormant / unused now:** `captured_bots`, `void_knight`, `user_profiles.capture_stones` — the personal Bot Tycoon economy (Shop/Stable/capture) was removed. |
 
 ---
 
