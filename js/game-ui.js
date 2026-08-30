@@ -5597,11 +5597,11 @@ document.getElementById('undo-move').onclick = function() {
                 // proportional-not-literal-game-count caveat applies).
                 if (state._public) {
                     makeChoiceRow('Depth:', [
-                        { value: 1, text: 'Quick', title: 'One climbing round — a few minutes. Often correctly finds no improvement; run it again or go deeper.' },
-                        { value: 5, text: 'Standard', title: 'Five climbing rounds — the usual setting. Tens of minutes.' },
-                        { value: 20, text: 'Deep', title: 'Twenty climbing rounds — best odds of a real improvement, but long. Leave the tab open.' },
+                        { value: 1, text: 'Quick', title: 'A short climb — usually under ~15 minutes. Often finds no improvement; run it again or go deeper.' },
+                        { value: 5, text: 'Standard', title: 'A medium climb — roughly 30–60 minutes. Better odds of a real improvement.' },
+                        { value: 20, text: 'Deep', title: 'A long climb — a couple of hours. Best odds; leave the tab open and watch the corner popup.' },
                     ], () => state.generations, (v) => { state.generations = v; },
-                        'How many climbing rounds to run. Each round plays 6 challengers × 30 games against the current champion. More rounds = better odds of beating it, but longer. You can Stop any time; a partial run never makes the bot worse.');
+                        'How hard to search for a better bot. It plays training games in your browser tab against the current champion, then a final test across 2–5 player tables. Deeper = better odds of beating it, but longer. You can Stop any time from the corner popup; a partial run never makes the bot worse.');
                 } else {
                     makeChoiceRow('Repeat:',
                         [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
@@ -5672,8 +5672,11 @@ document.getElementById('undo-move').onclick = function() {
                 // generations (see bot-arena.js's newMember()/elites), so the
                 // roster can show "same bot survived" vs "freshly bred" from
                 // one generation to the next instead of just bare numbers.
+                // Hidden entirely in public mode (hill-climb only — no population).
                 const insightRow = document.createElement('div');
-                insightRow.style.cssText = 'display:flex;gap:14px;flex-wrap:wrap;';
+                insightRow.style.cssText = state._public
+                    ? 'display:none;'
+                    : 'display:flex;gap:14px;flex-wrap:wrap;';
                 body.appendChild(insightRow);
 
                 const rosterCol = document.createElement('div');
@@ -5868,22 +5871,47 @@ document.getElementById('undo-move').onclick = function() {
                     startBtn.textContent = 'Training…';
                     resetInsights();
                     renderRoster();
+                    // Public mode: collapse to the corner progress popup right
+                    // away — the modal's own body has nothing extra to show for
+                    // a hill-climb run (the roster is evolve-only). Re-arm the
+                    // public flag so the popup's "⤢ expand" reopens in public
+                    // mode (cleared again in finally).
+                    if (state._public) {
+                        window._botTrainingPublic = true;
+                        showTrainingPopup({ mode: 'hillclimb', phase: 'training', round: 1, rounds: state.generations, gamesDone: 0, totalGames: 1, startedAt: Date.now(), roundHistory: [] });
+                        overlay.remove();
+                    }
                     try {
                         // Public "Train Bot" is hill-climb-only by definition.
                         if (state._public) state.method = 'hillclimb';
                         if (state.method === 'hillclimb') {
-                            const preset = { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, confirmSizes: [2, 3, 4, 5], gamesPerSize: 5 };
+                            // Public Depth presets scale the whole run so the
+                            // times in the tooltips are honest; the hermit panel
+                            // still uses its own full-size lambda/G.
+                            const PUBLIC = {
+                                1:  { rounds: 1, lambda: 3, gamesPerChallenge: 8,  gamesPerSize: 3 },
+                                5:  { rounds: 3, lambda: 4, gamesPerChallenge: 16, gamesPerSize: 4 },
+                                20: { rounds: 8, lambda: 6, gamesPerChallenge: 24, gamesPerSize: 5 },
+                            };
+                            const p = state._public
+                                ? (PUBLIC[state.generations] || PUBLIC[5])
+                                : { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, gamesPerSize: 5 };
+                            const preset = { ...p, confirmSizes: [2, 3, 4, 5] };
                             const { improved, record, promotions, rewarded, submitFailed } = await runHillClimbTraining(preset, renderProgress, {
                                 visual: state.watchable, noisyAnchor: state.noisyAnchor,
                             });
                             progressText.style.display = 'none';
-                            updateStatus(improved
+                            const msg = improved
                                 ? (submitFailed
                                     ? `Your bot beat the champion ${record} — but the submission failed, so no reward and the champion is unchanged.`
                                     : rewarded
-                                        ? `Your bot beat the champion ${record} in the confirmation match! Submitted for everyone — +25 gold.`
+                                        ? `Your bot beat the champion ${record} — submitted for everyone, +25 gold!`
                                         : `Your bot beat the champion ${record} — new weights applied. (Log in to submit it for everyone and earn gold.)`)
-                                : `Hill Climb finished (${promotions} promotion(s) this run) but did not beat the champion by enough (${record}) — nothing was changed.`);
+                                : `Training done — the result didn't beat the champion by enough (${record}), so nothing changed. Try again or go deeper.`;
+                            updateStatus(msg);
+                            // On the main page there's no #status HUD — the gami
+                            // toast is the only visible result feedback there.
+                            if (!rewarded) window.gami?.notify(msg, 0, 'gold');
                         } else {
                             const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10, gamesPerSize: 4 };
                             const { improved, record } = await runWeightTraining(preset, renderProgress, {
@@ -5899,11 +5927,13 @@ document.getElementById('undo-move').onclick = function() {
                         console.error('Bot training failed:', err);
                         progressText.style.display = 'none';
                         updateStatus(`Bot training failed — ${err.message || 'see console'}`);
+                        window.gami?.notify(`Bot training couldn't run — ${err.message || 'see console'}`, 0, 'gold');
                     } finally {
                         startBtnRef.disabled = false;
                         startBtn.disabled = false;
                         startBtn.textContent = 'Start Training';
                         hideTrainingPopup();
+                        window._botTrainingPublic = null; // run over — a fresh open goes through _gami_openTrainBot
                     }
                 };
 
