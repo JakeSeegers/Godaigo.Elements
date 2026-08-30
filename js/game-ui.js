@@ -5573,13 +5573,18 @@ document.getElementById('undo-move').onclick = function() {
                     ], () => state.method, (v) => { state.method = v; if (v === 'hillclimb') state.n = 2; playersRow.repaint(); });
                 }
 
-                const playersRow = makeChoiceRow('Players:',
-                    [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })).concat([
-                        { value: 'all', text: 'All', title: 'Generalist: train across arenas of every size (2–5 players) and confirm the champion across every size too. Best for real lobbies, which can be 2–5 players.' },
-                    ]),
-                    () => state.n, (v) => { state.n = v; },
-                    'How many bots play each training game. "All" trains across mixed 2–5-player arenas and confirms the champion at every size. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game. Fixed at 2 for Hill Climb, which has no population/nPlayers concept.',
-                    () => state.method === 'hillclimb');
+                // Public "Train Bot" is always 2-player hill-climb (the final
+                // gate already tests 2–5 tables on its own) — no Players choice.
+                let playersRow = { repaint() {} };
+                if (!state._public) {
+                    playersRow = makeChoiceRow('Players:',
+                        [2, 3, 4, 5].map(n => ({ value: n, text: String(n) })).concat([
+                            { value: 'all', text: 'All', title: 'Generalist: train across arenas of every size (2–5 players) and confirm the champion across every size too. Best for real lobbies, which can be 2–5 players.' },
+                        ]),
+                        () => state.n, (v) => { state.n = v; },
+                        'How many bots play each training game. "All" trains across mixed 2–5-player arenas and confirms the champion at every size. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game. Fixed at 2 for Hill Climb, which has no population/nPlayers concept.',
+                        () => state.method === 'hillclimb');
+                }
 
                 makeChoiceRow('Speed:', [
                     { value: true, text: 'Watchable', title: 'Normal pacing — watch the board play out' },
