@@ -4357,18 +4357,32 @@ document.getElementById('undo-move').onclick = function() {
             const improved = !!confirm.improved && result.promotions > 0;
             const record = confirm.record || `${confirm.champWins}-${confirm.baseWins}`;
 
-            let rewarded = false;
-            let submitFailed = false;
+            // DEGREE OF SUCCESS (reward tier): the champion's win share across
+            // the whole 2–5-player confirm field. A brain equal to the current
+            // champion wins ~0.32 of decided games here (the average fair seat
+            // share across sizes 2–5, since it's outnumbered by baselines at
+            // the big tables), so the tier bars sit well above that.
+            const cw = confirm.champWins || 0, bw = confirm.baseWins || 0;
+            const champShare = (cw + bw) ? cw / (cw + bw) : 0;
+            let tier = null, tierGold = 0;
             if (improved) {
-                // Beat the shared champion — apply locally, submit the new
-                // champion for everyone, and (only if that INSERT succeeds)
-                // pay the trainer 25 gold. No daily cap: each new champion is
-                // harder to beat, so this rate-limits itself.
+                if (champShare >= 0.55)      { tier = 'dominant'; tierGold = 60; }
+                else if (champShare >= 0.42) { tier = 'solid';    tierGold = 40; }
+                else                         { tier = 'marginal'; tierGold = 25; }
+            }
+
+            let uid = null;
+            try { const { data } = await supabase.auth.getSession(); uid = data?.session?.user?.id || null; } catch (e) {}
+
+            let rewarded = false, submitFailed = false, attemptGold = 0;
+
+            if (improved) {
+                // Beat the shared champion — apply locally and submit the new
+                // champion for everyone. The tier gold below is only paid if
+                // that INSERT lands.
                 window.BotArena.applyWeights(result.champion);
-                try {
-                    const { data } = await supabase.auth.getSession();
-                    const uid = data?.session?.user?.id || null;
-                    if (uid) {
+                if (uid) {
+                    try {
                         const { error } = await supabase.from('bot_champion_weights').insert({
                             weights: result.champion,
                             confirm_wins: confirm.aWins,
@@ -4376,21 +4390,10 @@ document.getElementById('undo-move').onclick = function() {
                             confirm_draws: confirm.draws,
                             created_by: uid,
                         });
-                        if (error) {
-                            submitFailed = true;
-                            console.warn('Could not submit champion:', error);
-                        } else {
-                            try {
-                                await supabase.rpc('award_gold', {
-                                    p_user_id: uid, p_gold_amount: 25,
-                                    p_description: 'Trained the community bot (beat the champion)',
-                                });
-                                window.gami?.notify('You improved the community bot!', 25, 'gold');
-                                rewarded = true;
-                            } catch (e) { console.warn('training gold failed (continuing):', e); }
-                        }
-                    }
-                } catch (e) { console.warn('Could not submit champion to Supabase (continuing):', e); }
+                        if (error) { submitFailed = true; console.warn('Could not submit champion:', error); }
+                        else rewarded = true;
+                    } catch (e) { console.warn('champion submit failed (continuing):', e); }
+                }
             } else {
                 window.BotArena.applyWeights(baselineWeights);
                 try {
@@ -4398,7 +4401,32 @@ document.getElementById('undo-move').onclick = function() {
                     else localStorage.setItem('godaigo_bot_weights', baselineStored);
                 } catch (e) {}
             }
-            return { improved, record, promotions: result.promotions, rewarded, submitFailed };
+
+            // Attempt bonus: 10 gold for completing a run (win or not), once
+            // per calendar day — same last-day-string pattern as the daily
+            // login bonus. The tier gold above is uncapped (each new champion
+            // is harder to beat, so it rate-limits itself).
+            if (uid) {
+                try {
+                    const today = new Date().toDateString();
+                    const { data: prof } = await supabase.from('user_profiles').select('stats').eq('user_id', uid).single();
+                    const stats = (prof && prof.stats) || {};
+                    if (stats.last_train_bonus_day !== today) {
+                        await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: 10, p_description: 'Bot training — daily attempt bonus' });
+                        await supabase.from('user_profiles').update({ stats: { ...stats, last_train_bonus_day: today } }).eq('user_id', uid);
+                        attemptGold = 10;
+                    }
+                } catch (e) { console.warn('attempt bonus failed (continuing):', e); }
+            }
+
+            if (rewarded && tierGold) {
+                try {
+                    await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: tierGold, p_description: `Bot training — beat the champion (${tier})` });
+                } catch (e) { console.warn('tier gold failed (continuing):', e); rewarded = false; }
+            }
+
+            const totalGold = attemptGold + (rewarded ? tierGold : 0);
+            return { improved, record, tier, tierGold, promotions: result.promotions, rewarded, submitFailed, attemptGold, totalGold };
         }
 
         // ─── Persistent training-status popup ───────────────────────────────
@@ -5501,7 +5529,7 @@ document.getElementById('undo-move').onclick = function() {
 
                 if (state._public) {
                     const publicBanner = document.createElement('div');
-                    publicBanner.textContent = 'Training the community bot — the shared brain behind the five elemental bots. A confirmed improvement over the current champion is submitted for everyone and pays 25 gold. Nothing changes if it doesn\'t beat the champion.';
+                    publicBanner.textContent = 'Training the community bot — the shared brain behind the five elemental bots. 10 gold for finishing a run (once a day). If the result beats the current champion across 2–5 player tables it\'s submitted for everyone and pays 25 / 40 / 60 gold by how decisively it won. Nothing changes if it doesn\'t beat the champion.';
                     publicBanner.style.cssText = 'font-size:11px;color:#c9a6ff;background:#221a33;border:1px solid #5a3f8a;border-radius:5px;padding:6px 10px;';
                     body.appendChild(publicBanner);
                 }
@@ -5897,21 +5925,27 @@ document.getElementById('undo-move').onclick = function() {
                                 ? (PUBLIC[state.generations] || PUBLIC[5])
                                 : { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, gamesPerSize: 5 };
                             const preset = { ...p, confirmSizes: [2, 3, 4, 5] };
-                            const { improved, record, promotions, rewarded, submitFailed } = await runHillClimbTraining(preset, renderProgress, {
+                            const { improved, record, tier, tierGold, promotions, rewarded, submitFailed, attemptGold, totalGold } = await runHillClimbTraining(preset, renderProgress, {
                                 visual: state.watchable, noisyAnchor: state.noisyAnchor,
                             });
                             progressText.style.display = 'none';
-                            const msg = improved
-                                ? (submitFailed
-                                    ? `Your bot beat the champion ${record} — but the submission failed, so no reward and the champion is unchanged.`
-                                    : rewarded
-                                        ? `Your bot beat the champion ${record} — submitted for everyone, +25 gold!`
-                                        : `Your bot beat the champion ${record} — new weights applied. (Log in to submit it for everyone and earn gold.)`)
-                                : `Training done — the result didn't beat the champion by enough (${record}), so nothing changed. Try again or go deeper.`;
+                            const bonusTail = attemptGold ? ` (+${attemptGold} daily attempt bonus)` : '';
+                            let msg;
+                            if (record === 'stopped') {
+                                msg = 'Training stopped — the result was discarded, the champion is unchanged.';
+                            } else if (improved && rewarded) {
+                                msg = `Your bot beat the champion — ${tier} win, ${record} across 2–5 player tables. Submitted for everyone. +${totalGold} gold${attemptGold ? ` (${tierGold} + ${attemptGold} daily)` : ''}.`;
+                            } else if (improved && submitFailed) {
+                                msg = `Your bot beat the champion ${record}, but the submission failed — champion unchanged, no win reward.${bonusTail}`;
+                            } else if (improved) {
+                                msg = `Your bot beat the champion ${record} — new weights applied locally. Log in to submit it for everyone and earn gold.`;
+                            } else {
+                                msg = `Training done — didn't beat the champion by enough (${record}), so nothing changed.${attemptGold ? ` +${attemptGold} gold for the attempt.` : ' Try again or go deeper.'}`;
+                            }
                             updateStatus(msg);
-                            // On the main page there's no #status HUD — the gami
-                            // toast is the only visible result feedback there.
-                            if (!rewarded) window.gami?.notify(msg, 0, 'gold');
+                            // Main page has no #status HUD — the toast is the
+                            // only visible result feedback there.
+                            window.gami?.notify(msg, totalGold || 0, 'gold');
                         } else {
                             const preset = { generations: state.generations, gamesPerPair: 1, popSize: 6, confirmGames: 10, gamesPerSize: 4 };
                             const { improved, record } = await runWeightTraining(preset, renderProgress, {
