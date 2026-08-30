@@ -4556,6 +4556,18 @@
 
             updateTileClasses();
 
+            // A re-placed REVEALED elemental tile (Telekinesis move, or a
+            // snap-back from an invalid Telekinesis drag) is rebuilt here
+            // without its element-texture overlay — placeTile only adds
+            // overlays for face-down ('unflipped') and player tiles; the
+            // shrine texture is otherwise only ever added by revealTile().
+            // Rebuild all tile overlays so the moved tile keeps its art.
+            if (!flipped && shrineType && shrineType !== 'player'
+                    && forcedTileId !== null && forcedTileId !== undefined
+                    && typeof window.refreshAllTileOverlays === 'function') {
+                window.refreshAllTileOverlays();
+            }
+
             // Place player marker on player tile
             if (isPlayerTile) {
                 // Create new player pawn at this tile's position.
