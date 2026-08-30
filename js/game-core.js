@@ -4250,14 +4250,23 @@
 
         // Check if any player is standing on a tile (by tile id)
         function tileHasPlayersById(tileId) {
+            return playerCountOnTileById(tileId) > 0;
+        }
+
+        // How many player pawns are standing on this tile. Telekinesis now
+        // allows moving a tile with ONE player (carried along + recentered,
+        // same as Shifting Sands); 2+ still blocks it.
+        function playerCountOnTileById(tileId) {
             const tile = placedTiles.find(t => t.id === tileId);
-            if (!tile || typeof playerPositions === 'undefined') return false;
+            if (!tile || typeof playerPositions === 'undefined') return 0;
             const tileRadius = TILE_SIZE * 4;
-            return playerPositions.some(pos => {
-                if (!pos) return false;
+            let n = 0;
+            playerPositions.forEach(pos => {
+                if (!pos) return;
                 const dist = Math.sqrt(Math.pow(pos.x - tile.x, 2) + Math.pow(pos.y - tile.y, 2));
-                return dist < tileRadius;
+                if (dist < tileRadius) n++;
             });
+            return n;
         }
 
         // Bridge check: would removing this tile leave any of its neighbors with 0 neighbors?
@@ -4477,9 +4486,10 @@
                     return;
                 }
 
-                // During Telekinesis, also block tiles that have players on them or are bridges
+                // During Telekinesis, block tiles with 2+ players (one player
+                // is carried along, Shifting-Sands style) or that would strand a neighbor
                 const tkActive = window.telekinesisState && window.telekinesisState.active;
-                const tkBlockPlayer = tkActive && tileHasPlayersById(tileId);
+                const tkBlockPlayer = tkActive && playerCountOnTileById(tileId) >= 2;
                 const tkBlockBridge = tkActive && tileIsBridge(tileId);
 
                 if (e.button === 0 && !tileHasStones(tileId) && !tkBlockPlayer && !tkBlockBridge && !isPanning && !isDraggingStone && !isDraggingPlayer) {
@@ -4489,8 +4499,8 @@
                     startTileDrag(tileId, e);
                 } else {
                     if (tkBlockPlayer) {
-                        console.log(`   ✗ Cannot drag: tile has a player on it`);
-                        updateStatus('Cannot move a tile with a player on it!');
+                        console.log(`   ✗ Cannot drag: tile has 2+ players on it`);
+                        updateStatus('Cannot move a tile with more than one player on it!');
                     } else if (tkBlockBridge) {
                         console.log(`   ✗ Cannot drag: removing tile would strand a neighbor`);
                         updateStatus('Cannot move this tile — it would strand an adjacent tile!');
@@ -4509,9 +4519,9 @@
                 // Only allow dragging if tileMoveMode is enabled
                 if (!tileMoveMode) return;
                 if (tileHasStones(tileId) || isPanning || isDraggingStone || isDraggingPlayer) return;
-                // During Telekinesis, block tiles that have players on them or are bridges
+                // During Telekinesis, block tiles with 2+ players or that would strand a neighbor
                 if (window.telekinesisState && window.telekinesisState.active) {
-                    if (tileHasPlayersById(tileId) || tileIsBridge(tileId)) return;
+                    if (playerCountOnTileById(tileId) >= 2 || tileIsBridge(tileId)) return;
                 }
 
                 if (e.touches && e.touches.length === 1) {
@@ -4934,6 +4944,10 @@
 
             tileGroup.addEventListener('mousedown', (e) => {
                 if (!tileMoveMode) return;
+                // During Telekinesis: 2+ players or a strand-causing move blocks the pickup
+                if (window.telekinesisState && window.telekinesisState.active) {
+                    if (playerCountOnTileById(tileId) >= 2 || tileIsBridge(tileId)) return;
+                }
                 if (e.button === 0 && !tileHasStones(tileId) && !isPanning && !isDraggingStone) {
                     e.stopPropagation();
                     e.preventDefault();
@@ -5095,6 +5109,10 @@
 
             tileGroup.addEventListener('mousedown', (e) => {
                 if (!tileMoveMode) return;
+                // During Telekinesis: 2+ players or a strand-causing move blocks the pickup
+                if (window.telekinesisState && window.telekinesisState.active) {
+                    if (playerCountOnTileById(tileId) >= 2 || tileIsBridge(tileId)) return;
+                }
                 if (e.button === 0 && !tileHasStones(tileId) && !isPanning && !isDraggingStone) {
                     e.stopPropagation();
                     e.preventDefault();

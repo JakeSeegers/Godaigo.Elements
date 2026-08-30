@@ -1214,6 +1214,29 @@
             });
         });
 
+        // Telekinesis carries a lone player along with the tile it moves
+        // (same rule as Shifting Sands — see isTileEligibleForShiftingSands).
+        // Call right AFTER placeTile() has moved the tile: `oldPos` is where
+        // the tile (and its occupant) were, `newPos` is where it landed.
+        // Returns the movedPlayers list for the telekinesis-move broadcast.
+        function carryPlayersOnTelekinesisMove(oldPos, newPos) {
+            const moved = [];
+            if (!oldPos || !newPos || typeof playerPositions === 'undefined') return moved;
+            const R = (typeof TILE_SIZE !== 'undefined' ? TILE_SIZE * 4 : 80);
+            playerPositions.forEach((pos, idx) => {
+                if (!pos) return;
+                const d = Math.hypot(pos.x - oldPos.x, pos.y - oldPos.y);
+                if (d >= R) return;
+                if (typeof window.movePlayerVisually === 'function') window.movePlayerVisually(idx, newPos.x, newPos.y, 0);
+                else { pos.x = newPos.x; pos.y = newPos.y; if (pos.element) pos.element.setAttribute('transform', `translate(${newPos.x}, ${newPos.y})`); }
+                moved.push({ playerIndex: idx, newX: newPos.x, newY: newPos.y });
+            });
+            if (moved.length && typeof window.checkWinCondition === 'function') {
+                try { window.checkWinCondition(moved[0].playerIndex, { announce: false }); } catch (e) {}
+            }
+            return moved;
+        }
+
         document.addEventListener('mouseup', (e) => {
             if (e.button === 0) leftButtonDown = false;
             if (e.button === 2) rightButtonDown = false;
@@ -1259,13 +1282,17 @@
                     // TELEKINESIS: track moves
                     const tkState = window.telekinesisState;
                     if (tkState && tkState.active && draggedTileId !== null && draggedTileOriginalPos) {
+                        // Carry a lone player on the moved tile along with it.
+                        const tkMovedPlayers = carryPlayersOnTelekinesisMove(
+                            { x: draggedTileOriginalPos.x, y: draggedTileOriginalPos.y },
+                            { x: snapResult.x, y: snapResult.y });
                         // Broadcast in multiplayer
                         if (isMultiplayer && typeof broadcastGameAction === 'function') {
                             broadcastGameAction('telekinesis-move', {
                                 tileId: draggedTileId,
                                 newPos: { x: snapResult.x, y: snapResult.y },
                                 oldPos: { x: draggedTileOriginalPos.x, y: draggedTileOriginalPos.y },
-                                movedPlayers: []
+                                movedPlayers: tkMovedPlayers
                             });
                         }
 
@@ -1945,12 +1972,15 @@
                         // TELEKINESIS: track moves and move players with tiles (touch handler)
                         const tkStateTouch = window.telekinesisState;
                         if (tkStateTouch && tkStateTouch.active && draggedTileId !== null && draggedTileOriginalPos) {
+                            const tkMovedPlayersTouch = carryPlayersOnTelekinesisMove(
+                                { x: draggedTileOriginalPos.x, y: draggedTileOriginalPos.y },
+                                { x: snapResult.x, y: snapResult.y });
                             if (isMultiplayer && typeof broadcastGameAction === 'function') {
                                 broadcastGameAction('telekinesis-move', {
                                     tileId: draggedTileId,
                                     newPos: { x: snapResult.x, y: snapResult.y },
                                     oldPos: { x: draggedTileOriginalPos.x, y: draggedTileOriginalPos.y },
-                                    movedPlayers: []
+                                    movedPlayers: tkMovedPlayersTouch
                                 });
                             }
                             window.SoundSystem?.play('placetile');

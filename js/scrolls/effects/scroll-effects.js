@@ -1219,7 +1219,7 @@ const ScrollEffects = {
 
         VOID_SCROLL_2: {
             name: 'Telekinesis',
-            description: 'Move a tile unoccupied by stones or players. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.',
+            description: 'Move a tile that has no stones on it. If one player is on the tile, they move to its center. Cannot move a tile with multiple players on it. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.',
             isCounter: false,
             priority: 2,
             execute(casterIndex, context, system) {
@@ -1694,8 +1694,12 @@ const ScrollEffects = {
             document.head.appendChild(style);
         }
 
-        // Highlight all eligible (draggable) tiles in wind yellow so it's clear which can move
-        const eligibleTiles = this.getEligibleTilesForSwap();
+        // Highlight all eligible (draggable) tiles in wind yellow so it's clear
+        // which can move. Telekinesis uses the Shifting-Sands rule now: no
+        // stones, and at most one player (that player is carried along and
+        // recentered on the tile). Bridge tiles still highlight but error on
+        // pickup (strand rule enforced at drag-start, same as before).
+        const eligibleTiles = this.getEligibleTilesForShiftingSands();
         eligibleTiles.forEach(tile => {
             this.highlightTile(tile, '#e8c84d', 3);
             if (tile.element) tile.element.style.animation = 'telekinesisFloat 2.2s ease-in-out infinite';
