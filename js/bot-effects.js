@@ -340,7 +340,7 @@
     }
 
     // ----------------------------------------------------------------
-    // Scholar's Insight (VOID_SCROLL_2) — modal, two steps: pick a deck,
+    // Scholar's Insight (VOID_SCROLL_4) — modal, two steps: pick a deck,
     // then pick a scroll card from it. Disambiguated from the deck picker
     // by the modal's own heading text (only Scholar's Insight uses this ID).
     // ----------------------------------------------------------------
@@ -738,7 +738,7 @@
     }
 
     // ----------------------------------------------------------------
-    // Telekinesis (VOID_SCROLL_4) — drag-only with no handleXClick()/
+    // Telekinesis (VOID_SCROLL_2) — drag-only with no handleXClick()/
     // onComplete() API like everything else here; the real move logic
     // lives inline in game-ui.js's mouseup handler, coupled to raw
     // drag-state module variables (draggedTileId/Rotation/Flipped/

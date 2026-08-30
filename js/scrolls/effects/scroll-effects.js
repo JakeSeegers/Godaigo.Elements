@@ -1217,11 +1217,11 @@ const ScrollEffects = {
             }
         },
 
-        VOID_SCROLL_4: {
+        VOID_SCROLL_2: {
             name: 'Telekinesis',
             description: 'Move a tile unoccupied by stones or players. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.',
             isCounter: false,
-            priority: 4,
+            priority: 2,
             execute(casterIndex, context, system) {
                 console.log(`🔮 Telekinesis activated by player ${casterIndex}`);
 
@@ -1232,7 +1232,7 @@ const ScrollEffects = {
                 }
 
                 system.enterTelekinesisMode(casterIndex, {
-                    scrollName: context?.scrollName || 'VOID_SCROLL_4',
+                    scrollName: context?.scrollName || 'VOID_SCROLL_2',
                     effectName: 'Telekinesis',
                     spell: context?.spell
                 });
@@ -1245,11 +1245,11 @@ const ScrollEffects = {
             }
         },
 
-        VOID_SCROLL_2: {
+        VOID_SCROLL_4: {
             name: "Scholar's Insight",
             description: 'Search through a Scroll Deck and add a scroll of your choice to your hand. Shuffle that deck afterwards.',
             isCounter: false,
-            priority: 2,
+            priority: 4,
             execute(casterIndex, context, system) {
                 console.log(`🔮 Scholar's Insight activated by player ${casterIndex}`);
 
@@ -1260,7 +1260,7 @@ const ScrollEffects = {
                 }
 
                 system.enterScholarsInsightMode(casterIndex, {
-                    scrollName: context?.scrollName || 'VOID_SCROLL_2',
+                    scrollName: context?.scrollName || 'VOID_SCROLL_4',
                     effectName: "Scholar's Insight",
                     spell: context?.spell
                 });

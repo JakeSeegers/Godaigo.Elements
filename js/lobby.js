@@ -2784,7 +2784,7 @@
                 if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
             });
 
-            // Listen for Scholar's Insight (Void II) — remote player searched a deck
+            // Listen for Scholar's Insight (Void IV) — remote player searched a deck
             gameChannel.on('broadcast', { event: 'scholars-insight' }, ({ payload }) => {
                 console.log("📄 Received Scholar's Insight:", payload);
                 const { playerIndex, element, scrollName } = payload;
