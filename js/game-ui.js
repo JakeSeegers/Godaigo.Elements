@@ -4402,20 +4402,13 @@ document.getElementById('undo-move').onclick = function() {
                 } catch (e) {}
             }
 
-            // Attempt bonus: 10 gold for completing a run (win or not), once
-            // per calendar day — same last-day-string pattern as the daily
-            // login bonus. The tier gold above is uncapped (each new champion
-            // is harder to beat, so it rate-limits itself).
+            // Attempt bonus: 10 gold for completing a run, win or not — we
+            // WANT people running these. No cap; a run is ~10+ minutes of
+            // tab-blocking work, which is the natural limiter.
             if (uid) {
                 try {
-                    const today = new Date().toDateString();
-                    const { data: prof } = await supabase.from('user_profiles').select('stats').eq('user_id', uid).single();
-                    const stats = (prof && prof.stats) || {};
-                    if (stats.last_train_bonus_day !== today) {
-                        await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: 10, p_description: 'Bot training — daily attempt bonus' });
-                        await supabase.from('user_profiles').update({ stats: { ...stats, last_train_bonus_day: today } }).eq('user_id', uid);
-                        attemptGold = 10;
-                    }
+                    await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: 10, p_description: 'Bot training — completed a run' });
+                    attemptGold = 10;
                 } catch (e) { console.warn('attempt bonus failed (continuing):', e); }
             }
 
@@ -5529,7 +5522,7 @@ document.getElementById('undo-move').onclick = function() {
 
                 if (state._public) {
                     const publicBanner = document.createElement('div');
-                    publicBanner.textContent = 'Training the community bot — the shared brain behind the five elemental bots. 10 gold for finishing a run (once a day). If the result beats the current champion across 2–5 player tables it\'s submitted for everyone and pays 25 / 40 / 60 gold by how decisively it won. Nothing changes if it doesn\'t beat the champion.';
+                    publicBanner.textContent = 'Training the community bot — the shared brain behind the five elemental bots. 10 gold every time you finish a run. If the result beats the current champion across 2–5 player tables it\'s submitted for everyone and pays 25 / 40 / 60 more by how decisively it won. Nothing changes if it doesn\'t beat the champion.';
                     publicBanner.style.cssText = 'font-size:11px;color:#c9a6ff;background:#221a33;border:1px solid #5a3f8a;border-radius:5px;padding:6px 10px;';
                     body.appendChild(publicBanner);
                 }
@@ -5929,18 +5922,18 @@ document.getElementById('undo-move').onclick = function() {
                                 visual: state.watchable, noisyAnchor: state.noisyAnchor,
                             });
                             progressText.style.display = 'none';
-                            const bonusTail = attemptGold ? ` (+${attemptGold} daily attempt bonus)` : '';
+                            const bonusTail = attemptGold ? ` (+${attemptGold} for the run)` : '';
                             let msg;
                             if (record === 'stopped') {
                                 msg = 'Training stopped — the result was discarded, the champion is unchanged.';
                             } else if (improved && rewarded) {
-                                msg = `Your bot beat the champion — ${tier} win, ${record} across 2–5 player tables. Submitted for everyone. +${totalGold} gold${attemptGold ? ` (${tierGold} + ${attemptGold} daily)` : ''}.`;
+                                msg = `Your bot beat the champion — ${tier} win, ${record} across 2–5 player tables. Submitted for everyone. +${totalGold} gold${attemptGold ? ` (${tierGold} + ${attemptGold} for the run)` : ''}.`;
                             } else if (improved && submitFailed) {
                                 msg = `Your bot beat the champion ${record}, but the submission failed — champion unchanged, no win reward.${bonusTail}`;
                             } else if (improved) {
                                 msg = `Your bot beat the champion ${record} — new weights applied locally. Log in to submit it for everyone and earn gold.`;
                             } else {
-                                msg = `Training done — didn't beat the champion by enough (${record}), so nothing changed.${attemptGold ? ` +${attemptGold} gold for the attempt.` : ' Try again or go deeper.'}`;
+                                msg = `Training done — didn't beat the champion by enough (${record}), so nothing changed.${attemptGold ? ` +${attemptGold} gold for the run — thanks for helping. Try again or go deeper.` : ' Try again or go deeper.'}`;
                             }
                             updateStatus(msg);
                             // Main page has no #status HUD — the toast is the
