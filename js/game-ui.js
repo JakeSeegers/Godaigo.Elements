@@ -4237,9 +4237,16 @@ document.getElementById('undo-move').onclick = function() {
         //      trials are noisy) — always run a separate confirm series
         //      against the true baseline before ever applying/submitting.
         // hillClimb() itself is 2-player only (champion vs. mutant
-        // challengers) — no nPlayers concept, unlike evolve().
+        // challengers) — no nPlayers concept, unlike evolve(). The FINAL
+        // confirmation, though, is played across every real table size
+        // (2–5 players) via confirmAcrossSizes(): a promoted result is only
+        // applied/submitted/rewarded if it's a better GENERALIST, not just a
+        // better duelist. Keeps the reliable 2-player trainer while making
+        // sure what ships to the shared champion holds up at big tables too.
         async function runHillClimbTraining(preset, onProgress, opts = {}) {
-            const { rounds, lambda, gamesPerChallenge, confirmGames, confirmMargin } = preset;
+            const { rounds, lambda, gamesPerChallenge } = preset;
+            const confirmSizes = (preset.confirmSizes && preset.confirmSizes.length) ? preset.confirmSizes : [2, 3, 4, 5];
+            const gamesPerSize = preset.gamesPerSize ?? 5;
             const visual = !!opts.visual;
 
             // Single anchor: the ONE shared community bot brain
@@ -4275,7 +4282,7 @@ document.getElementById('undo-move').onclick = function() {
             try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
             await leaveOnlineGameIfAny();
 
-            const totalGames = rounds * lambda * gamesPerChallenge + confirmGames;
+            const totalGames = rounds * lambda * gamesPerChallenge + confirmSizes.length * gamesPerSize;
             const startedAt = Date.now();
             let gamesDone = 0, lastRound = 0, lastInfo = null;
             let lastChallenger = 0, totalChallengers = lambda;
@@ -4335,15 +4342,20 @@ document.getElementById('undo-move').onclick = function() {
                 return { improved: false, record: 'stopped', promotions: result.promotions };
             }
 
-            lastGameNum = 0; lastGameTotal = confirmGames;
+            lastGameNum = 0; lastGameTotal = confirmSizes.length * gamesPerSize;
             report('confirming');
-            const confirm = await window.BotArena.run(
-                result.champion, baseline, confirmGames, Date.now() % 100000,
-                { visual, onGame: (gameNum, gameTotal) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; report('confirming'); } });
-            const decided = confirm.aWins + confirm.bWins;
-            const winRate = decided ? confirm.aWins / decided : 0;
-            const improved = decided >= Math.ceil(confirmGames / 2) && winRate >= confirmMargin;
-            const record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
+            // Multi-size gate: pit the climbed champion against a FIELD of the
+            // current champion at 2/3/4/5 players, rotating seats. "Improved"
+            // = better total seat-fitness across every size (a better
+            // generalist). Also require that hillClimb() actually promoted
+            // something in the 2-player climb — otherwise result.champion IS
+            // the baseline and any "improvement" here is pure noise.
+            const confirm = await window.BotArena.confirmAcrossSizes(
+                result.champion, baseline,
+                { sizes: confirmSizes, gamesPerSize, visual, seed: Date.now() % 100000,
+                  onGame: (gameNum, gameTotal) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; report('confirming'); } });
+            const improved = !!confirm.improved && result.promotions > 0;
+            const record = confirm.record || `${confirm.champWins}-${confirm.baseWins}`;
 
             let rewarded = false;
             let submitFailed = false;
@@ -4492,7 +4504,7 @@ document.getElementById('undo-move').onclick = function() {
             if (p.mode === 'hillclimb') {
                 scenarioLine = 'Hill Climb — champion-anchored';
                 phaseLine = p.phase === 'confirming'
-                    ? 'Confirming climbed champion vs. online baseline'
+                    ? 'Confirming across 2–5 player tables'
                     : `Round ${p.round}/${p.rounds}`;
                 // The explicit "what is literally happening right now" line —
                 // which challenger (or, once confirming, the climbed champion),
@@ -4500,11 +4512,11 @@ document.getElementById('undo-move').onclick = function() {
                 // side THIS game. Colors come pre-computed from the current
                 // game's parity (runHillClimbTraining's sideColors()) — sides
                 // alternate every game, never a fixed assignment.
-                if (p.gameNum) {
-                    const [aLabel, bLabel] = p.phase === 'confirming'
-                        ? ['Climbed champion', 'Online champion']
-                        : [`Challenger ${p.challenger}/${p.totalChallengers}`, 'Champion'];
-                    matchupHtml = `${swatch(p.sideAHex)} ${aLabel} <span style="color:#666;">vs</span> ${swatch(p.sideBHex)} ${bLabel}`
+                if (p.gameNum && p.phase === 'confirming') {
+                    matchupHtml = `Climbed champion vs. a field of the current champion`
+                        + `<span style="color:#777;margin-left:auto;">game ${p.gameNum}/${p.gameTotal}</span>`;
+                } else if (p.gameNum) {
+                    matchupHtml = `${swatch(p.sideAHex)} Challenger ${p.challenger}/${p.totalChallengers} <span style="color:#666;">vs</span> ${swatch(p.sideBHex)} Champion`
                         + `<span style="color:#777;margin-left:auto;">game ${p.gameNum}/${p.gameTotal}</span>`;
                 } else if (p.challenger) {
                     matchupHtml = `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion <span style="color:#777;">— starting…</span>`;
@@ -5615,10 +5627,10 @@ document.getElementById('undo-move').onclick = function() {
                     const elapsedS = (Date.now() - p.startedAt) / 1000;
                     let genLine;
                     if (p.mode === 'hillclimb') {
-                        genLine = p.phase === 'confirming' ? 'confirming vs. online baseline' : `round ${p.round}/${p.rounds}`;
+                        genLine = p.phase === 'confirming' ? 'confirming across 2–5 player tables' : `round ${p.round}/${p.rounds}`;
                         if (p.gameNum) {
                             genLine += p.phase === 'confirming'
-                                ? ` — climbed champ (${p.sideAColor}) vs. online champ (${p.sideBColor}), game ${p.gameNum}/${p.gameTotal}`
+                                ? ` — game ${p.gameNum}/${p.gameTotal}`
                                 : ` — challenger ${p.challenger}/${p.totalChallengers} (${p.sideAColor}) vs. champion (${p.sideBColor}), game ${p.gameNum}/${p.gameTotal}`;
                         }
                     } else {
@@ -5855,7 +5867,7 @@ document.getElementById('undo-move').onclick = function() {
                         // Public "Train Bot" is hill-climb-only by definition.
                         if (state._public) state.method = 'hillclimb';
                         if (state.method === 'hillclimb') {
-                            const preset = { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, confirmGames: 20, confirmMargin: 0.55 };
+                            const preset = { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, confirmSizes: [2, 3, 4, 5], gamesPerSize: 5 };
                             const { improved, record, promotions, rewarded, submitFailed } = await runHillClimbTraining(preset, renderProgress, {
                                 visual: state.watchable, noisyAnchor: state.noisyAnchor,
                             });
