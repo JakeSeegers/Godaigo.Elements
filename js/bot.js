@@ -645,6 +645,20 @@
     // ----------------------------------------------------------------
     function scoreAction(a, snap, ctx) {
         const self = me(snap);
+        // Optional feature-trace channel (js/bot-imitation.js's hermit-only
+        // learn-from-my-play feature): when ctx.trace is an object, contrib()
+        // ALSO records the raw feature value under its weight's key, on top
+        // of returning the normal weighted contribution. This can never
+        // change the returned score — contrib(k, f) === WEIGHTS[k] * f
+        // exactly, tracing or not — so every existing caller (greedy pick,
+        // search, arena) is unaffected. Only wired into the two branches
+        // bot-imitation.js currently compares (endTurn, discardScroll); see
+        // that file's header for why the rest are deliberately left untraced.
+        const trace = ctx && ctx.trace;
+        function contrib(key, feature) {
+            if (trace) trace[key] = (trace[key] || 0) + feature;
+            return WEIGHTS[key] * feature;
+        }
         switch (a.type) {
 
             case 'placeTile': {
@@ -763,24 +777,24 @@
             }
 
             case 'endTurn': {
-                let s = WEIGHTS.endTurnBase;
+                let s = contrib('endTurnBase', 1);
                 if (ctx.onShrine) {
-                    s += WEIGHTS.endTurnOnShrine
+                    s += contrib('endTurnOnShrine', 1)
                        + shrineValue(snap, ctx.onShrine.shrineType);
                 }
-                if (snap.turn.ap <= 1) s += WEIGHTS.endTurnLowAp;
+                if (snap.turn.ap <= 1) s += contrib('endTurnLowAp', 1);
                 return s;
             }
 
             case 'discardScroll': {
                 const el = scrollElement(a.scroll);
                 const def = window.SCROLL_DEFINITIONS?.[a.scroll];
-                let s = WEIGHTS.discardBase + WEIGHTS.discardLevel * (def?.level || 0);
-                if (a.voluntary) s += WEIGHTS.discardVoluntary;
-                if (def?.level === 1) s += WEIGHTS.discardResponseOnly;
+                let s = contrib('discardBase', 1) + contrib('discardLevel', def?.level || 0);
+                if (a.voluntary) s += contrib('discardVoluntary', 1);
+                if (def?.level === 1) s += contrib('discardResponseOnly', 1);
                 if (el && ELEMENTS.includes(el)) {
-                    if (self.activated.includes(el)) s += WEIGHTS.discardActivated;
-                    if ((snap.sourcePool[el] || 0) <= 0) s += WEIGHTS.discardDeadElement;
+                    if (self.activated.includes(el)) s += contrib('discardActivated', 1);
+                    if ((snap.sourcePool[el] || 0) <= 0) s += contrib('discardDeadElement', 1);
                 }
                 // Never discard the scroll the current build plan needs
                 const activePlan = mem(snap.turn.activePlayerIndex).plan;
@@ -1469,15 +1483,26 @@
     // turns into a real path in ctx.fixationPath for scoreAction()'s move
     // case. Omitted on every other call site, same as ctx.homePath being
     // conditional on all-5-activated.
-    function rankActions(fixationTarget) {
+    // opts.withTrace (default false): attach each candidate's raw feature
+    // trace (see scoreAction()'s contrib()) alongside its score — used only
+    // by js/bot-imitation.js's hermit-only learn-from-my-play feature. Every
+    // existing call site omits opts, so this can never change default
+    // behavior; it only adds a `.trace` object to each returned entry.
+    function rankActions(fixationTarget, opts) {
+        const withTrace = !!(opts && opts.withTrace);
         const snap = window.BotState.snapshot();
         const legal = window.BotState.legalActions();
+        const scoreWithOptionalTrace = (a, ctx) => {
+            const trace = withTrace ? {} : null;
+            const score = scoreAction(a, snap, trace ? { ...ctx, trace } : ctx);
+            return withTrace ? { action: a, score, trace } : { action: a, score };
+        };
 
         // Placement phase: no pawn placed yet, so me(snap) is null — the only
         // legal actions are placeTile candidates, scored without needing self.
         if (legal.length && legal[0].type === 'placeTile') {
             return legal
-                .map(a => ({ action: a, score: scoreAction(a, snap, {}) }))
+                .map(a => scoreWithOptionalTrace(a, {}))
                 .sort((x, y) => y.score - x.score);
         }
 
@@ -1532,7 +1557,7 @@
         ctx.tac = legal.some(a => a.type === 'placeStone') ? tacticalContext(snap) : null;
 
         return legal
-            .map(a => ({ action: a, score: scoreAction(a, snap, ctx) }))
+            .map(a => scoreWithOptionalTrace(a, ctx))
             .sort((x, y) => y.score - x.score);
     }
 

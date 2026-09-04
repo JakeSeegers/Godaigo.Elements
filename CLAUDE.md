@@ -93,6 +93,13 @@ Order matters — later scripts depend on earlier ones.
 27. action-log.js          ← window.ActionLog — in-memory record of every meaningful action this session
                              (human AND bot); record()/onRecord() feed both the hidden dev cheat-panel's
                              "Download Action Log" button and game-log-ui.js's player-facing panel
+27b. bot-imitation.js      ← window.BotImitation — HERMIT-ONLY, opt-in "learn from my play" imitation
+                             learning (docs/void-knight.md). Watches ActionLog.onRecord() during the
+                             hermit's own turns in a real online game that has a bot in it; compares
+                             endTurn/discardScroll decisions to bot.js's own ranking (rankActions()'s
+                             opts.withTrace) and nudges a personal localStorage weight table
+                             (godaigo_bot_weights_mine) perceptron-style. Never touches the shared
+                             community champion.
 28. game-log-ui.js         ← Player-facing readable "Game Log" panel (#game-log-panel, left side), built
                              from ActionLog.onRecord() — colour-coded, collapses movement, never shows
                              discardScroll or anything else that would reveal another player's hand

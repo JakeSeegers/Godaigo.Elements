@@ -106,9 +106,39 @@ section-label), not one-off styled cards.
 1. **Stable self-training (target + gauntlet)**: pick one bot to improve,
    your other bots form the opponent field — needs the CLI hall-of-fame
    gauntlet ported into in-browser `hillClimb()`.
-2. **Practice vs my bot**: a normal local game against a specific deployed
-   bot's weights. Prerequisite for the later imitation-learning idea
-   (perceptron-style weight nudges from human action logs).
 3. **Challenge trust**: results are client-run and self-reported. Cheap v2:
    commit-then-play (register seed+weights before the series) + random
    deterministic replay audits. Noted, deliberately not in v1.
+
+## Imitation learning — DONE, hermit-only (`js/bot-imitation.js`)
+
+Item 2 above ("Practice vs my bot" → imitation learning) shipped, but built
+against a REAL online game that already has a bot in it (the personal-bot
+economy this file describes was itself later removed — see CLAUDE.md's
+"Dormant / unused now" note — so there's no per-player Stable to launch a
+local practice game FROM any more; the existing "🤖 Add Bot" real-multiplayer
+flow already does what a new local mode would have, so no new mode was
+built). Gated behind `window.isHermit()` (developer account only) AND an
+explicit opt-in toggle in the hermit menu, off by default.
+
+While watching your own turns in such a game: `bot.js`'s `scoreAction()`
+gained an optional, purely additive trace channel (`ctx.trace` /
+`contrib()`) wired into exactly two branches — `endTurn` and
+`discardScroll` — and `rankActions()` gained an optional `opts.withTrace`
+that attaches each candidate's trace without changing any existing call
+site's behavior (verified via a same-seed headless regression: identical
+win/draw/fitness/turn-count numbers before and after). Every real decision
+still counts toward "did the human agree with the bot's overall top pick"
+(catches "the bot wanted to end the turn but I kept playing" either
+direction), but only endTurn/discardScroll get a feature-level nudge —
+move/cast/placeStone comparisons are a natural follow-up, deliberately left
+out of v1 to keep the first pass small and low-risk against the heavily-tuned
+scorer. Nudges land in a personal weight table
+(`localStorage['godaigo_bot_weights_mine']`), seeded from whatever the bot
+currently plays with — the shared community champion is never touched by
+this. A small on-screen badge (bottom-left, hermit-only) shows a live tally.
+
+**Not yet verified end-to-end** (same honesty standard as the response-scroll
+broadcast note elsewhere in this doc set): needs a real online smoke test —
+a hermit account, a real room with a bot added, the toggle on, a few turns
+played, and the badge's counts sanity-checked.
