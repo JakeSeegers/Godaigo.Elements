@@ -99,7 +99,7 @@ const WIND_SCROLL_EFFECTS = {
     2: { name: 'Respirate', description: 'Draw 2 wind stones. At end of turn, return all your wind stones to the source pools.' },
     3: { name: 'Breath of Power', description: 'Until end of turn, you may move adjacent stones to another adjacent empty space.' },
     4: { name: 'Take Flight', description: "Select a player to teleport. If you target yourself, you choose where to land; if you target another player, they choose instead. Destination must be an unoccupied hex on a tile occupied by another player. Cannot target player tiles. Cancels if no valid destination exists." },
-    5: { name: 'Freedom', description: 'Until your next turn, the centers of elemental shrines act as catacomb tiles (only applies to you).' }
+    5: { name: 'Freedom', description: 'Until your next turn, you may teleport for free between elemental shrine centers, the same way a catacomb tile lets you teleport (only applies to you).' }
 };
 
 // Catacomb scroll effect definitions (keyed by scroll number, e.g. 1 = CATACOMB_SCROLL_1)

@@ -397,7 +397,9 @@
 
         // ── teleport: standing on a revealed catacomb shrine (or ANY
         // elemental shrine while Freedom is active) lets the player jump to
-        // any OTHER revealed catacomb-like shrine centre, free (0 AP).
+        // any revealed ELEMENTAL shrine centre, free (0 AP). EXPLORATION:
+        // catacomb tiles no longer link to each other — the destination is
+        // always an elemental shrine, never another catacomb tile.
         // Mirrors game-ui.js's catacombEligibility()/updateCatacombIndicators()
         // exactly — same eligibility rule, same destination filter — just
         // enumerated as a candidate list instead of clickable DOM circles.
@@ -410,9 +412,10 @@
             // FIRST, same DO-NOT-LIST rule move/placeStone candidates follow.
             const isCatacombLike = (t) => !!t && !t.flipped &&
                 (t.shrineType === 'catacomb' || (freedomActive && elementalTypes.includes(t.shrineType)));
+            const isElementalCenter = (t) => !!t && !t.flipped && elementalTypes.includes(t.shrineType);
             if (currentShrine && isCatacombLike(currentShrine)) {
                 for (const t of placedTiles) {
-                    if (!isCatacombLike(t)) continue;
+                    if (!isElementalCenter(t)) continue;
                     if (Math.hypot(t.x - currentShrine.x, t.y - currentShrine.y) < HEX_NEAR) continue; // same shrine
                     if (placedStones.some(s => Math.hypot(s.x - t.x, s.y - t.y) < HEX_NEAR)) continue; // stone blocks it
                     if (playerPositions.some(p => p && Math.hypot(p.x - t.x, p.y - t.y) < HEX_NEAR)) continue; // occupied

@@ -140,20 +140,22 @@
                                  // scripted override): a genuinely better action found by the
                                  // same scoring pass — a cast, a richer shrine — can still win.
 
-        // catacomb/Freedom teleport — free (0 AP) hop between revealed
-        // catacomb-like shrine centres (see bot-state.js's legalActions()).
+        // catacomb/Freedom teleport — free (0 AP) hop from a catacomb tile
+        // (or, under Freedom, any elemental shrine) to an ELEMENTAL shrine
+        // centre (see bot-state.js's legalActions()). EXPLORATION: catacomb
+        // tiles no longer link to each other, so every teleport destination
+        // is now an elemental shrine.
         teleportBase:        5,  // small flat nudge so an otherwise-neutral hop still
                                  // gets picked over doing nothing when nothing else applies —
                                  // it's free, so there's rarely a reason to decline one
-        teleportShrineValue: 1.0, // × shrineValue(destination) when the destination is an
-                                 // ELEMENTAL shrine (Freedom-only case — plain catacomb
-                                 // destinations have no shrineValue). No path-cost division
-                                 // like moveShrineValue gets — the hop is free, so the full
-                                 // value applies, not a discounted one
+        teleportShrineValue: 1.0, // × shrineValue(destination) — every teleport destination
+                                 // is now an elemental shrine, so this always applies. No
+                                 // path-cost division like moveShrineValue gets — the hop is
+                                 // free, so the full value applies, not a discounted one
         teleportRevisitPenalty: -60, // ÷ steps-since-visited (same recency decay as
                                  // moveRevisitPenalty) on the teleport DESTINATION. Teleports
                                  // are free, so with no memory of them a bot can ping-pong
-                                 // between two catacomb shrines forever at zero cost — and
+                                 // between two shrines forever at zero cost — and
                                  // teleportBase is only +5, so even the decayed penalty makes
                                  // "hop straight back to where I just was" strongly negative
                                  // while a hop somewhere NEW keeps the full base nudge.
@@ -751,7 +753,7 @@
                     s += WEIGHTS.teleportShrineValue * shrineValue(snap, a.shrineType);
                 }
                 // Same anti-oscillation memory movement uses — without it,
-                // free hops between two catacombs ping-pong forever.
+                // free hops between two shrines ping-pong forever.
                 s += revisitPenalty(ctx.recentPositions || [], a, WEIGHTS.teleportRevisitPenalty);
                 return s;
             }

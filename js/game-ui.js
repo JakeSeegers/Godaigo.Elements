@@ -2524,6 +2524,8 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 && typeof spellSystem.scrollEffects.hasFreedomActive === 'function'
                 && spellSystem.scrollEffects.hasFreedomActive(myPlayerIndex);
             const elementalTypes = ['earth', 'water', 'fire', 'wind', 'void'];
+            // Departure eligibility: standing on a catacomb tile, or on any
+            // elemental shrine while Freedom is active.
             const isCatacombLike = (tile) => {
                 if (!tile) return false;
                 if (tile.shrineType === 'catacomb') return true;
@@ -2531,8 +2533,10 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 return false;
             };
             if (!currentShrine || !isCatacombLike(currentShrine)) return [];
+            // Destinations are always elemental shrine centers — see
+            // catacombEligibility()'s isElementalCenter comment.
             return placedTiles.filter(tile => {
-                if (!isCatacombLike(tile)) return false;
+                if (!elementalTypes.includes(tile.shrineType)) return false;
                 if (tile.flipped) return false;
                 if (Math.abs(tile.x - currentShrine.x) <= 5 && Math.abs(tile.y - currentShrine.y) <= 5) return false;
                 const hasStone = placedStones.some(s => Math.sqrt(Math.pow(s.x - tile.x, 2) + Math.pow(s.y - tile.y, 2)) < 5);
@@ -2586,7 +2590,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 return;
             }
             placePlayer(shrine.x, shrine.y);
-            updateStatus('Teleported to another catacomb shrine!');
+            updateStatus(`Teleported to the ${shrine.shrineType} shrine!`);
             if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
                 const playerIndex = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null) ? myPlayerIndex : activePlayerIndex;
                 broadcastGameAction('catacomb-teleport', { playerIndex, x: shrine.x, y: shrine.y });
@@ -3662,19 +3666,26 @@ document.getElementById('undo-move').onclick = function() {
         // Both call sites below recompute fresh off CURRENT myPlayerIndex so
         // a stale indicator can't be exploited after control passes on.
         function catacombEligibility() {
-            if (!playerPosition) return { shrine: null, isCatacombLike: () => false };
+            if (!playerPosition) return { shrine: null, isCatacombLike: () => false, isElementalCenter: () => false };
             const shrine = findShrineAtPosition(playerPosition.x, playerPosition.y);
             const freedomActive = spellSystem && spellSystem.scrollEffects
                 && typeof spellSystem.scrollEffects.hasFreedomActive === 'function'
                 && spellSystem.scrollEffects.hasFreedomActive(myPlayerIndex);
             const elementalTypes = ['earth', 'water', 'fire', 'wind', 'void'];
+            // Departure eligibility: standing on a catacomb tile, or on any
+            // elemental shrine while Freedom is active.
             const isCatacombLike = (tile) => {
                 if (!tile) return false;
                 if (tile.shrineType === 'catacomb') return true;
                 if (freedomActive && elementalTypes.includes(tile.shrineType)) return true;
                 return false;
             };
-            return { shrine, isCatacombLike };
+            // Destination filter — EXPLORATION: catacomb tiles no longer link
+            // to each other. Every teleport (whether departing from a
+            // catacomb tile or, via Freedom, from any elemental shrine) now
+            // lands only on the center of an elemental shrine.
+            const isElementalCenter = (tile) => !!tile && elementalTypes.includes(tile.shrineType);
+            return { shrine, isCatacombLike, isElementalCenter };
         }
 
         function updateCatacombIndicators() {
@@ -3685,14 +3696,14 @@ document.getElementById('undo-move').onclick = function() {
             // Only allow teleport indicators on the active player's turn
             if (typeof canTakeAction === 'function' && !canTakeAction()) return;
 
-            const { shrine: currentShrine, isCatacombLike } = catacombEligibility();
+            const { shrine: currentShrine, isCatacombLike, isElementalCenter } = catacombEligibility();
             if (!currentShrine || !isCatacombLike(currentShrine)) return;
 
-            // Find all other REVEALED catacomb shrines (not flipped) WITHOUT stones on them
+            // Find all REVEALED elemental shrine centers (not flipped) WITHOUT stones on them
             const otherCatacombs = placedTiles.filter(tile => {
-                if (!isCatacombLike(tile)) return false;
-                if (tile.flipped) return false; // Only revealed catacombs
-                if (Math.abs(tile.x - currentShrine.x) <= 5 && Math.abs(tile.y - currentShrine.y) <= 5) return false; // Same catacomb
+                if (!isElementalCenter(tile)) return false;
+                if (tile.flipped) return false; // Only revealed shrines
+                if (Math.abs(tile.x - currentShrine.x) <= 5 && Math.abs(tile.y - currentShrine.y) <= 5) return false; // Same shrine
                 
                 // Check if there's a stone at the catacomb center
                 const hasStone = placedStones.some(stone => {
@@ -3712,8 +3723,8 @@ document.getElementById('undo-move').onclick = function() {
 
             if (otherCatacombs.length === 0) {
                 const message = currentShrine.shrineType === 'catacomb'
-                    ? 'Standing on catacomb shrine, but no valid destinations! (must be revealed and have no stone on center)'
-                    : 'Freedom active, but no valid shrine destinations! (must be revealed and have no stone on center)';
+                    ? 'Standing on catacomb shrine, but no valid elemental destinations! (must be revealed and have no stone on center)'
+                    : 'Freedom active, but no valid elemental destinations! (must be revealed and have no stone on center)';
                 updateStatus(message);
                 return;
             }
@@ -3782,7 +3793,7 @@ document.getElementById('undo-move').onclick = function() {
 
                     // Teleport player (no AP cost)
                     placePlayer(shrine.x, shrine.y);
-                    updateStatus(`Teleported to another catacomb shrine!`);
+                    updateStatus(`Teleported to the ${shrine.shrineType} shrine!`);
 
                     // Broadcast teleport so other clients stay in sync
                     if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
@@ -3805,8 +3816,8 @@ document.getElementById('undo-move').onclick = function() {
             });
 
             const prompt = currentShrine.shrineType === 'catacomb'
-                ? 'Standing on catacomb shrine. Click another revealed catacomb to teleport (free).'
-                : 'Freedom active. Click another revealed shrine to teleport (free).';
+                ? 'Standing on catacomb shrine. Click a revealed elemental shrine center to teleport (free).'
+                : 'Freedom active. Click a revealed elemental shrine center to teleport (free).';
             updateStatus(prompt);
         }
 

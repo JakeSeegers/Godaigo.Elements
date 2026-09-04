@@ -1070,7 +1070,8 @@ const ScrollEffects = {
         },
         /**
          * Wind Scroll III - Freedom
-         * Until your next turn, elemental shrine centers act as catacomb tiles.
+         * Until your next turn, you may teleport for free between elemental
+         * shrine centers, the same way a catacomb tile lets you teleport.
          */
         WIND_SCROLL_3: {
             name: 'Breath of Power',
@@ -1134,7 +1135,7 @@ const ScrollEffects = {
          */
         WIND_SCROLL_5: {
             name: 'Freedom',
-            description: 'Until your next turn, the centers of elemental shrines act as catacomb tiles (only applies to you).',
+            description: 'Until your next turn, you may teleport for free between elemental shrine centers, the same way a catacomb tile lets you teleport (only applies to you).',
             isCounter: false,
             priority: 5,
 
@@ -1150,7 +1151,7 @@ const ScrollEffects = {
                     updateCatacombIndicators();
                 }
 
-                const message = 'Freedom: elemental shrine centers act as catacomb tiles until your next turn.';
+                const message = 'Freedom: teleport freely between elemental shrine centers until your next turn.';
                 updateStatus(message);
 
                 return {
