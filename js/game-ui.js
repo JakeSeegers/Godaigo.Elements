@@ -7065,6 +7065,14 @@ document.getElementById('undo-move').onclick = function() {
                 menu.appendChild(makeItem('Joytone Sequencer (Shift+J+T)', () => {
                     if (window.JoytoneBridge && typeof window.JoytoneBridge.togglePopup === 'function') window.JoytoneBridge.togglePopup();
                 }));
+                const imitationLabel = () =>
+                    `🧠 Learn from my play: ${(window.BotImitation && window.BotImitation.isEnabled()) ? 'ON' : 'OFF'}`;
+                const imitationItem = makeItem(imitationLabel(), () => {
+                    if (!window.BotImitation) return;
+                    window.BotImitation.setEnabled(!window.BotImitation.isEnabled());
+                    imitationItem.textContent = imitationLabel();
+                });
+                menu.appendChild(imitationItem);
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
                 menu.appendChild(makeItem('Board Rotation', openBoardRotationPanel));
                 menu.appendChild(makeItem('Board Angle', openBoardTiltPanel));
