@@ -138,7 +138,15 @@ scorer. Nudges land in a personal weight table
 currently plays with — the shared community champion is never touched by
 this. A small on-screen badge (bottom-left, hermit-only) shows a live tally.
 
-**Not yet verified end-to-end** (same honesty standard as the response-scroll
-broadcast note elsewhere in this doc set): needs a real online smoke test —
-a hermit account, a real room with a bot added, the toggle on, a few turns
-played, and the badge's counts sanity-checked.
+**Verified end-to-end (2026-09-05):** a real online smoke test confirmed the
+badge/toggle/logging actually fire during a real game. That same test
+surfaced a real design flaw, fixed the same session: "should I have ended my
+turn" was being judged against a single frozen snapshot, which flagged
+"disagreement" on nearly every turn the player kept playing toward a
+multi-step plan the snapshot can't see — teaching a systematic bias, not a
+real instinct mismatch. Fixed by judging that specific question with
+`searchPick()` (already-existing lookahead, several actions ahead within
+the turn) instead of the raw one-step ranking; the feature-level trace used
+for the actual weight nudge still comes from the immediate scoreAction()
+trace of that position — only the "was continuing actually the better type
+of move" verdict is now plan-aware.

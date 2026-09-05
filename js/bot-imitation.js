@@ -5,10 +5,20 @@
 // against real online games instead of a new local mode — see
 // planning/current.md for the session that scoped this down): while a real
 // online game with a bot in it is running, watch the HUMAN's own decisions.
-// At each of the two decision types below, compare what the bot's own
-// scoring would have picked to what the human actually did; when they
-// disagree, nudge a PERSONAL weight table (never the shared community
-// champion) a small step toward the human's choice, perceptron-style.
+// At each of the two decision types below, compare what the bot would have
+// picked to what the human actually did; when they disagree, nudge a
+// PERSONAL weight table (never the shared community champion) a small step
+// toward the human's choice, perceptron-style.
+//
+// "What the bot would have picked" is deliberately PLAN-AWARE (searchPick(),
+// several actions of lookahead within the turn), not a single frozen
+// snapshot — a raw one-step comparison flagged "disagreement" on nearly
+// every turn a human kept playing toward a multi-step goal the snapshot
+// can't see, which would just teach a systematic bias ("never value ending
+// the turn") rather than a real instinct mismatch. The feature-level trace
+// used for the actual weight nudge still comes from the immediate scoring
+// of that position (scoreAction()'s contrib()) — only the "was the human's
+// choice actually the best type of move" verdict is plan-aware.
 //
 // v1 SCOPE — deliberately two decision types, not all of them:
 //   - endTurn (should I have stopped here, or kept playing?)
@@ -150,8 +160,32 @@
             }
             const endTurnEntry = ranked.find(r => r.action.type === 'endTurn');
             const discardEntries = ranked.filter(r => r.action.type === 'discardScroll');
+
+            // "Should I have ended my turn here?" needs a PLAN-AWARE opinion,
+            // not a single frozen snapshot — a human rarely decides that
+            // turn-by-turn in isolation, they're usually mid-plan (see the
+            // 2026-09 session note this file was built in: comparing against
+            // the raw one-step ranking flagged "disagreement" on almost
+            // every turn a player kept playing toward a multi-step goal,
+            // which just teaches a systematic bias, not a real instinct
+            // mismatch). searchPick() already exists for exactly this — it
+            // looks several actions ahead within the turn (minimum 1 ply,
+            // deeper if the live Bot Brain search depth is turned up) instead
+            // of judging one position cold. Falls back to the plain greedy
+            // top pick if search is unavailable for any reason — better a
+            // cruder signal than none.
+            let bestType = ranked[0].action.type;
+            if (typeof bs.searchPick === 'function') {
+                try {
+                    const searched = bs.searchPick();
+                    if (searched && searched.action) bestType = searched.action.type;
+                } catch (e) {
+                    console.warn('⚠️ [Imitation] searchPick() failed, falling back to greedy top pick:', e);
+                }
+            }
+
             pending = {
-                bestType: ranked[0].action.type,
+                bestType,
                 endTurnTrace: endTurnEntry ? endTurnEntry.trace : null,
                 topDiscardScroll: discardEntries.length ? discardEntries[0].action.scroll : null,
                 discardTraceByScroll: Object.fromEntries(discardEntries.map(r => [r.action.scroll, r.trace])),
