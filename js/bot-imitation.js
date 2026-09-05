@@ -85,14 +85,42 @@
     function resetStats() { stats = { watched: 0, agreed: 0, nudged: 0 }; renderBadge(); }
 
     // ── eligibility: real online game, a bot is actually present, it's my turn ──
-    function eligibleNow() {
-        if (!isEnabled()) return false;
-        if (typeof window.BotArena?.isRunning === 'function' && window.BotArena.isRunning()) return false;
-        if (typeof isMultiplayer === 'undefined' || !isMultiplayer) return false;
-        if (typeof myPlayerIndex === 'undefined' || myPlayerIndex == null) return false;
-        if (typeof activePlayerIndex === 'undefined' || activePlayerIndex !== myPlayerIndex) return false;
-        if (typeof allPlayersData === 'undefined' || !Array.isArray(allPlayersData)) return false;
-        return allPlayersData.some(p => window.isBotUsername && window.isBotUsername(p.username));
+    // Returns {ok, reason} rather than a bare boolean so debugEligibility()
+    // (and the throttled console log below) can say WHICH check failed —
+    // needed because this can't be exercised from this sandbox at all (no
+    // Supabase egress — see file header), so a real online test is the only
+    // way to find a wrong assumption here, and a bare true/false gives no
+    // way to tell one failing gate from another.
+    function checkEligibility() {
+        if (!isEnabled()) return { ok: false, reason: 'not enabled (toggle is off, or not a hermit account)' };
+        if (typeof window.BotArena?.isRunning === 'function' && window.BotArena.isRunning())
+            return { ok: false, reason: 'BotArena self-play is running' };
+        if (typeof isMultiplayer === 'undefined' || !isMultiplayer)
+            return { ok: false, reason: `isMultiplayer is ${typeof isMultiplayer === 'undefined' ? 'undefined' : isMultiplayer}` };
+        if (typeof myPlayerIndex === 'undefined' || myPlayerIndex == null)
+            return { ok: false, reason: `myPlayerIndex is ${typeof myPlayerIndex === 'undefined' ? 'undefined' : myPlayerIndex}` };
+        if (typeof activePlayerIndex === 'undefined' || activePlayerIndex !== myPlayerIndex)
+            return { ok: false, reason: `not my turn (activePlayerIndex=${typeof activePlayerIndex === 'undefined' ? 'undefined' : activePlayerIndex}, myPlayerIndex=${myPlayerIndex})` };
+        if (typeof allPlayersData === 'undefined' || !Array.isArray(allPlayersData))
+            return { ok: false, reason: `allPlayersData is ${typeof allPlayersData === 'undefined' ? 'undefined' : typeof allPlayersData}` };
+        const hasBot = allPlayersData.some(p => window.isBotUsername && window.isBotUsername(p.username));
+        if (!hasBot) return { ok: false, reason: `no bot username among allPlayersData (${allPlayersData.map(p => p.username).join(', ')})` };
+        return { ok: true, reason: 'eligible' };
+    }
+    function eligibleNow() { return checkEligibility().ok; }
+
+    // Throttled diagnostic — logs at most once every 3s, and only when the
+    // reason CHANGES, so it's informative without flooding the console over
+    // a whole game.
+    let lastLoggedReason = null, lastLogAt = 0;
+    function logEligibilityChange() {
+        const { reason } = checkEligibility();
+        const now = Date.now();
+        if (reason !== lastLoggedReason && (now - lastLogAt) > 500) {
+            console.log(`🧠 [Imitation] eligibility: ${reason}`);
+            lastLoggedReason = reason;
+            lastLogAt = now;
+        }
     }
 
     // ── cached "what would the bot do right now", refreshed on a short poll
@@ -110,12 +138,16 @@
         // the one global that actually changes on join (multiplayer-state.js).
         const gid = (typeof currentGameId !== 'undefined') ? currentGameId : null;
         if (gid !== lastSeenGameId) { lastSeenGameId = gid; pending = null; resetStats(); }
+        logEligibilityChange();
         if (!eligibleNow()) { pending = null; return; }
         const bs = window.BotSystem;
         if (!bs || typeof bs.rank !== 'function') { pending = null; return; }
         try {
             const ranked = bs.rank(null, { withTrace: true });
-            if (!ranked || !ranked.length) { pending = null; return; }
+            if (!ranked || !ranked.length) {
+                console.log('🧠 [Imitation] eligible but rank() returned no candidates this tick');
+                pending = null; return;
+            }
             const endTurnEntry = ranked.find(r => r.action.type === 'endTurn');
             const discardEntries = ranked.filter(r => r.action.type === 'discardScroll');
             pending = {
@@ -175,6 +207,7 @@
     function onHumanAction(entry) {
         if (!isEnabled()) return;
         if (typeof myPlayerIndex === 'undefined' || entry.player !== myPlayerIndex) return;
+        console.log(`🧠 [Imitation] your action: ${entry.type}${entry.scroll ? ' (' + entry.scroll + ')' : ''} — had a cached bot pick? ${!!pending}${pending ? ` (bot wanted: ${pending.bestType})` : ''}`);
         if (!pending) return; // nothing cached to compare against — skip, don't guess
         const snapshot = pending;
         pending = null; // this decision is spent; next poll tick builds a fresh one
@@ -236,6 +269,8 @@
         getStats: () => ({ ...stats }),
         getMyWeights: loadMyWeights,
         _refreshPending: refreshPending, // exposed for console/testing only
+        debugEligibility: () => { const r = checkEligibility(); console.log('🧠 [Imitation]', r); return r; },
+        debugPending: () => { console.log('🧠 [Imitation] pending:', pending); return pending; },
     };
     renderBadge();
     console.log('🧠 [Imitation] Loaded — hermit-only, off by default (see hermit menu)');
