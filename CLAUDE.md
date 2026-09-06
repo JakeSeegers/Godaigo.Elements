@@ -97,9 +97,12 @@ Order matters — later scripts depend on earlier ones.
                              learning (docs/void-knight.md). Watches ActionLog.onRecord() during the
                              hermit's own turns in a real online game that has a bot in it; compares
                              endTurn/discardScroll decisions to bot.js's own ranking (rankActions()'s
-                             opts.withTrace) and nudges a personal localStorage weight table
-                             (godaigo_bot_weights_mine) perceptron-style. Never touches the shared
-                             community champion.
+                             opts.withTrace) and nudges a small additive DELTA table (localStorage
+                             godaigo_bot_weight_deltas), never a weight snapshot. lobby.js's
+                             hostStartGame() layers that delta onto every bot's normal (elemental-lean)
+                             base whenever the HOST is the hermit with the toggle on — same bots
+                             already in the room, not a separate one; toggle off = plain base,
+                             unchanged. Never touches the shared community champion itself.
 28. game-log-ui.js         ← Player-facing readable "Game Log" panel (#game-log-panel, left side), built
                              from ActionLog.onRecord() — colour-coded, collapses movement, never shows
                              discardScroll or anything else that would reveal another player's hand

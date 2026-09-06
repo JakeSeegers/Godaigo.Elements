@@ -6,9 +6,20 @@
 // planning/current.md for the session that scoped this down): while a real
 // online game with a bot in it is running, watch the HUMAN's own decisions.
 // At each of the two decision types below, compare what the bot would have
-// picked to what the human actually did; when they disagree, nudge a
-// PERSONAL weight table (never the shared community champion) a small step
-// toward the human's choice, perceptron-style.
+// picked to what the human actually did; when they disagree, nudge a small
+// step toward the human's choice, perceptron-style.
+//
+// DELTA, not a snapshot: what accumulates here is a small additive DELTA per
+// weight key (localStorage, `godaigo_bot_weight_deltas`), never a copy of the
+// base weights themselves. The base (shared community champion + each bot's
+// elemental lean — js/bot-elements.js) stays exactly what it would normally
+// be and keeps tracking live community training; this file only ever adds
+// `applyDeltas(base)` on top of it at the moment a bot's weights are stamped
+// (lobby.js's hostStartGame(), gated on the HOST being the hermit with this
+// toggle on). That's also how it reaches an actual opponent: there's no
+// separate "my bot" seat — every bot already in the room gets the delta
+// layered onto its own normal base whenever the toggle is on, and plays with
+// the normal, un-nudged base the moment it's off (or someone else hosts).
 //
 // "What the bot would have picked" is deliberately PLAN-AWARE (searchPick(),
 // several actions of lookahead within the turn), not a single frozen
@@ -57,7 +68,7 @@
     'use strict';
 
     const ENABLED_KEY = 'godaigo_imitation_learning_enabled';
-    const WEIGHTS_KEY = 'godaigo_bot_weights_mine';
+    const DELTAS_KEY = 'godaigo_bot_weight_deltas';
     const LEARNING_RATE = 0.05;
     const POLL_MS = 300;
 
@@ -76,18 +87,38 @@
     }
     function isEnabled() { return enabled && isHermitUser(); }
 
-    // ── personal weight table — separate from the shared community champion ──
-    function loadMyWeights() {
+    // ── the learned delta — a sparse {weightKey: additiveShift} map, NOT a
+    // full weight table. Starts empty; grows one small nudge at a time. ──
+    function loadDeltas() {
         try {
-            const raw = localStorage.getItem(WEIGHTS_KEY);
+            const raw = localStorage.getItem(DELTAS_KEY);
             if (raw) return JSON.parse(raw);
         } catch (e) { /* ignore */ }
-        // First use: seed from whatever the bot is currently playing with.
-        const bs = window.BotSystem;
-        return { ...((bs && (bs.WEIGHTS || bs.DEFAULT_WEIGHTS)) || {}) };
+        return {};
     }
-    function saveMyWeights(w) {
-        try { localStorage.setItem(WEIGHTS_KEY, JSON.stringify(w)); } catch (e) { /* ignore */ }
+    function saveDeltas(d) {
+        try { localStorage.setItem(DELTAS_KEY, JSON.stringify(d)); } catch (e) { /* ignore */ }
+    }
+    // Only accumulate a delta for a key that's actually a real, numeric
+    // weight — defends against a future trace shape carrying an unexpected
+    // key and quietly polluting the delta table with garbage.
+    function isRealWeightKey(key) {
+        const dw = window.BotSystem?.DEFAULT_WEIGHTS;
+        return !!dw && typeof dw[key] === 'number';
+    }
+    // The actual point of this file: base (whatever a bot would normally
+    // play with — the live community champion, a specific bot's elemental
+    // lean, anything) PLUS the learned delta on top. Called from
+    // lobby.js's hostStartGame() when the host is the hermit with the
+    // toggle on; the base itself is never modified or stored here.
+    function applyDeltas(base) {
+        const d = loadDeltas();
+        const out = { ...(base || {}) };
+        for (const key of Object.keys(d)) {
+            if (typeof out[key] !== 'number') continue; // base doesn't have this key — skip rather than invent it
+            out[key] = +(out[key] + d[key]).toFixed(4);
+        }
+        return out;
     }
 
     // ── session tally, reset each new game — drives the tiny badge ──
@@ -202,37 +233,36 @@
     }
     ensurePolling(); // harmless no-op every tick unless eligibleNow()
 
-    // ── the perceptron-style nudge: push each traced weight a small step
-    // toward whatever made the human's choice look better / the bot's
-    // rejected pick look worse. Skips non-numeric / absent keys defensively
-    // (a weights table missing a newer key shouldn't throw).
+    // ── the perceptron-style nudge: push each traced weight's DELTA a small
+    // step toward whatever made the human's choice look better / the bot's
+    // rejected pick look worse. Never touches any base weight table.
     function nudge(direction, trace) {
         if (!trace) return false;
-        const w = loadMyWeights();
+        const d = loadDeltas();
         let touched = false;
         for (const key of Object.keys(trace)) {
-            if (typeof w[key] !== 'number') continue;
-            w[key] = +(w[key] + direction * LEARNING_RATE * trace[key]).toFixed(4);
+            if (!isRealWeightKey(key)) continue;
+            d[key] = +((d[key] || 0) + direction * LEARNING_RATE * trace[key]).toFixed(4);
             touched = true;
         }
-        if (touched) { saveMyWeights(w); stats.nudged++; renderBadge(); }
+        if (touched) { saveDeltas(d); stats.nudged++; renderBadge(); }
         return touched;
     }
     // Perceptron difference update between two traced candidates: nudge
-    // every key present in EITHER trace by lr*(human[k]-bot[k]).
+    // every key present in EITHER trace's delta by lr*(human[k]-bot[k]).
     function nudgeDiff(humanTrace, botTrace) {
-        const w = loadMyWeights();
+        const d = loadDeltas();
         const keys = new Set([...Object.keys(humanTrace || {}), ...Object.keys(botTrace || {})]);
         let touched = false;
         for (const key of keys) {
-            if (typeof w[key] !== 'number') continue;
+            if (!isRealWeightKey(key)) continue;
             const h = (humanTrace && humanTrace[key]) || 0;
             const b = (botTrace && botTrace[key]) || 0;
             if (h === b) continue;
-            w[key] = +(w[key] + LEARNING_RATE * (h - b)).toFixed(4);
+            d[key] = +((d[key] || 0) + LEARNING_RATE * (h - b)).toFixed(4);
             touched = true;
         }
-        if (touched) { saveMyWeights(w); stats.nudged++; renderBadge(); }
+        if (touched) { saveDeltas(d); stats.nudged++; renderBadge(); }
         return touched;
     }
 
@@ -301,7 +331,9 @@
         isEnabled,
         resetStats,
         getStats: () => ({ ...stats }),
-        getMyWeights: loadMyWeights,
+        getDeltas: loadDeltas,
+        applyDeltas, // (base) => base + learned delta — lobby.js calls this per bot seat
+        resetDeltas: () => { saveDeltas({}); console.log('🧠 [Imitation] deltas cleared'); },
         _refreshPending: refreshPending, // exposed for console/testing only
         debugEligibility: () => { const r = checkEligibility(); console.log('🧠 [Imitation]', r); return r; },
         debugPending: () => { console.log('🧠 [Imitation] pending:', pending); return pending; },

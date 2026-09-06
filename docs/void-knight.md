@@ -133,10 +133,10 @@ still counts toward "did the human agree with the bot's overall top pick"
 direction), but only endTurn/discardScroll get a feature-level nudge —
 move/cast/placeStone comparisons are a natural follow-up, deliberately left
 out of v1 to keep the first pass small and low-risk against the heavily-tuned
-scorer. Nudges land in a personal weight table
-(`localStorage['godaigo_bot_weights_mine']`), seeded from whatever the bot
-currently plays with — the shared community champion is never touched by
-this. A small on-screen badge (bottom-left, hermit-only) shows a live tally.
+scorer. Nudges land in a small additive DELTA table
+(`localStorage['godaigo_bot_weight_deltas']`) — never a copy of the base
+weights, never the shared community champion. A small on-screen badge
+(bottom-left, hermit-only) shows a live tally.
 
 **Verified end-to-end (2026-09-05):** a real online smoke test confirmed the
 badge/toggle/logging actually fire during a real game. That same test
@@ -151,16 +151,21 @@ for the actual weight nudge still comes from the immediate scoreAction()
 trace of that position — only the "was continuing actually the better type
 of move" verdict is now plan-aware.
 
-**"🧠 Add My Bot" (hermit-only lobby button, `js/lobby.js`).** The learned
-personal table was otherwise write-only — nudged after every game, never
-actually faced. This button adds a bot seat stamped with
-`window.BotImitation.getMyWeights()` directly at insert time (a SNAPSHOT of
-whatever's been learned as of right now, not a live link — it won't reflect
-nudges made later in the same game, same "learn between games" scope as the
-rest of v1). `hostStartGame()`'s usual per-seat elemental-lean stamping
-(the thing that names/weights every OTHER bot) explicitly skips any row
-that already carries `bot_weights`, so this survives game start untouched
-and shows up named "🤖 Apprentice" instead of an elemental name. Uses the
+**Closing the loop — applied to the SAME bots you already face, not a
+separate one (revised 2026-09-05).** A first version added a distinct
+"🤖 Apprentice" bot seat holding a snapshot of the learned weights — the
+learned delta was otherwise write-only, nudged after every game but never
+actually faced. Replaced per explicit design feedback: the delta should
+apply to whichever bot(s) are already in the room, automatically, whenever
+the HOST is the hermit with the toggle on — no separate bot, no manual
+step, and the base weights those bots would normally get (community
+champion + elemental lean) are untouched and keep tracking live community
+training. `hostStartGame()`'s existing per-seat elemental-lean stamping
+(the thing that names/weights every bot) now has one extra line: when the
+host is the hermit and `BotImitation.isEnabled()`, it calls
+`window.BotImitation.applyDeltas(update.bot_weights)` on the freshly-computed
+elemental base before writing it. Toggle off, or someone else hosting: that
+line never runs, and bots play the plain base exactly as before. Uses the
 existing `players.bot_weights` column and `bot-driver.js`'s existing
 per-bot-weights mechanism (`docs/bot-tycoon-proposal.md` step 6) — no new
 schema, no changes to how a bot's turn is actually driven.
