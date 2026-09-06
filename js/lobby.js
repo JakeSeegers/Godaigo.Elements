@@ -1636,7 +1636,12 @@
                             if (typeof window.isHermit === 'function' && window.isHermit() &&
                                 window.BotImitation && typeof window.BotImitation.isEnabled === 'function' &&
                                 window.BotImitation.isEnabled()) {
-                                update.bot_weights = window.BotImitation.applyDeltas(update.bot_weights);
+                                const before = update.bot_weights;
+                                update.bot_weights = window.BotImitation.applyDeltas(before);
+                                const delta = window.BotImitation.getDeltas();
+                                const changedKeys = Object.keys(delta).filter(k => typeof before[k] === 'number' && before[k] !== update.bot_weights[k]);
+                                console.log(`🧠 [Imitation] applied your learned delta to ${update.username}'s weights ` +
+                                    `(${changedKeys.length} key(s) changed${changedKeys.length ? ': ' + changedKeys.join(', ') : ''})`);
                             }
                         }
                     }
