@@ -150,3 +150,17 @@ the turn) instead of the raw one-step ranking; the feature-level trace used
 for the actual weight nudge still comes from the immediate scoreAction()
 trace of that position — only the "was continuing actually the better type
 of move" verdict is now plan-aware.
+
+**"🧠 Add My Bot" (hermit-only lobby button, `js/lobby.js`).** The learned
+personal table was otherwise write-only — nudged after every game, never
+actually faced. This button adds a bot seat stamped with
+`window.BotImitation.getMyWeights()` directly at insert time (a SNAPSHOT of
+whatever's been learned as of right now, not a live link — it won't reflect
+nudges made later in the same game, same "learn between games" scope as the
+rest of v1). `hostStartGame()`'s usual per-seat elemental-lean stamping
+(the thing that names/weights every OTHER bot) explicitly skips any row
+that already carries `bot_weights`, so this survives game start untouched
+and shows up named "🤖 Apprentice" instead of an elemental name. Uses the
+existing `players.bot_weights` column and `bot-driver.js`'s existing
+per-bot-weights mechanism (`docs/bot-tycoon-proposal.md` step 6) — no new
+schema, no changes to how a bot's turn is actually driven.

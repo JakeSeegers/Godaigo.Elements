@@ -1404,12 +1404,17 @@
                 const botControls   = document.getElementById('bot-controls');
                 const addBotBtn     = document.getElementById('add-bot-button');
                 const removeBotBtn  = document.getElementById('remove-bot-button');
+                const addMyBotBtn   = document.getElementById('add-my-bot-button');
                 if (botControls && addBotBtn && removeBotBtn) {
                     const botCount = players.filter(p => window.isBotUsername?.(p.username)).length;
                     botControls.style.display = (isHost && (botCount > 0 || totalCount < 5)) ? 'block' : 'none';
                     addBotBtn.style.display = totalCount < 5 ? 'inline-block' : 'none';
                     removeBotBtn.style.display = botCount > 0 ? 'inline-block' : 'none';
                     addBotBtn.textContent = botCount > 0 ? `Add Bot (${botCount})` : 'Add Bot';
+                    if (addMyBotBtn) {
+                        const isDev = (typeof window.isHermit === 'function') && window.isHermit();
+                        addMyBotBtn.style.display = (isDev && totalCount < 5) ? 'block' : 'none';
+                    }
                 }
 
                 // Update status
@@ -1479,6 +1484,48 @@
             }
         }
         window.addBotPlayer = addBotPlayer;
+
+        // HERMIT-ONLY: add a bot seat that plays with the local player's OWN
+        // learned weights (js/bot-imitation.js's "🧠 Learn from my play"
+        // table) instead of the shared elemental-lean champion every other
+        // bot uses. bot_weights is stamped HERE, at insert time, rather than
+        // left null for hostStartGame()'s usual per-seat elemental stamping
+        // to fill in — that loop explicitly skips any row that already has
+        // bot_weights (see the comment there), so this survives game start
+        // untouched. A SNAPSHOT, not a live link: it reflects everything
+        // learned as of right now, not further nudges made mid-game — same
+        // "learn between games, not within one" scope as the rest of v1.
+        async function addMyImitationBot() {
+            if (!isHost || !currentGameId) return;
+            if (typeof window.isHermit !== 'function' || !window.isHermit()) return;
+            if (!window.BotImitation) { alert('Imitation learning is not loaded.'); return; }
+            try {
+                const { data: players, error } = await supabase
+                    .from('players')
+                    .select('id, username')
+                    .eq('game_id', currentGameId);
+                if (error) throw error;
+
+                if ((players || []).length >= 5) { alert('Room is full!'); return; }
+
+                const myWeights = window.BotImitation.getMyWeights();
+                const username = `${window.BOT_USERNAME_PREFIX || '🤖'} Apprentice`;
+
+                await supabase.from('players').insert([{
+                    username,
+                    is_ready: true,
+                    game_id: currentGameId,
+                    bot_weights: myWeights,
+                    bot_source_id: null, // not one of the five elemental bots
+                }]);
+                console.log(`🧠 Apprentice bot added, carrying your current learned weights`);
+                updatePlayerList();
+            } catch (e) {
+                console.error('Add apprentice bot failed:', e);
+                alert('Could not add your bot: ' + e.message);
+            }
+        }
+        window.addMyImitationBot = addMyImitationBot;
 
         async function removeBotPlayer() {
             if (!isHost || !currentGameId) return;
@@ -1617,7 +1664,15 @@
 
                     const update = { player_index: assignedIndex, color: assignedColor };
 
-                    if (elementalOk && window.isBotUsername?.(player.username)) {
+                    // A bot row can already carry its own bot_weights at this
+                    // point — js/bot-imitation.js's hermit-only "🧠 Add My Bot"
+                    // stamps them directly at insert time (see
+                    // addMyImitationBot() below). Never overwrite a row that
+                    // already has weights with the generic elemental overlay;
+                    // the ordinary addBotPlayer() path always inserts
+                    // bot_weights: null, so this can't accidentally skip a
+                    // normal bot.
+                    if (elementalOk && window.isBotUsername?.(player.username) && !player.bot_weights) {
                         const el = window.BotElements.COLOR_ELEMENT[assignedColor];
                         if (el) {
                             update.username = `${window.BOT_USERNAME_PREFIX || '🤖'} ${window.BotElements.NAMES[el]}`;
