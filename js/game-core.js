@@ -7788,6 +7788,14 @@ function clearPlayerPath() {
 
             if (!stone) return { canMove: true, cost: 1 };
 
+            // This function is re-run for every neighbour hex on every
+            // pathfinding sweep — Dijkstra recalculates on each mousemove
+            // while dragging the pawn. Near a stone, that fires the branch
+            // logs below dozens of times a second with nothing actually
+            // happening, so they're throttled (shouldDebugLog, same pattern
+            // used elsewhere in this file) rather than printed every call.
+            const logMoveCost = shouldDebugLog('moveCostChain', 500);
+
             // Mudslide buff: earth and water stones act as wind stones (free movement)
             const mudslideBuff = spellSystem?.scrollEffects?.activeBuffs?.mudslide;
             if (mudslideBuff && mudslideBuff.playerIndex === activePlayerIndex) {
@@ -7795,7 +7803,7 @@ function clearPlayerPath() {
                     // Treat as wind stone — free movement, unless nullified by void
                     const hasVoid = hasAdjacentStoneType(x, y, 'void');
                     if (hasVoid) return { canMove: true, cost: 1 };
-                    console.log(`🌊 Mudslide: ${stone.type} stone at (${x.toFixed(1)}, ${y.toFixed(1)}) acts as wind (free movement)`);
+                    if (logMoveCost) console.log(`🌊 Mudslide: ${stone.type} stone at (${x.toFixed(1)}, ${y.toFixed(1)}) acts as wind (free movement)`);
                     return { canMove: true, cost: 0 };
                 }
             }
@@ -7803,21 +7811,21 @@ function clearPlayerPath() {
             // Handle water stones with chaining
             if (stone.type === 'water') {
                 const chainedAbility = getChainedAbility(x, y);
-                console.log(`💧 Water at (${x.toFixed(1)}, ${y.toFixed(1)}) has chained ability: ${chainedAbility || 'none'}`);
+                if (logMoveCost) console.log(`💧 Water at (${x.toFixed(1)}, ${y.toFixed(1)}) has chained ability: ${chainedAbility || 'none'}`);
 
                 if (chainedAbility === 'wind') {
                     // Wind chains through water - free movement
-                    console.log(`✓ Wind chaining active - water becomes free movement`);
+                    if (logMoveCost) console.log(`✓ Wind chaining active - water becomes free movement`);
                     return { canMove: true, cost: 0 };
                 } else if (chainedAbility === 'earth') {
                     // Earth chains through water - blocks movement
-                    console.log(`✓ Earth chaining active - water blocks movement`);
+                    if (logMoveCost) console.log(`✓ Earth chaining active - water blocks movement`);
                     if (logBlocked) console.log(`❌ Cannot move to (${x.toFixed(1)}, ${y.toFixed(1)}): Water has chained Earth ability (blocks movement)`);
                     return { canMove: false, cost: Infinity };
                 }
 
                 // No chaining effects, normal water cost
-                console.log(`💧 No chaining - normal water cost (2 AP)`);
+                if (logMoveCost) console.log(`💧 No chaining - normal water cost (2 AP)`);
                 return { canMove: true, cost: 2 };
             }
 
