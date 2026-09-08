@@ -212,6 +212,26 @@
                     className: 'gl-response',
                 };
             }
+            // Reflect and Psychic don't resolve when cast — they queue a
+            // scroll to activate at the start of the CASTER's own next turn
+            // (see processReflectPending/processPsychicPending in
+            // scroll-effects.js). That's easy to miss entirely otherwise: it
+            // happens amid a turn-start flurry of other status text with no
+            // lasting trace, so these get their own explicit, permanent line.
+            case 'reflect_triggered': {
+                return {
+                    html: `🪞 ${playerSpan(entry.casterIndex)}'s Reflect activates: ` +
+                        `<span style="color:${elColor(elementOf(entry.scrollName))}">${esc(scrollDisplayName(entry.scrollName))}</span>!`,
+                    className: 'gl-reflect',
+                };
+            }
+            case 'psychic_triggered': {
+                return {
+                    html: `🔮 ${playerSpan(entry.casterIndex)}'s Psychic activates: ` +
+                        `<span style="color:${elColor(elementOf(entry.scrollName))}">${esc(scrollDisplayName(entry.scrollName))}</span>!`,
+                    className: 'gl-psychic',
+                };
+            }
             case 'original_countered':
             case 'original_resolved':
             case 'sacrificial_pyre_response_opened':

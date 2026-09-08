@@ -2575,6 +2575,13 @@
                         runNextReflectTrigger();
                     };
 
+                    // Record for the Game Log on THIS client too — this is the
+                    // receiving side of the broadcast game-ui.js's endTurn flow
+                    // sends (see processReflectPending's matching call in
+                    // scroll-effects.js), so every client watching, not just
+                    // the one that drove the turn change, needs its own entry.
+                    window.logScrollEvent?.('reflect_triggered', { casterIndex: playerIndex, scrollName });
+
                     // Execute the reflected scroll's effect on this client.
                     // Interactive scrolls (requiresSelection) should only run on the Reflect caster's
                     // own client (playerIndex === myPlayerIndex). On other clients, skip execute() —
@@ -2656,6 +2663,10 @@
                         psychicRunning = false;
                         runNextPsychicTrigger();
                     };
+
+                    // Record for the Game Log on THIS client too — receiving
+                    // side of the broadcast, mirrors reflect_triggered above.
+                    window.logScrollEvent?.('psychic_triggered', { casterIndex: playerIndex, scrollName });
 
                     // Execute the stolen scroll's effect on this client.
                     // Interactive scrolls (requiresSelection) should only run on the Psychic caster's

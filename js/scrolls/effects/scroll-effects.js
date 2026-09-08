@@ -3197,6 +3197,14 @@ const ScrollEffects = {
             const definition = pending.definition;
             const displayName = definition?.name || scrollName;
             updateStatus(`Reflect triggers: activating ${displayName}!`);
+            // Record for the Game Log — the deferred trigger fires at the
+            // start of the caster's OWN turn (not when Reflect was cast), so
+            // without this it's easy to miss entirely: the transient status
+            // line above gets overwritten within the same tick by the rest
+            // of the turn-start sequence (AP reset, "Your turn!", etc.).
+            if (typeof window !== 'undefined' && window.logScrollEvent) {
+                window.logScrollEvent('reflect_triggered', { casterIndex: playerIndex, scrollName });
+            }
 
             // Broadcast reflect-triggered for this scroll immediately before executing,
             // so remote clients receive them in order and can queue them sequentially.
@@ -3321,6 +3329,13 @@ const ScrollEffects = {
             const definition = pending.definition;
             const displayName = definition?.name || scrollName;
             updateStatus(`Psychic triggers: activating ${displayName}!`);
+            // Record for the Game Log — same reasoning as Reflect's identical
+            // call above: the deferred trigger fires at the start of the
+            // caster's OWN turn, and the transient status line gets
+            // overwritten within the same tick by the rest of turn-start.
+            if (typeof window !== 'undefined' && window.logScrollEvent) {
+                window.logScrollEvent('psychic_triggered', { casterIndex: playerIndex, scrollName });
+            }
 
             const fullDef = definition?.element ? definition : (self.spellSystem?.patterns?.[scrollName] || definition);
 
