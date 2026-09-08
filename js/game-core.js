@@ -5038,6 +5038,48 @@
 
         // Make revealTile available globally for scroll effects
         window.revealTile = revealTile;
+
+        // A single movement action can cross several hexes in one go (a
+        // dragged path, a tap-to-move hop, or the keyboard move preview).
+        // Only checking the hex the pawn STOPS on misses any face-down tile
+        // the path merely passed through on the way to an already-revealed
+        // tile — this walks every hex actually stepped on (in path order,
+        // origin excluded) and reveals any face-down tile found there.
+        // `steps` matches playerPath.slice(1)'s shape: an array of {x, y}.
+        // Returns the number of tiles revealed, so a caller can tell whether
+        // its own "Moved N hexes" status would just get overwritten by
+        // revealTile()'s own "Revealed X shrine!" status anyway.
+        function revealFlippedTilesAlongPath(steps) {
+            if (!steps || steps.length === 0) return 0;
+            let revealedCount = 0;
+            const allHexes = getAllHexagonPositions();
+            steps.forEach(step => {
+                let hex = null, minDist = Infinity;
+                allHexes.forEach(hexPos => {
+                    const dist = Math.hypot(hexPos.x - step.x, hexPos.y - step.y);
+                    if (dist < minDist) { minDist = dist; hex = hexPos; }
+                });
+                if (!hex || minDist >= 5 || !hex.tiles) return;
+
+                const flippedTiles = hex.tiles.filter(t => t.flipped && !t.isPlayerTile);
+                if (flippedTiles.length === 0) return;
+
+                // If multiple flipped tiles share this hex, reveal the one
+                // whose centre is closest to the point actually stepped on.
+                let tileToReveal = flippedTiles[0];
+                if (flippedTiles.length > 1) {
+                    let minTileDist = Infinity;
+                    flippedTiles.forEach(tile => {
+                        const tileDist = Math.hypot(tile.x - step.x, tile.y - step.y);
+                        if (tileDist < minTileDist) { minTileDist = tileDist; tileToReveal = tile; }
+                    });
+                }
+                revealTile(tileToReveal.id);
+                revealedCount++;
+            });
+            return revealedCount;
+        }
+        window.revealFlippedTilesAlongPath = revealFlippedTilesAlongPath;
         // Expose placePlayer and movePlayerVisually for scroll effects (e.g. Take Flight)
         window.placePlayer = placePlayer;
         window.movePlayerVisually = movePlayerVisually;

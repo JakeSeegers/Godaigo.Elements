@@ -1529,59 +1529,14 @@
                             cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
                         });
 
-                        // Check if player stepped on a hidden tile - reveal it!
-                        // Use the ACTUAL player position after placement
-                        const actualPlayerPos = { x: playerPosition.x, y: playerPosition.y };
-                        if (window.shouldDebugLog ? window.shouldDebugLog('playerLanded', 500) : true) {
-                            console.log(`📍 Player landed at (${actualPlayerPos.x.toFixed(1)}, ${actualPlayerPos.y.toFixed(1)})`);
-                        }
-                        console.log(`   finalPos from path: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)})`);
-
-                        // Use getAllHexagonPositions which properly handles trapezoids
-                        const allHexes = getAllHexagonPositions();
-                        
-                        // Find the hex position where the player landed
-                        let playerHex = null;
-                        let minDist = Infinity;
-                        allHexes.forEach(hexPos => {
-                            const dist = Math.sqrt(Math.pow(hexPos.x - actualPlayerPos.x, 2) + Math.pow(hexPos.y - actualPlayerPos.y, 2));
-                            if (dist < minDist) {
-                                minDist = dist;
-                                playerHex = hexPos;
-                            }
-                        });
-
-                        if (playerHex && minDist < 5 && playerHex.tiles) {
-                            console.log(`   Player is on hex at (${playerHex.x.toFixed(1)}, ${playerHex.y.toFixed(1)}), dist=${minDist.toFixed(2)}`);
-                            console.log(`   This hex is contributed to by ${playerHex.tiles.length} tile(s)`);
-                            
-                            // Find flipped tiles that contribute to this hex position
-                            const flippedTiles = playerHex.tiles.filter(t => t.flipped && !t.isPlayerTile);
-                            console.log(`   Flipped tiles at this hex:`, flippedTiles.map(t => ({id: t.id, x: t.x, y: t.y, flipped: t.flipped})));
-
-                            if (flippedTiles.length > 0) {
-                                // If multiple flipped tiles share this hex, choose the one whose center is closest to player
-                                let tileToReveal = flippedTiles[0];
-                                if (flippedTiles.length > 1) {
-                                    let minTileDist = Infinity;
-                                    flippedTiles.forEach(tile => {
-                                        const tileDist = Math.sqrt(Math.pow(tile.x - actualPlayerPos.x, 2) + Math.pow(tile.y - actualPlayerPos.y, 2));
-                                        console.log(`     Flipped tile id=${tile.id} at (${tile.x.toFixed(1)}, ${tile.y.toFixed(1)}): dist to center=${tileDist.toFixed(1)}`);
-                                        if (tileDist < minTileDist) {
-                                            minTileDist = tileDist;
-                                            tileToReveal = tile;
-                                        }
-                                    });
-                                    console.log(`   Multiple flipped tiles - choosing closest at (${tileToReveal.x.toFixed(1)}, ${tileToReveal.y.toFixed(1)})`);
-                                }
-                                console.log(`✨ Revealing tile id=${tileToReveal.id} at (${tileToReveal.x.toFixed(1)}, ${tileToReveal.y.toFixed(1)})`);
-                                revealTile(tileToReveal.id);
-                            } else {
-                                console.log(`   No flipped tiles at this hex position`);
-                                updateStatus(`Moved ${playerPath.length - 1} hexes (cost: ${totalCost} AP, ${getTotalAP()} AP remaining)`);
-                            }
-                        } else {
-                            console.log(`   ❌ Player not on any valid hex (minDist=${minDist.toFixed(2)})`);
+                        // Check if the path stepped on any hidden tile - reveal it!
+                        // Walk every hex actually crossed (not just where the
+                        // pawn stopped) so a tile the path merely passed
+                        // through on the way to an already-revealed tile
+                        // still flips. playerPath[0] is the origin hex, so
+                        // skip it — everything after is a hex stepped onto.
+                        const revealedAlongPath = revealFlippedTilesAlongPath(playerPath.slice(1));
+                        if (revealedAlongPath === 0) {
                             updateStatus(`Moved ${playerPath.length - 1} hexes (cost: ${totalCost} AP, ${getTotalAP()} AP remaining)`);
                         }
                     } else if (!moveCheck.canMove) {
@@ -1890,26 +1845,16 @@
                                     });
                                 }
 
-                                // Check for hidden tile reveal
-                                const allHexes = getAllHexagonPositions();
-                                let playerHex = null;
-                                let minDist = Infinity;
-                                allHexes.forEach(hexPos => {
-                                    const dist = Math.sqrt(Math.pow(hexPos.x - targetHex.x, 2) + Math.pow(hexPos.y - targetHex.y, 2));
-                                    if (dist < minDist) {
-                                        minDist = dist;
-                                        playerHex = hexPos;
-                                    }
-                                });
+                                // Check for hidden tile reveal — walk every hex the
+                                // path actually crosses (not just the destination),
+                                // via the same shortest-path search the drag-path
+                                // uses, so a tile merely passed through still flips.
+                                const tapPath = _dijkstraPath(startPos, targetHex);
+                                const revealedAlongPath = revealFlippedTilesAlongPath(tapPath ? tapPath.slice(1) : []);
 
-                                if (playerHex && minDist < 5 && playerHex.tiles) {
-                                    const flippedTiles = playerHex.tiles.filter(t => t.flipped && !t.isPlayerTile);
-                                    flippedTiles.forEach(tileInfo => {
-                                        revealTile(tileInfo.id);
-                                    });
+                                if (revealedAlongPath === 0) {
+                                    updateStatus(`Moved (cost: ${actualCost} AP, ${getTotalAP()} AP remaining)`);
                                 }
-
-                                updateStatus(`Moved (cost: ${actualCost} AP, ${getTotalAP()} AP remaining)`);
                             } else if (actualCost <= 0) {
                                 updateStatus('No valid path to that hex');
                             } else {
@@ -2141,26 +2086,10 @@
                                 });
                             }
 
-                            // Check if player stepped on a hidden tile - reveal it!
-                            const actualPlayerPos = { x: playerPosition.x, y: playerPosition.y };
-                            const allHexes = getAllHexagonPositions();
-
-                            let playerHex = null;
-                            let minDist = Infinity;
-                            allHexes.forEach(hexPos => {
-                                const dist = Math.sqrt(Math.pow(hexPos.x - actualPlayerPos.x, 2) + Math.pow(hexPos.y - actualPlayerPos.y, 2));
-                                if (dist < minDist) {
-                                    minDist = dist;
-                                    playerHex = hexPos;
-                                }
-                            });
-
-                            if (playerHex && minDist < 5 && playerHex.tiles) {
-                                const flippedTiles = playerHex.tiles.filter(t => t.flipped && !t.isPlayerTile);
-                                flippedTiles.forEach(tileInfo => {
-                                    revealTile(tileInfo.id);
-                                });
-                            }
+                            // Check if the path stepped on any hidden tile - reveal it!
+                            // Walk every hex actually crossed, not just where the pawn
+                            // stopped (playerPath[0] is the origin, so skip it).
+                            revealFlippedTilesAlongPath(playerPath.slice(1));
                         }
                     }
 
@@ -3033,17 +2962,14 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                                 cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
                             });
                         }
-                        // Reveal hidden tile if stepped onto one
-                        const allHexes = getAllHexagonPositions();
-                        let landedHex = null, minD = Infinity;
-                        allHexes.forEach(h => {
-                            const d = Math.sqrt(Math.pow(h.x - target.x, 2) + Math.pow(h.y - target.y, 2));
-                            if (d < minD) { minD = d; landedHex = h; }
-                        });
-                        if (landedHex && minD < 5 && landedHex.tiles) {
-                            landedHex.tiles.filter(t => t.flipped && !t.isPlayerTile).forEach(t => revealTile(t.id));
+                        // Reveal hidden tiles anywhere along the path — not just
+                        // the hex the pawn stops on — using the same shortest-path
+                        // search the drag-path uses to find which hexes it crossed.
+                        const previewPath = _dijkstraPath(startPos, target);
+                        const revealedAlongPath = revealFlippedTilesAlongPath(previewPath ? previewPath.slice(1) : []);
+                        if (revealedAlongPath === 0) {
+                            updateStatus(`Moved (cost: ${actualCost} AP, ${getTotalAP()} AP remaining)`);
                         }
-                        updateStatus(`Moved (cost: ${actualCost} AP, ${getTotalAP()} AP remaining)`);
                     } else {
                         updateStatus('Could not move there!');
                     }
