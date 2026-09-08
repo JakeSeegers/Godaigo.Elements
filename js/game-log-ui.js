@@ -220,14 +220,14 @@
             // lasting trace, so these get their own explicit, permanent line.
             case 'reflect_triggered': {
                 return {
-                    html: `🪞 ${playerSpan(entry.casterIndex)}'s Reflect activates: ` +
+                    html: `${playerSpan(entry.casterIndex)}'s Reflect activates: ` +
                         `<span style="color:${elColor(elementOf(entry.scrollName))}">${esc(scrollDisplayName(entry.scrollName))}</span>!`,
                     className: 'gl-reflect',
                 };
             }
             case 'psychic_triggered': {
                 return {
-                    html: `🔮 ${playerSpan(entry.casterIndex)}'s Psychic activates: ` +
+                    html: `${playerSpan(entry.casterIndex)}'s Psychic activates: ` +
                         `<span style="color:${elColor(elementOf(entry.scrollName))}">${esc(scrollDisplayName(entry.scrollName))}</span>!`,
                     className: 'gl-psychic',
                 };
