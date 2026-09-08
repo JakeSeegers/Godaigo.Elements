@@ -4093,11 +4093,25 @@ const ScrollEffects = {
             return;
         }
 
-        // Only show the modal on the caster's client (in multiplayer)
-        const isMultiplayer = typeof window !== 'undefined' && window.isMultiplayer;
-        const myPlayerIndex = typeof window !== 'undefined' ? window.myPlayerIndex : null;
-        if (isMultiplayer && myPlayerIndex !== null && casterIndex !== myPlayerIndex) {
-            console.log(`🔥 Sacrificial Pyre: Skipping modal for non-local player ${casterIndex} (I am player ${myPlayerIndex})`);
+        // Only show the modal on the caster's client (in multiplayer).
+        // NOTE: this used to read window.isMultiplayer/window.myPlayerIndex —
+        // neither is ever actually assigned on window (isMultiplayer/
+        // myPlayerIndex are plain top-level `let`s in multiplayer-state.js,
+        // which does NOT create a same-named window property), so that read
+        // always came back undefined and this check was permanently inert.
+        // Also resolve through BotDriver.driverRealIndex() when this browser
+        // is mid-impersonation (driving a bot's turn) — same reasoning as
+        // the isReflectCaster check in WATER_SCROLL_1's execute(): the bare
+        // myPlayerIndex can be a bot's index here, not the real human
+        // driving this browser.
+        const _pyreDriverIdx = (typeof window !== 'undefined' && window.BotDriver
+            && typeof window.BotDriver.driverRealIndex === 'function'
+            && window.BotDriver.driverRealIndex() != null)
+            ? window.BotDriver.driverRealIndex()
+            : (typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : null);
+        const _pyreIsMultiplayer = typeof isMultiplayer !== 'undefined' && isMultiplayer;
+        if (_pyreIsMultiplayer && _pyreDriverIdx !== null && casterIndex !== _pyreDriverIdx) {
+            console.log(`🔥 Sacrificial Pyre: Skipping modal for non-local player ${casterIndex} (I am player ${_pyreDriverIdx})`);
             return;
         }
 
