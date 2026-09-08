@@ -476,7 +476,18 @@ const ScrollEffects = {
                     console.log(`🪞 Reflecting special effect: ${effect.name}`);
                     // Determine if we are the Reflect caster on this client.
                     // If not, interactive scrolls should skip their UI (same as Psychic remote client behavior).
-                    const isReflectCaster = (typeof myPlayerIndex === 'undefined' || myPlayerIndex === null || myPlayerIndex === casterIndex);
+                    // myPlayerIndex can be mid-impersonation (a bot's own turn — see
+                    // bot-driver.js's asBot()), which is a DIFFERENT identity than the
+                    // real human driving this browser. Resolve through
+                    // BotDriver.driverRealIndex() when impersonating, same fallback
+                    // multiplayer-state.js's 'response-resolved' listener already uses
+                    // for this exact ambiguity.
+                    const _reflectDriverIdx = (typeof window !== 'undefined' && window.BotDriver
+                        && typeof window.BotDriver.driverRealIndex === 'function'
+                        && window.BotDriver.driverRealIndex() != null)
+                        ? window.BotDriver.driverRealIndex()
+                        : (typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : undefined);
+                    const isReflectCaster = (typeof _reflectDriverIdx === 'undefined' || _reflectDriverIdx === null || _reflectDriverIdx === casterIndex);
                     // Execute the reflected scroll's special effect
                     const result = system.execute(scrollName, casterIndex, {
                         ...context,
@@ -3205,7 +3216,29 @@ const ScrollEffects = {
             // On non-caster clients, pass psychicRemoteClient=true so interactive scrolls
             // (e.g. Shifting Sands tile-swap) skip their UI — the caster's client handles
             // selection and syncs state via broadcast.
-            const isReflectCaster = (typeof myPlayerIndex === 'undefined' || myPlayerIndex === null || myPlayerIndex === playerIndex);
+            //
+            // myPlayerIndex is not reliable here: this whole call can run from
+            // INSIDE a bot's own end-turn (bot-driver.js's asBot() impersonates
+            // the bot for its entire turn, including clicking #end-turn, which is
+            // exactly what fires processReflectPending for the INCOMING player).
+            // When a bot hands off to the real human, myPlayerIndex is still the
+            // bot's index at this point — not reverted until asBot()'s finally
+            // block runs, well after this call returns (driveBotTurn's own
+            // post-asBot() AP-reset fixup exists for this identical gap). That
+            // made every reflected scroll needing a UI (Heavy Stomp, Create,
+            // Shifting Sands, Scholar's Insight, ...) look like "nothing
+            // happened": this client wrongly saw itself as a remote bystander
+            // and silently skipped — but in a bot-only game this IS the only
+            // real client, so no one else ever picks up the broadcast either.
+            // Resolve through BotDriver.driverRealIndex() when impersonating,
+            // same fallback multiplayer-state.js's 'response-resolved' listener
+            // already uses for this exact ambiguity.
+            const _reflectDriverIdx = (typeof window !== 'undefined' && window.BotDriver
+                && typeof window.BotDriver.driverRealIndex === 'function'
+                && window.BotDriver.driverRealIndex() != null)
+                ? window.BotDriver.driverRealIndex()
+                : (typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : undefined);
+            const isReflectCaster = (typeof _reflectDriverIdx === 'undefined' || _reflectDriverIdx === null || _reflectDriverIdx === playerIndex);
             const result = self.execute(scrollName, playerIndex, {
                 spell: definition,
                 scrollName,
