@@ -3339,6 +3339,9 @@
                     }
                 }
                 console.log(`⛏️ Excavate teleport: player ${playerIndex} to (${x.toFixed(1)}, ${y.toFixed(1)})`);
+                // Record for the Game Log on THIS client too — receiving side
+                // of the broadcast, mirrors reflect_triggered/psychic_triggered.
+                window.logScrollEvent?.('excavate_teleport_used', { casterIndex: playerIndex });
             });
 
             // Listen for Excavate immunity buff (so other clients know player is immune)

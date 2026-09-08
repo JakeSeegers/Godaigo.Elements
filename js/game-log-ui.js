@@ -232,6 +232,23 @@
                     className: 'gl-psychic',
                 };
             }
+            // Excavate (Catacomb IV) is the same "nothing visible happens
+            // until the caster's own next turn starts" shape as Reflect/
+            // Psychic above — same fix, same reasoning.
+            case 'excavate_triggered': {
+                return {
+                    html: `${playerSpan(entry.casterIndex)}'s ` +
+                        `<span style="color:${elColor('catacomb')}">Excavate</span> offers a teleport this turn`,
+                    className: 'gl-excavate',
+                };
+            }
+            case 'excavate_teleport_used': {
+                return {
+                    html: `${playerSpan(entry.casterIndex)} teleports via ` +
+                        `<span style="color:${elColor('catacomb')}">Excavate</span>`,
+                    className: 'gl-excavate',
+                };
+            }
             case 'original_countered':
             case 'original_resolved':
             case 'sacrificial_pyre_response_opened':

@@ -5707,9 +5707,22 @@ const ScrollEffects = {
         const buff = this.activeBuffs.excavateTeleport;
         if (!buff || buff.playerIndex !== playerIndex) return false;
 
-        // Only trigger for the local player in multiplayer
-        const localPlayer = (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof myPlayerIndex !== 'undefined')
-            ? myPlayerIndex : (typeof activePlayerIndex !== 'undefined' ? activePlayerIndex : -1);
+        // Only trigger for the local player in multiplayer. Resolve through
+        // BotDriver.driverRealIndex() when this browser is mid-impersonation
+        // (driving a bot's turn) — same reasoning as the isReflectCaster fix
+        // above: this runs from inside the #end-turn click handler, and when
+        // a BOT ends its own turn (asBot() still impersonating it) and hands
+        // off to the real human, raw myPlayerIndex is still the bot's index
+        // here, not the human's — so the teleport prompt was silently
+        // dropped as "not the local player" every time a bot's turn handed
+        // off to the Excavate caster.
+        const _excavateDriverIdx = (typeof window !== 'undefined' && window.BotDriver
+            && typeof window.BotDriver.driverRealIndex === 'function'
+            && window.BotDriver.driverRealIndex() != null)
+            ? window.BotDriver.driverRealIndex()
+            : (typeof myPlayerIndex !== 'undefined' ? myPlayerIndex : null);
+        const localPlayer = (typeof isMultiplayer !== 'undefined' && isMultiplayer && _excavateDriverIdx != null)
+            ? _excavateDriverIdx : (typeof activePlayerIndex !== 'undefined' ? activePlayerIndex : -1);
         if (playerIndex !== localPlayer) {
             // Not the local player — just clear the buff silently
             delete this.activeBuffs.excavateTeleport;
@@ -5718,6 +5731,12 @@ const ScrollEffects = {
 
         delete this.activeBuffs.excavateTeleport;
         console.log(`⛏️ Excavate teleport available for player ${playerIndex}`);
+        // Record for the Game Log — same reasoning as Reflect/Psychic's
+        // matching calls: this deferred option appears amid a turn-start
+        // flurry of other status text with no lasting trace otherwise.
+        if (typeof window !== 'undefined' && window.logScrollEvent) {
+            window.logScrollEvent('excavate_triggered', { casterIndex: playerIndex });
+        }
 
         // Show teleport prompt modal
         this.showExcavateTeleportModal(playerIndex);
@@ -5864,6 +5883,9 @@ const ScrollEffects = {
 
                 updateStatus(`Excavate: Teleported! Your turn begins.`);
                 console.log(`⛏️ Excavate teleport: player ${playerIndex} to (${destX.toFixed(1)}, ${destY.toFixed(1)})`);
+                if (typeof window !== 'undefined' && window.logScrollEvent) {
+                    window.logScrollEvent('excavate_teleport_used', { casterIndex: playerIndex });
+                }
 
                 // Broadcast in multiplayer
                 if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {

@@ -114,7 +114,7 @@
     const WHITELISTED_SCROLL_EVENTS = new Set([
         'cast_execute', 'effect_execute', 'response_resolved', 'original_countered', 'original_resolved',
         'response_counter', 'counter_negated', 'sacrificial_pyre_response_opened', 'sacrificial_pyre_response_submitted',
-        'reflect_triggered', 'psychic_triggered',
+        'reflect_triggered', 'psychic_triggered', 'excavate_triggered', 'excavate_teleport_used',
     ]);
     const prevLogScrollEvent = window.logScrollEvent;
     window.logScrollEvent = function (type, details) {
