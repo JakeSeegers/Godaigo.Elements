@@ -844,7 +844,7 @@ const ScrollEffects = {
                 }
 
                 // Enter scroll selection mode for sacrificial activation
-                system.enterScrollSacrificeMode(casterIndex);
+                system.enterScrollSacrificeMode(casterIndex, context?.onComplete);
 
                 return {
                     success: true,
@@ -4082,14 +4082,19 @@ const ScrollEffects = {
     // FIRE SCROLL MODES
     // ============================================
 
-    // Fire III - Sacrificial Pyre: Activate scroll from hand ignoring pattern
-    enterScrollSacrificeMode(casterIndex) {
+    // Fire III - Sacrificial Pyre: Activate scroll from hand ignoring pattern.
+    // onComplete: optional — mirrors enterTileFlipMode's pattern so a
+    // Reflect/Psychic-chained cast still signals completion (and lets the
+    // next queued reflect/psychic run) even on an early "nothing to
+    // sacrifice" return, not just after a real selection.
+    enterScrollSacrificeMode(casterIndex, onComplete) {
         const self = this;
 
         // Get player's scrolls
         const playerScrolls = this.spellSystem?.playerScrolls?.[casterIndex];
         if (!playerScrolls || playerScrolls.hand.size === 0) {
             updateStatus('No scrolls to sacrifice!');
+            if (typeof onComplete === 'function') onComplete();
             return;
         }
 
@@ -4112,6 +4117,7 @@ const ScrollEffects = {
         const _pyreIsMultiplayer = typeof isMultiplayer !== 'undefined' && isMultiplayer;
         if (_pyreIsMultiplayer && _pyreDriverIdx !== null && casterIndex !== _pyreDriverIdx) {
             console.log(`🔥 Sacrificial Pyre: Skipping modal for non-local player ${casterIndex} (I am player ${_pyreDriverIdx})`);
+            if (typeof onComplete === 'function') onComplete();
             return;
         }
 
@@ -4126,6 +4132,7 @@ const ScrollEffects = {
         });
         if (scrollArray.length === 0) {
             updateStatus('No scrolls to sacrifice! (Level I response scrolls can only be activated this way as a response on an opponent\'s turn.)');
+            if (typeof onComplete === 'function') onComplete();
             return;
         }
         this.showScrollSelectionModal(scrollArray, 'Select a scroll to sacrifice and activate:', (selectedScroll) => {
@@ -4204,6 +4211,14 @@ const ScrollEffects = {
             if (typeof updateCommonAreaUI === 'function') {
                 updateCommonAreaUI();
             }
+
+            // Signal completion (for Reflect/Psychic-chained casts — see the
+            // onComplete param note above; enterTileFlipMode does the same).
+            if (typeof onComplete === 'function') onComplete();
+        }, () => {
+            // Cancelled — still signal completion so a Reflect/Psychic chain
+            // doesn't hang waiting on a selection that will never come.
+            if (typeof onComplete === 'function') onComplete();
         });
     },
 
