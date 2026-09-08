@@ -623,11 +623,17 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🍵 Inspiring Draught activated by player ${casterIndex}`);
 
-                // In multiplayer, only open the modal for the casting player
-                if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null) {
-                    if (myPlayerIndex !== casterIndex) {
-                        return { success: true, message: 'Inspiring Draught resolved for remote player.' };
-                    }
+                // If triggered via Reflect/Psychic on a non-caster client, skip
+                // interactive UI — same convention every other interactive scroll
+                // in this file uses. This used to instead compare raw
+                // myPlayerIndex to casterIndex directly, which is unreliable
+                // when this runs from inside a bot's own end-turn (bot-driver.js's
+                // asBot() still impersonating it — see the isReflectCaster fix
+                // above for the full explanation): a bot handing off to the real
+                // human caster would wrongly read as "remote" and silently skip.
+                if (context?.psychicRemoteClient) {
+                    console.log(`🍵 Inspiring Draught: skipping deck-pick UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
                 }
 
                 // Draw 2 from one deck, then put 1 back (show all scrolls of that element)
@@ -867,11 +873,15 @@ const ScrollEffects = {
             execute(casterIndex, context, system) {
                 console.log(`🔥 Transmute activated by player ${casterIndex}`);
 
-                // Only the caster should run Transmute UI/effects (avoid remote clients)
-                if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
-                    if (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null && myPlayerIndex !== casterIndex) {
-                        return { success: true, message: 'Transmute resolved for remote player.' };
-                    }
+                // If triggered via Reflect/Psychic on a non-caster client, skip
+                // interactive UI — same convention every other interactive scroll
+                // in this file uses. This used to instead compare raw
+                // myPlayerIndex to casterIndex directly, which is unreliable
+                // when this runs from inside a bot's own end-turn (see the
+                // isReflectCaster fix above for the full explanation).
+                if (context?.psychicRemoteClient) {
+                    console.log(`🔥 Transmute: skipping discard UI on non-caster remote client`);
+                    return { success: true, requiresSelection: true, message: 'Skipped on remote client' };
                 }
 
                 // Belt-and-suspenders: track the fire element win condition HERE, before opening the
@@ -890,10 +900,16 @@ const ScrollEffects = {
                     playerIndex: casterIndex
                 };
 
-                system.enterTransmuteMode(casterIndex);
+                system.enterTransmuteMode(casterIndex, context);
 
                 return {
                     success: true,
+                    // Missing before — without this, a Reflect/Psychic replay's
+                    // runNext() treated Transmute as already-resolved and
+                    // immediately advanced to the next queued reflect/psychic
+                    // (or chained into Psychic) while the discard modal was
+                    // still open for the player.
+                    requiresSelection: true,
                     message: 'Select stones or scrolls to transmute into AP.'
                 };
             }
@@ -3278,6 +3294,24 @@ const ScrollEffects = {
                 if (typeof updatePlayerElementSymbols === 'function') {
                     updatePlayerElementSymbols(playerIndex);
                 }
+                // Win check: if water was the reflecting player's 5th element
+                // and they're already standing on their own shrine, this needs
+                // checking NOW, not later. The usual place this happens
+                // (lobby.js's reflect-triggered broadcast RECEIVER) never runs
+                // in a single-host bot game — the sender's own gameChannel is
+                // broadcast:{self:false}, so a bot-only room (host is the only
+                // real client) never receives its own broadcast back, and the
+                // win would otherwise sit undetected until the player's next
+                // move happens to re-trigger it. checkWinCondition is a pure
+                // read (idempotent, no side effect beyond the win UI it's
+                // meant to trigger), so calling it defensively here alongside
+                // the receiver's own call is safe — same reasoning as the
+                // other "doesn't receive its own broadcast" checks elsewhere
+                // in this codebase (see multiplayer-state.js's response
+                // handler and lobby.js's counter-caster branch).
+                if (typeof checkWinCondition === 'function') {
+                    checkWinCondition(playerIndex, { announce: true });
+                }
             }
 
             const fullDef = definition?.element ? definition : (self.spellSystem?.patterns?.[scrollName] || definition);
@@ -3392,6 +3426,14 @@ const ScrollEffects = {
                 console.log(`🔮 processPsychicPending activated void for player ${playerIndex}:`, Array.from(activated));
                 if (typeof updatePlayerElementSymbols === 'function') {
                     updatePlayerElementSymbols(playerIndex);
+                }
+                // Win check — same reasoning as processReflectPending's
+                // identical call: the usual place this happens (lobby.js's
+                // psychic-triggered broadcast receiver) never runs in a
+                // single-host bot game, since that room's only real client
+                // never receives its own broadcast back.
+                if (typeof checkWinCondition === 'function') {
+                    checkWinCondition(playerIndex, { announce: true });
                 }
             }
 
@@ -4289,8 +4331,12 @@ const ScrollEffects = {
         updateStatus('Select a tile to destroy all stones on it.');
     },
 
-    // Fire IV - Transmute: discard stones/scrolls for AP
-    enterTransmuteMode(casterIndex) {
+    // Fire IV - Transmute: discard stones/scrolls for AP.
+    // context: optional — carries onComplete, called once the modal actually
+    // closes (Done, Cancel, or a forced cancelSelectionMode() sweep) via the
+    // existing close-observer below, so a Reflect/Psychic-chained cast can
+    // advance to the next queued entry once the player is actually done.
+    enterTransmuteMode(casterIndex, context) {
         const self = this;
         const overlayId = 'transmute-modal';
         const existing = document.getElementById(overlayId);
@@ -4562,11 +4608,15 @@ const ScrollEffects = {
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
-        // Cleanup suppress flag when modal closes (Done or Cancel)
+        // Cleanup suppress flag when modal closes (Done, Cancel, or a forced
+        // cancelSelectionMode() sweep) — and signal completion the same way,
+        // so a Reflect/Psychic-chained cast can advance once the player is
+        // actually done, not the instant the modal opens.
         const observer = new MutationObserver(() => {
             if (!document.body.contains(overlay)) {
                 observer.disconnect();
                 clearSuppress();
+                if (typeof context?.onComplete === 'function') context.onComplete();
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
