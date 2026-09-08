@@ -437,14 +437,27 @@ const ScrollEffects = {
                     return { success: true, deferred: true };
                 }
 
-                // Get the last scroll cast this turn (main-phase Reflect)
-                const lastScroll = system.lastScrollCastThisTurn;
+                // Get the last scroll cast this turn (main-phase Reflect).
+                // Use context.previousScrollCast — captured by applyScrollEffects()
+                // BEFORE this very cast overwrote system.lastScrollCastThisTurn to
+                // Reflect itself. Reading system.lastScrollCastThisTurn directly here
+                // (as this used to) always sees Reflect itself at this point, so the
+                // self-check below fired on EVERY main-phase cast — same fix Sigh of
+                // Recollection (Wind I) already has for the identical ordering issue.
+                const selfScrollName = context?.scrollName || 'WATER_SCROLL_1';
+                let lastScroll = null;
+                if (context?.previousScrollCast && context.previousScrollCast.name !== selfScrollName) {
+                    lastScroll = context.previousScrollCast;
+                } else if (system.lastScrollCastThisTurn && system.lastScrollCastThisTurn.name !== selfScrollName) {
+                    lastScroll = system.lastScrollCastThisTurn;
+                }
+
                 if (!lastScroll || !lastScroll.name) {
                     updateStatus('Reflect failed: No scroll was activated this turn!');
                     return { success: false, reason: 'No scroll cast this turn' };
                 }
 
-                // Cannot reflect itself
+                // Cannot reflect itself (defensive — the lookup above already excludes it)
                 if (lastScroll.name === 'WATER_SCROLL_1') {
                     updateStatus('Reflect failed: Cannot reflect Reflect!');
                     return { success: false, reason: 'Cannot reflect Reflect' };
