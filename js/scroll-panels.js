@@ -547,7 +547,12 @@ const ScrollPanelSystem = (() => {
                     // Record undo state before moving
                     window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'hand', to: 'active', displacedScroll: null };
                     window.SoundSystem?.play('scrollmove');
-                    setTimeout(() => { sp.moveToActive(scrollName); refresh(); }, 60);
+                    // Mutate state immediately so an "Undo Step" fired before the animation's
+                    // 60ms elapses reverses a move that has actually happened, instead of a
+                    // no-op that the still-pending move below then applies anyway. Only the
+                    // visual refresh (which would otherwise cut off the animation) is delayed.
+                    sp.moveToActive(scrollName);
+                    setTimeout(() => { refresh(); }, 60);
                 });
                 acts.appendChild(toActive);
 
@@ -568,7 +573,9 @@ const ScrollPanelSystem = (() => {
                     window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'hand', to: 'common', displacedScroll: displaced !== scrollName ? displaced : null };
                     window.lastMove = null;
                     window.SoundSystem?.play('scrollmove');
-                    setTimeout(() => { sp.discardScroll(scrollName); refresh(); }, 60);
+                    // Mutate state immediately — see the "Move to Active Area" handler above.
+                    sp.discardScroll(scrollName);
+                    setTimeout(() => { refresh(); }, 60);
                 });
                 acts.appendChild(toCommon);
             }
@@ -590,7 +597,9 @@ const ScrollPanelSystem = (() => {
                     window.lastScrollAction = { type: 'scroll-move', scrollName, from: 'active', to: 'common', displacedScroll: displaced !== scrollName ? displaced : null };
                     window.lastMove = null;
                     window.SoundSystem?.play('scrollmove');
-                    setTimeout(() => { sp.discardScroll(scrollName); refresh(); }, 60);
+                    // Mutate state immediately — see the "Move to Active Area" handler above.
+                    sp.discardScroll(scrollName);
+                    setTimeout(() => { refresh(); }, 60);
                 });
                 acts.appendChild(toCommon);
 
