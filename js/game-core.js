@@ -1437,6 +1437,70 @@
                 return true;
             }
 
+            // Activate exactly the named scroll (the per-card "Activate" button in
+            // scroll-panels.js), as opposed to castSpell() which scans every castable
+            // scroll (active + common area) and fires whichever one matches. Without
+            // this, clicking a specific card's dim/not-ready Activate button could
+            // silently activate a *different* scroll elsewhere (e.g. one sitting in
+            // the common area) that happened to match the board instead of reporting
+            // that this scroll isn't ready.
+            castSpecificScroll(scrollName) {
+                if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
+                    window.SoundSystem?.play('error');
+                    updateStatus('Cannot activate while standing on a stone — move to an empty hex first.');
+                    return false;
+                }
+
+                const activeScrollsList = Array.from(this.getPlayerScrolls(false).active);
+                const commonAreaScrolls = this.getCommonAreaScrolls();
+                const isFromCommonArea = commonAreaScrolls.includes(scrollName);
+
+                if (!activeScrollsList.includes(scrollName) && !isFromCommonArea) {
+                    window.SoundSystem?.play('error');
+                    updateStatus(`${scrollName} is no longer available to activate.`);
+                    return false;
+                }
+
+                const spell = this.patterns[scrollName];
+                if (!spell) {
+                    window.SoundSystem?.play('error');
+                    updateStatus(`Unknown scroll: ${scrollName}.`);
+                    return false;
+                }
+
+                if (!this.checkPattern(scrollName)) {
+                    window.SoundSystem?.play('error');
+                    updateStatus(`${spell.name || scrollName}: place stones in the required pattern first.`);
+                    return false;
+                }
+
+                // Level 1 scrolls can only be used during the response window
+                if (spell.level === 1) {
+                    window.SoundSystem?.play('error');
+                    updateStatus('Level 1 scrolls can only be used as responses.');
+                    return false;
+                }
+
+                const cost = this.getSpellCost(spell, activePlayerIndex);
+                if (!canAfford(cost)) {
+                    window.SoundSystem?.play('error');
+                    updateStatus(`Not enough AP! Need ${cost} AP to activate.`);
+                    return false;
+                }
+
+                if (typeof window !== 'undefined' && window.logScrollEvent) {
+                    window.logScrollEvent('cast_attempt', {
+                        playerIndex: activePlayerIndex,
+                        active: activeScrollsList,
+                        common: commonAreaScrolls,
+                        targeted: scrollName
+                    });
+                }
+
+                this.executeSpell({ name: scrollName, spell, fromCommonArea: isFromCommonArea });
+                return true;
+            }
+
             showSpellSelection(spells) {
                 const popup = document.createElement('div');
                 Object.assign(popup.style, {

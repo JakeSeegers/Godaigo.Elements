@@ -611,7 +611,11 @@ const ScrollPanelSystem = (() => {
                 castBtn.title = patternMatches ? 'Pattern matches — ready to activate!' : 'Place stones in the required pattern first';
                 castBtn.addEventListener('click', e => {
                     e.stopPropagation();
-                    sp.castSpell();
+                    // Activate THIS scroll specifically — not castSpell(), which scans every
+                    // castable scroll (active + common) and would happily fire a different,
+                    // actually-ready scroll elsewhere instead of erroring on this one.
+                    if (typeof sp.castSpecificScroll === 'function') sp.castSpecificScroll(scrollName);
+                    else sp.castSpell();
                 });
                 acts.appendChild(castBtn);
             }
@@ -625,7 +629,11 @@ const ScrollPanelSystem = (() => {
                 castBtn.title = patternMatches ? 'Pattern matches — ready to activate!' : 'Place stones in the required pattern first';
                 castBtn.addEventListener('click', e => {
                     e.stopPropagation();
-                    sp.castSpell();
+                    // Activate THIS scroll specifically — not castSpell(), which scans every
+                    // castable scroll (active + common) and would happily fire a different,
+                    // actually-ready scroll elsewhere instead of erroring on this one.
+                    if (typeof sp.castSpecificScroll === 'function') sp.castSpecificScroll(scrollName);
+                    else sp.castSpell();
                 });
                 acts.appendChild(castBtn);
             }

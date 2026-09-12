@@ -2812,7 +2812,11 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 if (name && sp) {
                     if (sp.checkPattern && sp.checkPattern(name)) {
                         cancelHandNav(); cancelActiveNav(); cancelCommonNav();
-                        sp.castSpell();
+                        // Cast the specific selected scroll — castSpell() scans every
+                        // castable scroll and could execute a different one if this one
+                        // turns out to be the sole match that isn't affordable.
+                        if (typeof sp.castSpecificScroll === 'function') sp.castSpecificScroll(name);
+                        else sp.castSpell();
                         sps?.refresh();
                     } else {
                         updateStatus(`Pattern not matched — place the required stones first.`);
