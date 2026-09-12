@@ -56,6 +56,53 @@
             }
         }
 
+        // Guest login: create a throwaway account with a random username/password
+        // so a first-time visitor can join real multiplayer games without going
+        // through Register. Reuses the exact same signUp() path as authRegister()
+        // — nothing downstream (user_profiles, the lobby, gamification) needs to
+        // know or care that the account is a guest one.
+        async function authGuestLogin() {
+            setAuthLoading(true);
+
+            const MAX_ATTEMPTS = 5;
+            let lastError = null;
+
+            for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+                const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+                const username = `Guest${suffix}`;
+                const email = username.toLowerCase() + '@godaigo.game';
+                // Never shown to or needed by the guest again — they're not
+                // expected to sign back in as this account.
+                const password = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: { data: { username } }
+                });
+
+                if (!error) {
+                    setAuthLoading(false);
+                    if (data.session) {
+                        onAuthSuccess(data.user);
+                    } else {
+                        // Email confirmation is still enabled in Supabase dashboard
+                        showAuthError('Guest login failed: email confirmation is required. Please disable it in your Supabase Authentication settings.');
+                    }
+                    return;
+                }
+
+                lastError = error;
+                // Only worth retrying on a username collision (astronomically
+                // unlikely, but the suffix IS randomly generated) — anything else
+                // (rate limit, signups disabled, network) fails identically every time.
+                if (!/already registered|already exists/i.test(error.message || '')) break;
+            }
+
+            setAuthLoading(false);
+            showAuthError(lastError?.message || 'Guest login failed. Please try again.');
+        }
+
         // Is the currently signed-in account the developer account ("TheHermit")?
         // All hidden cheat/dev tooling is gated on this. Identity comes from the
         // Supabase-derived username captured in onAuthSuccess (auth metadata /
@@ -155,9 +202,11 @@
             const loading = document.getElementById('auth-loading');
             const loginBtn = document.getElementById('auth-login-btn');
             const regBtn = document.getElementById('auth-register-btn');
+            const guestBtn = document.getElementById('auth-guest-btn');
             if (loading) loading.style.display = on ? 'block' : 'none';
             if (loginBtn) loginBtn.disabled = on;
             if (regBtn) regBtn.disabled = on;
+            if (guestBtn) guestBtn.disabled = on;
         }
 
         // ========================================
