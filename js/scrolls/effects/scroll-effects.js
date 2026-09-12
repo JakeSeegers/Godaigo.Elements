@@ -5477,6 +5477,11 @@ const ScrollEffects = {
         }
         if (opponentStones[stoneType] > 0) {
             opponentStones[stoneType]--;
+            // A destroyed stone returns to the shared SOURCE pool — same invariant
+            // every other stone-destruction path uses (fire kills on the board,
+            // etc.). Without this the stone just vanished: not in the opponent's
+            // pool, never credited back to the source.
+            if (typeof returnStoneToPool === 'function') returnStoneToPool(stoneType);
             const name = (typeof playerPositions !== 'undefined' && playerPositions[opponentIndex]?.username)
                 ? playerPositions[opponentIndex].username
                 : `Player ${opponentIndex + 1}`;

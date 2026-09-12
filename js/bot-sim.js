@@ -460,10 +460,10 @@
     // Arson (FIRE_SCROLL_5): the driver targets the biggest threat
     // (rankedOpponents: most activated ×1000 + total pool, stable
     // tie-break = lowest index), then destroys 1 stone of that opponent's
-    // most-plentiful type (destroyed outright — NOT returned to the source
-    // pool, unlike Transmute), and the scroll moves from the caster's
-    // active area to the common area (replacing any same-element scroll
-    // there, per discardToCommonArea). If the target has no stones the
+    // most-plentiful type — returned to the source pool, same as any other
+    // destroyed stone (see destroyStone() above) — and the scroll moves from
+    // the caster's active area to the common area (replacing any same-element
+    // scroll there, per discardToCommonArea). If the target has no stones the
     // real flow aborts before any of that — scroll stays in active.
     // Excavate immunity is a buff the snapshot doesn't carry — accepted
     // (rare) divergence in target choice.
@@ -483,6 +483,7 @@
         }
         if (!el) return; // target has no stones — real flow aborts, scroll stays put
         target.pool[el]--;
+        if ((snap.sourcePool[el] || 0) < SOURCE_CAP) snap.sourcePool[el]++;
         // handleScrollDisposition(..., forceToCommonArea): active → common
         // area (a common-area cast isn't in active, and simply stays there)
         const ai = p.active.indexOf(scrollName);

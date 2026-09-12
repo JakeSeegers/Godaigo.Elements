@@ -3409,6 +3409,10 @@
                 // Update the local pool for the targeted player
                 if (playerPools[opponentIndex] && playerPools[opponentIndex][stoneType] > 0) {
                     playerPools[opponentIndex][stoneType]--;
+                    // Mirror the caster's returnStoneToPool() call so every client's
+                    // source pool count agrees — without this only the caster's source
+                    // pool went up, leaving it desynced from everyone else's.
+                    if (typeof returnStoneToPool === 'function') returnStoneToPool(stoneType);
                 }
 
                 // If I'm the targeted opponent, refresh my stone UI
