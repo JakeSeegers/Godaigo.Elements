@@ -605,8 +605,11 @@
                 return false;
             }
 
-            // Internal undo helper — reverses a scroll move without broadcast or rule checks.
+            // Internal undo helper — reverses a scroll move without rule checks.
             // 'from' and 'to' are the ORIGINAL move's from/to; this reverses it.
+            // Broadcasts the reversal in multiplayer (mirrors the undo-move/stone-break/
+            // stone-place branches in game-ui.js) so remote clients don't keep believing
+            // the scroll is still in the common area — see 'scroll-move-undo' in lobby.js.
             _undoScrollMove(scrollName, from, to, displacedScroll) {
                 const scrolls = this.getPlayerScrolls(false);
                 const element = this.getScrollElement(scrollName);
@@ -636,6 +639,16 @@
 
                 this.updateScrollCount();
                 if (typeof updateScrollDeckUI === 'function') try { updateScrollDeckUI(); } catch(e) {}
+
+                if (isMultiplayer) {
+                    broadcastGameAction('scroll-move-undo', {
+                        playerIndex: activePlayerIndex,
+                        scrollName,
+                        from,
+                        to,
+                        displacedScroll: displacedScroll || null
+                    });
+                }
             }
 
             // Discard a scroll from hand or active area to common area
