@@ -6036,7 +6036,24 @@ init();
 
     // BPM: 94 at tension 0 → 115 at tension 1.
     const bpm = Math.round(Math.max(94, Math.min(115, 94 + tension * 21)));
-    project.tempo = bpm;
+    // currentBeat()/scheduleAhead() derive the playhead as
+    // playStartBeat + secToBeat(now - playStartCtxTime), and secToBeat() uses
+    // WHATEVER project.tempo is at call time — not the tempo that was actually
+    // in effect for each slice of that elapsed time. Changing project.tempo
+    // without re-anchoring retroactively reinterprets the ENTIRE elapsed
+    // playback under the new tempo, so the beat position jumps instantly and
+    // the next scheduleAhead() tick has to skip or burst-catch-up to it —
+    // audible as a lag/glitch every time tension moves. Re-anchor to the
+    // actual current beat (captured under the OUTGOING tempo, before it
+    // changes) so playback stays continuous across the tempo change.
+    if (isPlaying && audioCtx) {
+      const beatNow = currentBeat();
+      project.tempo = bpm;
+      playStartBeat = beatNow;
+      playStartCtxTime = audioCtx.currentTime;
+    } else {
+      project.tempo = bpm;
+    }
     const bpmInput = document.getElementById('bpm-input');
     if (bpmInput) bpmInput.value = bpm;
     Object.values(activeTracks()).forEach(t => trackEngines[t.id]?.apply(t));
