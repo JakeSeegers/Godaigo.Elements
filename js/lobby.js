@@ -2995,6 +2995,47 @@
                 updateOpponentPanel();
             });
 
+            // Listen for a scroll-move undo ("Undo Step" after Move to Active/Common Area).
+            // Mirrors spellSystem._undoScrollMove()'s local logic, applied to the acting
+            // player's remote-tracked state — without this, remote clients never learn the
+            // move was reversed and keep showing the scroll in the common area, while it's
+            // actually back in the actor's hand. The next host common-area-sync then blanks
+            // that slot everywhere, and the scroll becomes unfindable until something else
+            // forces a resync.
+            gameChannel.on('broadcast', { event: 'scroll-move-undo' }, ({ payload }) => {
+                console.log('📄 Received scroll move undo:', payload);
+                const { playerIndex, scrollName, from, to, displacedScroll } = payload;
+
+                spellSystem.ensurePlayerScrollsStructure(playerIndex);
+                const scrolls = spellSystem.playerScrolls[playerIndex];
+                const element = spellSystem.getScrollElement(scrollName);
+
+                if (to === 'active') {
+                    scrolls.active.delete(scrollName);
+                    scrolls.hand.add(scrollName);
+                } else if (to === 'common') {
+                    if (element && spellSystem.commonArea[element] === scrollName) {
+                        spellSystem.commonArea[element] = null;
+                        if (displacedScroll) {
+                            const deck = spellSystem.scrollDecks[element];
+                            const idx = deck ? deck.lastIndexOf(displacedScroll) : -1;
+                            if (idx !== -1) deck.splice(idx, 1);
+                            spellSystem.commonArea[element] = displacedScroll;
+                        }
+                    }
+                    if (from === 'hand') scrolls.hand.add(scrollName);
+                    else if (from === 'active') scrolls.active.add(scrollName);
+                }
+
+                console.log(`📜 ${getPlayerColorName(playerIndex)} undid scroll move: ${scrollName} back to ${from}`);
+                spellSystem.validateScrollState();
+                spellSystem.updateScrollCount();
+
+                if (typeof updateCommonAreaUI === 'function') updateCommonAreaUI();
+                if (typeof updateScrollDeckUI === 'function') updateScrollDeckUI();
+                updateOpponentPanel();
+            });
+
             // Response window events for scroll responses
             gameChannel.on('broadcast', { event: 'response-window-opened' }, ({ payload }) => {
                 console.log('📄 Received response window opened:', payload);
