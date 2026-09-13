@@ -1,0 +1,361 @@
+(function () {
+    'use strict';
+
+    // ── Lore Intro ───────────────────────────────────────────────────────
+    // Plays right after js/boot-splash.js's logo animation, before the login
+    // screen appears. Nine hand-drawn (Remarkable tablet) sketch-plus-
+    // typewriter-caption clips (LoreIntroClips/chunk*.mp4), each black ink on
+    // near-white paper (~rgb(250,252,247), measured), 1080x1350 (4:5), 30fps,
+    // silent audio track.
+    //
+    // Effect: instead of a plain chroma-keyed cutout, the frame is a
+    // "porthole" into the SAME already-running parallax background
+    // (js/parallax.js's #parallax-bg, which keeps animating underneath the
+    // whole boot-splash/login sequence regardless of what's shown on top of
+    // it — see css/boot-splash.css). Bare paper reads as a dim ambient wash
+    // of that parallax; wherever the sketch/text ink is, the SAME parallax
+    // shows through much brighter (lightness-floored so it's always legible
+    // over a dark patch of the background) — the linework and caption read
+    // as glowing windows onto the moving backdrop.
+    //
+    // Technical note (see conversation / commit): drawing the LIVE DOM
+    // parallax onto a canvas via an SVG <foreignObject> snapshot was tried
+    // and confirmed a dead end — canvases drawn from a foreignObject-bearing
+    // SVG are permanently tainted (no getImageData/toDataURL) even with
+    // every referenced image fully inlined as a data URI. Per-pixel access
+    // is required here, so instead this reads the REAL live geometry
+    // (getBoundingClientRect) and opacity of the actual running parallax
+    // layers every frame, and draws its OWN preloaded copies of the exact
+    // same six PNG assets at that exact live position — i.e. not a
+    // reimplementation of the animation curves, just a pixel-readable
+    // redraw of whatever the real parallax is doing at that instant. If
+    // parallax.js's timing/positions are retuned later, this follows
+    // automatically.
+
+    const CLIP_NAMES = [
+        'chunkone', 'chunktwo', 'chunkthree', 'chunkfour', 'chunkfive',
+        'chunksix', 'chunkseven', 'chunkeight', 'chunknine'
+    ];
+    const CLIP_PATHS = CLIP_NAMES.map(n => `LoreIntroClips/${n}.mp4`);
+
+    // Measured from the actual exported clips (see conversation) — paper
+    // background averages ~rgb(250,252,247); ink strokes go down toward 0,
+    // but H.264 compression on dark ink strokes rarely hits pure black, so
+    // INK_FLOOR is not 0 — pixels this dark or darker count as "fully inked".
+    const PAPER_LUM = 250;
+    const INK_FLOOR = 60;
+
+    // HSL lightness floor applied to the parallax's OWN color when it's
+    // used as the "glow" fill under ink — guarantees legibility over a dark
+    // patch of the (mostly dark, space-themed) parallax regardless of what
+    // color happens to be there, while keeping that color's hue/saturation
+    // so it still reads as "the parallax, but glowing" rather than flat white.
+    const MIN_GLOW_LIGHTNESS = 0.60;
+
+    // Bare-paper areas render as the parallax at this fraction of its own
+    // brightness — the "dim ambient wash" the ink then glows out of.
+    const AMBIENT_FACTOR = 0.20;
+
+    // Internal compositing resolution — matches the clips' 4:5 aspect.
+    // Kept modest (not the clips' native 1080x1350) since every pixel gets a
+    // getImageData round trip plus an RGB<->HSL conversion every frame;
+    // the result is upscaled to the display box, which is fine for soft
+    // painterly content like this.
+    const IW = 360, IH = 450;
+
+    const PARALLAX_BASE_URL = 'images/Background/background/';
+    const PARALLAX_ASSETS = {
+        base:  PARALLAX_BASE_URL + 'Truebackground.png',
+        space: PARALLAX_BASE_URL + 'secondlayermuchbiggerthantrue.png',
+        clouds: [
+            PARALLAX_BASE_URL + 'smallcloud.png',
+            PARALLAX_BASE_URL + 'smallcloud2.png',
+            PARALLAX_BASE_URL + 'smallcloud3.png',
+            PARALLAX_BASE_URL + 'smallcloud4.png',
+        ]
+    };
+    // Natural size shared by every parallax layer image (confirmed via ffprobe).
+    const PARALLAX_NATURAL_W = 2500, PARALLAX_NATURAL_H = 1932;
+
+    let overlay, frameEl, canvas, ctx, video, nextBtn, skipBtn;
+    let inkCanvas, inkCtx, paraCanvas, paraCtx, outCanvas, outCtx;
+    let clipIndex = 0;
+    let onDone = null;
+    let rafId = null;
+    let started = false;
+
+    // Preloaded copies of the parallax's own images — drawn ourselves (not
+    // the live <img> elements) so the composite step can read their pixels.
+    const parallaxImages = {}; // url -> Image
+    let parallaxImagesReady = false;
+
+    function preloadParallaxImages() {
+        const urls = [PARALLAX_ASSETS.base, PARALLAX_ASSETS.space, ...PARALLAX_ASSETS.clouds];
+        let remaining = urls.length;
+        return new Promise(resolve => {
+            urls.forEach(url => {
+                const img = new Image();
+                img.onload = img.onerror = () => {
+                    remaining--;
+                    if (remaining <= 0) { parallaxImagesReady = true; resolve(); }
+                };
+                img.src = url;
+                parallaxImages[url] = img;
+            });
+        });
+    }
+
+    // Find the live parallax injected by js/parallax.js into #lobby-wrapper.
+    // It keeps animating there continuously regardless of what's shown on
+    // top (boot-splash, this lore intro, or the login screen itself).
+    function getLiveParallax() {
+        const bg = document.querySelector('#lobby-wrapper #parallax-bg');
+        if (!bg) return null;
+        const base = bg.querySelector('.parallax-base');
+        const space = bg.querySelector('.parallax-space');
+        const clouds = [...bg.querySelectorAll('.parallax-cloud')];
+        return { bg, base, space, clouds };
+    }
+
+    // A fixed 4:5 crop window into the live parallax-bg's own box (in its
+    // own coordinate space) — this is the "porthole". Centered, sized to
+    // most of the container so there's real motion visible within it.
+    function computeCropWindow(containerRect) {
+        let h = containerRect.height * 0.92;
+        let w = h * (IW / IH);
+        if (w > containerRect.width * 0.92) {
+            w = containerRect.width * 0.92;
+            h = w * (IH / IW);
+        }
+        return {
+            x: (containerRect.width - w) / 2,
+            y: (containerRect.height - h) / 2,
+            w, h
+        };
+    }
+
+    // Render the current live parallax state (base + drifting space + 4
+    // clouds), viewed through the crop window, into the given ctx at IWxIH.
+    function renderParallaxPorthole(destCtx) {
+        destCtx.clearRect(0, 0, IW, IH);
+        const live = getLiveParallax();
+        if (!live || !parallaxImagesReady) return;
+
+        const containerRect = live.bg.getBoundingClientRect();
+        if (!containerRect.width || !containerRect.height) return;
+        const crop = computeCropWindow(containerRect);
+        const sx = IW / crop.w, sy = IH / crop.h;
+        const toCanvas = (relX, relY) => [(relX - crop.x) * sx, (relY - crop.y) * sy];
+
+        // Base layer: static "cover" fit of the full container — no
+        // animation, so plain cover-fit math against the known natural size.
+        const coverScale = Math.max(containerRect.width / PARALLAX_NATURAL_W, containerRect.height / PARALLAX_NATURAL_H);
+        const baseW = PARALLAX_NATURAL_W * coverScale, baseH = PARALLAX_NATURAL_H * coverScale;
+        const baseX = (containerRect.width - baseW) / 2, baseY = (containerRect.height - baseH) / 2;
+        drawLayerImage(destCtx, parallaxImages[PARALLAX_ASSETS.base], baseX, baseY, baseW, baseH, toCanvas, sx, sy, 1);
+
+        // Space + clouds: live rect already bakes in their current CSS
+        // transform (drift animation) — just read and redraw.
+        if (live.space) {
+            const r = live.space.getBoundingClientRect();
+            const relX = r.left - containerRect.left, relY = r.top - containerRect.top;
+            const op = parseFloat(getComputedStyle(live.space).opacity) || 0;
+            drawLayerImage(destCtx, parallaxImages[PARALLAX_ASSETS.space], relX, relY, r.width, r.height, toCanvas, sx, sy, op);
+        }
+        live.clouds.forEach((cloudEl, i) => {
+            const url = PARALLAX_ASSETS.clouds[i];
+            const img = parallaxImages[url];
+            if (!img) return;
+            const r = cloudEl.getBoundingClientRect();
+            const relX = r.left - containerRect.left, relY = r.top - containerRect.top;
+            const op = parseFloat(getComputedStyle(cloudEl).opacity) || 0;
+            drawLayerImage(destCtx, img, relX, relY, r.width, r.height, toCanvas, sx, sy, op);
+        });
+    }
+
+    function drawLayerImage(destCtx, img, relX, relY, relW, relH, toCanvas, sx, sy, opacity) {
+        if (!img || !img.complete || opacity <= 0) return;
+        const [cx, cy] = toCanvas(relX, relY);
+        const cw = relW * sx, ch = relH * sy;
+        // Cheap reject — fully outside the crop window.
+        if (cx + cw < 0 || cy + ch < 0 || cx > IW || cy > IH) return;
+        const prevAlpha = destCtx.globalAlpha;
+        destCtx.globalAlpha = opacity;
+        destCtx.drawImage(img, cx, cy, cw, ch);
+        destCtx.globalAlpha = prevAlpha;
+    }
+
+    // ── RGB <-> HSL (only used to floor lightness for the glow color) ────
+    function rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h = 0, s = 0; const l = (max + min) / 2;
+        if (max !== min) {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                default: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return [h, s, l];
+    }
+    function hue2rgb(p, q, t) {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+    }
+    function hslToRgb(h, s, l) {
+        if (s === 0) { const v = l * 255; return [v, v, v]; }
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        return [
+            hue2rgb(p, q, h + 1 / 3) * 255,
+            hue2rgb(p, q, h) * 255,
+            hue2rgb(p, q, h - 1 / 3) * 255
+        ];
+    }
+
+    function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+    // Composite one frame: ink video -> luminance mask; parallax porthole ->
+    // color source; blend dim-everywhere / bright-glow-under-ink.
+    function drawFrame() {
+        if (!video || video.readyState < video.HAVE_CURRENT_DATA) return;
+
+        inkCtx.drawImage(video, 0, 0, IW, IH);
+        const ink = inkCtx.getImageData(0, 0, IW, IH).data;
+
+        renderParallaxPorthole(paraCtx);
+        const para = paraCtx.getImageData(0, 0, IW, IH).data;
+
+        const out = outCtx.createImageData(IW, IH);
+        const od = out.data;
+        const range = PAPER_LUM - INK_FLOOR;
+
+        for (let i = 0; i < ink.length; i += 4) {
+            const lum = (ink[i] + ink[i + 1] + ink[i + 2]) / 3;
+            const inkAmount = clamp01((PAPER_LUM - lum) / range);
+
+            const pr = para[i], pg = para[i + 1], pb = para[i + 2];
+            const dimR = pr * AMBIENT_FACTOR, dimG = pg * AMBIENT_FACTOR, dimB = pb * AMBIENT_FACTOR;
+
+            if (inkAmount <= 0.002) {
+                od[i] = dimR; od[i + 1] = dimG; od[i + 2] = dimB; od[i + 3] = 255;
+                continue;
+            }
+
+            const [h, s, l] = rgbToHsl(pr, pg, pb);
+            const [gr, gg, gb] = hslToRgb(h, s, Math.max(l, MIN_GLOW_LIGHTNESS));
+
+            od[i]     = dimR + (gr - dimR) * inkAmount;
+            od[i + 1] = dimG + (gg - dimG) * inkAmount;
+            od[i + 2] = dimB + (gb - dimB) * inkAmount;
+            od[i + 3] = 255;
+        }
+
+        outCtx.putImageData(out, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(outCanvas, 0, 0, IW, IH, 0, 0, canvas.width, canvas.height);
+    }
+
+    function loop() {
+        drawFrame();
+        rafId = requestAnimationFrame(loop);
+    }
+
+    function loadClip(i) {
+        video.src = CLIP_PATHS[i];
+        video.load();
+        video.play().catch(() => {
+            // Autoplay blocked (shouldn't happen — always called from a real
+            // user gesture chain) — advance anyway rather than stall forever.
+            advance();
+        });
+    }
+
+    function advance() {
+        clipIndex++;
+        if (clipIndex >= CLIP_PATHS.length) { finish(); return; }
+        loadClip(clipIndex);
+    }
+
+    function finish() {
+        if (!started) return;
+        started = false;
+        video.removeEventListener('ended', advance);
+        if (rafId) cancelAnimationFrame(rafId);
+        video.pause();
+        overlay.classList.add('lore-intro-hidden');
+        const cb = onDone;
+        onDone = null;
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            if (cb) cb();
+        }, 1000); // matches #lore-intro's own fade-out transition
+    }
+
+    function start(onCompleteCallback) {
+        overlay = document.getElementById('lore-intro');
+        canvas = document.getElementById('lore-intro-canvas');
+        video = document.getElementById('lore-intro-video');
+        nextBtn = document.getElementById('lore-intro-next-btn');
+        skipBtn = document.getElementById('lore-intro-skip-btn');
+        if (!overlay || !canvas || !video) { if (onCompleteCallback) onCompleteCallback(); return; }
+
+        onDone = onCompleteCallback;
+
+        try {
+            ctx = canvas.getContext('2d');
+            inkCanvas = document.createElement('canvas');
+            inkCanvas.width = IW; inkCanvas.height = IH;
+            inkCtx = inkCanvas.getContext('2d', { willReadFrequently: true });
+
+            paraCanvas = document.createElement('canvas');
+            paraCanvas.width = IW; paraCanvas.height = IH;
+            paraCtx = paraCanvas.getContext('2d', { willReadFrequently: true });
+
+            outCanvas = document.createElement('canvas');
+            outCanvas.width = IW; outCanvas.height = IH;
+            outCtx = outCanvas.getContext('2d');
+        } catch (e) {
+            console.warn('Lore intro failed to initialize:', e);
+            started = false;
+            if (onCompleteCallback) onCompleteCallback();
+            return;
+        }
+
+        started = true;
+        clipIndex = 0;
+        overlay.style.display = 'flex';
+        overlay.classList.remove('lore-intro-hidden');
+
+        // Canvas backing resolution follows its actual displayed CSS size
+        // (aspect-ratio: 4/5 in css/lore-intro.css) — MUST be read only
+        // after the overlay is actually displayed (was display:none up to
+        // the line above), or getBoundingClientRect() reports 0x0 and the
+        // backing store clamps to 1x1: every draw call then lands on that
+        // single pixel, which CSS then stretches to fill the whole box —
+        // reads as one flat, slowly-changing color instead of the composite.
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = Math.max(1, Math.round(rect.width));
+        canvas.height = Math.max(1, Math.round(rect.height));
+
+        video.addEventListener('ended', advance);
+        if (nextBtn) nextBtn.onclick = advance;
+        if (skipBtn) skipBtn.onclick = finish;
+
+        preloadParallaxImages().then(() => {
+            if (!started) return; // skipped before images finished loading
+            loadClip(0);
+            rafId = requestAnimationFrame(loop);
+        });
+    }
+
+    window.LoreIntro = { start };
+})();

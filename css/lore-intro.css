@@ -1,0 +1,56 @@
+/* ── Lore Intro — hand-drawn sketch sequence ──────────────────────────
+   Plays right after js/boot-splash.js's logo animation, before the login
+   screen fades in. Frame border/shadow deliberately matches .auth-screen
+   (css/styles.css) for visual consistency between the two screens the
+   player sees back to back. See js/lore-intro.js for the compositing. */
+
+#lore-intro {
+    position: fixed;
+    inset: 0;
+    z-index: 99999; /* just under #boot-splash's 100000 — plays right after it */
+    background: #05050a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    opacity: 1;
+    transition: opacity 1s ease;
+}
+
+#lore-intro.lore-intro-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.lore-intro-frame {
+    background: var(--bg-panel);
+    border: 2px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: 4px 4px 0 #000;
+    padding: 10px;
+    width: min(440px, 86vw);
+}
+
+.lore-intro-frame canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    border-radius: calc(var(--radius-lg) - 4px);
+}
+
+.lore-intro-controls {
+    display: flex;
+    gap: 12px;
+}
+
+/* Decode source only — never rendered directly (see #boot-splash-video's
+   identical treatment in css/boot-splash.css). js/lore-intro.js reads its
+   frames into the canvas. */
+#lore-intro-video {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
+}

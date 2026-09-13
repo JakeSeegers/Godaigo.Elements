@@ -27,8 +27,17 @@
     // including setup failure, so a broken splash can never permanently
     // hard-lock the player out of logging in.
 
+    // Hands off to js/lore-intro.js (the hand-drawn sketch sequence) if it
+    // loaded correctly; that module reveals the login screen itself once its
+    // clips finish or are skipped. Falls straight through to the login
+    // screen if LoreIntro is missing/broken — same "never permanently
+    // hard-lock login" guarantee this function has always had.
     function revealLogin() {
-        document.body.classList.remove('boot-splash-active');
+        if (window.LoreIntro && typeof window.LoreIntro.start === 'function') {
+            window.LoreIntro.start(() => document.body.classList.remove('boot-splash-active'));
+        } else {
+            document.body.classList.remove('boot-splash-active');
+        }
     }
 
     const splash = document.getElementById('boot-splash');

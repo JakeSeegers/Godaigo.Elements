@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="css/paper-ui-profile.css">
     <link rel="stylesheet" href="css/paper-ui-lobby.css">
     <link rel="stylesheet" href="css/boot-splash.css">
+    <link rel="stylesheet" href="css/lore-intro.css">
 </head>
 <body>
     <!-- ============================================
@@ -36,6 +37,23 @@
         <canvas id="boot-splash-canvas"></canvas>
         <div id="boot-splash-prompt">Press any key to start</div>
     </div>
+
+    <!-- ============================================
+         LORE INTRO (hand-drawn sketch sequence — plays
+         right after the boot splash, ahead of login)
+         ============================================ -->
+    <div id="lore-intro" style="display:none;">
+        <div class="lore-intro-frame">
+            <canvas id="lore-intro-canvas"></canvas>
+        </div>
+        <div class="lore-intro-controls">
+            <button id="lore-intro-next-btn" class="auth-btn-secondary">Next</button>
+            <button id="lore-intro-skip-btn" class="auth-btn-secondary">Skip All</button>
+        </div>
+        <!-- Decode source only — never rendered directly, see js/lore-intro.js. -->
+        <video id="lore-intro-video" muted playsinline preload="auto"></video>
+    </div>
+
     <!-- Runs immediately, before #auth-screen below even exists in the DOM,
          so it hides with zero flash-of-unstyled-content. js/boot-splash.js
          removes this class on dismiss (and as a fail-safe on its own setup
@@ -643,6 +661,10 @@
     <script src="js/game-ui.js" charset="UTF-8"></script>
     <script src="js/scroll-panels.js" charset="UTF-8"></script>
     <script src="js/parallax.js" charset="UTF-8"></script>
+    <!-- Reads parallax.js's live DOM output at runtime (from boot-splash.js's
+         revealLogin(), well after page load) — placed after it for clarity,
+         though nothing here depends on script PARSE order. -->
+    <script src="js/lore-intro.js" charset="UTF-8"></script>
     <script src="js/gamification.js" charset="UTF-8"></script>
     <script src="js/crt-overlay.js" charset="UTF-8"></script>
     <script src="js/gamification-ui.js" charset="UTF-8"></script>

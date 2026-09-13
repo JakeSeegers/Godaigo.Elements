@@ -66,6 +66,16 @@ Order matters — later scripts depend on earlier ones.
 11. game-ui.js             ← HUD, drag-drop handlers, panel toggles, scroll deck UI
 12. scroll-panels.js       ← window.ScrollPanelSystem — shared floating-panel chrome (Hand/Active/Common/Game Log/Opponent Status/Elemental Stones)
 13. parallax.js            ← Animated background (no game deps)
+13b. lore-intro.js         ← window.LoreIntro — hand-drawn sketch/typewriter lore sequence
+                             (LoreIntroClips/chunk*.mp4), played by boot-splash.js's
+                             revealLogin() right after the logo, before login. Reads
+                             parallax.js's LIVE DOM output at runtime (getBoundingClientRect
+                             + computed transform/opacity on the real #parallax-bg layers,
+                             re-drawn into its own canvas so it can read pixels — a
+                             foreignObject-snapshot approach was tried and confirmed to
+                             permanently taint the canvas, even with every image inlined as
+                             a data URI) — placed after parallax.js for clarity only, no
+                             actual parse-order dependency.
 14. gamification.js        ← window.gami — XP/gold/profiles (depends on Supabase)
 15. crt-overlay.js         ← CRT canvas effects (no game deps)
 16. gamification-ui.js     ← Profile modal UI (depends on gamification.js)
