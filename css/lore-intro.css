@@ -44,6 +44,26 @@
     gap: 12px;
 }
 
+/* Same look as #boot-splash-prompt's "Press any key to start" pill
+   (css/boot-splash.css) — the logo screen's own prompt — adapted into an
+   actual clickable button (cursor + hover/active feedback added; that one
+   is a static, non-interactive prompt). */
+.lore-intro-btn {
+    padding: 8px 18px;
+    background: rgba(0, 0, 0, 0.55);
+    border: none;
+    border-radius: 20px;
+    font-family: var(--font-pixel, 'Press Start 2P', monospace);
+    font-size: 14px;
+    color: #fff;
+    letter-spacing: 1px;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.lore-intro-btn:hover  { background: rgba(0, 0, 0, 0.75); }
+.lore-intro-btn:active { background: rgba(0, 0, 0, 0.9); }
+
 /* Decode source only — never rendered directly (see #boot-splash-video's
    identical treatment in css/boot-splash.css). js/lore-intro.js reads its
    frames into the canvas. */
