@@ -43,9 +43,12 @@
          right after the boot splash, ahead of login)
          ============================================ -->
     <div id="lore-intro" style="display:none;">
-        <div class="lore-intro-frame">
+        <div class="lore-intro-frame auth-screen">
             <canvas id="lore-intro-canvas"></canvas>
         </div>
+        <!-- Shown once a clip ends and holds on its last frame — see
+             js/lore-intro.js's onClipEnded(). Space (or Next) continues. -->
+        <div id="lore-intro-prompt" class="lore-intro-prompt">Press Space to continue</div>
         <div class="lore-intro-controls">
             <button id="lore-intro-next-btn" class="lore-intro-btn">Next</button>
             <button id="lore-intro-skip-btn" class="lore-intro-btn">Skip All</button>

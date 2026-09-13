@@ -12,11 +12,25 @@
     // "porthole" into the SAME already-running parallax background
     // (js/parallax.js's #parallax-bg, which keeps animating underneath the
     // whole boot-splash/login sequence regardless of what's shown on top of
-    // it — see css/boot-splash.css). Bare paper reads as a dim ambient wash
-    // of that parallax; wherever the sketch/text ink is, the SAME parallax
-    // shows through much brighter (lightness-floored so it's always legible
-    // over a dark patch of the background) — the linework and caption read
-    // as glowing windows onto the moving backdrop.
+    // it — see css/boot-splash.css). #lore-intro itself has NO opaque
+    // background (css/lore-intro.css) so that real parallax shows through
+    // at full brightness everywhere OUTSIDE the frame too, exactly as it
+    // does on the login screen either side of this sequence — only the
+    // framed area is dimmed. Bare paper reads as a dim ambient wash of that
+    // parallax; wherever the sketch/text ink is, the SAME parallax shows
+    // through much brighter (lightness-floored so it's always legible over
+    // a dark patch of the background) — the linework and caption read as
+    // glowing windows onto the moving backdrop.
+    //
+    // Pacing: each clip plays once and then HOLDS on its last frame (video
+    // 'ended' just stops it — drawFrame() keeps compositing whatever frame
+    // the paused video is sitting on) with a "Press Space to continue"
+    // prompt, giving the player time to actually read the caption instead
+    // of racing to the next clip. Space always moves on immediately —
+    // whether the current clip is still playing (skips the rest of it) or
+    // already ended and waiting — via the same advance() the Next button
+    // uses, so there's exactly one "move forward" behavior regardless of
+    // when it's triggered.
     //
     // Technical note (see conversation / commit): drawing the LIVE DOM
     // parallax onto a canvas via an SVG <foreignObject> snapshot was tried
@@ -77,12 +91,13 @@
     // Natural size shared by every parallax layer image (confirmed via ffprobe).
     const PARALLAX_NATURAL_W = 2500, PARALLAX_NATURAL_H = 1932;
 
-    let overlay, frameEl, canvas, ctx, video, nextBtn, skipBtn;
+    let overlay, frameEl, canvas, ctx, video, nextBtn, skipBtn, promptEl;
     let inkCanvas, inkCtx, paraCanvas, paraCtx, outCanvas, outCtx;
     let clipIndex = 0;
     let onDone = null;
     let rafId = null;
     let started = false;
+    let waiting = false; // true once a clip has ended and is holding for input
 
     // Preloaded copies of the parallax's own images — drawn ourselves (not
     // the live <img> elements) so the composite step can read their pixels.
@@ -270,6 +285,8 @@
     }
 
     function loadClip(i) {
+        waiting = false;
+        if (promptEl) promptEl.classList.remove('lore-intro-prompt-visible');
         video.src = CLIP_PATHS[i];
         video.load();
         video.play().catch(() => {
@@ -279,18 +296,41 @@
         });
     }
 
+    // A clip reached its natural end — hold on its last frame (drawFrame()
+    // keeps compositing it every tick regardless of play state) and prompt,
+    // rather than auto-advancing. Space (see onKeyDown) or the Next button
+    // move on; both call advance() directly, so there's no separate "resume
+    // from waiting" path to keep in sync.
+    function onClipEnded() {
+        waiting = true;
+        if (promptEl) promptEl.classList.add('lore-intro-prompt-visible');
+    }
+
+    // The single "move on" action — used by the Next button, and by Space
+    // whether the current clip is still playing (skips the rest of it) or
+    // already ended and waiting (the normal path). Always the same result,
+    // so pressing Space is never the "wrong" thing to do.
     function advance() {
         clipIndex++;
         if (clipIndex >= CLIP_PATHS.length) { finish(); return; }
         loadClip(clipIndex);
     }
 
+    function onKeyDown(e) {
+        if (e.code !== 'Space' && e.key !== ' ') return;
+        e.preventDefault();
+        advance();
+    }
+
     function finish() {
         if (!started) return;
         started = false;
-        video.removeEventListener('ended', advance);
+        waiting = false;
+        video.removeEventListener('ended', onClipEnded);
+        document.removeEventListener('keydown', onKeyDown);
         if (rafId) cancelAnimationFrame(rafId);
         video.pause();
+        if (promptEl) promptEl.classList.remove('lore-intro-prompt-visible');
         overlay.classList.add('lore-intro-hidden');
         const cb = onDone;
         onDone = null;
@@ -306,6 +346,7 @@
         video = document.getElementById('lore-intro-video');
         nextBtn = document.getElementById('lore-intro-next-btn');
         skipBtn = document.getElementById('lore-intro-skip-btn');
+        promptEl = document.getElementById('lore-intro-prompt');
         if (!overlay || !canvas || !video) { if (onCompleteCallback) onCompleteCallback(); return; }
 
         onDone = onCompleteCallback;
@@ -346,7 +387,8 @@
         canvas.width = Math.max(1, Math.round(rect.width));
         canvas.height = Math.max(1, Math.round(rect.height));
 
-        video.addEventListener('ended', advance);
+        video.addEventListener('ended', onClipEnded);
+        document.addEventListener('keydown', onKeyDown);
         if (nextBtn) nextBtn.onclick = advance;
         if (skipBtn) skipBtn.onclick = finish;
 

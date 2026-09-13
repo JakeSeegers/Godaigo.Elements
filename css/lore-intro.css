@@ -1,14 +1,21 @@
 /* ── Lore Intro — hand-drawn sketch sequence ──────────────────────────
    Plays right after js/boot-splash.js's logo animation, before the login
-   screen fades in. Frame border/shadow deliberately matches .auth-screen
-   (css/styles.css) for visual consistency between the two screens the
-   player sees back to back. See js/lore-intro.js for the compositing. */
+   screen fades in. The frame carries .auth-screen (css/styles.css) directly
+   in its markup — the SAME border/background/shadow/width/margin the login
+   screen uses, not a separately maintained copy — for visual continuity
+   between the two screens the player sees back to back. See
+   js/lore-intro.js for the compositing. */
 
 #lore-intro {
     position: fixed;
     inset: 0;
     z-index: 99999; /* just under #boot-splash's 100000 — plays right after it */
-    background: #05050a;
+    /* No opaque background — js/parallax.js's #parallax-bg keeps animating
+       underneath the whole boot-splash/login sequence regardless of what's
+       on top of it, so leaving this transparent lets it show through at
+       full brightness everywhere outside the frame, same as it does on the
+       login screen either side of this. Only the frame itself is dimmed. */
+    background: transparent;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -23,13 +30,13 @@
     pointer-events: none;
 }
 
+/* Applied ALONGSIDE .auth-screen in the markup (not a lookalike copy of
+   its values) so the background/border/radius/shadow/width/margin are the
+   exact same declarations the login screen uses — this can't drift from
+   it. Only the padding is overridden: .auth-screen's 32px/36px is sized
+   for a stack of form fields, not a canvas that already fills the frame. */
 .lore-intro-frame {
-    background: var(--bg-panel);
-    border: 2px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    box-shadow: 4px 4px 0 #000;
     padding: 10px;
-    width: min(440px, 86vw);
 }
 
 .lore-intro-frame canvas {
@@ -37,6 +44,30 @@
     width: 100%;
     aspect-ratio: 4 / 5;
     border-radius: calc(var(--radius-lg) - 4px);
+}
+
+/* Same look as #boot-splash-prompt's "Press any key to start" pill
+   (css/boot-splash.css) — reuses its exact blink keyframe by name (that
+   file loads first, see index.html). Shown once a clip ends and holds on
+   its last frame, waiting for Space (or Next) to continue. */
+.lore-intro-prompt {
+    padding: 8px 18px;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 20px;
+    text-align: center;
+    white-space: nowrap;
+    font-family: var(--font-pixel, 'Press Start 2P', monospace);
+    font-size: 14px;
+    color: #fff;
+    letter-spacing: 1px;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+}
+.lore-intro-prompt.lore-intro-prompt-visible {
+    opacity: 1;
+    animation: boot-splash-blink 1.4s ease-in-out 0.6s infinite;
 }
 
 .lore-intro-controls {
