@@ -31,12 +31,16 @@
 }
 
 /* Applied ALONGSIDE .auth-screen in the markup (not a lookalike copy of
-   its values) so the background/border/radius/shadow/width/margin are the
-   exact same declarations the login screen uses — this can't drift from
-   it. Only the padding is overridden: .auth-screen's 32px/36px is sized
-   for a stack of form fields, not a canvas that already fills the frame. */
+   its values) so the background/border/radius/shadow/margin are the exact
+   same declarations the login screen uses — this can't drift from it.
+   Padding and width are overridden: .auth-screen's 32px/36px padding is
+   sized for a stack of form fields, not a canvas that already fills the
+   frame, and the width is bumped 20% over .auth-screen's own
+   min(420px, 92vw) — sized for one line of text on a scrollable page, not
+   the fixed-height full-screen sequence this frame is the whole point of. */
 .lore-intro-frame {
     padding: 10px;
+    width: min(504px, 92vw);
 }
 
 .lore-intro-frame canvas {
@@ -49,15 +53,15 @@
 /* Same look as #boot-splash-prompt's "Press any key to start" pill
    (css/boot-splash.css) — reuses its exact blink keyframe by name (that
    file loads first, see index.html). Shown once a clip ends and holds on
-   its last frame, waiting for Space (or Next) to continue. */
+   its last frame, waiting for Space to continue. */
 .lore-intro-prompt {
-    padding: 8px 18px;
+    padding: 10px 22px;
     background: rgba(0, 0, 0, 0.55);
-    border-radius: 20px;
+    border-radius: 24px;
     text-align: center;
     white-space: nowrap;
     font-family: var(--font-pixel, 'Press Start 2P', monospace);
-    font-size: 14px;
+    font-size: 17px;
     color: #fff;
     letter-spacing: 1px;
     text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
@@ -80,12 +84,12 @@
    actual clickable button (cursor + hover/active feedback added; that one
    is a static, non-interactive prompt). */
 .lore-intro-btn {
-    padding: 8px 18px;
+    padding: 10px 22px;
     background: rgba(0, 0, 0, 0.55);
     border: none;
-    border-radius: 20px;
+    border-radius: 24px;
     font-family: var(--font-pixel, 'Press Start 2P', monospace);
-    font-size: 14px;
+    font-size: 17px;
     color: #fff;
     letter-spacing: 1px;
     text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);

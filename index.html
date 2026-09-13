@@ -47,10 +47,10 @@
             <canvas id="lore-intro-canvas"></canvas>
         </div>
         <!-- Shown once a clip ends and holds on its last frame — see
-             js/lore-intro.js's onClipEnded(). Space (or Next) continues. -->
+             js/lore-intro.js's onClipEnded(). Space always continues (mid-
+             clip or once waiting) — no separate Next button needed. -->
         <div id="lore-intro-prompt" class="lore-intro-prompt">Press Space to continue</div>
         <div class="lore-intro-controls">
-            <button id="lore-intro-next-btn" class="lore-intro-btn">Next</button>
             <button id="lore-intro-skip-btn" class="lore-intro-btn">Skip All</button>
         </div>
         <!-- Decode source only — never rendered directly, see js/lore-intro.js. -->

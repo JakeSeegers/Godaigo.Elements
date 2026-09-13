@@ -32,12 +32,21 @@
     // clips finish or are skipped. Falls straight through to the login
     // screen if LoreIntro is missing/broken — same "never permanently
     // hard-lock login" guarantee this function has always had.
+    //
+    // Waits out #boot-splash's own 1.4s fade-out (css/boot-splash.css)
+    // first, in this one place, before doing either — otherwise LoreIntro's
+    // sequence would start appearing while the splash was still visibly
+    // fading out on top of it. (This used to be a CSS transition-delay on
+    // #auth-screen/#multiplayer-lobby/.site-logo instead; moved here since
+    // that delay only ever made sense for the no-LoreIntro path.)
     function revealLogin() {
-        if (window.LoreIntro && typeof window.LoreIntro.start === 'function') {
-            window.LoreIntro.start(() => document.body.classList.remove('boot-splash-active'));
-        } else {
-            document.body.classList.remove('boot-splash-active');
-        }
+        setTimeout(() => {
+            if (window.LoreIntro && typeof window.LoreIntro.start === 'function') {
+                window.LoreIntro.start(() => document.body.classList.remove('boot-splash-active'));
+            } else {
+                document.body.classList.remove('boot-splash-active');
+            }
+        }, 1400);
     }
 
     const splash = document.getElementById('boot-splash');

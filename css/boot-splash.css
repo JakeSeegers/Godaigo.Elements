@@ -45,10 +45,15 @@ body.boot-splash-active .site-logo {
 #auth-screen,
 #multiplayer-lobby,
 .site-logo {
-    /* Delay matches #boot-splash's own 1.4s fade-out exactly (below) —
-       zero overlap. The splash must be fully invisible before this
-       starts fading in at all; sequential, not a crossfade. */
-    transition: opacity 1s ease 1.4s;
+    /* No transition-delay here anymore — js/boot-splash.js's revealLogin()
+       now waits out #boot-splash's own 1.4s fade-out itself (in a single
+       place, before branching to js/lore-intro.js or straight to the login
+       screen) rather than this CSS delaying the visual fade-in. A delay
+       fixed here would either double up (lore intro's own path already
+       waits in JS) or fire again for no reason (lore intro's callback,
+       possibly minutes later once its clips finish, has nothing left to
+       wait on). Sequential, not a crossfade, either way. */
+    transition: opacity 1s ease;
 }
 
 #boot-splash.boot-splash-hidden {

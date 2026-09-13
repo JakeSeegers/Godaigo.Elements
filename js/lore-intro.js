@@ -28,9 +28,9 @@
     // prompt, giving the player time to actually read the caption instead
     // of racing to the next clip. Space always moves on immediately —
     // whether the current clip is still playing (skips the rest of it) or
-    // already ended and waiting — via the same advance() the Next button
-    // uses, so there's exactly one "move forward" behavior regardless of
-    // when it's triggered.
+    // already ended and waiting — through the same advance(), so there's
+    // exactly one "move forward" behavior regardless of when it's
+    // triggered. No separate Next button — Skip All is the only other control.
     //
     // Technical note (see conversation / commit): drawing the LIVE DOM
     // parallax onto a canvas via an SVG <foreignObject> snapshot was tried
@@ -91,7 +91,7 @@
     // Natural size shared by every parallax layer image (confirmed via ffprobe).
     const PARALLAX_NATURAL_W = 2500, PARALLAX_NATURAL_H = 1932;
 
-    let overlay, frameEl, canvas, ctx, video, nextBtn, skipBtn, promptEl;
+    let overlay, frameEl, canvas, ctx, video, skipBtn, promptEl;
     let inkCanvas, inkCtx, paraCanvas, paraCtx, outCanvas, outCtx;
     let clipIndex = 0;
     let onDone = null;
@@ -298,18 +298,18 @@
 
     // A clip reached its natural end — hold on its last frame (drawFrame()
     // keeps compositing it every tick regardless of play state) and prompt,
-    // rather than auto-advancing. Space (see onKeyDown) or the Next button
-    // move on; both call advance() directly, so there's no separate "resume
-    // from waiting" path to keep in sync.
+    // rather than auto-advancing. Space (see onKeyDown) calls advance()
+    // directly, so there's no separate "resume from waiting" path to keep
+    // in sync.
     function onClipEnded() {
         waiting = true;
         if (promptEl) promptEl.classList.add('lore-intro-prompt-visible');
     }
 
-    // The single "move on" action — used by the Next button, and by Space
-    // whether the current clip is still playing (skips the rest of it) or
-    // already ended and waiting (the normal path). Always the same result,
-    // so pressing Space is never the "wrong" thing to do.
+    // The single "move on" action — triggered by Space whether the current
+    // clip is still playing (skips the rest of it) or already ended and
+    // waiting (the normal path). Always the same result, so pressing Space
+    // is never the "wrong" thing to do.
     function advance() {
         clipIndex++;
         if (clipIndex >= CLIP_PATHS.length) { finish(); return; }
@@ -344,7 +344,6 @@
         overlay = document.getElementById('lore-intro');
         canvas = document.getElementById('lore-intro-canvas');
         video = document.getElementById('lore-intro-video');
-        nextBtn = document.getElementById('lore-intro-next-btn');
         skipBtn = document.getElementById('lore-intro-skip-btn');
         promptEl = document.getElementById('lore-intro-prompt');
         if (!overlay || !canvas || !video) { if (onCompleteCallback) onCompleteCallback(); return; }
@@ -389,7 +388,6 @@
 
         video.addEventListener('ended', onClipEnded);
         document.addEventListener('keydown', onKeyDown);
-        if (nextBtn) nextBtn.onclick = advance;
         if (skipBtn) skipBtn.onclick = finish;
 
         preloadParallaxImages().then(() => {
