@@ -26,11 +26,12 @@
     // 'ended' just stops it — drawFrame() keeps compositing whatever frame
     // the paused video is sitting on) with a "Press Space to continue"
     // prompt, giving the player time to actually read the caption instead
-    // of racing to the next clip. Space always moves on immediately —
-    // whether the current clip is still playing (skips the rest of it) or
-    // already ended and waiting — through the same advance(), so there's
-    // exactly one "move forward" behavior regardless of when it's
-    // triggered. No separate Next button — Skip All is the only other control.
+    // of racing to the next clip. Space OR a click anywhere (except Skip
+    // All itself) always moves on immediately — whether the current clip
+    // is still playing (skips the rest of it) or already ended and waiting
+    // — through the same advance(), so there's exactly one "move forward"
+    // behavior regardless of how or when it's triggered. No separate Next
+    // button — Skip All is the only other control.
     //
     // Technical note (see conversation / commit): drawing the LIVE DOM
     // parallax onto a canvas via an SVG <foreignObject> snapshot was tried
@@ -298,8 +299,9 @@
 
     // A clip reached its natural end — hold on its last frame (drawFrame()
     // keeps compositing it every tick regardless of play state) and prompt,
-    // rather than auto-advancing. Space (see onKeyDown) calls advance()
-    // directly, so there's no separate "resume from waiting" path to keep
+    // rather than auto-advancing. Space (onKeyDown) or a click (onClick)
+    // call advance() directly, so there's no separate "resume from waiting"
+    // path to keep
     // in sync.
     function onClipEnded() {
         waiting = true;
@@ -322,12 +324,22 @@
         advance();
     }
 
+    // Click anywhere to continue too (mirrors boot-splash.js's own
+    // click-or-key dismiss) — except the Skip All button itself, which
+    // already has its own handler and means something different (jump to
+    // the end, not just one step).
+    function onClick(e) {
+        if (skipBtn && (e.target === skipBtn || skipBtn.contains(e.target))) return;
+        advance();
+    }
+
     function finish() {
         if (!started) return;
         started = false;
         waiting = false;
         video.removeEventListener('ended', onClipEnded);
         document.removeEventListener('keydown', onKeyDown);
+        overlay.removeEventListener('click', onClick);
         if (rafId) cancelAnimationFrame(rafId);
         video.pause();
         if (promptEl) promptEl.classList.remove('lore-intro-prompt-visible');
@@ -388,6 +400,7 @@
 
         video.addEventListener('ended', onClipEnded);
         document.addEventListener('keydown', onKeyDown);
+        overlay.addEventListener('click', onClick);
         if (skipBtn) skipBtn.onclick = finish;
 
         preloadParallaxImages().then(() => {
