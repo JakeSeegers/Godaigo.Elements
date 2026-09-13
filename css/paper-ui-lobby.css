@@ -204,8 +204,12 @@
 }
 
 /* ── Pre-login Sign In screen — same frame/palette as the lobby it leads
-   into, so the two screens read as one system instead of a jump cut. ── */
-#auth-screen.auth-screen {
+   into, so the two screens read as one system instead of a jump cut.
+   .lore-intro-frame.auth-screen (js/lore-intro.js's sequence, played right
+   before this screen) shares this same rule rather than a copy, so its
+   frame can't drift from whatever this one looks like. ── */
+#auth-screen.auth-screen,
+.lore-intro-frame.auth-screen {
   background: var(--pp-parch);
   border-style: solid;
   border-width: 16px;
@@ -218,7 +222,8 @@
   position: relative;
   color: var(--pp-ink);
 }
-#auth-screen.auth-screen::before {
+#auth-screen.auth-screen::before,
+.lore-intro-frame.auth-screen::before {
   content: "";
   position: absolute;
   inset: -14px;
