@@ -1191,11 +1191,13 @@ const TutorialMode = (function () {
         if (!step) return;
 
         // ── Earth shrine gate ────────────────────────────────────────────────
+        // Matches the Wind/Water shrine gates below: check that the stone draw
+        // actually happened (playerPool.earth went up) instead of the player's
+        // on-screen position, which didn't reliably line up with EARTH_POS.
         if (step.id === 'earth-shrine') {
-            const dist = pos
-                ? Math.sqrt(Math.pow(pos.x - EARTH_POS.x, 2) + Math.pow(pos.y - EARTH_POS.y, 2))
-                : Infinity;
-            if (dist < 20) {
+            const earthNow = window.playerPool?.earth || 0;
+            if (earthNow > 0) {
+                clearHintTimer();
                 setTimeout(() => showStep(currentStep + 1), 900);
             } else {
                 if (typeof updateStatus === 'function')
