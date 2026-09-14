@@ -3,9 +3,10 @@
  *
  * Features:
  *  - Auto-builds a scripted board (earth tile at center, player + enemy pawns placed)
- *  - 27-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
+ *  - 28-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
  *    paginated designer's note, added before the original 14-step game-intro walkthrough;
- *    later additions cover Water's ability-copying mechanic, Water+Wind synergy, and Void)
+ *    later additions cover finding a Water shrine, Water's ability-copying mechanic,
+ *    Water+Wind synergy, and Void)
  *  - Spotlight system: dims everything and highlights one UI element at a time
  *  - Movement gating: restricts the pawn to the tutorial destination
  *  - Click-to-advance: certain steps wait for the player to click the spotlit element
@@ -41,6 +42,7 @@ const TutorialMode = (function () {
     let spotlightHandler  = null;   // {el, fn} for click-to-advance cleanup
     let earthRevealed     = false;  // tracks whether the first tile reveal has been processed
     let windRevealed       = false;  // tracks whether the wind-escape step's forced tile has been processed
+    let waterRevealed      = false;  // tracks whether the water-shrine step's forced tile has been processed
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
     let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
     let cornerResizeFn    = null;   // window 'resize'/'scroll' listener kept while a corner modal is open
@@ -344,6 +346,19 @@ const TutorialMode = (function () {
             freeMove: true,
             modalPos: 'corner'
         },
+        // ── water-shrine: player explores to find and gather water stones ──────────
+        {
+            id: 'water-shrine',
+            title: 'Find a Water Shrine',
+            content: `Explore the board and <strong>end your turn on a Water shrine</strong> to collect <strong style="color:#5894f4;">Water stones</strong>.
+                <div style="margin-top:8px; color:#bbb; font-size:17px;">
+                    Flip a hidden tile to find one, then walk to its center and click <strong>End Turn</strong>.
+                </div>`,
+            action: 'water-shrine',
+            nextLabel: null,
+            freeMove: true,
+            modalPos: 'corner'
+        },
         // ── water-basics: player copies an Earth stone's ability with Water ────────
         {
             id: 'water-basics',
@@ -512,6 +527,7 @@ const TutorialMode = (function () {
         window.tutorialDeckOverride = [...TUTORIAL_DECK];
         earthRevealed = false;
         windRevealed  = false;
+        waterRevealed = false;
         currentStep   = -1;
 
         const sg = window.startGame || (typeof startGame !== 'undefined' ? startGame : null);
@@ -719,6 +735,7 @@ const TutorialMode = (function () {
             'spell-cast':    'Click "Activate Scroll" in the dock (or the Activate ✦ button on the scroll card) to activate Avalanche…',
             'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
+            'water-shrine':      'Explore the board, find a Water shrine, walk to its center and click End Turn…',
             'wind-move':         'Drag a Wind stone, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone (red) from the pool and place it adjacent to an Earth stone…',
             'stone-placed-water-earth': 'Drag a Water stone from the pool and place it adjacent to an Earth stone…',
@@ -873,12 +890,8 @@ const TutorialMode = (function () {
                 window.placeStoneVisually(nx, ny, 'earth');
             }
         } else if (stepId === 'water-basics') {
-            const pool = window.playerPool;
-            if (pool && (pool.water || 0) < 1) {
-                pool.water = (pool.water || 0) + 2;
-                if (typeof updateHUD === 'function') updateHUD();
-                if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
-            }
+            // Water stones come from the water-shrine step just before this one
+            // (forced tile + shrine replenish on End Turn) — no free grant needed.
             // Safety net: ensure at least one earth stone is on the board for Water to copy.
             const hasEarth = Array.isArray(window.placedStones)
                 && window.placedStones.some(s => s.type === 'earth');
@@ -1054,6 +1067,7 @@ const TutorialMode = (function () {
             'spell-cast':    'Click "Activate Scroll" in the dock after placing the pattern…',
             'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
+            'water-shrine':      'Explore the board, find a Water shrine, walk to its center and click End Turn…',
             'wind-move':         'Drag a Wind stone from the pool, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone from the pool adjacent to an Earth stone…',
             'stone-placed-water-earth': 'Drag a Water stone from the pool adjacent to an Earth stone…',
@@ -1116,6 +1130,9 @@ const TutorialMode = (function () {
             // forced to be a Wind shrine, so the player doesn't have to hunt for
             // one by chance.
             tile.shrineType = 'wind';
+        } else if (currentStep === stepIndexOf('water-shrine') && !waterRevealed) {
+            // Same trick for Water.
+            tile.shrineType = 'water';
         }
     }
 
@@ -1133,6 +1150,8 @@ const TutorialMode = (function () {
             // and actually collects Wind stones. Just stop forcing further
             // reveals during this step.
             windRevealed = true;
+        } else if (currentStep === stepIndexOf('water-shrine') && !waterRevealed) {
+            waterRevealed = true;
         }
     }
 
@@ -1180,7 +1199,7 @@ const TutorialMode = (function () {
                 setTimeout(() => showStep(currentStep + 1), 900);
             } else {
                 if (typeof updateStatus === 'function')
-                    updateStatus('Walk to the glowing Earth shrine center first, then click End Turn.');
+                    updateStatus('Walk to the Earth shrine center first, then click End Turn.');
             }
             return;
         }
@@ -1195,6 +1214,19 @@ const TutorialMode = (function () {
             } else {
                 if (typeof updateStatus === 'function')
                     updateStatus('End your turn on the Wind shrine center to collect Wind stones.');
+            }
+        }
+
+        // ── Water shrine gate ────────────────────────────────────────────────
+        // Fires after shrine replenishment, so playerPool.water is already updated.
+        if (step.action === 'water-shrine') {
+            const waterNow = window.playerPool?.water || 0;
+            if (waterNow > 0) {
+                clearHintTimer();
+                setTimeout(() => showStep(currentStep + 1), 900);
+            } else {
+                if (typeof updateStatus === 'function')
+                    updateStatus('End your turn on the Water shrine center to collect Water stones.');
             }
         }
     }
