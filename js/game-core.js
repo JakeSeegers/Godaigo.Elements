@@ -7591,6 +7591,12 @@ function clearPlayerPath() {
                         }
 
                         console.log(`✨ ${stone.type} at (${stone.x.toFixed(1)}, ${stone.y.toFixed(1)}) is nullified by void`);
+
+                        // Tutorial hook — fires with the actual nullified stone,
+                        // not a proxy "any non-void neighbor" guess.
+                        if (window.isTutorialMode && window.TutorialMode?.onStoneNullified) {
+                            window.TutorialMode.onStoneNullified(stone);
+                        }
                     }
                 }
             });
@@ -7604,6 +7610,13 @@ function clearPlayerPath() {
         function updateWaterStoneVisual(waterStone) {
             const effectiveType = getEffectiveStoneType(waterStone);
             const chainedAbility = getChainedAbility(waterStone.x, waterStone.y);
+
+            // Tutorial hook — fires with the water stone's actual, authoritative
+            // resolved mimicry type (same value that drives the ring indicator
+            // below), not a proxy adjacency guess.
+            if (window.isTutorialMode && window.TutorialMode?.onWaterMimicUpdated) {
+                window.TutorialMode.onWaterMimicUpdated(waterStone, effectiveType);
+            }
 
             // Remember whether an adoption indicator existed BEFORE we clear it
             const hadIndicator = !!(

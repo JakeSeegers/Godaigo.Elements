@@ -1317,27 +1317,60 @@ const TutorialMode = (function () {
             clearHintTimer();
             setTimeout(advance, 400);
         } else if (step.action === 'stone-placed-water-earth' && stoneType === 'water') {
-            if (isAdjacentToStoneType(x, y, 'earth')) {
-                clearHintTimer();
-                setTimeout(advance, 400);
-            } else if (typeof updateStatus === 'function') {
+            // Advance is driven by onWaterMimicUpdated() below — the real,
+            // authoritative mimicry resolution (water could be adjacent to
+            // something that outranks Earth and mimics that instead) — this
+            // is just an instant nudge when it's not even close.
+            if (!isAdjacentToStoneType(x, y, 'earth') && typeof updateStatus === 'function') {
                 updateStatus('Place the Water stone adjacent to an Earth stone to copy its ability.');
             }
         } else if (step.action === 'stone-placed-water-wind' && stoneType === 'water') {
-            if (isAdjacentToStoneType(x, y, 'wind')) {
-                clearHintTimer();
-                setTimeout(advance, 400);
-            } else if (typeof updateStatus === 'function') {
+            if (!isAdjacentToStoneType(x, y, 'wind') && typeof updateStatus === 'function') {
                 updateStatus('Place the Water stone adjacent to a Wind stone to copy its free-movement ability.');
             }
         } else if (step.action === 'stone-placed-void' && stoneType === 'void') {
-            if (isAdjacentToOtherStone(x, y, 'void')) {
-                clearHintTimer();
-                setTimeout(advance, 400);
-            } else if (typeof updateStatus === 'function') {
-                updateStatus('Place the Void stone adjacent to another stone to cancel its ability.');
+            // Advance is driven by onStoneNullified() below — the real
+            // nullification resolution (only Fire/Wind/Earth are actually
+            // eligible to be cancelled, matching game-core.js's own rule) —
+            // this is just an instant nudge when nothing nearby qualifies.
+            const nullifiable = ['fire', 'wind', 'earth'];
+            const hasTarget = nullifiable.some(t => isAdjacentToStoneType(x, y, t));
+            if (!hasTarget && typeof updateStatus === 'function') {
+                updateStatus('Place the Void stone adjacent to a Fire, Wind, or Earth stone to cancel its ability.');
             }
         }
+    }
+
+    /**
+     * Called from game-core.js whenever a water stone's mimicked ability is
+     * recomputed (getEffectiveStoneType — the same value that drives the
+     * on-screen ability-ring indicator), not a proxy distance guess. Fires on
+     * every water stone any time the board changes, so it can't be fooled by
+     * water sitting next to Earth but actually mimicking something else that
+     * outranks it.
+     */
+    function onWaterMimicUpdated(stone, effectiveType) {
+        const step = STEPS[currentStep];
+        if (!step) return;
+        if (step.action === 'stone-placed-water-earth' && effectiveType === 'earth') {
+            clearHintTimer();
+            setTimeout(advance, 400);
+        } else if (step.action === 'stone-placed-water-wind' && effectiveType === 'wind') {
+            clearHintTimer();
+            setTimeout(advance, 400);
+        }
+    }
+
+    /**
+     * Called from game-core.js whenever a stone is actually nullified by an
+     * adjacent Void stone (matches the real rule: only Fire/Wind/Earth are
+     * eligible), not a proxy "any non-void neighbor" guess.
+     */
+    function onStoneNullified(stone) {
+        const step = STEPS[currentStep];
+        if (!step || step.action !== 'stone-placed-void') return;
+        clearHintTimer();
+        setTimeout(advance, 400);
     }
 
     /** Called from game-core.js after a stone is broken/removed from the board. */
@@ -1464,6 +1497,7 @@ const TutorialMode = (function () {
         start, advance, finish,
         onTilePreReveal, onTileRevealed, onPlayerMoved, onWindStoneUsed, onPlayerTilePlaced, onEndTurn, showMovementHint,
         onStonePlaced, onStoneBroken, onScrollMoved, onScrollHovered, onSpellCast,
+        onWaterMimicUpdated, onStoneNullified,
         get currentStep() { return currentStep; }
     };
 })();
