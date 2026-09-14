@@ -215,9 +215,9 @@ const TutorialMode = (function () {
         {
             id: 'earth-shrine',
             title: 'Collect Earth Stones',
-            content: `You flipped an <strong style="color:#69d83a;">Earth tile</strong>! The glowing center is the <strong>Earth shrine</strong>.
+            content: `You flipped an <strong style="color:#69d83a;">Earth tile</strong>! The center is the <strong>Earth shrine</strong>.
             <div style="margin-top:10px;">
-                <strong>Walk your pawn to the glowing center</strong>, then click <strong>End Turn</strong> to collect <strong style="color:#69d83a;">5 Earth stones</strong>.
+                <strong>Walk your pawn to the center</strong>, then click <strong>End Turn</strong> to collect <strong style="color:#69d83a;">5 Earth stones</strong>.
             </div>
             <div style="margin-top:10px; color:#bbb; font-size:17px;">
                 Stones come from shared <strong>Source Pools</strong> (25 of each type max).
@@ -673,7 +673,7 @@ const TutorialMode = (function () {
 
     function showBoardRing(x, y) {
         removeBoardRing();
-        const svg = document.getElementById('boardSvg');
+        const svg = document.getElementById('board');
         if (!svg) return;
         const vp = svg.querySelector('#viewport') || svg;
 
@@ -1367,7 +1367,7 @@ const TutorialMode = (function () {
      */
     function showOpponentSpeechBubble(text) {
         removeOpponentSpeechBubble();
-        const svg = document.getElementById('boardSvg');
+        const svg = document.getElementById('board');
         if (!svg) return;
         const vp = svg.querySelector('#viewport') || svg;
 
