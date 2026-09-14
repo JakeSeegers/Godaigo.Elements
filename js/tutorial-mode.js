@@ -64,7 +64,8 @@ const TutorialMode = (function () {
             content: `Welcome to Godaigo! I've been working on this game since 2014, making many changes over the years based on feedback from players like you.`,
             action: 'read',
             nextLabel: 'Continue',
-            modalPos: 'center'
+            modalPos: 'center',
+            skipTo: 'welcome'
         },
         // ── 1  designer's note, part 2/5 ────────────────────────────────────────
         {
@@ -73,7 +74,8 @@ const TutorialMode = (function () {
             content: `It started with one question: <em>what if we could play Magic: The Gathering, but our players and mana physically affected the board?</em>`,
             action: 'read',
             nextLabel: 'Continue',
-            modalPos: 'center'
+            modalPos: 'center',
+            skipTo: 'welcome'
         },
         // ── 2  designer's note, part 3/5 ────────────────────────────────────────
         {
@@ -88,7 +90,8 @@ const TutorialMode = (function () {
             </div>`,
             action: 'read',
             nextLabel: 'Continue',
-            modalPos: 'center'
+            modalPos: 'center',
+            skipTo: 'welcome'
         },
         // ── 3  designer's note, part 4/5 ────────────────────────────────────────
         {
@@ -100,7 +103,8 @@ const TutorialMode = (function () {
             </div>`,
             action: 'read',
             nextLabel: 'Continue',
-            modalPos: 'center'
+            modalPos: 'center',
+            skipTo: 'welcome'
         },
         // ── 4  designer's note, part 5/5 ────────────────────────────────────────
         {
@@ -116,6 +120,8 @@ const TutorialMode = (function () {
             action: 'read',
             nextLabel: 'Continue',
             modalPos: 'center'
+            // No skipTo here — this is the last preamble page, so Continue
+            // already lands on 'welcome' next; a Skip button would be redundant.
         },
         // ── 5  welcome (read — only intro step permitted as read-only) ─────────
         {
@@ -650,6 +656,14 @@ const TutorialMode = (function () {
                 ? `<span style="color:#bbb;font-size:17px;font-style:italic;">${actionHints[step.action]}</span>`
                 : `<span style="color:#bbb;font-size:17px;font-style:italic;">Complete the action above to continue…</span>`;
 
+        // Lets a step (currently the designer's-note pages) offer a muted "Skip"
+        // button that jumps straight to another step by id, bypassing the rest
+        // of its own sequence, without touching the normal Next/Continue flow.
+        const skipHTML = step.skipTo
+            ? `<button class="tmode-skip" style="background:none;border:none;color:#888;font-size:14px;cursor:pointer;padding:4px 2px;text-decoration:underline;transition:color 0.15s;">Skip Preamble</button>`
+            : '';
+        const footerJustify = step.skipTo ? 'space-between' : 'flex-end';
+
         const overlay = document.createElement('div');
         overlay.className = `tutorial-modal tutorial-tmode${isCorner ? ' tutorial-corner' : ''}`;
 
@@ -661,7 +675,8 @@ const TutorialMode = (function () {
                 </div>
                 <div class="tutorial-body">${step.content}</div>
                 <div class="tutorial-footer"
-                     style="display:flex;justify-content:flex-end;margin-top:14px;gap:8px;">
+                     style="display:flex;justify-content:${footerJustify};align-items:center;margin-top:14px;gap:8px;">
+                    ${skipHTML}
                     ${footerHTML}
                 </div>
             </div>`;
@@ -674,6 +689,13 @@ const TutorialMode = (function () {
 
         const btn = overlay.querySelector('.tmode-next');
         if (btn) btn.addEventListener('click', advance);
+
+        const skipBtn = overlay.querySelector('.tmode-skip');
+        if (skipBtn) {
+            skipBtn.addEventListener('mouseenter', () => { skipBtn.style.color = '#ddd'; });
+            skipBtn.addEventListener('mouseleave', () => { skipBtn.style.color = '#888'; });
+            skipBtn.addEventListener('click', () => showStep(stepIndexOf(step.skipTo)));
+        }
 
         if (isCorner) {
             pinCornerModalAboveDock(overlay);
