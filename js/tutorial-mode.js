@@ -892,12 +892,15 @@ const TutorialMode = (function () {
         } else if (stepId === 'water-basics') {
             // Water stones come from the water-shrine step just before this one
             // (forced tile + shrine replenish on End Turn) — no free grant needed.
-            // Safety net: ensure at least one earth stone is on the board for Water to copy.
-            const hasEarth = Array.isArray(window.placedStones)
-                && window.placedStones.some(s => s.type === 'earth');
-            if (!hasEarth && typeof window.placeStoneVisually === 'function') {
-                const { x: nx, y: ny } = hp(3, 0);
-                window.placeStoneVisually(nx, ny, 'earth');
+            // Safety net: guarantee an Earth stone is actually reachable from the
+            // player's current position. Checking "does one exist ANYWHERE on the
+            // board" isn't enough — the avalanche pattern was built way back
+            // around wherever the pawn was at the time, which could be nowhere
+            // near the player by now after all the exploring since.
+            const pos1 = window.playerPosition;
+            if (pos1 && !isAdjacentToStoneType(pos1.x, pos1.y, 'earth') && typeof window.placeStoneVisually === 'function') {
+                const target = hexAdjacentToPlayer(1, 0);
+                if (target) window.placeStoneVisually(target.x, target.y, 'earth');
             }
         } else if (stepId === 'water-wind-synergy') {
             const pool = window.playerPool;
@@ -906,12 +909,13 @@ const TutorialMode = (function () {
                 if (typeof updateHUD === 'function') updateHUD();
                 if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
             }
-            // Safety net: ensure at least one wind stone is on the board for Water to copy.
-            const hasWind = Array.isArray(window.placedStones)
-                && window.placedStones.some(s => s.type === 'wind');
-            if (!hasWind && typeof window.placeStoneVisually === 'function') {
-                const { x: nx, y: ny } = hp(3, 0);
-                window.placeStoneVisually(nx, ny, 'wind');
+            // Safety net: guarantee a Wind stone is actually reachable from the
+            // player's current position — see water-basics above for why a
+            // board-wide existence check isn't enough.
+            const pos2 = window.playerPosition;
+            if (pos2 && !isAdjacentToStoneType(pos2.x, pos2.y, 'wind') && typeof window.placeStoneVisually === 'function') {
+                const target = hexAdjacentToPlayer(1, 0);
+                if (target) window.placeStoneVisually(target.x, target.y, 'wind');
             }
         } else if (stepId === 'void-stones') {
             const pool = window.playerPool;
@@ -920,12 +924,13 @@ const TutorialMode = (function () {
                 if (typeof updateHUD === 'function') updateHUD();
                 if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
             }
-            // Safety net: ensure at least one other stone is on the board for Void to nullify.
-            const hasOther = Array.isArray(window.placedStones)
-                && window.placedStones.some(s => s.type !== 'void');
-            if (!hasOther && typeof window.placeStoneVisually === 'function') {
-                const { x: nx, y: ny } = hp(3, 0);
-                window.placeStoneVisually(nx, ny, 'earth');
+            // Safety net: guarantee some other stone is actually reachable from
+            // the player's current position for Void to nullify — see
+            // water-basics above for why a board-wide existence check isn't enough.
+            const pos3 = window.playerPosition;
+            if (pos3 && !isAdjacentToOtherStone(pos3.x, pos3.y, 'void') && typeof window.placeStoneVisually === 'function') {
+                const target = hexAdjacentToPlayer(1, 0);
+                if (target) window.placeStoneVisually(target.x, target.y, 'earth');
             }
         } else if (stepId === 'react-scrolls') {
             // Force a Water I "Reflect" scroll into the player's hand — a real
@@ -1252,6 +1257,22 @@ const TutorialMode = (function () {
 
     function clearPatternPoll() {
         if (patternPollInterval) { clearInterval(patternPollInterval); patternPollInterval = null; }
+    }
+
+    // Pixel position of the hex one step (dq, dr) away from the player's
+    // current position, on the same small stone-slot hex grid game-core.js's
+    // own pixelToHex/hexToPixel use (TILE_SIZE=20) — those aren't exposed on
+    // window, so this duplicates the same axial-hex math rather than calling in.
+    function hexAdjacentToPlayer(dq, dr) {
+        const pos = window.playerPosition;
+        if (!pos) return null;
+        const s = 20; // matches game-core.js's TILE_SIZE
+        const q = Math.round(pos.x * Math.sqrt(3) / 3 / s - pos.y / 3 / s);
+        const r = Math.round(pos.y * 2 / 3 / s);
+        const nq = q + dq, nr = r + dr;
+        const width  = s * Math.sqrt(3);
+        const height = 2 * s;
+        return { x: width * (nq + nr / 2), y: height * (3 / 4) * nr };
     }
 
     // "Adjacent" here mirrors game-core.js's own stone-adjacency threshold
