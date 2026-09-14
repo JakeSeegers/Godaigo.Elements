@@ -149,7 +149,7 @@ const TutorialMode = (function () {
         {
             id: 'tile-placed',
             title: 'Place Your Starting Tile',
-            content: `See the <strong>hexagonal tile in the left panel?</strong> That's your Player Tile.
+            content: `See the <strong>hexagonal tile in the panel above?</strong> That's your Player Tile.
             <div style="margin-top:10px;">
                 <strong>Drag it onto the board</strong> and snap it next to the edge of two existing tiles. You'll see a ghost tile showing where it'll land.
             </div>`,
