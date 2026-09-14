@@ -1176,6 +1176,9 @@ const ScrollPanelSystem = (() => {
         // it isn't meaningful (opponent cards aren't the viewer's to move).
         function showPreview(scrollName, anchorEl, area) {
             currentArea = area; // kept fresh regardless of the currentKey guard in _showCardPreview
+            if (window.isTutorialMode && window.TutorialMode?.onScrollHovered) {
+                window.TutorialMode.onScrollHovered(scrollName);
+            }
             const sp = window.spellSystem;
             const element = (sp && typeof sp.getScrollElement === 'function')
                 ? sp.getScrollElement(scrollName) : 'earth';

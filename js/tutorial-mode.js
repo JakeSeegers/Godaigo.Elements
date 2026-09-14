@@ -198,11 +198,16 @@ const TutorialMode = (function () {
             <div style="margin-top:10px;">
                 Hover your cursor over the name of the scroll to reveal its ability.
             </div>`,
-            action: 'click',
-            spotlight: '.fsp-close-btn',
+            action: 'scroll-hover',
+            // Targets the scroll's own card/row, not the #fsp-hand panel itself —
+            // the panel is position:fixed, and .tutorial-spotlight forces
+            // position:relative, which would knock a fixed-position element off
+            // its actual on-screen spot. Both selectors are listed because the
+            // Hand panel can default to either its collapsed compact-row view or
+            // the full card view; only one is ever actually in the DOM.
+            spotlight: '#fsp-hand .fsp-card, #fsp-hand .fsp-compact-row',
             nextLabel: null,
-            modalPos: 'corner',
-            noDim: true
+            modalPos: 'corner'
         },
         // ── 10  earth shrine (action-gated: onEndTurn at EARTH_POS) ───────────
         {
@@ -641,6 +646,7 @@ const TutorialMode = (function () {
             'click':         'Click the highlighted element to continue…',
             'place-tile':    'Drag your player tile onto the board to continue…',
             'end-turn':      'Walk to the glowing shrine center, then click End Turn…',
+            'scroll-hover':  'Hover the Avalanche scroll in your Hand panel to continue…',
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
             'pattern-built': 'Build the Avalanche pattern (4 Earth stones) around your pawn. See the scroll card for the layout…',
@@ -855,12 +861,13 @@ const TutorialMode = (function () {
         }
 
         // Spotlight an HTML element.
-        // Only block all other interaction for 'click' steps — move/place-tile steps
-        // need the board to stay interactive so the player can drag pawns/tiles.
-        // step.noDim opts a 'click' step out of the dimming overlay entirely (e.g.
-        // scroll-found, where the player needs the rest of the hand panel to stay
-        // undimmed and hoverable so they can preview the scroll's ability) while
-        // keeping the pulsing highlight ring and the click-to-advance gate.
+        // Only block all other interaction for 'click' steps — move/place-tile/
+        // scroll-hover steps need the board (or panel) to stay interactive so the
+        // player can drag pawns/tiles or hover a scroll card.
+        // step.noDim additionally opts a 'click' step out of the dimming overlay
+        // while still keeping the pulsing highlight ring and the click-to-advance
+        // gate — for a 'click' step that still needs the rest of the screen to
+        // stay hoverable/interactive.
         if (step.spotlight) {
             const blocking = (step.action === 'click') && !step.noDim;
             showSpotlight(step.spotlight, blocking);
@@ -905,6 +912,7 @@ const TutorialMode = (function () {
         }
         // Start hint timers for other action-gated steps
         const hintMessages = {
+            'scroll-hover':  'Hover the Avalanche scroll in your Hand panel to continue…',
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
             'spell-cast':    'Click "Activate Scroll" in the dock after placing the pattern…',
@@ -1090,6 +1098,14 @@ const TutorialMode = (function () {
         }
     }
 
+    /** Called from scroll-panels.js when the player hovers any scroll card/row to preview it. */
+    function onScrollHovered(scrollName) {
+        const step = STEPS[currentStep];
+        if (!step || step.action !== 'scroll-hover') return;
+        clearHintTimer();
+        advance();
+    }
+
     /** Called from scroll-panels.js when player moves a scroll between areas. */
     function onScrollMoved(scrollName, fromArea, toArea) {
         const step = STEPS[currentStep];
@@ -1194,7 +1210,7 @@ const TutorialMode = (function () {
     return {
         start, advance, finish,
         onTilePreReveal, onTileRevealed, onPlayerMoved, onWindStoneUsed, onPlayerTilePlaced, onEndTurn, showMovementHint,
-        onStonePlaced, onStoneBroken, onScrollMoved, onSpellCast,
+        onStonePlaced, onStoneBroken, onScrollMoved, onScrollHovered, onSpellCast,
         get currentStep() { return currentStep; }
     };
 })();
