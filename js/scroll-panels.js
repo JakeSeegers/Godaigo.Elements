@@ -330,6 +330,34 @@ const ScrollPanelSystem = (() => {
         saveState();
     }
 
+    // ---- Reset to defaults ----
+    // Re-applies each panel's DEFAULTS position/size/collapsed state to both
+    // panels[id].state and the live DOM, without touching what's saved in
+    // localStorage — used by the tutorial so its walkthrough always starts
+    // from the same known layout regardless of how a player previously
+    // dragged/resized these panels in a real game. Omit `ids` to reset all.
+    function resetToDefaults(ids) {
+        (ids || Object.keys(DEFAULTS)).forEach(id => {
+            const p = panels[id];
+            if (!p || !DEFAULTS[id]) return;
+            const state = { ...DEFAULTS[id] };
+            _clampToViewport(state);
+            p.state = state;
+            if (id === 'elementalstones') {
+                // autoHeight panel (see createPanel's opts.autoHeight) — no
+                // inline width/height, ever; just reposition it.
+                p.el.style.left = state.x + 'px';
+                p.el.style.top  = state.y + 'px';
+            } else {
+                p.el.style.left   = state.x + 'px';
+                p.el.style.top    = state.y + 'px';
+                p.el.style.width  = state.w + 'px';
+                p.el.style.height = state.collapsed ? '' : state.h + 'px';
+            }
+            _applyCollapsed(id, state.collapsed);
+        });
+    }
+
     // ---- Open / close ----
     // Syncs the associated dock/HUD button's lit (fsp-dock-btn-open) state
     // right here, not just from each button's own click handler — a panel
@@ -1276,5 +1304,5 @@ const ScrollPanelSystem = (() => {
         setTimeout(init, 0);
     }
 
-    return { init, toggle, refresh, openPanel, closePanel, animateCardMove, animateCardToDeck };
+    return { init, toggle, refresh, openPanel, closePanel, animateCardMove, animateCardToDeck, resetToDefaults };
 })();

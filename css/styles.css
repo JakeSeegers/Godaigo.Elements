@@ -4193,6 +4193,53 @@ label, .hud-ap-label, .hud-ap-value {
     background: color-mix(in srgb, currentColor 18%, transparent);
 }
 
+/* One-time "why am I over the limit" explainer, shown below the overflow
+   banner the first time a player hits scroll overflow in a session. */
+#scroll-overflow-explainer {
+    position: fixed;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1d1831;
+    border: 1px solid var(--accent-gold);
+    border-radius: 6px;
+    padding: 14px 18px;
+    z-index: 9599;
+    font-family: var(--font-terminal);
+    color: var(--text-primary);
+    width: 90%;
+    max-width: 420px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    animation: scroll-toast-in 0.2s ease-out;
+}
+.overflow-explainer-title {
+    color: var(--accent-gold);
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+.overflow-explainer-body {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+.overflow-explainer-btn {
+    display: block;
+    margin: 10px 0 0 auto;
+    background: transparent;
+    border: 2px solid var(--accent-gold);
+    color: var(--accent-gold);
+    font-family: var(--font-terminal);
+    font-size: 13px;
+    padding: 5px 14px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+.overflow-explainer-btn:hover {
+    background: color-mix(in srgb, var(--accent-gold) 18%, transparent);
+}
+
 /* ============================================
    VERSION LABEL
    ============================================ */

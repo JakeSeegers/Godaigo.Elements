@@ -31,6 +31,10 @@
                 this.MAX_HAND_SIZE = 2;
                 this.MAX_ACTIVE_SIZE = 2;
 
+                // Shows the "why am I over the limit" explainer once per session the
+                // first time showEndTurnOverflowModal() fires — see that method.
+                this._overflowExplained = false;
+
                 // Common area - shared scrolls any player can activate
                 // Max 1 scroll per element type. When a new scroll of same element enters,
                 // the old one goes to bottom of deck
@@ -1126,6 +1130,24 @@
                     window.ScrollPanelSystem.openPanel('hand');
                     window.ScrollPanelSystem.openPanel('active');
                     window.ScrollPanelSystem.refresh();
+                }
+
+                // First time a player hits overflow this session, explain what's
+                // going on — the banner alone says the counts, not why the limit
+                // exists or what discarding to the Common Area actually does.
+                if (!self._overflowExplained) {
+                    self._overflowExplained = true;
+                    const old2 = document.getElementById('scroll-overflow-explainer');
+                    if (old2) old2.remove();
+                    const explainer = document.createElement('div');
+                    explainer.id = 'scroll-overflow-explainer';
+                    explainer.innerHTML = `
+                        <div class="overflow-explainer-title">Scroll Overflow</div>
+                        <div class="overflow-explainer-body">Your Hand and Active Area can each hold at most 2 scrolls. When you're over the limit, discard down to 2 before you can end your turn, sometimes down to the Common Area, where any player can use it. Sending a scroll to the Common Area replaces a scroll of the same type already there.</div>
+                        <button class="overflow-explainer-btn">Got it</button>
+                    `;
+                    document.body.appendChild(explainer);
+                    explainer.querySelector('.overflow-explainer-btn').addEventListener('click', () => explainer.remove());
                 }
 
                 // Remove any stale banner from a previous call

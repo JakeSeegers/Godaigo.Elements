@@ -3,8 +3,9 @@
  *
  * Features:
  *  - Auto-builds a scripted board (earth tile at center, player + enemy pawns placed)
- *  - 24-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
- *    paginated designer's note, added before the original 14-step game-intro walkthrough)
+ *  - 27-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
+ *    paginated designer's note, added before the original 14-step game-intro walkthrough;
+ *    later additions cover Water's ability-copying mechanic, Water+Wind synergy, and Void)
  *  - Spotlight system: dims everything and highlights one UI element at a time
  *  - Movement gating: restricts the pawn to the tutorial destination
  *  - Click-to-advance: certain steps wait for the player to click the spotlit element
@@ -39,6 +40,7 @@ const TutorialMode = (function () {
     let spotlightEl       = null;   // currently spotlit DOM element
     let spotlightHandler  = null;   // {el, fn} for click-to-advance cleanup
     let earthRevealed     = false;  // tracks whether the first tile reveal has been processed
+    let windRevealed       = false;  // tracks whether the wind-escape step's forced tile has been processed
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
     let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
     let cornerResizeFn    = null;   // window 'resize'/'scroll' listener kept while a corner modal is open
@@ -291,7 +293,7 @@ const TutorialMode = (function () {
             title: 'Build the Avalanche Pattern',
             content: `The Avalanche scroll requires a pattern of <strong>4 Earth stones</strong> around your pawn.
             <div style="margin-top:10px;">
-                Open the scroll card in your Active Area. You'll see the exact pattern layout.
+                Open the scroll card in your Active or Common Area. You'll see the exact pattern layout.
                 <strong>Place the remaining stones</strong> to complete it.
             </div>
             <div style="margin-top:8px; color:#bbb; font-size:17px;">
@@ -310,7 +312,10 @@ const TutorialMode = (function () {
                 Click <strong>Activate Scroll</strong> in the dock, or the glowing <strong>Activate ✦</strong> button on the Avalanche scroll card.
             </div>
             <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                Activating costs 2 AP. After activating, your Earth win-condition is fulfilled!
+                Activating costs 2 AP. You may need to end your turn to regain AP before you can activate the scroll.
+            </div>
+            <div style="margin-top:8px; color:#bbb; font-size:17px;">
+                After activating, your Earth win-condition is fulfilled!
             </div>`,
             action: 'spell-cast',
             nextLabel: null,
@@ -327,6 +332,9 @@ const TutorialMode = (function () {
                     Breaking costs <strong>AP equal to the stone's rank</strong>. Earth is rank 5, so it costs <strong style="color:#69d83a;">5 AP</strong>.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
+                    As before, you will need to end your turn to regain the AP necessary to break an Earth Stone.
+                </div>
+                <div style="margin-top:8px; color:#bbb; font-size:17px;">
                     On touch devices: long-press the stone instead.
                 </div>`,
             action: 'stone-broken',
@@ -336,13 +344,29 @@ const TutorialMode = (function () {
             freeMove: true,
             modalPos: 'corner'
         },
+        // ── water-basics: player copies an Earth stone's ability with Water ────────
+        {
+            id: 'water-basics',
+            title: 'Water Copies Its Neighbor',
+            content: `<strong style="color:#5894f4;">Water stones</strong> are unique: they copy the ability of whichever stone is placed next to them.
+                <div style="margin-top:10px;">
+                    <strong>Drag a Water stone</strong> from the pool and drop it <em>adjacent to an Earth stone</em>.
+                    It will copy Earth's ability and become impassable too.
+                </div>
+                <div style="margin-top:8px; color:#bbb; font-size:17px;">
+                    Placing stones is free, with no AP cost.
+                </div>`,
+            action: 'stone-placed-water-earth',
+            nextLabel: null,
+            modalPos: 'corner'
+        },
         // ── wind-escape: player places a wind stone ───────────────────────────────
         {
             id: 'wind-escape',
             title: 'Find a Wind Shrine',
             content: `Explore the board and <strong>end your turn on a Wind shrine</strong> to collect <strong style="color:#ffce00;">Wind stones</strong>.
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    Wind shrines glow yellow. Walk to the center and click <strong>End Turn</strong>.
+                    Flip a hidden tile to find one, then walk to its center and click <strong>End Turn</strong>.
                 </div>`,
             action: 'wind-shrine',
             nextLabel: null,
@@ -361,19 +385,46 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
+        // ── water-wind-synergy: player copies a Wind stone's ability with Water ────
+        {
+            id: 'water-wind-synergy',
+            title: 'Water + Wind: Easy Movement',
+            content: `Placing a <strong style="color:#5894f4;">Water stone</strong> next to a <strong style="color:#ffce00;">Wind stone</strong> is especially powerful: water copies Wind's ability too, so that hex also costs <strong>0 AP</strong> to walk through.
+                <div style="margin-top:10px;">
+                    <strong>Drag a Water stone</strong> from the pool and drop it <em>adjacent to a Wind stone</em> to open up an easy-movement path.
+                </div>`,
+            action: 'stone-placed-water-wind',
+            nextLabel: null,
+            modalPos: 'corner'
+        },
         // ── fire-counter: player places a fire stone adjacent to earth ────────────
         {
             id: 'fire-counter',
-            title: 'Fire Destroys Earth!',
+            title: 'Fire Destroys Stones!',
             content: `<strong style="color:#ed1b43;">Fire stones</strong> destroy adjacent stones when placed!
                 <div style="margin-top:10px;">
-                    <strong>Drag a Fire stone</strong> from the pool and drop it <em>adjacent to an Earth stone</em>.
-                    Watch the Earth stone disappear.
+                    <strong>Drag a Fire stone</strong> from the pool and drop it <em>adjacent to an Earth, Water, or Wind stone</em> to destroy them.
+                    Watch the stone disappear.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    This is how Fire counters Earth. It's perfect for breaking traps without spending AP.
+                    This is how Fire counters Earth, Water, and Wind. It's perfect for breaking traps without spending AP.
                 </div>`,
             action: 'stone-placed-fire',
+            nextLabel: null,
+            modalPos: 'corner'
+        },
+        // ── void-stones: player places a void stone to cancel a neighbor's ability ─
+        {
+            id: 'void-stones',
+            title: 'Void: Cancel and Empower',
+            content: `<strong style="color:#9458f4;">Void stones</strong> do two things. While they sit in your pool, each one raises your max AP by 1, giving you extra Action Points beyond the usual 5.
+                <div style="margin-top:10px;">
+                    Placed on the board, a Void stone <strong>cancels the ability</strong> of any stone next to it.
+                </div>
+                <div style="margin-top:10px;">
+                    <strong>Drag a Void stone</strong> from the pool and drop it <em>adjacent to another stone</em> to nullify it.
+                </div>`,
+            action: 'stone-placed-void',
             nextLabel: null,
             modalPos: 'corner'
         },
@@ -388,11 +439,15 @@ const TutorialMode = (function () {
                 <div style="margin-top:10px;">
                     Only <strong>one reaction fires per turn</strong>. You cannot react to a reaction. Once one resolves, the window closes.
                 </div>
+                <div style="margin-top:10px;">
+                    You just picked up a <strong style="color:#5894f4;">Water I</strong> reaction scroll. Hover your cursor over its name in your Hand panel to reveal its ability.
+                </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
                     Build a reaction scroll pattern in your Active Area before your opponent's turn to surprise them!
                 </div>`,
-            action: 'read',
-            nextLabel: 'Good to know!',
+            action: 'scroll-hover',
+            spotlight: '#fsp-hand .fsp-card, #fsp-hand .fsp-compact-row',
+            nextLabel: null,
             modalPos: 'corner'
         },
         // ── 22  HUD reference (brief read) ───────────────────────────────────
@@ -456,6 +511,7 @@ const TutorialMode = (function () {
         window.isTutorialMode       = true;
         window.tutorialDeckOverride = [...TUTORIAL_DECK];
         earthRevealed = false;
+        windRevealed  = false;
         currentStep   = -1;
 
         const sg = window.startGame || (typeof startGame !== 'undefined' ? startGame : null);
@@ -475,6 +531,15 @@ const TutorialMode = (function () {
             if (typeof fitBoardToView === 'function') fitBoardToView();
         } catch (err) {
             console.error('TutorialMode: board setup error (non-fatal):', err);
+        }
+        // Force Hand/Active/Common/Elemental Stones/Opponent Status/Game Log back
+        // to their default positions for the walkthrough, regardless of how a
+        // player previously dragged/resized them in a real game — not persisted,
+        // so their own customized layout is untouched for their next real game.
+        try {
+            window.ScrollPanelSystem?.resetToDefaults?.();
+        } catch (err) {
+            console.error('TutorialMode: panel position reset error (non-fatal):', err);
         }
         // Ensure End Turn button is visible — it starts as display:none in HTML
         // and may have been re-hidden by lobby reset flows before the tutorial launched.
@@ -608,7 +673,7 @@ const TutorialMode = (function () {
 
     function showBoardRing(x, y) {
         removeBoardRing();
-        const svg = document.getElementById('board');
+        const svg = document.getElementById('boardSvg');
         if (!svg) return;
         const vp = svg.querySelector('#viewport') || svg;
 
@@ -656,6 +721,9 @@ const TutorialMode = (function () {
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'wind-move':         'Drag a Wind stone, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone (red) from the pool and place it adjacent to an Earth stone…',
+            'stone-placed-water-earth': 'Drag a Water stone from the pool and place it adjacent to an Earth stone…',
+            'stone-placed-water-wind':  'Drag a Water stone from the pool and place it adjacent to a Wind stone…',
+            'stone-placed-void':        'Drag a Void stone from the pool and place it adjacent to another stone…',
             'scripted-ai':       'Watch the opponent\'s move…',
         };
         const footerHTML = (step.nextLabel && !actionHints[step.action])
@@ -804,6 +872,71 @@ const TutorialMode = (function () {
                 const { x: nx, y: ny } = hp(3, 0);
                 window.placeStoneVisually(nx, ny, 'earth');
             }
+        } else if (stepId === 'water-basics') {
+            const pool = window.playerPool;
+            if (pool && (pool.water || 0) < 1) {
+                pool.water = (pool.water || 0) + 2;
+                if (typeof updateHUD === 'function') updateHUD();
+                if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
+            }
+            // Safety net: ensure at least one earth stone is on the board for Water to copy.
+            const hasEarth = Array.isArray(window.placedStones)
+                && window.placedStones.some(s => s.type === 'earth');
+            if (!hasEarth && typeof window.placeStoneVisually === 'function') {
+                const { x: nx, y: ny } = hp(3, 0);
+                window.placeStoneVisually(nx, ny, 'earth');
+            }
+        } else if (stepId === 'water-wind-synergy') {
+            const pool = window.playerPool;
+            if (pool && (pool.water || 0) < 1) {
+                pool.water = (pool.water || 0) + 1;
+                if (typeof updateHUD === 'function') updateHUD();
+                if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
+            }
+            // Safety net: ensure at least one wind stone is on the board for Water to copy.
+            const hasWind = Array.isArray(window.placedStones)
+                && window.placedStones.some(s => s.type === 'wind');
+            if (!hasWind && typeof window.placeStoneVisually === 'function') {
+                const { x: nx, y: ny } = hp(3, 0);
+                window.placeStoneVisually(nx, ny, 'wind');
+            }
+        } else if (stepId === 'void-stones') {
+            const pool = window.playerPool;
+            if (pool && (pool.void || 0) < 1) {
+                pool.void = (pool.void || 0) + 2;
+                if (typeof updateHUD === 'function') updateHUD();
+                if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
+            }
+            // Safety net: ensure at least one other stone is on the board for Void to nullify.
+            const hasOther = Array.isArray(window.placedStones)
+                && window.placedStones.some(s => s.type !== 'void');
+            if (!hasOther && typeof window.placeStoneVisually === 'function') {
+                const { x: nx, y: ny } = hp(3, 0);
+                window.placeStoneVisually(nx, ny, 'earth');
+            }
+        } else if (stepId === 'react-scrolls') {
+            // Force a Water I "Reflect" scroll into the player's hand — a real
+            // Level 1 response scroll — so this step has an actual scroll to
+            // hover and reveal, instead of just a Continue button.
+            const ss = window.spellSystem;
+            if (ss && typeof ss.getPlayerScrolls === 'function') {
+                const scrolls = ss.getPlayerScrolls(false);
+                const already = scrolls.hand.has('WATER_SCROLL_1') || scrolls.active?.has('WATER_SCROLL_1');
+                if (!already) {
+                    // Remove it from the water deck first so it can never be drawn a second time.
+                    const deck = ss.scrollDecks?.water;
+                    if (Array.isArray(deck)) {
+                        const idx = deck.indexOf('WATER_SCROLL_1');
+                        if (idx >= 0) deck.splice(idx, 1);
+                    }
+                    scrolls.hand.add('WATER_SCROLL_1');
+                    if (typeof ss.updateScrollCount === 'function') ss.updateScrollCount();
+                }
+            }
+            if (window.ScrollPanelSystem) {
+                window.ScrollPanelSystem.openPanel('hand');
+                window.ScrollPanelSystem.refresh();
+            }
         }
     }
 
@@ -923,6 +1056,9 @@ const TutorialMode = (function () {
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'wind-move':         'Drag a Wind stone from the pool, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone from the pool adjacent to an Earth stone…',
+            'stone-placed-water-earth': 'Drag a Water stone from the pool adjacent to an Earth stone…',
+            'stone-placed-water-wind':  'Drag a Water stone from the pool adjacent to a Wind stone…',
+            'stone-placed-void':        'Drag a Void stone from the pool adjacent to another stone…',
         };
         if (hintMessages[step.action]) {
             startHintTimer(hintMessages[step.action]);
@@ -970,11 +1106,17 @@ const TutorialMode = (function () {
      * We can override tile.shrineType here and the visual + scroll will both reflect it.
      */
     function onTilePreReveal(tile) {
-        if (currentStep !== stepIndexOf('move-pawn') || earthRevealed) return;
-        // Force the first tile the player steps on to be Earth — regardless of
-        // where they placed their player tile or which direction they moved.
-        tile.shrineType = 'earth';
-        primeEarthDeck(window.spellSystem);
+        if (currentStep === stepIndexOf('move-pawn') && !earthRevealed) {
+            // Force the first tile the player steps on to be Earth — regardless of
+            // where they placed their player tile or which direction they moved.
+            tile.shrineType = 'earth';
+            primeEarthDeck(window.spellSystem);
+        } else if (currentStep === stepIndexOf('wind-escape') && !windRevealed) {
+            // Same trick for Wind — the next tile flipped during wind-escape is
+            // forced to be a Wind shrine, so the player doesn't have to hunt for
+            // one by chance.
+            tile.shrineType = 'wind';
+        }
     }
 
     /**
@@ -982,9 +1124,16 @@ const TutorialMode = (function () {
      * We advance the tutorial here so the scroll is already in the player's hand.
      */
     function onTileRevealed(tile, spellSystem) {
-        if (currentStep !== stepIndexOf('move-pawn') || earthRevealed) return;
-        earthRevealed = true;
-        setTimeout(() => showStep(stepIndexOf('scroll-found')), 900); // let the flip animation finish
+        if (currentStep === stepIndexOf('move-pawn') && !earthRevealed) {
+            earthRevealed = true;
+            setTimeout(() => showStep(stepIndexOf('scroll-found')), 900); // let the flip animation finish
+        } else if (currentStep === stepIndexOf('wind-escape') && !windRevealed) {
+            // No step-advance here — wind-escape's own onEndTurn gate (below)
+            // already advances once the player ends their turn on the shrine
+            // and actually collects Wind stones. Just stop forcing further
+            // reveals during this step.
+            windRevealed = true;
+        }
     }
 
     /** Called from game-ui.js after a successful pawn move. */
@@ -1071,6 +1220,31 @@ const TutorialMode = (function () {
         if (patternPollInterval) { clearInterval(patternPollInterval); patternPollInterval = null; }
     }
 
+    // "Adjacent" here mirrors game-core.js's own stone-adjacency threshold
+    // (TILE_SIZE=20 * 2.5 = 50px) — the small ring of hex stone-slots around
+    // a tile — so it means the same thing the real game means by it.
+    function isAdjacentToStoneType(x, y, type) {
+        const stones = window.placedStones;
+        if (!Array.isArray(stones)) return false;
+        return stones.some(s => {
+            if (s.type !== type) return false;
+            const dist = Math.sqrt((s.x - x) ** 2 + (s.y - y) ** 2);
+            return dist > 5 && dist < 50;
+        });
+    }
+
+    // Same as above, but true for ANY neighboring stone other than the given type
+    // (used for the Void step — any adjacent stone demonstrates nullification).
+    function isAdjacentToOtherStone(x, y, excludeType) {
+        const stones = window.placedStones;
+        if (!Array.isArray(stones)) return false;
+        return stones.some(s => {
+            if (s.type === excludeType) return false;
+            const dist = Math.sqrt((s.x - x) ** 2 + (s.y - y) ** 2);
+            return dist > 5 && dist < 50;
+        });
+    }
+
     /** Called from game-core.js after a stone is placed on the board. */
     function onStonePlaced(stoneType, x, y) {
         const step = STEPS[currentStep];
@@ -1087,6 +1261,27 @@ const TutorialMode = (function () {
         } else if (step.action === 'stone-placed-fire' && stoneType === 'fire') {
             clearHintTimer();
             setTimeout(advance, 400);
+        } else if (step.action === 'stone-placed-water-earth' && stoneType === 'water') {
+            if (isAdjacentToStoneType(x, y, 'earth')) {
+                clearHintTimer();
+                setTimeout(advance, 400);
+            } else if (typeof updateStatus === 'function') {
+                updateStatus('Place the Water stone adjacent to an Earth stone to copy its ability.');
+            }
+        } else if (step.action === 'stone-placed-water-wind' && stoneType === 'water') {
+            if (isAdjacentToStoneType(x, y, 'wind')) {
+                clearHintTimer();
+                setTimeout(advance, 400);
+            } else if (typeof updateStatus === 'function') {
+                updateStatus('Place the Water stone adjacent to a Wind stone to copy its free-movement ability.');
+            }
+        } else if (step.action === 'stone-placed-void' && stoneType === 'void') {
+            if (isAdjacentToOtherStone(x, y, 'void')) {
+                clearHintTimer();
+                setTimeout(advance, 400);
+            } else if (typeof updateStatus === 'function') {
+                updateStatus('Place the Void stone adjacent to another stone to cancel its ability.');
+            }
         }
     }
 
@@ -1172,7 +1367,7 @@ const TutorialMode = (function () {
      */
     function showOpponentSpeechBubble(text) {
         removeOpponentSpeechBubble();
-        const svg = document.getElementById('board');
+        const svg = document.getElementById('boardSvg');
         if (!svg) return;
         const vp = svg.querySelector('#viewport') || svg;
 
