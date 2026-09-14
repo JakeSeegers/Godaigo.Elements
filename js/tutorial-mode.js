@@ -3,8 +3,8 @@
  *
  * Features:
  *  - Auto-builds a scripted board (earth tile at center, player + enemy pawns placed)
- *  - 15-step walkthrough using the official voice-recorded transcript (step 0 is the
- *    designer's note, added before the original 14-step game-intro walkthrough)
+ *  - 24-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
+ *    paginated designer's note, added before the original 14-step game-intro walkthrough)
  *  - Spotlight system: dims everything and highlights one UI element at a time
  *  - Movement gating: restricts the pawn to the tutorial destination
  *  - Click-to-advance: certain steps wait for the player to click the spotlit element
@@ -57,28 +57,67 @@ const TutorialMode = (function () {
     // boardRing: true = show pulsing ring on earth tile
     // modalPos:  'center' (default) | 'corner' (bottom-right, used when spotlight is active)
     const STEPS = [
-        // ── 0  designer's note (read — plays before the game intro) ────────────
+        // ── 0  designer's note, part 1/5 (read — plays before the game intro) ──
         {
-            id: 'designer-note',
+            id: 'designer-note-1',
             title: "A Note From the Designer",
-            content: `Welcome to Godaigo! I've been working on this game since 2014, making many changes over the years based on feedback from players like you.
+            content: `Welcome to Godaigo! I've been working on this game since 2014, making many changes over the years based on feedback from players like you.`,
+            action: 'read',
+            nextLabel: 'Continue',
+            modalPos: 'center'
+        },
+        // ── 1  designer's note, part 2/5 ────────────────────────────────────────
+        {
+            id: 'designer-note-2',
+            title: 'Where It Started',
+            content: `It started with one question: <em>what if we could play Magic: The Gathering, but our players and mana physically affected the board?</em>`,
+            action: 'read',
+            nextLabel: 'Continue',
+            modalPos: 'center'
+        },
+        // ── 2  designer's note, part 3/5 ────────────────────────────────────────
+        {
+            id: 'designer-note-3',
+            title: 'The Five Elements',
+            content: `The game also draws from Japanese Five Element theory, an interpretation of traditional Buddhist philosophy about personal growth.
             <div style="margin-top:12px;">
-                It started with one question: <em>what if we could play Magic: The Gathering, but our players and mana physically affected the board?</em>
+                I know it's a common trope for board game designers to lean too heavily on orientalism, and I've thought hard about that. My connection to this framework is personal: it comes from many years of practice in martial arts.
             </div>
             <div style="margin-top:12px;">
-                The game also draws from Japanese Five Element theory, an interpretation of traditional Buddhist philosophy about personal growth. I know it's a common trope for board game designers to lean too heavily on orientalism, and I've thought hard about that. My connection to this framework is personal: it comes from many years of practice in martial arts. The five elements serve as a lens for pursuing emotional stability and harmony, and I've tried to express that idea in this game.
-            </div>
-            <div style="margin-top:12px;">
-                I also want to be clear about one thing: while this game's online version was built with the help of AI, no gameplay decisions were influenced by AI. The core of the game was developed and refined based on my own tastes and the feedback of players who tested the physical copy, which you can find here: <a href="https://www.thegamecrafter.com/make/games/6E8418E8-0C5C-11ED-9192-5FDEF6169289" target="_blank" rel="noopener" style="color:var(--accent-gold);">The Game Crafter</a>.
-            </div>
-            <div style="margin-top:12px; color:#bbb; font-size:16px;">
-                Thank you so much for taking the time to learn this game and join the community. My dream is to build a group of players who want to refine our gameplay together, and to turn this game into something that stands the test of time. If you have questions or want to play a match, reach out to me on Discord in the <a href="https://discord.gg/6Tg6Y9EgN" target="_blank" rel="noopener" style="color:var(--accent-gold);">Godaigo channel</a>.
+                The five elements serve as a lens for pursuing emotional stability and harmony, and I've tried to express that idea in this game.
             </div>`,
             action: 'read',
             nextLabel: 'Continue',
             modalPos: 'center'
         },
-        // ── 1  welcome (read — only intro step permitted as read-only) ─────────
+        // ── 3  designer's note, part 4/5 ────────────────────────────────────────
+        {
+            id: 'designer-note-4',
+            title: 'About the AI',
+            content: `I also want to be clear about one thing: while this game's online version was built with the help of AI, no gameplay decisions were influenced by AI.
+            <div style="margin-top:12px;">
+                The core of the game was developed and refined based on my own tastes and the feedback of players who tested the physical copy, which you can find here: <a href="https://www.thegamecrafter.com/games/godaigo:-secret-of-the-five-elements" target="_blank" rel="noopener" style="color:var(--accent-gold);">The Game Crafter</a>.
+            </div>`,
+            action: 'read',
+            nextLabel: 'Continue',
+            modalPos: 'center'
+        },
+        // ── 4  designer's note, part 5/5 ────────────────────────────────────────
+        {
+            id: 'designer-note-5',
+            title: 'Join the Community',
+            content: `Thank you so much for taking the time to learn this game and join the community.
+            <div style="margin-top:12px;">
+                My dream is to build a group of players who want to refine our gameplay together, and to turn this game into something that stands the test of time.
+            </div>
+            <div style="margin-top:12px; color:#bbb; font-size:16px;">
+                If you have questions or want to play a match, reach out to me on Discord in the <a href="https://discord.gg/6Tg6Y9EgN" target="_blank" rel="noopener" style="color:var(--accent-gold);">Godaigo channel</a>.
+            </div>`,
+            action: 'read',
+            nextLabel: 'Continue',
+            modalPos: 'center'
+        },
+        // ── 5  welcome (read — only intro step permitted as read-only) ─────────
         {
             id: 'welcome',
             title: 'Welcome to Godaigo!',
@@ -86,12 +125,12 @@ const TutorialMode = (function () {
             <div style="margin-top:12px;">
                 Your goal is to <strong>master all 5 elements</strong> by finding and activating one scroll of each type.
             </div>
-            <div style="margin-top:14px; display:flex; justify-content:center; gap:14px; font-size:20px; flex-wrap:wrap; line-height:1.6;">
-                <span style="color:#69d83a;">▲ Earth</span>
-                <span style="color:#5894f4;">◯ Water</span>
-                <span style="color:#ed1b43;">♦ Fire</span>
-                <span style="color:#ffce00;">≋ Wind</span>
-                <span style="color:#9458f4;">✺ Void</span>
+            <div style="margin-top:14px; display:flex; justify-content:center; gap:18px; font-size:18px; flex-wrap:wrap; align-items:center; line-height:1.6;">
+                <span style="color:#69d83a;"><img src="images/mountainsymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Earth</span>
+                <span style="color:#5894f4;"><img src="images/watersymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Water</span>
+                <span style="color:#ed1b43;"><img src="images/firesymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Fire</span>
+                <span style="color:#ffce00;"><img src="images/windsymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Wind</span>
+                <span style="color:#9458f4;"><img src="images/voidsymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Void</span>
             </div>
             <div style="margin-top:10px; color:#bbb; font-size:17px;">
                 Be the first player to activate all five and return to your player shrine to win. You'll escape the mystical island too!
@@ -100,7 +139,7 @@ const TutorialMode = (function () {
             nextLabel: "Let's Go!",
             modalPos: 'center'
         },
-        // ── 2  place tile (action-gated: onPlayerTilePlaced) ──────────────────
+        // ── 6  place tile (action-gated: onPlayerTilePlaced) ──────────────────
         {
             id: 'tile-placed',
             title: 'Place Your Starting Tile',
@@ -113,7 +152,7 @@ const TutorialMode = (function () {
             spotlight: '#new-player-tile-deck',
             modalPos: 'corner'
         },
-        // ── 3  camera (brief read — no sensible action gate for controls intro) ─
+        // ── 7  camera (brief read — no sensible action gate for controls intro) ─
         {
             id: 'camera',
             title: 'Camera Controls',
@@ -129,7 +168,7 @@ const TutorialMode = (function () {
             action: 'read',
             nextLabel: 'Got it'
         },
-        // ── 4  explore / flip tile (action-gated: onTileRevealed) ────────────
+        // ── 8  explore / flip tile (action-gated: onTileRevealed) ────────────
         {
             id: 'move-pawn',
             title: 'Explore the Board',
@@ -145,7 +184,7 @@ const TutorialMode = (function () {
             spotlight: '#hud-ap-value',
             modalPos: 'corner'
         },
-        // ── 5  scroll found (read-only) ───────────────────────────────────────
+        // ── 9  scroll found (read-only) ───────────────────────────────────────
         {
             id: 'scroll-found',
             title: 'You Found a Scroll!',
@@ -158,7 +197,7 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
-        // ── 6  earth shrine (action-gated: onEndTurn at EARTH_POS) ───────────
+        // ── 10  earth shrine (action-gated: onEndTurn at EARTH_POS) ───────────
         {
             id: 'earth-shrine',
             title: 'Collect Earth Stones',
@@ -176,7 +215,7 @@ const TutorialMode = (function () {
             spotlight: '#end-turn',
             modalPos: 'corner'
         },
-        // ── 7  open scrolls hand panel (action-gated: click) ─────────────────
+        // ── 11  open scrolls hand panel (action-gated: click) ─────────────────
         {
             id: 'open-scrolls',
             title: 'Open Your Hand',
@@ -186,7 +225,7 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
-        // ── 8  move scroll to active area (action-gated: onScrollMoved hand→active) ─
+        // ── 12  move scroll to active area (action-gated: onScrollMoved hand→active) ─
         {
             id: 'scrolls-explained',
             title: 'Move Scroll to Active Area',
@@ -203,7 +242,7 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
-        // ── 9  how to win (brief read then action-gated into pattern step) ────
+        // ── 13  how to win (brief read then action-gated into pattern step) ────
         {
             id: 'how-to-win',
             title: 'How to Win',
@@ -220,7 +259,7 @@ const TutorialMode = (function () {
             action: 'read',
             nextLabel: "Let's try it!"
         },
-        // ── 10  place earth stone (action-gated: onStonePlaced('earth')) ───────
+        // ── 14  place earth stone (action-gated: onStonePlaced('earth')) ───────
         {
             id: 'place-stone',
             title: 'Place an Earth Stone',
@@ -234,7 +273,7 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
-        // ── 11  build the avalanche pattern (action-gated: checkPattern polling) ─
+        // ── 15  build the avalanche pattern (action-gated: checkPattern polling) ─
         {
             id: 'build-pattern',
             title: 'Build the Avalanche Pattern',
@@ -250,7 +289,7 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
-        // ── 12  cast avalanche (action-gated: onSpellCast) ────────────────────
+        // ── 16  cast avalanche (action-gated: onSpellCast) ────────────────────
         {
             id: 'cast-avalanche',
             title: 'Activate Avalanche!',
@@ -344,7 +383,7 @@ const TutorialMode = (function () {
             nextLabel: 'Good to know!',
             modalPos: 'corner'
         },
-        // ── 18  HUD reference (brief read) ───────────────────────────────────
+        // ── 22  HUD reference (brief read) ───────────────────────────────────
         {
             id: 'hud',
             title: 'The HUD & Dock',
@@ -360,7 +399,7 @@ const TutorialMode = (function () {
             spotlight: '#hud-ap-pips',
             modalPos: 'corner'
         },
-        // ── 14  finish ───────────────────────────────────────────────────────
+        // ── 18  finish ───────────────────────────────────────────────────────
         {
             id: 'finish',
             title: "You're Ready!",
@@ -375,6 +414,29 @@ const TutorialMode = (function () {
             nextLabel: 'Start Playing'
         }
     ];
+
+    // Looks a step up by id instead of a hardcoded array position, so inserting
+    // or reordering STEPS (e.g. the designer's note pages) never desyncs the
+    // game-code hooks below that need to check/advance to a specific step.
+    function stepIndexOf(id) {
+        return STEPS.findIndex(s => s.id === id);
+    }
+
+    // Space bar advances any 'read' step (the designer's note pages, the
+    // rules-only steps like Camera Controls, etc.) — same effect as clicking
+    // that step's Next/Continue button, so a plain-text page can be read
+    // through with just the keyboard.
+    document.addEventListener('keydown', (e) => {
+        if (!window.isTutorialMode) return;
+        if (e.code !== 'Space' && e.key !== ' ') return;
+        const step = STEPS[currentStep];
+        if (!step || step.action !== 'read') return;
+        // Don't hijack Space if focus is on a real text field somewhere else on the page.
+        const tag = document.activeElement && document.activeElement.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        e.preventDefault();
+        advance();
+    });
 
     // ── Board setup ───────────────────────────────────────────────────────────
 
@@ -444,8 +506,8 @@ const TutorialMode = (function () {
 
     /** Called from game-core.js placeTile() when the local player drops their tile. */
     function onPlayerTilePlaced() {
-        if (currentStep !== 1) return;   // step 1 = 'tile-placed'
-        setTimeout(() => showStep(2), 600);
+        if (currentStep !== stepIndexOf('tile-placed')) return;
+        setTimeout(() => showStep(stepIndexOf('camera')), 600);
     }
 
     function primeEarthDeck(ss) {
@@ -870,7 +932,7 @@ const TutorialMode = (function () {
      * We can override tile.shrineType here and the visual + scroll will both reflect it.
      */
     function onTilePreReveal(tile) {
-        if (currentStep !== 3 || earthRevealed) return;
+        if (currentStep !== stepIndexOf('move-pawn') || earthRevealed) return;
         // Force the first tile the player steps on to be Earth — regardless of
         // where they placed their player tile or which direction they moved.
         tile.shrineType = 'earth';
@@ -882,9 +944,9 @@ const TutorialMode = (function () {
      * We advance the tutorial here so the scroll is already in the player's hand.
      */
     function onTileRevealed(tile, spellSystem) {
-        if (currentStep !== 3 || earthRevealed) return;
+        if (currentStep !== stepIndexOf('move-pawn') || earthRevealed) return;
         earthRevealed = true;
-        setTimeout(() => showStep(4), 900); // let the flip animation finish
+        setTimeout(() => showStep(stepIndexOf('scroll-found')), 900); // let the flip animation finish
     }
 
     /** Called from game-ui.js after a successful pawn move. */
