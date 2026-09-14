@@ -534,8 +534,9 @@ const TutorialMode = (function () {
 
     /**
      * Highlight a UI element.
-     * blocking=true  → also add a full-screen dim overlay that eats all clicks
-     *                  (use for action:'click' steps so only the target is interactive)
+     * blocking=true  → also add a full-screen dim overlay that eats all clicks/hovers
+     *                  (use for action:'click' and action:'scroll-hover' steps so
+     *                  only the target is interactive)
      * blocking=false → just glow the element; board + pawns stay fully interactive
      *                  (use for action:'move' and action:'place-tile' steps)
      */
@@ -567,7 +568,7 @@ const TutorialMode = (function () {
             ov.className = 'tutorial-blocking-overlay';
             ov.addEventListener('click', () => {
                 if (typeof updateStatus === 'function')
-                    updateStatus('Click the highlighted element to continue the tutorial.');
+                    updateStatus('Interact with the highlighted element to continue the tutorial.');
             });
             document.body.appendChild(ov);
             overlayEl = ov;
@@ -861,15 +862,17 @@ const TutorialMode = (function () {
         }
 
         // Spotlight an HTML element.
-        // Only block all other interaction for 'click' steps — move/place-tile/
-        // scroll-hover steps need the board (or panel) to stay interactive so the
-        // player can drag pawns/tiles or hover a scroll card.
-        // step.noDim additionally opts a 'click' step out of the dimming overlay
-        // while still keeping the pulsing highlight ring and the click-to-advance
-        // gate — for a 'click' step that still needs the rest of the screen to
-        // stay hoverable/interactive.
+        // Block all other interaction for 'click' and 'scroll-hover' steps —
+        // both require the player to interact with the exact spotlit element
+        // to advance, so everything else dims and stops accepting clicks/hovers.
+        // move/place-tile steps don't block: the board itself needs to stay
+        // interactive so the player can drag pawns/tiles.
+        // step.noDim is an escape hatch for a 'click' or 'scroll-hover' step
+        // that should keep its highlight ring and advance-gate but NOT dim/
+        // block the rest of the screen.
         if (step.spotlight) {
-            const blocking = (step.action === 'click') && !step.noDim;
+            const blocks = step.action === 'click' || step.action === 'scroll-hover';
+            const blocking = blocks && !step.noDim;
             showSpotlight(step.spotlight, blocking);
             if (step.action === 'click') {
                 attachClickAdvance(step.spotlight);
