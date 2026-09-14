@@ -196,12 +196,13 @@ const TutorialMode = (function () {
             title: 'You Found a Scroll!',
             content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll, a powerful earth scroll.
             <div style="margin-top:10px;">
-                Close the hand panel by clicking <strong>✕</strong>.
+                Hover your cursor over the name of the scroll to reveal its ability.
             </div>`,
             action: 'click',
             spotlight: '.fsp-close-btn',
             nextLabel: null,
-            modalPos: 'corner'
+            modalPos: 'corner',
+            noDim: true
         },
         // ── 10  earth shrine (action-gated: onEndTurn at EARTH_POS) ───────────
         {
@@ -856,8 +857,12 @@ const TutorialMode = (function () {
         // Spotlight an HTML element.
         // Only block all other interaction for 'click' steps — move/place-tile steps
         // need the board to stay interactive so the player can drag pawns/tiles.
+        // step.noDim opts a 'click' step out of the dimming overlay entirely (e.g.
+        // scroll-found, where the player needs the rest of the hand panel to stay
+        // undimmed and hoverable so they can preview the scroll's ability) while
+        // keeping the pulsing highlight ring and the click-to-advance gate.
         if (step.spotlight) {
-            const blocking = (step.action === 'click');
+            const blocking = (step.action === 'click') && !step.noDim;
             showSpotlight(step.spotlight, blocking);
             if (step.action === 'click') {
                 attachClickAdvance(step.spotlight);
