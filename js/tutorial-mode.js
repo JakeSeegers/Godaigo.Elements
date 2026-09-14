@@ -164,12 +164,12 @@ const TutorialMode = (function () {
             title: 'Camera Controls',
             content: `A few handy controls before you start moving:
             <ul style="margin:10px 0; padding-left:18px; line-height:1.6;">
-                <li><strong>Scroll wheel</strong> — zoom in / out</li>
-                <li><strong>Right-click drag</strong> — pan the board</li>
-                <li><strong>Right-click drag outside tiles</strong> — rotate the board</li>
+                <li><strong>Scroll wheel</strong>: zoom in / out</li>
+                <li><strong>Right-click drag</strong>: pan the board</li>
+                <li><strong>Right-click drag outside tiles</strong>: rotate the board</li>
             </ul>
             <div style="color:#bbb; font-size:17px;">
-                Try zooming now — it never costs AP.
+                Try it now to get a feel for the controls.
             </div>`,
             action: 'read',
             nextLabel: 'Got it'
@@ -183,7 +183,7 @@ const TutorialMode = (function () {
                 Each hex costs <strong>1 Action Point</strong>. You start every turn with 5 AP.
             </div>
             <div style="margin-top:10px;">
-                All the tiles are hidden — <strong>step onto any face-down tile to flip it</strong> and reveal the shrine underneath!
+                All the tiles are hidden. <strong>Step onto any face-down tile to flip it</strong> and reveal the shrine underneath!
             </div>`,
             action: 'explore',
             nextLabel: null,
@@ -194,7 +194,7 @@ const TutorialMode = (function () {
         {
             id: 'scroll-found',
             title: 'You Found a Scroll!',
-            content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll — a powerful earth scroll.
+            content: `When you flip a tile, a scroll is added to your <strong>hand</strong>. You got an <strong style="color:#69d83a;">Avalanche (Earth V)</strong> scroll, a powerful earth scroll.
             <div style="margin-top:10px;">
                 Close the hand panel by clicking <strong>✕</strong>.
             </div>`,
@@ -212,7 +212,7 @@ const TutorialMode = (function () {
                 <strong>Walk your pawn to the glowing center</strong>, then click <strong>End Turn</strong> to collect <strong style="color:#69d83a;">5 Earth stones</strong>.
             </div>
             <div style="margin-top:10px; color:#bbb; font-size:17px;">
-                Stones come from shared <strong>Source Pools</strong> — 25 of each type max.
+                Stones come from shared <strong>Source Pools</strong> (25 of each type max).
             </div>`,
             action: 'end-turn',
             nextLabel: null,
@@ -237,9 +237,9 @@ const TutorialMode = (function () {
             title: 'Move Scroll to Active Area',
             content: `Your scrolls are split across three panels:
             <ul style="margin:10px 0; padding-left:18px; line-height:1.6;">
-                <li><strong>Hand</strong> — private; max 2 scrolls</li>
-                <li><strong>Active</strong> — face-up, visible to all; scrolls here can be activated</li>
-                <li><strong>Common Area</strong> — shared pool any player can activate from</li>
+                <li><strong>Hand</strong>: private, max 2 scrolls</li>
+                <li><strong>Active</strong>: face-up, visible to all; scrolls here can be activated</li>
+                <li><strong>Common Area</strong>: shared pool any player can activate from</li>
             </ul>
             <div style="margin-top:8px;">
                 <strong>Click "Move to Active Area"</strong> on a scroll to get it ready to activate.
@@ -272,7 +272,7 @@ const TutorialMode = (function () {
             content: `You have <strong style="color:#69d83a;">5 Earth stones</strong> in your pool (bottom dock).
             <div style="margin-top:10px;">
                 <strong>Drag an Earth stone</strong> from the dock and drop it on a hex <em>adjacent</em> to your pawn.
-                Placing stones is free — no AP cost.
+                Placing stones is free, with no AP cost.
             </div>`,
             action: 'stone-placed',
             stoneType: 'earth',
@@ -285,7 +285,7 @@ const TutorialMode = (function () {
             title: 'Build the Avalanche Pattern',
             content: `The Avalanche scroll requires a pattern of <strong>4 Earth stones</strong> around your pawn.
             <div style="margin-top:10px;">
-                Open the scroll card in your Active Area — you'll see the exact pattern layout.
+                Open the scroll card in your Active Area. You'll see the exact pattern layout.
                 <strong>Place the remaining stones</strong> to complete it.
             </div>
             <div style="margin-top:8px; color:#bbb; font-size:17px;">
@@ -301,7 +301,7 @@ const TutorialMode = (function () {
             title: 'Activate Avalanche!',
             content: `The pattern is complete! Now activate the scroll.
             <div style="margin-top:10px;">
-                Click <strong>Activate Scroll</strong> in the dock — or the glowing <strong>Activate ✦</strong> button on the Avalanche scroll card.
+                Click <strong>Activate Scroll</strong> in the dock, or the glowing <strong>Activate ✦</strong> button on the Avalanche scroll card.
             </div>
             <div style="margin-top:8px; color:#bbb; font-size:17px;">
                 Activating costs 2 AP. After activating, your Earth win-condition is fulfilled!
@@ -315,10 +315,10 @@ const TutorialMode = (function () {
         {
             id: 'break-trap',
             title: 'Stone Breaker',
-            content: `Sometimes you need to break a stone — to open a path, disrupt an opponent's pattern, or return it to the source pool.
+            content: `Sometimes you need to break a stone: to open a path, disrupt an opponent's pattern, or return it to the source pool.
                 <div style="margin-top:10px;">
                     <strong>Right-click any Earth stone</strong> on the board to break it.
-                    Breaking costs <strong>AP equal to the stone's rank</strong> — Earth is rank 5, so it costs <strong style="color:#69d83a;">5 AP</strong>.
+                    Breaking costs <strong>AP equal to the stone's rank</strong>. Earth is rank 5, so it costs <strong style="color:#69d83a;">5 AP</strong>.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
                     On touch devices: long-press the stone instead.
@@ -346,8 +346,8 @@ const TutorialMode = (function () {
         // ── use wind stone: player places a wind stone and walks onto it ──────────
         {
             id: 'use-wind-stone',
-            title: 'Wind Stone — Free Move!',
-            content: `You collected <strong style="color:#ffce00;">Wind stones</strong>! These give you free movement — moving <em>through</em> a hex with a Wind stone costs <strong>0 AP</strong> instead of 1.
+            title: 'Wind Stone: Free Move!',
+            content: `You collected <strong style="color:#ffce00;">Wind stones</strong>! These give you free movement. Moving <em>through</em> a hex with a Wind stone costs <strong>0 AP</strong> instead of 1.
                 <div style="margin-top:10px;">
                     <strong>Drag a Wind stone</strong> from your pool onto any hex, then <strong>move your pawn through or past it</strong> to feel the difference.
                 </div>`,
@@ -365,7 +365,7 @@ const TutorialMode = (function () {
                     Watch the Earth stone disappear.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    This is how Fire counters Earth — perfect for breaking traps without spending AP.
+                    This is how Fire counters Earth. It's perfect for breaking traps without spending AP.
                 </div>`,
             action: 'stone-placed-fire',
             nextLabel: null,
@@ -375,12 +375,12 @@ const TutorialMode = (function () {
         {
             id: 'react-scrolls',
             title: 'Reaction Scrolls',
-            content: `Some scrolls are <strong>Reaction scrolls</strong> — they activate on your <em>opponent's</em> turn, not yours.
+            content: `Some scrolls are <strong>Reaction scrolls</strong>. They activate on your <em>opponent's</em> turn, not yours.
                 <div style="margin-top:10px;">
-                    <strong>Level 1 reactions</strong> are the easiest to build and require the fewest stones. When multiple players try to react on the same turn, reactions resolve by <strong>element rank</strong> — Wind outranks Earth, for example.
+                    <strong>Level 1 reactions</strong> are the easiest to build and require the fewest stones. When multiple players try to react on the same turn, reactions resolve by <strong>element rank</strong>. For example, Wind outranks Earth.
                 </div>
                 <div style="margin-top:10px;">
-                    Only <strong>one reaction fires per turn</strong>. You cannot react to a reaction — once one resolves, the window closes.
+                    Only <strong>one reaction fires per turn</strong>. You cannot react to a reaction. Once one resolves, the window closes.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
                     Build a reaction scroll pattern in your Active Area before your opponent's turn to surprise them!
@@ -395,10 +395,10 @@ const TutorialMode = (function () {
             title: 'The HUD & Dock',
             content: `Quick reference for the on-screen controls:
             <ul style="margin:10px 0; padding-left:18px; line-height:1.6;">
-                <li><strong>AP pips</strong> — five orange squares; each = 1 remaining AP</li>
-                <li><strong>Shrine dots</strong> — light up as you activate scrolls</li>
-                <li><strong>Activate Scroll</strong> — activates the best matching scroll from Active or Common Area</li>
-                <li><strong>End Turn</strong> — ends your turn; AP resets to 5 next turn</li>
+                <li><strong>AP pips</strong>: five orange squares; each = 1 remaining AP</li>
+                <li><strong>Shrine dots</strong>: light up as you activate scrolls</li>
+                <li><strong>Activate Scroll</strong>: activates the best matching scroll from Active or Common Area</li>
+                <li><strong>End Turn</strong>: ends your turn; AP resets to 5 next turn</li>
             </ul>`,
             action: 'read',
             nextLabel: "I'm ready!",
@@ -411,7 +411,7 @@ const TutorialMode = (function () {
             title: "You're Ready!",
             content: `That's the basics of Godaigo!
             <div style="margin-top:12px;">
-                Keep exploring — flip hidden tiles, collect scrolls, build stone patterns, activate one scroll of each element, then return to your player shrine to win.
+                Keep exploring: flip hidden tiles, collect scrolls, build stone patterns, activate one scroll of each element, then return to your player shrine to win.
             </div>
             <div style="margin-top:10px; color:#bbb; font-size:17px;">
                 Good luck, adventurer. The mystical island awaits.
@@ -642,7 +642,7 @@ const TutorialMode = (function () {
             'end-turn':      'Walk to the glowing shrine center, then click End Turn…',
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
-            'pattern-built': 'Build the Avalanche pattern (4 Earth stones) around your pawn — see the scroll card for the layout…',
+            'pattern-built': 'Build the Avalanche pattern (4 Earth stones) around your pawn. See the scroll card for the layout…',
             'spell-cast':    'Click "Activate Scroll" in the dock (or the Activate ✦ button on the scroll card) to activate Avalanche…',
             'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
@@ -870,7 +870,7 @@ const TutorialMode = (function () {
             const loc = getAvalancheLocation();
             console.log('[Tutorial] how-to-win entry — Avalanche location:', loc);
             if (loc === 'common') {
-                const notice = `<div style="margin-bottom:12px;padding:8px 10px;background:rgba(148,88,244,0.15);border-left:3px solid #9458f4;border-radius:4px;font-size:17px;">Normally we'd show you how to move <strong>Avalanche</strong> from your Hand to your <strong>Active Area</strong> — but you moved it to the <strong>Common Area</strong>, where anyone can play it unless it gets replaced by a scroll of the same type.</div>`;
+                const notice = `<div style="margin-bottom:12px;padding:8px 10px;background:rgba(148,88,244,0.15);border-left:3px solid #9458f4;border-radius:4px;font-size:17px;">Normally we'd show you how to move <strong>Avalanche</strong> from your Hand to your <strong>Active Area</strong>, but you moved it to the <strong>Common Area</strong>, where anyone can play it unless it gets replaced by a scroll of the same type.</div>`;
                 stepToShow = { ...step, content: notice + step.content };
             }
         }
@@ -886,7 +886,7 @@ const TutorialMode = (function () {
                     advance();
                 }
             }, 500);
-            startHintTimer('Build the Avalanche pattern (4 Earth stones) around your pawn — see the scroll card for the layout…');
+            startHintTimer('Build the Avalanche pattern (4 Earth stones) around your pawn. See the scroll card for the layout…');
         }
         // During cast step, monitor for a broken pattern so the player gets actionable feedback.
         if (step.action === 'spell-cast') {
@@ -894,7 +894,7 @@ const TutorialMode = (function () {
                 const ss = window.spellSystem;
                 if (ss && typeof ss.checkPattern === 'function' && !ss.checkPattern('EARTH_SCROLL_5')) {
                     if (typeof updateStatus === 'function')
-                        updateStatus('Pattern broken — replace the Earth stone, then Activate Scroll.');
+                        updateStatus('Pattern broken. Replace the Earth stone, then Activate Scroll.');
                 }
             }, 1000);
         }
@@ -1103,7 +1103,7 @@ const TutorialMode = (function () {
                     const bodyEl   = modalEl.querySelector('.tutorial-body');
                     const footerEl = modalEl.querySelector('.tutorial-footer');
                     if (titleEl)  titleEl.textContent = 'Common Area';
-                    if (bodyEl)   bodyEl.innerHTML = `Normally we'd show you how to move <strong>Avalanche</strong> from your Hand to your <strong>Active Area</strong> — but you moved it to the <strong>Common Area</strong>, where anyone can play it unless it gets replaced by a scroll of the same type.`;
+                    if (bodyEl)   bodyEl.innerHTML = `Normally we'd show you how to move <strong>Avalanche</strong> from your Hand to your <strong>Active Area</strong>, but you moved it to the <strong>Common Area</strong>, where anyone can play it unless it gets replaced by a scroll of the same type.`;
                     if (footerEl) {
                         footerEl.innerHTML = `<button class="tmode-next">Ok!</button>`;
                         footerEl.querySelector('.tmode-next').addEventListener('click', advance);
