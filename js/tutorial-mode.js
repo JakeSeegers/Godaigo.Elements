@@ -3,10 +3,14 @@
  *
  * Features:
  *  - Auto-builds a scripted board (earth tile at center, player + enemy pawns placed)
- *  - 28-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
+ *  - 29-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
  *    paginated designer's note, added before the original 14-step game-intro walkthrough;
  *    later additions cover finding a Water shrine, Water's ability-copying mechanic,
- *    Water+Wind synergy, and Void)
+ *    Water+Wind synergy, finding a Fire shrine, and Void)
+ *  - Premature-flip guard: game-core.js's revealFlippedTilesAlongPath() blocks (and
+ *    alerts on) revealing a hidden tile during any step that isn't currently expecting
+ *    one — see isTileFlipExpected() — so exploring ahead can't draw an extra scroll or
+ *    eat a later step's forced shrine tile before the tutorial is ready for it
  *  - Spotlight system: dims everything and highlights one UI element at a time
  *  - Movement gating: restricts the pawn to the tutorial destination
  *  - Click-to-advance: certain steps wait for the player to click the spotlit element
@@ -43,6 +47,7 @@ const TutorialMode = (function () {
     let earthRevealed     = false;  // tracks whether the first tile reveal has been processed
     let windRevealed       = false;  // tracks whether the wind-escape step's forced tile has been processed
     let waterRevealed      = false;  // tracks whether the water-shrine step's forced tile has been processed
+    let fireRevealed       = false;  // tracks whether the fire-shrine step's forced tile has been processed
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
     let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
     let cornerResizeFn    = null;   // window 'resize'/'scroll' listener kept while a corner modal is open
@@ -412,6 +417,19 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
+        // ── fire-shrine: player explores to find and gather fire stones ────────────
+        {
+            id: 'fire-shrine',
+            title: 'Find a Fire Shrine',
+            content: `Explore the board and <strong>end your turn on a Fire shrine</strong> to collect <strong style="color:#ed1b43;">Fire stones</strong>.
+                <div style="margin-top:8px; color:#bbb; font-size:17px;">
+                    Flip a hidden tile to find one, then walk to its center and click <strong>End Turn</strong>.
+                </div>`,
+            action: 'fire-shrine',
+            nextLabel: null,
+            freeMove: true,
+            modalPos: 'corner'
+        },
         // ── fire-counter: player places a fire stone adjacent to earth ────────────
         {
             id: 'fire-counter',
@@ -528,6 +546,7 @@ const TutorialMode = (function () {
         earthRevealed = false;
         windRevealed  = false;
         waterRevealed = false;
+        fireRevealed  = false;
         currentStep   = -1;
 
         const sg = window.startGame || (typeof startGame !== 'undefined' ? startGame : null);
@@ -736,6 +755,7 @@ const TutorialMode = (function () {
             'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'water-shrine':      'Explore the board, find a Water shrine, walk to its center and click End Turn…',
+            'fire-shrine':       'Explore the board, find a Fire shrine, walk to its center and click End Turn…',
             'wind-move':         'Drag a Wind stone, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone (red) from the pool and place it adjacent to an Earth stone…',
             'stone-placed-water-earth': 'Drag a Water stone from the pool and place it adjacent to an Earth stone…',
@@ -875,19 +895,16 @@ const TutorialMode = (function () {
                 window.placeStoneVisually(nx, ny, 'earth');
             }
         } else if (stepId === 'fire-counter') {
-            const pool = window.playerPool;
-            if (pool && (pool.fire || 0) < 1) {
-                pool.fire = (pool.fire || 0) + 2;
-                if (typeof updateHUD === 'function') updateHUD();
-                if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
-            }
-            // Safety net: ensure at least one earth stone remains on board
-            const hasEarth = Array.isArray(window.placedStones)
-                && window.placedStones.some(s => s.type === 'earth');
-            if (!hasEarth && typeof window.placeStoneVisually === 'function' && window.playerPosition) {
-                // Place an earth stone east of the player at hp(3, 0) to avoid pixel-grid issues
-                const { x: nx, y: ny } = hp(3, 0);
-                window.placeStoneVisually(nx, ny, 'earth');
+            // Fire stones come from the fire-shrine step just before this one
+            // (forced tile + shrine replenish on End Turn) — no free grant needed.
+            // Safety net: guarantee an Earth, Water, or Wind stone is actually
+            // reachable from the player's current position — see water-basics
+            // below for why a board-wide existence check isn't enough.
+            const posF = window.playerPosition;
+            const hasTargetNearby = posF && ['earth', 'water', 'wind'].some(t => isAdjacentToStoneType(posF.x, posF.y, t));
+            if (posF && !hasTargetNearby && typeof window.placeStoneVisually === 'function') {
+                const target = hexAdjacentToPlayer(1, 0);
+                if (target) window.placeStoneVisually(target.x, target.y, 'earth');
             }
         } else if (stepId === 'water-basics') {
             // Water stones come from the water-shrine step just before this one
@@ -1073,6 +1090,7 @@ const TutorialMode = (function () {
             'stone-broken':  'Right-click an Earth stone to break it (costs 5 AP)…',
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'water-shrine':      'Explore the board, find a Water shrine, walk to its center and click End Turn…',
+            'fire-shrine':       'Explore the board, find a Fire shrine, walk to its center and click End Turn…',
             'wind-move':         'Drag a Wind stone from the pool, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone from the pool adjacent to an Earth stone…',
             'stone-placed-water-earth': 'Drag a Water stone from the pool adjacent to an Earth stone…',
@@ -1138,6 +1156,9 @@ const TutorialMode = (function () {
         } else if (currentStep === stepIndexOf('water-shrine') && !waterRevealed) {
             // Same trick for Water.
             tile.shrineType = 'water';
+        } else if (currentStep === stepIndexOf('fire-shrine') && !fireRevealed) {
+            // Same trick for Fire.
+            tile.shrineType = 'fire';
         }
     }
 
@@ -1157,6 +1178,8 @@ const TutorialMode = (function () {
             windRevealed = true;
         } else if (currentStep === stepIndexOf('water-shrine') && !waterRevealed) {
             waterRevealed = true;
+        } else if (currentStep === stepIndexOf('fire-shrine') && !fireRevealed) {
+            fireRevealed = true;
         }
     }
 
@@ -1236,12 +1259,37 @@ const TutorialMode = (function () {
                     updateStatus('End your turn on the Water shrine center to collect Water stones.');
             }
         }
+
+        // ── Fire shrine gate ─────────────────────────────────────────────────
+        // Fires after shrine replenishment, so playerPool.fire is already updated.
+        if (step.action === 'fire-shrine') {
+            const fireNow = window.playerPool?.fire || 0;
+            if (fireNow > 0) {
+                clearHintTimer();
+                setTimeout(() => showStep(currentStep + 1), 900);
+            } else {
+                if (typeof updateStatus === 'function')
+                    updateStatus('End your turn on the Fire shrine center to collect Fire stones.');
+            }
+        }
     }
 
     /** Called from game-ui.js when tutorial blocks an out-of-bounds drop. */
     function showMovementHint() {
         if (typeof updateStatus === 'function')
             updateStatus('Tutorial: drag your pawn onto a face-down tile to continue!');
+    }
+
+    // True only during the steps that actually expect the player to flip a
+    // hidden tile right now (the explore/find-a-shrine steps) — checked by
+    // game-core.js's revealFlippedTilesAlongPath() before it reveals a tile
+    // the player wandered onto early, so exploring ahead of the current step
+    // can't draw an extra scroll or eat a later step's forced shrine tile.
+    function isTileFlipExpected() {
+        const step = STEPS[currentStep];
+        if (!step) return true; // unknown step — fail open, don't block outside a known flow
+        return step.action === 'explore' || step.action === 'wind-shrine' ||
+               step.action === 'water-shrine' || step.action === 'fire-shrine';
     }
 
     function clearHintTimer() {
@@ -1497,7 +1545,7 @@ const TutorialMode = (function () {
         start, advance, finish,
         onTilePreReveal, onTileRevealed, onPlayerMoved, onWindStoneUsed, onPlayerTilePlaced, onEndTurn, showMovementHint,
         onStonePlaced, onStoneBroken, onScrollMoved, onScrollHovered, onSpellCast,
-        onWaterMimicUpdated, onStoneNullified,
+        onWaterMimicUpdated, onStoneNullified, isTileFlipExpected,
         get currentStep() { return currentStep; }
     };
 })();

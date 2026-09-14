@@ -5151,6 +5151,7 @@
         function revealFlippedTilesAlongPath(steps) {
             if (!steps || steps.length === 0) return 0;
             let revealedCount = 0;
+            let tutorialFlipBlockedAlerted = false; // one alert per path, not one per hidden tile crossed
             const allHexes = getAllHexagonPositions();
             steps.forEach(step => {
                 let hex = null, minDist = Infinity;
@@ -5162,6 +5163,19 @@
 
                 const flippedTiles = hex.tiles.filter(t => t.flipped && !t.isPlayerTile);
                 if (flippedTiles.length === 0) return;
+
+                // Tutorial: block revealing a tile before the current step
+                // actually expects one — otherwise exploring ahead could draw
+                // an extra scroll early or eat a later step's forced shrine
+                // tile before the tutorial is ready for it.
+                if (window.isTutorialMode && window.TutorialMode?.isTileFlipExpected
+                    && !window.TutorialMode.isTileFlipExpected()) {
+                    if (!tutorialFlipBlockedAlerted) {
+                        tutorialFlipBlockedAlerted = true;
+                        alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
+                    }
+                    return;
+                }
 
                 // If multiple flipped tiles share this hex, reveal the one
                 // whose centre is closest to the point actually stepped on.
