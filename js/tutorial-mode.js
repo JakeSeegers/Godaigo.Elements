@@ -71,7 +71,7 @@ const TutorialMode = (function () {
         {
             id: 'designer-note-2',
             title: 'Where It Started',
-            content: `It started with one question: <em>what if we could play Magic: The Gathering, but our players and mana physically affected the board?</em>`,
+            content: `It started with one question: <em>what if we could play Magic: The Gathering, but our players and mana physically affected the board?</em> (And we didn't have to pay for booster packs.)`,
             action: 'read',
             nextLabel: 'Continue',
             modalPos: 'center',
