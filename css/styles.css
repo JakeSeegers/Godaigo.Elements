@@ -1079,6 +1079,106 @@ body {
 }
 
 /* ============================================
+   RULEBOOK panel (#fsp-body-rulebook — search + tabs + entry list)
+   ============================================ */
+.fsp-body.rulebook-body {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    padding: 0;
+    gap: 0;
+}
+
+.rulebook-search-wrap {
+    padding: 8px 8px 0;
+    flex-shrink: 0;
+}
+
+.rulebook-search {
+    width: 100%;
+    box-sizing: border-box;
+    background: color-mix(in srgb, #0e0e1a 55%, transparent);
+    border: 1px solid var(--border-subtle, #333);
+    border-radius: 3px;
+    padding: 6px 8px;
+    font-family: var(--font-terminal);
+    font-size: 14px;
+    color: var(--text-primary, #eee);
+}
+.rulebook-search::placeholder { color: var(--text-muted, #888); }
+.rulebook-search:focus {
+    outline: none;
+    border-color: var(--accent-gold, #ffd700);
+}
+
+.rulebook-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 8px 6px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-subtle, #333);
+}
+
+.rulebook-tab-btn {
+    font-family: var(--font-pixel);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    padding: 5px 9px;
+    border: 1px solid color-mix(in srgb, var(--tab-color, #888) 40%, transparent);
+    background: transparent;
+    color: color-mix(in srgb, var(--tab-color, #888) 60%, #999);
+    border-radius: 3px 3px 0 0;
+    cursor: pointer;
+}
+.rulebook-tab-btn:hover { color: var(--tab-color, #888); }
+.rulebook-tab-btn.active {
+    background: color-mix(in srgb, var(--tab-color, #888) 16%, transparent);
+    color: var(--tab-color, #888);
+    border-color: var(--tab-color, #888);
+}
+
+.rulebook-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rulebook-entry {
+    background: color-mix(in srgb, #0e0e1a 55%, transparent);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-left: 3px solid var(--el-color, #888);
+    border-radius: 0 4px 4px 0;
+    padding: 8px 10px;
+}
+
+.rulebook-entry-title {
+    font-family: var(--font-terminal);
+    font-size: 16px;
+    color: var(--el-color, #eee);
+    margin-bottom: 4px;
+}
+
+.rulebook-entry-body {
+    font-family: var(--font-terminal);
+    font-size: 14px;
+    color: var(--text-secondary, #bbb);
+    line-height: 1.45;
+}
+
+.rulebook-empty {
+    color: var(--text-muted, #888);
+    font-size: 13px;
+    text-align: center;
+    padding: 20px 8px;
+    font-style: italic;
+}
+
+/* ============================================
    BOTTOM ACTION BAR (legacy — hidden, replaced by dock)
    ============================================ */
 .action-bar { display: none; }
