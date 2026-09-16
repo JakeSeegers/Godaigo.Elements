@@ -651,13 +651,15 @@ const TutorialMode = (function () {
             title: 'A Few More Things to Know',
             content: `Some finer points that will come up as you play:
             <ul style="margin:10px 0; padding-left:18px; line-height:1.6;">
+                <li>The tile deck holds one of each tile type (Earth, Water, Fire, Wind, Void, and Catacomb) for every player, minus one. These are shuffled to form the hidden board.</li>
                 <li>Activating a scroll (including a Catacomb scroll) doesn't count toward your win condition for an element whose source pool is empty. Destroy a placed stone of that type to free one up and get around this.</li>
                 <li>When scroll effects conflict, they resolve by element rank.</li>
-                <li>You don't need to be standing in the center of a tile to activate a scroll — a common mistake.</li>
+                <li>You don't need to be standing in the center of a tile to activate a scroll. This is a common mistake.</li>
                 <li>Some scrolls can be activated more than once in the same turn. Stack repeated activations to maximize your control of the board.</li>
-                <li>You can't end your turn on another player's player tile, and you can't place stones there.</li>
+                <li>You can't end your turn on another player's player tile (though you can end it on your own), and you can't place stones on any player tile.</li>
                 <li>Placing a stone on an elemental shrine's center blocks other players from teleporting there.</li>
                 <li>You can't stand on the same hex as another player.</li>
+                <li>Right-click a stone adjacent to your pawn to break it, for AP equal to its rank (Void 1, Wind 2, Fire 3, Water 4, Earth 5). This works on any stone within reach, not just your own, and returns it to the shared source pool.</li>
             </ul>`,
             action: 'read',
             nextLabel: 'Continue',

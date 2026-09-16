@@ -748,39 +748,42 @@ const ScrollPanelSystem = (() => {
     function _rulebookEntries() {
         const stoneEntries = ['void', 'wind', 'fire', 'water', 'earth'].map(el => {
             const info = STONE_INFO[el];
-            return { title: info.name, body: `${info.ability} (Rank ${info.rank}${info.interaction ? ' — ' + info.interaction : ''})` };
+            const interactionText = info.interaction ? ` ${info.interaction}.` : '';
+            return { title: info.name, body: `${info.ability} Rank ${info.rank}.${interactionText}` };
         });
         return {
             basics: [
+                { title: 'Board Setup', body: 'The tile deck holds one of each tile type (Earth, Water, Fire, Wind, Void, and Catacomb) for every player, minus one. All of these tiles are shuffled together to form the hidden board.' },
                 { title: 'Turns & Action Points', body: 'Each turn gives you 5 AP. Moving into a hex costs 1 AP, except through a Wind stone (or a Water stone adjacent to a Wind stone), which cost 0 AP. Unused AP does not carry over to your next turn.' },
                 { title: 'Exploring Tiles', body: 'All tiles start face-down. Stepping onto a face-down tile flips it, revealing its shrine type and drawing a scroll into your hand.' },
-                { title: 'Undo Step', body: "Undo Step reverses your most recent action — a move, a stone placement or break, or a scroll move — but only until you end your turn." },
-                { title: 'Player Tiles', body: "You can't end your turn on the center hex of any player tile, yours or an opponent's. You can't place a stone anywhere on a player tile, including your own." },
+                { title: 'Undo Step', body: "Undo Step reverses your most recent action: a move, a stone placement or break, or a scroll move. It only works until you end your turn." },
+                { title: 'Player Tiles', body: "You can't end your turn on the center hex of another player's tile. You can end your turn on your own. You can't place a stone anywhere on a player tile, including your own." },
                 { title: 'Sharing a Hex', body: "You can never move onto a hex that another player currently occupies." },
             ],
             stones: [
                 ...stoneEntries,
                 { title: 'Placing Stones', body: "A stone you place must land adjacent to your pawn's current position, and never on a player tile." },
-                { title: 'Shrine Types', body: "There are six shrine tile types: Earth, Water, Fire, Wind, Void, and Catacomb. Ending your turn on a shrine's center hex grants stones of that type from the shared source pool — the amount depends on the element's rank." },
-                { title: 'Catacomb Shrines', body: "Revealing a Catacomb tile instantly refunds 1 AP and draws a Catacomb scroll. Standing on a Catacomb shrine lets you teleport for free to the center of any other revealed, empty elemental shrine — a stone placed there blocks the teleport." },
+                { title: 'Breaking Stones', body: "Right-click a stone adjacent to your pawn to break it. This costs AP equal to the stone's rank (Void 1, Wind 2, Fire 3, Water 4, Earth 5). You can break any stone within reach, not just your own, but not while standing on a stone yourself. A broken stone returns to the shared source pool, not to any player's pool." },
+                { title: 'Shrine Types', body: "There are six shrine tile types: Earth, Water, Fire, Wind, Void, and Catacomb. Ending your turn on a shrine's center hex grants stones of that type from the shared source pool. The amount depends on the element's rank." },
+                { title: 'Catacomb Shrines', body: "Revealing a Catacomb tile instantly refunds 1 AP and draws a Catacomb scroll. Standing on a Catacomb shrine lets you teleport for free to the center of any other revealed, empty elemental shrine. A stone placed there blocks the teleport." },
             ],
             scrolls: [
                 { title: 'Hand, Active & Common', body: 'Scrolls live in three areas: Hand (private, max 2), Active (face-up, anyone can activate), and Common Area (a shared pool anyone can activate from).' },
                 { title: 'Building a Pattern', body: "A scroll's stone pattern is always checked relative to your pawn's current hex. It doesn't matter what tile type you're standing on, and you don't need to be in a tile's center." },
-                { title: 'Level 1 Response Scrolls', body: 'Level 1 scrolls are Response scrolls: they activate on an opponent\'s turn, not yours. Only one response scroll resolves per turn — competing responses are resolved by element rank.' },
-                { title: 'Stacking Activations', body: 'Most scrolls have no once-per-turn limit — activate the same scroll multiple times in one turn to stack its effect. A few, mostly Level 1 response/counter scrolls, are limited to once per turn.' },
+                { title: 'Level 1 Response Scrolls', body: "Level 1 scrolls are Response scrolls: they activate on an opponent's turn, not yours. Only one response scroll resolves per turn. Competing responses are resolved by element rank." },
+                { title: 'Stacking Activations', body: 'Most scrolls have no once-per-turn limit. Activate the same scroll multiple times in one turn to stack its effect. A few, mostly Level 1 response/counter scrolls, are limited to once per turn.' },
                 { title: 'Catacomb Scrolls', body: 'Catacomb scrolls span two element types and reward or activate both at once.' },
             ],
             win: [
-                { title: 'How to Win', body: 'Activate at least one scroll of all five elements — Earth, Water, Fire, Wind, and Void — over the course of the game, then return to the center of your own player shrine.' },
-                { title: 'Empty Source Pools', body: "Activating a scroll — including a Catacomb scroll — doesn't count toward your win condition for an element whose shared source pool is empty. Destroy a placed stone of that type to free one up in the source pool." },
+                { title: 'How to Win', body: 'Activate at least one scroll of each of the five elements (Earth, Water, Fire, Wind, and Void) over the course of the game, then return to the center of your own player shrine.' },
+                { title: 'Empty Source Pools', body: "Activating a scroll, including a Catacomb scroll, doesn't count toward your win condition for an element whose shared source pool is empty. Destroy a placed stone of that type to free one up in the source pool." },
             ],
             advanced: [
                 { title: 'Empty Source Pools', body: "Activating a scroll doesn't count toward your win condition if that element's source pool is empty. Destroy a placed stone of that type to free one up and get around this." },
-                { title: 'Element Rank Resolves Conflicts', body: 'When scroll effects conflict — for example, two players\' response scrolls both try to fire the same turn — they resolve by element rank.' },
-                { title: "Scrolls Don't Need a Tile Center", body: "You don't need to be standing in the center of a tile to activate a scroll — a common mistake." },
+                { title: 'Element Rank Resolves Conflicts', body: "When scroll effects conflict (for example, two players' response scrolls both try to fire on the same turn), they resolve by element rank." },
+                { title: "Scrolls Don't Need a Tile Center", body: "You don't need to be standing in the center of a tile to activate a scroll. This is a common mistake." },
                 { title: 'Stacking', body: 'Some scrolls can be activated more than once in the same turn. Stack repeated activations to maximize your control of the board.' },
-                { title: 'Player Tile Restrictions', body: "You can't end your turn on another player's player tile, and you can't place stones there." },
+                { title: 'Player Tile Restrictions', body: "You can't end your turn on another player's tile, and you can't place stones on any player tile. You can end your turn on your own tile." },
                 { title: 'Catacomb Teleport Blocking', body: "Placing a stone on an elemental shrine's center blocks other players from teleporting there." },
                 { title: 'No Shared Hexes', body: "You can't stand on the same hex as another player." },
             ],
