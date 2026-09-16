@@ -484,7 +484,10 @@ const TutorialMode = (function () {
         {
             id: 'catacomb-shrine',
             title: 'Find a Catacomb Shrine',
-            content: `There's a sixth tile type: <strong style="color:#c8a870;">Catacomb</strong>. Revealing one instantly refunds <strong>1 AP</strong>.
+            content: `There's a sixth tile type: <strong style="color:#c8a870;">Catacomb</strong>. Revealing one instantly refunds <strong>1 AP</strong> and hands you a <strong style="color:#c8a870;">Catacomb scroll</strong>.
+                <div style="margin-top:10px;">
+                    Catacomb scrolls span two elements. Activating one satisfies <strong>two of your elemental win requirements</strong> at once.
+                </div>
                 <div style="margin-top:10px;">
                     Standing on a Catacomb shrine lets you <strong>teleport for free</strong> to the center of any other revealed, empty elemental shrine.
                 </div>
