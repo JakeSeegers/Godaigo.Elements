@@ -3,13 +3,13 @@
  *
  * Features:
  *  - Auto-builds a scripted board (earth tile at center, player + enemy pawns placed)
- *  - 38-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
+ *  - 39-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
  *    paginated designer's note, added before the original 14-step game-intro walkthrough;
  *    later additions cover finding a Water shrine, Water's ability-copying mechanic,
  *    Water+Wind synergy, finding a Fire shrine, finding a Void shrine, Void's
- *    cancel ability, finding a Catacomb shrine, and a UI tour (panel collapse,
+ *    cancel ability, finding a Catacomb shrine, a UI tour (panel collapse,
  *    Game Log, Opponent Status, Undo Step, stone-pool hover, Scroll Reference,
- *    Settings) near the end)
+ *    Settings), and a closing "extra considerations" advanced-rules reference)
  *  - Premature-flip guard: game-ui.js's four movement-commit paths (drag, tap, the
  *    keyboard/touch fallback, and the preview-confirm flow) all check
  *    isTileFlipExpected() before committing a move, and reject the whole move (not
@@ -643,6 +643,24 @@ const TutorialMode = (function () {
             action: 'read',
             nextLabel: 'Continue',
             spotlight: '#settings-panel-btn',
+            modalPos: 'corner'
+        },
+        // ── extra-considerations: advanced-rules reference (brief read) ────────
+        {
+            id: 'extra-considerations',
+            title: 'A Few More Things to Know',
+            content: `Some finer points that will come up as you play:
+            <ul style="margin:10px 0; padding-left:18px; line-height:1.6;">
+                <li>Activating a scroll doesn't count toward your win condition if that element's source pool is empty. Destroy a placed stone of that type to free one up and get around this.</li>
+                <li>When scroll effects conflict, they resolve by element rank.</li>
+                <li>A scroll's stone pattern doesn't need to match the element of the tile you're standing on, and it doesn't need to be centered on your position.</li>
+                <li>Some scrolls can be activated more than once in the same turn. Stack repeated activations to maximize your control of the board.</li>
+                <li>You can't end your turn on another player's player tile, and you can't place stones there.</li>
+                <li>Placing a stone on an elemental shrine's center blocks other players from teleporting there.</li>
+                <li>You can't stand on the same hex as another player.</li>
+            </ul>`,
+            action: 'read',
+            nextLabel: 'Continue',
             modalPos: 'corner'
         },
         // ── 18  finish ───────────────────────────────────────────────────────
