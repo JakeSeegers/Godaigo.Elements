@@ -516,7 +516,7 @@ const TutorialMode = (function () {
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
                     Build a reaction scroll pattern in your Active Area before your opponent's turn to surprise them!
                 </div>`,
-            action: 'scroll-hover',
+            action: 'scroll-hover-reaction',
             spotlight: '#fsp-hand .fsp-card, #fsp-hand .fsp-compact-row',
             nextLabel: null,
             modalPos: 'corner'
@@ -788,6 +788,7 @@ const TutorialMode = (function () {
             'place-tile':    'Drag your player tile onto the board to continue…',
             'end-turn':      'Walk to the glowing shrine center, then click End Turn…',
             'scroll-hover':  'Hover the Avalanche scroll in your Hand panel to continue…',
+            'scroll-hover-reaction': 'Hover over a level one scroll to continue…',
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
             'pattern-built': 'Build the Avalanche pattern (4 Earth stones) around your pawn. See the scroll card for the layout…',
@@ -1067,7 +1068,7 @@ const TutorialMode = (function () {
         // that should keep its highlight ring and advance-gate but NOT dim/
         // block the rest of the screen.
         if (step.spotlight) {
-            const blocks = step.action === 'click' || step.action === 'scroll-hover';
+            const blocks = step.action === 'click' || step.action === 'scroll-hover' || step.action === 'scroll-hover-reaction';
             const blocking = blocks && !step.noDim;
             showSpotlight(step.spotlight, blocking);
             if (step.action === 'click') {
@@ -1112,6 +1113,7 @@ const TutorialMode = (function () {
         // Start hint timers for other action-gated steps
         const hintMessages = {
             'scroll-hover':  'Hover the Avalanche scroll in your Hand panel to continue…',
+            'scroll-hover-reaction': 'Hover over a level one scroll to continue…',
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
             'spell-cast':    'Click "Activate Scroll" in the dock after placing the pattern…',
@@ -1500,7 +1502,7 @@ const TutorialMode = (function () {
     /** Called from scroll-panels.js when the player hovers any scroll card/row to preview it. */
     function onScrollHovered(scrollName) {
         const step = STEPS[currentStep];
-        if (!step || step.action !== 'scroll-hover') return;
+        if (!step || (step.action !== 'scroll-hover' && step.action !== 'scroll-hover-reaction')) return;
         clearHintTimer();
         advance();
     }
