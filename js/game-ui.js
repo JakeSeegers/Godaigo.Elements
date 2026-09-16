@@ -1485,6 +1485,15 @@
                             return Math.abs(ax - finalPos.x) < 70 && Math.abs(ay - finalPos.y) < 70;
                         });
 
+                    // Tutorial gate: reject the whole move (not just the reveal) if
+                    // it would step onto a still-hidden tile before the current
+                    // step actually expects a flip — e.g. a Wind stone's free
+                    // movement could otherwise walk the pawn onto unrevealed
+                    // territory even though nothing there ever gets shown.
+                    const tutorialFlipBlocked = window.isTutorialMode &&
+                        window.TutorialMode?.isTileFlipExpected && !window.TutorialMode.isTileFlipExpected() &&
+                        typeof pathHasHiddenTile === 'function' && pathHasHiddenTile(playerPath.slice(1));
+
                     if (cannotEndTurnHere) {
                         console.log(`❌ Movement rejected: Cannot end turn on ${stoneAtFinal.type} stone at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)})`);
                         placePlayer(startPos.x, startPos.y);
@@ -1492,6 +1501,9 @@
                     } else if (tutorialBlocked) {
                         placePlayer(startPos.x, startPos.y);
                         if (window.TutorialMode) window.TutorialMode.showMovementHint();
+                    } else if (tutorialFlipBlocked) {
+                        placePlayer(startPos.x, startPos.y);
+                        alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
                     } else if (moveCheck.canMove && totalCost <= getTotalAP()) {
                         console.log(`✅ Movement successful: ${playerPath.length - 1} hexes, cost ${totalCost} AP`);
                         // Store the last move for undo (snapshot AP before spending)
@@ -1809,15 +1821,28 @@
                         });
                         const cannotEndTurnHere = stoneAtTarget && stoneAtTarget.type !== 'void';
 
+                        // Compute the actual path early (used both for the reveal
+                        // walk below and the tutorial flip-block check) — the
+                        // same shortest-path search the drag-path uses, so a
+                        // tile merely passed through still counts.
+                        const startPosForPath = { x: playerPosition.x, y: playerPosition.y };
+                        const tapPath = _dijkstraPath(startPosForPath, targetHex);
+
+                        const tutorialFlipBlocked = window.isTutorialMode &&
+                            window.TutorialMode?.isTileFlipExpected && !window.TutorialMode.isTileFlipExpected() &&
+                            typeof pathHasHiddenTile === 'function' && pathHasHiddenTile(tapPath ? tapPath.slice(1) : []);
+
                         if (cannotEndTurnHere) {
                             updateStatus('Cannot end movement on a ' + stoneAtTarget.type + ' stone!');
                         } else if (!moveCheck.canMove) {
                             updateStatus(moveCheck.reason || 'Cannot move there');
                         } else if (pathCost > getTotalAP()) {
                             updateStatus(`Not enough AP (need ~${pathCost}, have ${getTotalAP()})`);
+                        } else if (tutorialFlipBlocked) {
+                            alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
                         } else {
                             // Calculate actual path cost by building path
-                            const startPos = { x: playerPosition.x, y: playerPosition.y };
+                            const startPos = startPosForPath;
                             const actualCost = calculateTapMoveCost(startPos, targetHex);
 
                             if (actualCost > 0 && actualCost <= getTotalAP()) {
@@ -1847,9 +1872,7 @@
 
                                 // Check for hidden tile reveal — walk every hex the
                                 // path actually crosses (not just the destination),
-                                // via the same shortest-path search the drag-path
-                                // uses, so a tile merely passed through still flips.
-                                const tapPath = _dijkstraPath(startPos, targetHex);
+                                // so a tile merely passed through still flips.
                                 const revealedAlongPath = revealFlippedTilesAlongPath(tapPath ? tapPath.slice(1) : []);
 
                                 if (revealedAlongPath === 0) {
@@ -2054,12 +2077,21 @@
                         });
                         const cannotEndTurnHere = stoneAtFinal && stoneAtFinal.type !== 'void';
 
+                        // Tutorial gate: reject the whole move if it would step onto
+                        // a still-hidden tile before the current step expects a flip
+                        // — see the drag-handler's own copy of this check above.
+                        const tutorialFlipBlocked = window.isTutorialMode &&
+                            window.TutorialMode?.isTileFlipExpected && !window.TutorialMode.isTileFlipExpected() &&
+                            typeof pathHasHiddenTile === 'function' && pathHasHiddenTile(playerPath.slice(1));
+
                         if (cannotEndTurnHere) {
                             updateStatus('Cannot end movement on a ' + stoneAtFinal.type + ' stone!');
                         } else if (!moveCheck.canMove) {
                             updateStatus(moveCheck.reason || 'Cannot move to this position');
                         } else if (totalCost > getTotalAP()) {
                             updateStatus(`Not enough AP (need ${totalCost}, have ${getTotalAP()})`);
+                        } else if (tutorialFlipBlocked) {
+                            alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
                         } else {
                             // Store the last move for undo (snapshot AP before spending)
                             lastMove = {
@@ -2948,7 +2980,18 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     cancelMovePreview();
                     const startPos = { x: playerPosition.x, y: playerPosition.y };
                     const actualCost = calculateTapMoveCost(startPos, target);
-                    if (actualCost >= 0 && actualCost <= getTotalAP()) {
+                    // Reveal hidden tiles anywhere along the path — not just
+                    // the hex the pawn stops on — using the same shortest-path
+                    // search the drag-path uses to find which hexes it crossed.
+                    // Computed before committing so the tutorial gate below can
+                    // reject the whole move, not just the reveal.
+                    const previewPath = _dijkstraPath(startPos, target);
+                    const tutorialFlipBlocked = window.isTutorialMode &&
+                        window.TutorialMode?.isTileFlipExpected && !window.TutorialMode.isTileFlipExpected() &&
+                        typeof pathHasHiddenTile === 'function' && pathHasHiddenTile(previewPath ? previewPath.slice(1) : []);
+                    if (tutorialFlipBlocked) {
+                        alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
+                    } else if (actualCost >= 0 && actualCost <= getTotalAP()) {
                         lastMove = { type: 'move', prevPos: startPos, prevCurrentAP: currentAP, prevVoidAP: voidAP };
                         window.lastScrollAction = null;
                         // Only play footstep if AP was spent (wind steps cost 0)
@@ -2966,10 +3009,6 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                                 cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
                             });
                         }
-                        // Reveal hidden tiles anywhere along the path — not just
-                        // the hex the pawn stops on — using the same shortest-path
-                        // search the drag-path uses to find which hexes it crossed.
-                        const previewPath = _dijkstraPath(startPos, target);
                         const revealedAlongPath = revealFlippedTilesAlongPath(previewPath ? previewPath.slice(1) : []);
                         if (revealedAlongPath === 0) {
                             updateStatus(`Moved (cost: ${actualCost} AP, ${getTotalAP()} AP remaining)`);

@@ -5138,6 +5138,27 @@
         // Make revealTile available globally for scroll effects
         window.revealTile = revealTile;
 
+        // Read-only check, same hex-matching as revealFlippedTilesAlongPath
+        // below: would committing this movement path step onto any hidden
+        // (still face-down, non-player) tile? Used by game-ui.js's movement
+        // handlers to reject the move itself — not just skip the reveal —
+        // when the tutorial isn't currently expecting a flip, so the pawn
+        // never ends up standing on a tile that stays hidden underneath it.
+        function pathHasHiddenTile(steps) {
+            if (!steps || steps.length === 0) return false;
+            const allHexes = getAllHexagonPositions();
+            return steps.some(step => {
+                let hex = null, minDist = Infinity;
+                allHexes.forEach(hexPos => {
+                    const dist = Math.hypot(hexPos.x - step.x, hexPos.y - step.y);
+                    if (dist < minDist) { minDist = dist; hex = hexPos; }
+                });
+                if (!hex || minDist >= 5 || !hex.tiles) return false;
+                return hex.tiles.some(t => t.flipped && !t.isPlayerTile);
+            });
+        }
+        window.pathHasHiddenTile = pathHasHiddenTile;
+
         // A single movement action can cross several hexes in one go (a
         // dragged path, a tap-to-move hop, or the keyboard move preview).
         // Only checking the hex the pawn STOPS on misses any face-down tile
