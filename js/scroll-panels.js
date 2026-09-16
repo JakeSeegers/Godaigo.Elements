@@ -1226,9 +1226,6 @@ const ScrollPanelSystem = (() => {
         // cards, built from STONE_INFO via _buildStoneCard() instead of a
         // scroll definition.
         function showStonePreview(element, anchorEl) {
-            if (window.isTutorialMode && window.TutorialMode?.onStoneHovered) {
-                window.TutorialMode.onStoneHovered(element);
-            }
             const elColor = EL_COLORS[element] || '#888';
             _showCardPreview(`stone:${element}`, anchorEl, elColor, () => _buildStoneCard(element));
         }

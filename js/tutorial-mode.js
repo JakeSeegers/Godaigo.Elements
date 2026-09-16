@@ -539,7 +539,7 @@ const TutorialMode = (function () {
             spotlight: '#hud-ap-pips',
             modalPos: 'corner'
         },
-        // ── panel-collapse: player collapses/expands a scroll panel ───────────
+        // ── panel-collapse: read-only, self-paced — player may try the toggle ──
         {
             id: 'panel-collapse',
             title: 'Collapse & Expand Panels',
@@ -548,14 +548,14 @@ const TutorialMode = (function () {
                     Each panel's header has a small toggle button (<strong>−</strong> or <strong>+</strong>) that switches it between the full card view and the compact strip.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    Click it on the Hand panel now to see it toggle.
+                    Try it on the Hand panel, highlighted below. Take your time.
                 </div>`,
-            action: 'click',
+            action: 'read',
+            nextLabel: 'Continue',
             spotlight: '#fsp-hand .fsp-collapse-btn',
-            nextLabel: null,
             modalPos: 'corner'
         },
-        // ── gamelog-toggle: player opens/closes the Game Log panel ────────────
+        // ── gamelog-toggle: read-only, self-paced ──────────────────────────────
         {
             id: 'gamelog-toggle',
             title: 'The Game Log',
@@ -564,14 +564,14 @@ const TutorialMode = (function () {
                     It never shows what is in another player's hand.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    Click the Game Log button in the dock to open or close it.
+                    Click the highlighted Game Log button to open or close it. Take your time.
                 </div>`,
-            action: 'click',
+            action: 'read',
+            nextLabel: 'Continue',
             spotlight: '#panel-btn-gamelog',
-            nextLabel: null,
             modalPos: 'corner'
         },
-        // ── opponent-status-toggle: player opens/closes the Opponent Status panel ─
+        // ── opponent-status-toggle: read-only, self-paced ──────────────────────
         {
             id: 'opponent-status-toggle',
             title: 'Opponent Status',
@@ -580,14 +580,14 @@ const TutorialMode = (function () {
                     Hand contents stay private. Only the element of each hand scroll is shown, not its name.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    Click the Opponents button in the dock to open or close it.
+                    Click the highlighted Opponents button to open or close it. Take your time.
                 </div>`,
-            action: 'click',
+            action: 'read',
+            nextLabel: 'Continue',
             spotlight: '#panel-btn-opponents',
-            nextLabel: null,
             modalPos: 'corner'
         },
-        // ── undo-explain: player clicks the Undo Step button ───────────────────
+        // ── undo-explain: read-only, self-paced ────────────────────────────────
         {
             id: 'undo-explain',
             title: 'Undo Step',
@@ -596,37 +596,40 @@ const TutorialMode = (function () {
                     It only works until you end your turn.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    Click it now to try it. It's safe even with nothing to undo.
+                    Try clicking it — it's safe even with nothing to undo.
                 </div>`,
-            action: 'click',
+            action: 'read',
+            nextLabel: 'Continue',
             spotlight: '#undo-move',
-            nextLabel: null,
             modalPos: 'corner'
         },
-        // ── stone-hover: player hovers an Elemental Stones pool card ───────────
+        // ── stone-hover: read-only, self-paced ─────────────────────────────────
         {
             id: 'stone-hover',
             title: 'Inspect Elemental Stones',
-            content: `Hover your cursor over a stone card in the <strong>Elemental Stones</strong> panel to see how many are left in your pool and that element's ability.`,
-            action: 'stone-hover',
+            content: `Hover your cursor over a stone card in the <strong>Elemental Stones</strong> panel to see how many are left in your pool and that element's ability.
+                <div style="margin-top:8px; color:#bbb; font-size:17px;">
+                    Take your time looking through each one.
+                </div>`,
+            action: 'read',
+            nextLabel: 'Continue',
             spotlight: '#new-earth-deck',
-            nextLabel: null,
             modalPos: 'corner'
         },
-        // ── scroll-reference: player opens the full scroll compendium ──────────
+        // ── scroll-reference: read-only, self-paced ────────────────────────────
         {
             id: 'scroll-reference',
             title: 'Scroll Reference',
             content: `Any player can open the <strong>Scroll Reference</strong> at any time. It lists all <strong>35 scrolls</strong> (25 elemental, 10 Catacomb) with their full abilities.
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    Click the Scroll Reference button in the dock to open it.
+                    Click the highlighted Scroll Reference button to browse it. Take your time.
                 </div>`,
-            action: 'click',
+            action: 'read',
+            nextLabel: 'Continue',
             spotlight: '#scroll-reference-btn',
-            nextLabel: null,
             modalPos: 'corner'
         },
-        // ── settings-explain: player opens Settings ─────────────────────────────
+        // ── settings-explain: read-only, self-paced ────────────────────────────
         {
             id: 'settings-explain',
             title: 'Settings',
@@ -635,11 +638,11 @@ const TutorialMode = (function () {
                     These only change what you see and hear. They don't affect other players.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    Click the Settings button to take a look.
+                    Click the highlighted Settings button to take a look. Take your time.
                 </div>`,
-            action: 'click',
+            action: 'read',
+            nextLabel: 'Continue',
             spotlight: '#settings-panel-btn',
-            nextLabel: null,
             modalPos: 'corner'
         },
         // ── 18  finish ───────────────────────────────────────────────────────
@@ -894,7 +897,6 @@ const TutorialMode = (function () {
             'end-turn':      'Walk to the glowing shrine center, then click End Turn…',
             'scroll-hover':  'Hover the Avalanche scroll in your Hand panel to continue…',
             'scroll-hover-reaction': 'Hover over a level one scroll to continue…',
-            'stone-hover':   'Hover over a stone card in the Elemental Stones panel to continue…',
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
             'pattern-built': 'Build the Avalanche pattern (4 Earth stones) around your pawn. See the scroll card for the layout…',
@@ -1182,7 +1184,7 @@ const TutorialMode = (function () {
         // that should keep its highlight ring and advance-gate but NOT dim/
         // block the rest of the screen.
         if (step.spotlight) {
-            const blocks = step.action === 'click' || step.action === 'scroll-hover' || step.action === 'scroll-hover-reaction' || step.action === 'stone-hover';
+            const blocks = step.action === 'click' || step.action === 'scroll-hover' || step.action === 'scroll-hover-reaction';
             const blocking = blocks && !step.noDim;
             showSpotlight(step.spotlight, blocking);
             if (step.action === 'click') {
@@ -1228,7 +1230,6 @@ const TutorialMode = (function () {
         const hintMessages = {
             'scroll-hover':  'Hover the Avalanche scroll in your Hand panel to continue…',
             'scroll-hover-reaction': 'Hover over a level one scroll to continue…',
-            'stone-hover':   'Hover over a stone card in the Elemental Stones panel to continue…',
             'scroll-moved':  'Open your Hand panel and click "Move to Active Area" on the Avalanche scroll…',
             'stone-placed':  'Drag an Earth stone from the stone pool and drop it adjacent to your pawn…',
             'spell-cast':    'Click "Activate Scroll" in the dock after placing the pattern…',
@@ -1622,14 +1623,6 @@ const TutorialMode = (function () {
         advance();
     }
 
-    /** Called from scroll-panels.js when the player hovers an Elemental Stones pool card. */
-    function onStoneHovered(element) {
-        const step = STEPS[currentStep];
-        if (!step || step.action !== 'stone-hover') return;
-        clearHintTimer();
-        advance();
-    }
-
     /** Called from scroll-panels.js when player moves a scroll between areas. */
     function onScrollMoved(scrollName, fromArea, toArea) {
         const step = STEPS[currentStep];
@@ -1734,7 +1727,7 @@ const TutorialMode = (function () {
     return {
         start, advance, finish,
         onTilePreReveal, onTileRevealed, onPlayerMoved, onWindStoneUsed, onPlayerTilePlaced, onEndTurn, showMovementHint,
-        onStonePlaced, onStoneBroken, onScrollMoved, onScrollHovered, onStoneHovered, onSpellCast,
+        onStonePlaced, onStoneBroken, onScrollMoved, onScrollHovered, onSpellCast,
         onWaterMimicUpdated, onStoneNullified, isTileFlipExpected, onCatacombTeleport,
         get currentStep() { return currentStep; }
     };
