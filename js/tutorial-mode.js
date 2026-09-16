@@ -887,37 +887,30 @@ const TutorialMode = (function () {
         } else if (stepId === 'break-trap') {
             // Set AP to exactly 5 so player can afford one Earth break (cost 5).
             if (ss) { ss.actionPoints = 5; if (typeof updateHUD === 'function') updateHUD(); }
-            // Safety net: ensure at least one earth stone is on the board to break.
-            const hasEarth = Array.isArray(window.placedStones)
-                && window.placedStones.some(s => s.type === 'earth');
-            if (!hasEarth && typeof window.placeStoneVisually === 'function') {
-                const { x: nx, y: ny } = hp(3, 0);
-                window.placeStoneVisually(nx, ny, 'earth');
+            // No auto-placed stone here on purpose: spawning one at a computed
+            // spot risked landing on or near a still-hidden tile, which a
+            // Wind-enabled free move could then walk the player onto — just
+            // point them toward the pattern's own stones if none are close.
+            const posB = window.playerPosition;
+            if (posB && !isAdjacentToStoneType(posB.x, posB.y, 'earth') && typeof updateStatus === 'function') {
+                updateStatus('Move next to an Earth stone to break it.');
             }
         } else if (stepId === 'fire-counter') {
             // Fire stones come from the fire-shrine step just before this one
             // (forced tile + shrine replenish on End Turn) — no free grant needed.
-            // Safety net: guarantee an Earth, Water, or Wind stone is actually
-            // reachable from the player's current position — see water-basics
-            // below for why a board-wide existence check isn't enough.
+            // No auto-placed stone here either — see break-trap above.
             const posF = window.playerPosition;
             const hasTargetNearby = posF && ['earth', 'water', 'wind'].some(t => isAdjacentToStoneType(posF.x, posF.y, t));
-            if (posF && !hasTargetNearby && typeof window.placeStoneVisually === 'function') {
-                const target = hexAdjacentToPlayer(1, 0);
-                if (target) window.placeStoneVisually(target.x, target.y, 'earth');
+            if (posF && !hasTargetNearby && typeof updateStatus === 'function') {
+                updateStatus('Move next to an Earth, Water, or Wind stone to try Fire on it.');
             }
         } else if (stepId === 'water-basics') {
             // Water stones come from the water-shrine step just before this one
             // (forced tile + shrine replenish on End Turn) — no free grant needed.
-            // Safety net: guarantee an Earth stone is actually reachable from the
-            // player's current position. Checking "does one exist ANYWHERE on the
-            // board" isn't enough — the avalanche pattern was built way back
-            // around wherever the pawn was at the time, which could be nowhere
-            // near the player by now after all the exploring since.
+            // No auto-placed stone here either — see break-trap above.
             const pos1 = window.playerPosition;
-            if (pos1 && !isAdjacentToStoneType(pos1.x, pos1.y, 'earth') && typeof window.placeStoneVisually === 'function') {
-                const target = hexAdjacentToPlayer(1, 0);
-                if (target) window.placeStoneVisually(target.x, target.y, 'earth');
+            if (pos1 && !isAdjacentToStoneType(pos1.x, pos1.y, 'earth') && typeof updateStatus === 'function') {
+                updateStatus('Move next to an Earth stone to copy its ability with Water.');
             }
         } else if (stepId === 'water-wind-synergy') {
             const pool = window.playerPool;
@@ -926,13 +919,10 @@ const TutorialMode = (function () {
                 if (typeof updateHUD === 'function') updateHUD();
                 if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
             }
-            // Safety net: guarantee a Wind stone is actually reachable from the
-            // player's current position — see water-basics above for why a
-            // board-wide existence check isn't enough.
+            // No auto-placed stone here either — see break-trap above.
             const pos2 = window.playerPosition;
-            if (pos2 && !isAdjacentToStoneType(pos2.x, pos2.y, 'wind') && typeof window.placeStoneVisually === 'function') {
-                const target = hexAdjacentToPlayer(1, 0);
-                if (target) window.placeStoneVisually(target.x, target.y, 'wind');
+            if (pos2 && !isAdjacentToStoneType(pos2.x, pos2.y, 'wind') && typeof updateStatus === 'function') {
+                updateStatus('Move next to your Wind stone to copy its ability with Water.');
             }
         } else if (stepId === 'void-stones') {
             const pool = window.playerPool;
@@ -941,13 +931,10 @@ const TutorialMode = (function () {
                 if (typeof updateHUD === 'function') updateHUD();
                 if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
             }
-            // Safety net: guarantee some other stone is actually reachable from
-            // the player's current position for Void to nullify — see
-            // water-basics above for why a board-wide existence check isn't enough.
+            // No auto-placed stone here either — see break-trap above.
             const pos3 = window.playerPosition;
-            if (pos3 && !isAdjacentToOtherStone(pos3.x, pos3.y, 'void') && typeof window.placeStoneVisually === 'function') {
-                const target = hexAdjacentToPlayer(1, 0);
-                if (target) window.placeStoneVisually(target.x, target.y, 'earth');
+            if (pos3 && !isAdjacentToOtherStone(pos3.x, pos3.y, 'void') && typeof updateStatus === 'function') {
+                updateStatus('Move next to another stone to cancel its ability with Void.');
             }
         } else if (stepId === 'react-scrolls') {
             // Force a Water I "Reflect" scroll into the player's hand — a real
@@ -1305,22 +1292,6 @@ const TutorialMode = (function () {
 
     function clearPatternPoll() {
         if (patternPollInterval) { clearInterval(patternPollInterval); patternPollInterval = null; }
-    }
-
-    // Pixel position of the hex one step (dq, dr) away from the player's
-    // current position, on the same small stone-slot hex grid game-core.js's
-    // own pixelToHex/hexToPixel use (TILE_SIZE=20) — those aren't exposed on
-    // window, so this duplicates the same axial-hex math rather than calling in.
-    function hexAdjacentToPlayer(dq, dr) {
-        const pos = window.playerPosition;
-        if (!pos) return null;
-        const s = 20; // matches game-core.js's TILE_SIZE
-        const q = Math.round(pos.x * Math.sqrt(3) / 3 / s - pos.y / 3 / s);
-        const r = Math.round(pos.y * 2 / 3 / s);
-        const nq = q + dq, nr = r + dr;
-        const width  = s * Math.sqrt(3);
-        const height = 2 * s;
-        return { x: width * (nq + nr / 2), y: height * (3 / 4) * nr };
     }
 
     // "Adjacent" here mirrors game-core.js's own stone-adjacency threshold
