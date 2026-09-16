@@ -189,8 +189,6 @@
             if (window.crtOverlay) {
                 window.crtOverlay.loadForUser(user.id);
             }
-
-            promptLogConsentIfNeeded();
         }
 
         function showAuthError(msg) {
@@ -605,10 +603,13 @@
         }
 
         // One-time "may we store your session's game log?" consent prompt —
-        // shown once per browser (godaigo_log_consent unset), from
-        // onAuthSuccess() below. Revisitable later via Settings → Privacy
-        // (js/gamification-ui.js's _gami_toggleLogConsent), which reuses
-        // setLogConsent() so both write paths share one function.
+        // shown once per browser (godaigo_log_consent unset), on match launch
+        // (startGame()/startMultiplayerGame() below, each after a short delay
+        // so it doesn't cover the board's own intro animation) rather than
+        // right after login, since a player may log in and just browse the
+        // lobby without starting a match. Revisitable later via Settings →
+        // Privacy (js/gamification-ui.js's _gami_toggleLogConsent), which
+        // reuses setLogConsent() so both write paths share one function.
         function promptLogConsentIfNeeded() {
             try {
                 if (localStorage.getItem('godaigo_log_consent')) return; // already answered
@@ -4132,6 +4133,9 @@
             // Initialize opponent panel
             updateOpponentPanel();
 
+            // Delayed so the consent dialog doesn't cover the board's own
+            // intro (tiles dropping into their spiral, camera fitting to view).
+            setTimeout(promptLogConsentIfNeeded, 1500);
         }
 
 
@@ -4190,6 +4194,15 @@
             updateIsMobile();
             window.addEventListener('resize', updateIsMobile);
             try { window.matchMedia('(max-width: 768px)').addEventListener('change', updateIsMobile); } catch (e) {}
+
+            // startGame() is also how tutorial-mode.js builds its scripted board
+            // (see the comment right below) — that never touches Supabase, so
+            // skip the consent prompt there. Delayed so it doesn't cover the
+            // board's own intro (tiles dropping into their spiral, camera
+            // fitting to view).
+            if (!window.isTutorialMode) {
+                setTimeout(promptLogConsentIfNeeded, 1500);
+            }
         }
 
         // Expose startGame globally so tutorial-mode.js can call it without auth
