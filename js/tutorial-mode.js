@@ -651,9 +651,9 @@ const TutorialMode = (function () {
             title: 'A Few More Things to Know',
             content: `Some finer points that will come up as you play:
             <ul style="margin:10px 0; padding-left:18px; line-height:1.6;">
-                <li>Activating a scroll doesn't count toward your win condition if that element's source pool is empty. Destroy a placed stone of that type to free one up and get around this.</li>
+                <li>Activating a scroll (including a Catacomb scroll) doesn't count toward your win condition for an element whose source pool is empty. Destroy a placed stone of that type to free one up and get around this.</li>
                 <li>When scroll effects conflict, they resolve by element rank.</li>
-                <li>A scroll's stone pattern doesn't need to match the element of the tile you're standing on, and it doesn't need to be centered on your position.</li>
+                <li>You don't need to be standing in the center of a tile to activate a scroll — a common mistake.</li>
                 <li>Some scrolls can be activated more than once in the same turn. Stack repeated activations to maximize your control of the board.</li>
                 <li>You can't end your turn on another player's player tile, and you can't place stones there.</li>
                 <li>Placing a stone on an elemental shrine's center blocks other players from teleporting there.</li>

@@ -1707,15 +1707,22 @@
                             return;
                         }
                         if (spell.element === 'catacomb' && spell.patterns && spell.patterns[0]) {
-                            // Catacomb scrolls activate each component element
+                            // Catacomb scrolls activate each component element — the same
+                            // source-pool guard as regular scrolls applies per component
+                            // element (a component whose source is depleted doesn't count).
                             const elements = new Set(spell.patterns[0].map(pos => pos.type));
                             elements.forEach(el => {
-                                const ps = this.getPlayerScrolls(false);
-                                const isNew = !ps.activated.has(el);
-                                ps.activated.add(el);
-                                if (isNew) window.SoundSystem?.onWinCondition(el);
-                                if (typeof window.gami?.onElementActivated === 'function') {
-                                    window.gami.onElementActivated(el, Array.from(this.getPlayerScrolls(false).activated));
+                                const elSourcePool = window.stonePools?.[el] ?? 1;
+                                if (elSourcePool > 0) {
+                                    const ps = this.getPlayerScrolls(false);
+                                    const isNew = !ps.activated.has(el);
+                                    ps.activated.add(el);
+                                    if (isNew) window.SoundSystem?.onWinCondition(el);
+                                    if (typeof window.gami?.onElementActivated === 'function') {
+                                        window.gami.onElementActivated(el, Array.from(this.getPlayerScrolls(false).activated));
+                                    }
+                                } else {
+                                    console.log(`📜 Win condition skipped for ${el} (catacomb component): source pool is empty.`);
                                 }
                             });
                         } else {
@@ -1793,11 +1800,17 @@
                         );
                         updateStoneCount(element);
 
-                        // Track activated element for win condition (for active player)
-                        const ps0 = this.getPlayerScrolls(false);
-                        const isNew0 = !ps0.activated.has(element);
-                        ps0.activated.add(element);
-                        if (isNew0) window.SoundSystem?.onWinCondition(element);
+                        // Track activated element for win condition (for active player) —
+                        // source pool guard applies per component element here too.
+                        const elSourcePool0 = window.stonePools?.[element] ?? 1;
+                        if (elSourcePool0 > 0) {
+                            const ps0 = this.getPlayerScrolls(false);
+                            const isNew0 = !ps0.activated.has(element);
+                            ps0.activated.add(element);
+                            if (isNew0) window.SoundSystem?.onWinCondition(element);
+                        } else {
+                            console.log(`📜 Win condition skipped for ${element} (catacomb component, default path): source pool is empty.`);
+                        }
                         rewards.push(`+${count} ${element}`);
                     });
 
