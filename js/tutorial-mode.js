@@ -3,10 +3,11 @@
  *
  * Features:
  *  - Auto-builds a scripted board (earth tile at center, player + enemy pawns placed)
- *  - 30-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
+ *  - 31-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
  *    paginated designer's note, added before the original 14-step game-intro walkthrough;
  *    later additions cover finding a Water shrine, Water's ability-copying mechanic,
- *    Water+Wind synergy, finding a Fire shrine, Void, and finding a Catacomb shrine)
+ *    Water+Wind synergy, finding a Fire shrine, finding a Void shrine, Void's
+ *    cancel ability, and finding a Catacomb shrine)
  *  - Premature-flip guard: game-ui.js's four movement-commit paths (drag, tap, the
  *    keyboard/touch fallback, and the preview-confirm flow) all check
  *    isTileFlipExpected() before committing a move, and reject the whole move (not
@@ -54,6 +55,7 @@ const TutorialMode = (function () {
     let windRevealed       = false;  // tracks whether the wind-escape step's forced tile has been processed
     let waterRevealed      = false;  // tracks whether the water-shrine step's forced tile has been processed
     let fireRevealed       = false;  // tracks whether the fire-shrine step's forced tile has been processed
+    let voidRevealed       = false;  // tracks whether the void-shrine step's forced tile has been processed
     let catacombRevealed   = false;  // tracks whether the catacomb-shrine step's forced tile has been processed
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
     let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
@@ -450,6 +452,19 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
+        // ── void-shrine: player explores to find and gather void stones ────────────
+        {
+            id: 'void-shrine',
+            title: 'Find a Void Shrine',
+            content: `Explore the board and <strong>end your turn on a Void shrine</strong> to collect <strong style="color:#9458f4;">Void stones</strong>.
+                <div style="margin-top:8px; color:#bbb; font-size:17px;">
+                    Flip a hidden tile to find one, then walk to its center and click <strong>End Turn</strong>.
+                </div>`,
+            action: 'void-shrine',
+            nextLabel: null,
+            freeMove: true,
+            modalPos: 'corner'
+        },
         // ── void-stones: player places a void stone to cancel a neighbor's ability ─
         {
             id: 'void-stones',
@@ -567,6 +582,7 @@ const TutorialMode = (function () {
         windRevealed  = false;
         waterRevealed = false;
         fireRevealed  = false;
+        voidRevealed  = false;
         catacombRevealed = false;
         currentStep   = -1;
 
@@ -777,6 +793,7 @@ const TutorialMode = (function () {
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'water-shrine':      'Explore the board, find a Water shrine, walk to its center and click End Turn…',
             'fire-shrine':       'Explore the board, find a Fire shrine, walk to its center and click End Turn…',
+            'void-shrine':       'Explore the board, find a Void shrine, walk to its center and click End Turn…',
             'catacomb-shrine':   'Explore the board, find a Catacomb shrine, then click a glowing destination to teleport…',
             'wind-move':         'Drag a Wind stone, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone (red) from the pool and place it adjacent to an Earth stone…',
@@ -950,12 +967,8 @@ const TutorialMode = (function () {
                 updateStatus('Move next to your Wind stone to copy its ability with Water.');
             }
         } else if (stepId === 'void-stones') {
-            const pool = window.playerPool;
-            if (pool && (pool.void || 0) < 1) {
-                pool.void = (pool.void || 0) + 2;
-                if (typeof updateHUD === 'function') updateHUD();
-                if (typeof updateStonePoolDisplay === 'function') updateStonePoolDisplay();
-            }
+            // Void stones come from the void-shrine step just before this one
+            // (forced tile + shrine replenish on End Turn) — no free grant needed.
             // No auto-placed stone here either — see break-trap above.
             const pos3 = window.playerPosition;
             if (pos3 && !isAdjacentToOtherStone(pos3.x, pos3.y, 'void') && typeof updateStatus === 'function') {
@@ -1103,6 +1116,7 @@ const TutorialMode = (function () {
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'water-shrine':      'Explore the board, find a Water shrine, walk to its center and click End Turn…',
             'fire-shrine':       'Explore the board, find a Fire shrine, walk to its center and click End Turn…',
+            'void-shrine':       'Explore the board, find a Void shrine, walk to its center and click End Turn…',
             'catacomb-shrine':   'Explore the board, find a Catacomb shrine, then click a glowing destination to teleport…',
             'wind-move':         'Drag a Wind stone from the pool, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone from the pool adjacent to an Earth stone…',
@@ -1172,6 +1186,9 @@ const TutorialMode = (function () {
         } else if (currentStep === stepIndexOf('fire-shrine') && !fireRevealed) {
             // Same trick for Fire.
             tile.shrineType = 'fire';
+        } else if (currentStep === stepIndexOf('void-shrine') && !voidRevealed) {
+            // Same trick for Void.
+            tile.shrineType = 'void';
         } else if (currentStep === stepIndexOf('catacomb-shrine') && !catacombRevealed) {
             // Same trick for Catacomb.
             tile.shrineType = 'catacomb';
@@ -1196,6 +1213,12 @@ const TutorialMode = (function () {
             waterRevealed = true;
         } else if (currentStep === stepIndexOf('fire-shrine') && !fireRevealed) {
             fireRevealed = true;
+        } else if (currentStep === stepIndexOf('void-shrine') && !voidRevealed) {
+            // No step-advance here — void-shrine's own onEndTurn gate (below)
+            // already advances once the player ends their turn on the shrine
+            // and actually collects Void stones. Just stop forcing further
+            // reveals during this step.
+            voidRevealed = true;
         } else if (currentStep === stepIndexOf('catacomb-shrine') && !catacombRevealed) {
             // No step-advance here either — advancing happens in
             // onCatacombTeleport() once the player actually uses the shrine.
@@ -1292,6 +1315,19 @@ const TutorialMode = (function () {
                     updateStatus('End your turn on the Fire shrine center to collect Fire stones.');
             }
         }
+
+        // ── Void shrine gate ─────────────────────────────────────────────────
+        // Fires after shrine replenishment, so playerPool.void is already updated.
+        if (step.action === 'void-shrine') {
+            const voidNow = window.playerPool?.void || 0;
+            if (voidNow > 0) {
+                clearHintTimer();
+                setTimeout(() => showStep(currentStep + 1), 900);
+            } else {
+                if (typeof updateStatus === 'function')
+                    updateStatus('End your turn on the Void shrine center to collect Void stones.');
+            }
+        }
     }
 
     /** Called from game-ui.js when tutorial blocks an out-of-bounds drop. */
@@ -1315,8 +1351,8 @@ const TutorialMode = (function () {
         // hand the player a scroll or resource the tutorial isn't expecting
         // yet. From water-shrine onward it's all elemental teaching: each
         // "find a shrine" step (water-shrine/wind-escape/fire-shrine/
-        // catacomb-shrine/...) explicitly wants a flip, and every step in
-        // between (water-basics, fire-counter, void-stones, etc.) has no
+        // void-shrine/catacomb-shrine/...) explicitly wants a flip, and every
+        // step in between (water-basics, fire-counter, void-stones, etc.) has no
         // shrine step of its own and may need the player to explore further
         // to reach a stone it needs — blocking flips there only strands the
         // player and protects nothing, since no later step depends on a
