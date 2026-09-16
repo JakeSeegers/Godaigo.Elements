@@ -3,14 +3,20 @@
  *
  * Features:
  *  - Auto-builds a scripted board (earth tile at center, player + enemy pawns placed)
- *  - 29-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
+ *  - 30-step walkthrough using the official voice-recorded transcript (steps 0-4 are a
  *    paginated designer's note, added before the original 14-step game-intro walkthrough;
  *    later additions cover finding a Water shrine, Water's ability-copying mechanic,
- *    Water+Wind synergy, finding a Fire shrine, and Void)
- *  - Premature-flip guard: game-core.js's revealFlippedTilesAlongPath() blocks (and
- *    alerts on) revealing a hidden tile during any step that isn't currently expecting
- *    one — see isTileFlipExpected() — so exploring ahead can't draw an extra scroll or
- *    eat a later step's forced shrine tile before the tutorial is ready for it
+ *    Water+Wind synergy, finding a Fire shrine, Void, and finding a Catacomb shrine)
+ *  - Premature-flip guard: game-ui.js's four movement-commit paths (drag, tap, the
+ *    keyboard/touch fallback, and the preview-confirm flow) all check
+ *    isTileFlipExpected() before committing a move, and reject the whole move (not
+ *    just skip the reveal) with an alert if it would step onto a still-hidden tile
+ *    outside a step that currently expects one. Only the linear intro arc (through
+ *    break-trap) is protected — every step from water-shrine onward allows flips,
+ *    since nothing that far into the walkthrough depends on a specific early flip
+ *    going untouched, and blocking there only strands the player. game-core.js's
+ *    revealFlippedTilesAlongPath() has its own copy of the same check as a fallback,
+ *    but shouldn't fire in practice since every real caller now checks first.
  *  - Spotlight system: dims everything and highlights one UI element at a time
  *  - Movement gating: restricts the pawn to the tutorial destination
  *  - Click-to-advance: certain steps wait for the player to click the spotlit element
@@ -48,6 +54,7 @@ const TutorialMode = (function () {
     let windRevealed       = false;  // tracks whether the wind-escape step's forced tile has been processed
     let waterRevealed      = false;  // tracks whether the water-shrine step's forced tile has been processed
     let fireRevealed       = false;  // tracks whether the fire-shrine step's forced tile has been processed
+    let catacombRevealed   = false;  // tracks whether the catacomb-shrine step's forced tile has been processed
     let exitBtnEl         = null;   // persistent exit button shown for the whole tutorial
     let liftedAncestors   = [];     // ancestors temporarily raised above the overlay
     let cornerResizeFn    = null;   // window 'resize'/'scroll' listener kept while a corner modal is open
@@ -458,6 +465,22 @@ const TutorialMode = (function () {
             nextLabel: null,
             modalPos: 'corner'
         },
+        // ── catacomb-shrine: player explores to find and use a Catacomb shrine ─────
+        {
+            id: 'catacomb-shrine',
+            title: 'Find a Catacomb Shrine',
+            content: `There's a sixth tile type: <strong style="color:#c8a870;">Catacomb</strong>. Revealing one instantly refunds <strong>1 AP</strong>.
+                <div style="margin-top:10px;">
+                    Standing on a Catacomb shrine lets you <strong>teleport for free</strong> to the center of any other revealed, empty elemental shrine.
+                </div>
+                <div style="margin-top:8px; color:#bbb; font-size:17px;">
+                    Flip a hidden tile to find one, then click a glowing destination to teleport there.
+                </div>`,
+            action: 'catacomb-shrine',
+            nextLabel: null,
+            freeMove: true,
+            modalPos: 'corner'
+        },
         // ── react-scrolls: explanation-only, no player action required ──────────
         {
             id: 'react-scrolls',
@@ -544,6 +567,7 @@ const TutorialMode = (function () {
         windRevealed  = false;
         waterRevealed = false;
         fireRevealed  = false;
+        catacombRevealed = false;
         currentStep   = -1;
 
         const sg = window.startGame || (typeof startGame !== 'undefined' ? startGame : null);
@@ -753,6 +777,7 @@ const TutorialMode = (function () {
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'water-shrine':      'Explore the board, find a Water shrine, walk to its center and click End Turn…',
             'fire-shrine':       'Explore the board, find a Fire shrine, walk to its center and click End Turn…',
+            'catacomb-shrine':   'Explore the board, find a Catacomb shrine, then click a glowing destination to teleport…',
             'wind-move':         'Drag a Wind stone, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone (red) from the pool and place it adjacent to an Earth stone…',
             'stone-placed-water-earth': 'Drag a Water stone from the pool and place it adjacent to an Earth stone…',
@@ -1078,6 +1103,7 @@ const TutorialMode = (function () {
             'wind-shrine':       'Explore the board, find a Wind shrine, walk to its center and click End Turn…',
             'water-shrine':      'Explore the board, find a Water shrine, walk to its center and click End Turn…',
             'fire-shrine':       'Explore the board, find a Fire shrine, walk to its center and click End Turn…',
+            'catacomb-shrine':   'Explore the board, find a Catacomb shrine, then click a glowing destination to teleport…',
             'wind-move':         'Drag a Wind stone from the pool, drop it on any hex, then move your pawn through or past it…',
             'stone-placed-fire': 'Drag a Fire stone from the pool adjacent to an Earth stone…',
             'stone-placed-water-earth': 'Drag a Water stone from the pool adjacent to an Earth stone…',
@@ -1146,6 +1172,9 @@ const TutorialMode = (function () {
         } else if (currentStep === stepIndexOf('fire-shrine') && !fireRevealed) {
             // Same trick for Fire.
             tile.shrineType = 'fire';
+        } else if (currentStep === stepIndexOf('catacomb-shrine') && !catacombRevealed) {
+            // Same trick for Catacomb.
+            tile.shrineType = 'catacomb';
         }
     }
 
@@ -1167,6 +1196,10 @@ const TutorialMode = (function () {
             waterRevealed = true;
         } else if (currentStep === stepIndexOf('fire-shrine') && !fireRevealed) {
             fireRevealed = true;
+        } else if (currentStep === stepIndexOf('catacomb-shrine') && !catacombRevealed) {
+            // No step-advance here either — advancing happens in
+            // onCatacombTeleport() once the player actually uses the shrine.
+            catacombRevealed = true;
         }
     }
 
@@ -1275,18 +1308,21 @@ const TutorialMode = (function () {
     function isTileFlipExpected() {
         const step = STEPS[currentStep];
         if (!step) return true; // unknown step — fail open, don't block outside a known flow
-        if (step.action === 'explore' || step.action === 'wind-shrine' ||
-            step.action === 'water-shrine' || step.action === 'fire-shrine') {
-            return true;
-        }
-        // Once the last forced-tile step (fire-shrine) is behind us, every
-        // shrine type the tutorial ever needs to force has already been
-        // consumed — blocking flips from here on serves no purpose and only
-        // strands the player if they need to explore further to reach a
-        // stone a later step needs (e.g. void-stones has no shrine step of
-        // its own and may need the player to find a stone that isn't close).
-        const fireShrineIdx = stepIndexOf('fire-shrine');
-        return fireShrineIdx >= 0 && currentStep > fireShrineIdx;
+        // The very first exploration — forces the first tile flipped to Earth.
+        if (step.action === 'explore') return true;
+        // Everything up through break-trap is the linear intro arc (movement,
+        // scrolls, patterns, stone-breaking) where an early flip really could
+        // hand the player a scroll or resource the tutorial isn't expecting
+        // yet. From water-shrine onward it's all elemental teaching: each
+        // "find a shrine" step (water-shrine/wind-escape/fire-shrine/
+        // catacomb-shrine/...) explicitly wants a flip, and every step in
+        // between (water-basics, fire-counter, void-stones, etc.) has no
+        // shrine step of its own and may need the player to explore further
+        // to reach a stone it needs — blocking flips there only strands the
+        // player and protects nothing, since no later step depends on a
+        // *specific* early flip going untouched.
+        const cutoffIdx = stepIndexOf('break-trap');
+        return cutoffIdx >= 0 && currentStep > cutoffIdx;
     }
 
     function clearHintTimer() {
@@ -1398,6 +1434,15 @@ const TutorialMode = (function () {
     function onStoneNullified(stone) {
         const step = STEPS[currentStep];
         if (!step || step.action !== 'stone-placed-void') return;
+        clearHintTimer();
+        setTimeout(advance, 400);
+    }
+
+    /** Called from game-ui.js's catacomb teleport indicator click handler,
+     *  right after a successful teleport actually happens. */
+    function onCatacombTeleport() {
+        const step = STEPS[currentStep];
+        if (!step || step.action !== 'catacomb-shrine') return;
         clearHintTimer();
         setTimeout(advance, 400);
     }
@@ -1526,7 +1571,7 @@ const TutorialMode = (function () {
         start, advance, finish,
         onTilePreReveal, onTileRevealed, onPlayerMoved, onWindStoneUsed, onPlayerTilePlaced, onEndTurn, showMovementHint,
         onStonePlaced, onStoneBroken, onScrollMoved, onScrollHovered, onSpellCast,
-        onWaterMimicUpdated, onStoneNullified, isTileFlipExpected,
+        onWaterMimicUpdated, onStoneNullified, isTileFlipExpected, onCatacombTeleport,
         get currentStep() { return currentStep; }
     };
 })();

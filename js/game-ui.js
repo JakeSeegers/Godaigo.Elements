@@ -2552,6 +2552,9 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             }
             placePlayer(shrine.x, shrine.y);
             updateStatus(`Teleported to the ${shrine.shrineType} shrine!`);
+            if (window.isTutorialMode && window.TutorialMode?.onCatacombTeleport) {
+                window.TutorialMode.onCatacombTeleport();
+            }
             if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
                 const playerIndex = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null) ? myPlayerIndex : activePlayerIndex;
                 broadcastGameAction('catacomb-teleport', { playerIndex, x: shrine.x, y: shrine.y });
@@ -3763,6 +3766,9 @@ document.getElementById('undo-move').onclick = function() {
                     // Teleport player (no AP cost)
                     placePlayer(shrine.x, shrine.y);
                     updateStatus(`Teleported to the ${shrine.shrineType} shrine!`);
+                    if (window.isTutorialMode && window.TutorialMode?.onCatacombTeleport) {
+                        window.TutorialMode.onCatacombTeleport();
+                    }
 
                     // Broadcast teleport so other clients stay in sync
                     if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
