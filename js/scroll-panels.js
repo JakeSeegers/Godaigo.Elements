@@ -712,7 +712,7 @@ const ScrollPanelSystem = (() => {
         titleWrap.appendChild(nameEl);
         const metaEl = document.createElement('span');
         metaEl.className = 'fsp-card-meta';
-        metaEl.textContent = `Rank ${info.rank} · ${info.cost} AP`;
+        metaEl.textContent = `Rank ${info.rank} · ${info.cost} AP to break`;
         titleWrap.appendChild(metaEl);
         hdr.appendChild(titleWrap);
         card.appendChild(hdr);
