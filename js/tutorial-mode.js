@@ -338,11 +338,8 @@ const TutorialMode = (function () {
                     <strong>Right-click any Earth stone</strong> on the board to break it.
                     Breaking costs <strong>AP equal to the stone's rank</strong>. Earth is rank 5, so it costs <strong style="color:#69d83a;">5 AP</strong>.
                 </div>
-                <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    As before, you will need to end your turn to regain the AP necessary to break an Earth Stone.
-                </div>
-                <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    On touch devices: long-press the stone instead.
+                <div style="margin-top:8px; color:#bbb; font-size:15px; line-height:1.4;">
+                    As before, you'll need to end your turn to regain the AP to break an Earth stone. On touch devices, long-press the stone instead.
                 </div>`,
             action: 'stone-broken',
             nextLabel: null,

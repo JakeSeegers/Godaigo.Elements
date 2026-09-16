@@ -1927,10 +1927,13 @@ svg {
    bottom padding (104px = .dock-bar's own 72px height + 32px clearance —
    see .dock-bar below) keeps this off the Hand/Active/Common/Activate
    Scroll/Undo Step/End Turn/Elemental Stones buttons NO MATTER WHAT — pure
-   CSS, no JS measurement to get out of sync or fail to run. max-height on
-   the content below is sized to exactly the space padding-top/bottom leave
-   (100vh - 16 - 104), so a long step's text scrolls internally instead of
-   the box ever growing past that reserved band. */
+   CSS, no JS measurement to get out of sync or fail to run. Top padding is
+   the HUD bar's own height (--hud-height) plus the same 16px clearance, so
+   a tall step's box growing upward stops above the AP pips/HUD instead of
+   covering them. max-height on the content below is sized to exactly the
+   space padding-top/bottom leave, so a long step's text scrolls internally
+   instead of the box ever growing past that reserved band. Width bumped
+   from 380 to 410px so long lines wrap less, keeping boxes shorter overall. */
 .tutorial-modal.tutorial-corner {
     position: fixed;
     top: 0; left: 0;
@@ -1938,7 +1941,7 @@ svg {
     display: flex;
     align-items: flex-end;
     justify-content: flex-end;
-    padding: 16px 16px 104px 16px;
+    padding: calc(var(--hud-height, 52px) + 16px) 16px 104px 16px;
     box-sizing: border-box;
     background: none;
     pointer-events: none;
@@ -1951,8 +1954,8 @@ svg {
     border-radius: 8px;
     padding: 18px 22px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.7);
-    max-width: 380px;
-    max-height: calc(100vh - 120px);
+    max-width: 410px;
+    max-height: calc(100vh - var(--hud-height, 52px) - 16px - 104px);
     overflow-y: auto;
     box-sizing: border-box;
 }
