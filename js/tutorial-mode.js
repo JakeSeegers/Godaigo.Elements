@@ -1275,8 +1275,18 @@ const TutorialMode = (function () {
     function isTileFlipExpected() {
         const step = STEPS[currentStep];
         if (!step) return true; // unknown step — fail open, don't block outside a known flow
-        return step.action === 'explore' || step.action === 'wind-shrine' ||
-               step.action === 'water-shrine' || step.action === 'fire-shrine';
+        if (step.action === 'explore' || step.action === 'wind-shrine' ||
+            step.action === 'water-shrine' || step.action === 'fire-shrine') {
+            return true;
+        }
+        // Once the last forced-tile step (fire-shrine) is behind us, every
+        // shrine type the tutorial ever needs to force has already been
+        // consumed — blocking flips from here on serves no purpose and only
+        // strands the player if they need to explore further to reach a
+        // stone a later step needs (e.g. void-stones has no shrine step of
+        // its own and may need the player to find a stone that isn't close).
+        const fireShrineIdx = stepIndexOf('fire-shrine');
+        return fireShrineIdx >= 0 && currentStep > fireShrineIdx;
     }
 
     function clearHintTimer() {
