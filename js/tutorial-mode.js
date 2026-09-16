@@ -870,7 +870,10 @@ const TutorialMode = (function () {
         if (stepId === 'open-scrolls') {
             // If the Hand panel is already open (player opened it during free exploration),
             // force-close it so the spotlight click action opens it fresh as intended.
-            document.querySelectorAll('.fsp-close-btn').forEach(btn => btn.click());
+            // Close only the Hand panel — .fsp-close-btn is shared by every panel's
+            // header, so querying it unscoped closed Active/Common/Game Log/
+            // Opponent Status too.
+            window.ScrollPanelSystem?.closePanel?.('hand');
         } else if (stepId === 'cast-avalanche') {
             // Guarantee at least 2 AP so the player can cast without having to End Turn.
             if (ss && ss.actionPoints < 2) {
