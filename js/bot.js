@@ -257,6 +257,14 @@
         mctsIterations:   20,    // UCB1 simulations per sample
         mctsHorizon:      15,    // max actions per rollout before falling back to evaluateSnapshot()
         mctsExploration:  1.4,   // UCB1 C (exploration term)
+        // Root candidates are pruned to the top mctsRootBreadth by one-ply
+        // evaluateSnapshot() BEFORE UCB1 spends any iterations — see
+        // mctsPick()'s own comment for why: a real position routinely offers
+        // 20-40+ legal actions (every hand scroll is also a voluntary-discard
+        // option, plus placeStone/cast/move), which used to silently outrun
+        // mctsIterations and turn "UCB1" into "whichever action
+        // legalActions() happened to enumerate first."
+        mctsRootBreadth:  10,
 
         // evaluateSnapshot() — STATE value, only used when searchDepth > 0.
         // Rough scale: one activated element (400) ≫ anything else per turn.
@@ -1671,6 +1679,18 @@
     // the same evaluateSnapshot() scale, not undefined).
     // opts.seed: optional, for reproducible tests — omitted in real play so
     // consecutive calls sample fresh completions.
+    //
+    // Root arms are pruned to the top WEIGHTS.mctsRootBreadth by one-ply
+    // evaluateSnapshot() before any UCB1 iteration runs (same trick as
+    // searchPick()'s root). Without this, a position with more legal
+    // actions than mctsIterations (routine — see mctsRootBreadth's own
+    // comment) forces every arm to be visited at most once each, UCB1
+    // comparison never actually triggers (arms.find(x => x.visits === 0)
+    // keeps finding a fresh arm every iteration), and the final "most
+    // visited" tiebreak silently falls back to whichever action
+    // legalActions() happened to enumerate first — a real bug, confirmed by
+    // a reproduction where the dominant action, placed past index
+    // mctsIterations in enumeration order, was never even sampled.
     // Bonus pseudo-visits per matching js/bot-memory.js retrieval, seeded
     // onto the root's arms before real UCB1 iterations begin — a PRIOR,
     // not an override: an arm this seeds still competes on equal footing
@@ -1702,7 +1722,14 @@
             const legal = creditFilter(detSnap, sim.legalActions(detSnap));
             if (!legal.length || legal[0].type === 'placeTile') continue;
 
-            const arms = legal.map(a => ({ a, visits: 0, total: 0 }));
+            const rootBreadth = Math.max(2, WEIGHTS.mctsRootBreadth | 0);
+            const pruned = legal.length <= rootBreadth ? legal : legal
+                .map(a => { const s1 = sim.simulate(detSnap, a); return { a, v1: evaluateSnapshot(s1, meIdx) }; })
+                .sort((x, y) => y.v1 - x.v1)
+                .slice(0, rootBreadth)
+                .map(x => x.a);
+
+            const arms = pruned.map(a => ({ a, visits: 0, total: 0 }));
             if (window.BotMemory?.retrieveSimilar) {
                 const baseline = evaluateSnapshot(detSnap, meIdx);
                 const similar = window.BotMemory.retrieveSimilar(detSnap, meIdx, MEMORY_PRIOR_K);
