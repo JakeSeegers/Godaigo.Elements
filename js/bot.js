@@ -240,7 +240,7 @@
         // ── Stage 2 step 5: multi-turn MCTS (docs/bot-roadmap.md — "optional,
         // not started" until mctsPick() below). searchPick() above stops the
         // instant the active player would change; mctsPick() instead rolls
-        // real games forward THROUGH opponent turns via a fixed greedy
+        // real games forward THROUGH opponent turns via a fixed rollout
         // policy, so opponent responses actually shape which of our current
         // options looks best. OFF by default: unlike searchDepth/searchHybrid
         // this has not yet been measured at arena scale. Enable via the cheat
@@ -265,6 +265,17 @@
         // mctsIterations and turn "UCB1" into "whichever action
         // legalActions() happened to enumerate first."
         mctsRootBreadth:  10,
+        // rolloutStep()'s own lookahead, applied at every step of every
+        // rollout (not just the root) — see the "Stage 2 step 5" block
+        // comment above mulberry32() for why plain one-ply greedy here was
+        // losing every decided arena game to hybrid search even after the
+        // mctsRootBreadth fix. depth=2/breadth=3 costs roughly the same
+        // simulate() calls per step as the old one-ply full scan did on a
+        // typical branching factor (~12 vs ~20-40), so this isn't expected
+        // to meaningfully slow decisions down — needs its own arena
+        // confirmation once shipped, same as mctsRootBreadth did.
+        mctsRolloutDepth:    2,
+        mctsRolloutBreadth:  3,
 
         // evaluateSnapshot() — STATE value, only used when searchDepth > 0.
         // Rough scale: one activated element (400) ≫ anything else per turn.
@@ -1562,22 +1573,38 @@
     // opponent turn as a leaf (evaluateSnapshot() the instant
     // activePlayerIndex would change) — it never actually sees how an
     // opponent might respond. mctsPick() instead rolls real games forward
-    // THROUGH opponent turns (and our own later turns) via a fixed greedy
+    // THROUGH opponent turns (and our own later turns) via a fixed rollout
     // policy, so opponent responses genuinely shape which current option
     // looks best — the "UCT over turns" the roadmap describes, plus the
     // opponent-awareness a single-turn search structurally can't have.
     //
     // Root-level UCT: one bandit arm per legal action available RIGHT NOW.
     // Each simulation plays that arm, then rolls the WHOLE REST OF THE GAME
-    // forward — every player's turn, including ours, via greedyStep() below
+    // forward — every player's turn, including ours, via rolloutStep() below
     // — until a terminal win or mctsHorizon actions elapse, then values the
     // leaf from OUR OWN perspective. Not full adversarial minimax; "how
     // would a reasonable opponent actually respond" via the same
-    // evaluateSnapshot()-greedy policy every player uses for themselves.
+    // evaluateSnapshot()-driven policy every player uses for themselves.
     //
     // Hidden information: DETERMINIZED (see determinize() below) — mctsPick
     // samples mctsSamples plausible completions, runs one full UCT search
     // per sample, and majority-votes the root action across them.
+    //
+    // rolloutStep()'s policy strength matters more than it first looks:
+    // arena testing (see mctsRootBreadth's own comment for the sibling root-
+    // arm bug this doesn't cover) showed MCTS losing every decided game to
+    // the existing depth-3/breadth-5 hybrid searchPick() even after that fix
+    // — because a rollout's OWN future turns, including the acting player's,
+    // were being played by plain one-ply Stage-1 greedy, far weaker than the
+    // real depth-3 search that bot would actually use later. That mismatch
+    // makes a good root move look worse than it is, since the rollout can't
+    // capitalize on it as well as real play would. rolloutStep() replaces
+    // the one-ply scan with a small WEIGHTS.mctsRolloutDepth-ply,
+    // WEIGHTS.mctsRolloutBreadth-wide beam per step — still self-interested/
+    // greedy in spirit (every ply keeps optimizing the SAME acting player,
+    // no adversarial minimax), just less myopic. Applied uniformly to every
+    // player, same as before, so this doesn't make opponents any more or
+    // less "AI" than the acting player's own future turns — only deeper.
     // ----------------------------------------------------------------
 
     // Same algorithm as bot-sim.js's mulberry32 (used by BotSim.validate()),
@@ -1636,34 +1663,55 @@
         return snap;
     }
 
-    // Whoever's turn snap.turn.activePlayerIndex says it is picks the legal
-    // action maximizing THEIR OWN evaluateSnapshot() — the rollout's step
-    // function, applied uniformly to every player (ourselves included, on
-    // later turns) so opponents are modeled as reasonably self-interested
-    // rather than absent or random.
-    function greedyStep(snap) {
+    // Whoever's turn snap.turn.activePlayerIndex says it is picks ONE
+    // action — the rollout's step function, applied uniformly to every
+    // player (ourselves included, on later turns) so opponents are modeled
+    // as reasonably self-interested rather than absent or random. Not plain
+    // one-ply greedy: prunes to the top `breadth` legal actions by one-ply
+    // evaluateSnapshot(), then (while `depth` remains) recurses ONE more
+    // ply past each survivor and re-ranks by that deeper value — still
+    // scored entirely from the CURRENT acting player's own perspective at
+    // every ply (self-interested "how does this look a couple of moves from
+    // now," not adversarial minimax against whoever's turn a deeper ply
+    // lands on). depth=1 collapses to the original one-ply scan. Returns
+    // the snapshot right after the ONE action chosen at this ply, same
+    // contract the old one-ply-only version had, so rollout() below is
+    // unchanged.
+    function rolloutStep(snap, depth) {
         const acting = snap.turn.activePlayerIndex;
         const acts = creditFilter(snap, window.BotSim.legalActions(snap));
         if (!acts.length) return null;
-        let bestSnap = null, bestV = -Infinity;
-        for (const a of acts) {
-            const s1 = window.BotSim.simulate(snap, a);
-            const v = evaluateSnapshot(s1, acting);
-            if (v > bestV) { bestV = v; bestSnap = s1; }
+        const breadth = Math.max(1, WEIGHTS.mctsRolloutBreadth | 0);
+        const ranked = acts
+            .map(a => { const s1 = window.BotSim.simulate(snap, a); return { s1, v1: evaluateSnapshot(s1, acting) }; })
+            .sort((x, y) => y.v1 - x.v1)
+            .slice(0, breadth);
+        if (depth <= 1 || ranked.length === 1) return ranked[0].s1;
+        let bestSnap = ranked[0].s1, bestV = -Infinity;
+        for (const c of ranked) {
+            if (window.BotSim.isTerminal(c.s1)) {
+                const v = evaluateSnapshot(c.s1, acting);
+                if (v > bestV) { bestV = v; bestSnap = c.s1; }
+                continue;
+            }
+            const deeper = rolloutStep(c.s1, depth - 1);
+            const v = evaluateSnapshot(deeper || c.s1, acting);
+            if (v > bestV) { bestV = v; bestSnap = c.s1; }
         }
         return bestSnap;
     }
 
-    // Rolls a determinized snapshot forward via greedyStep() until a
+    // Rolls a determinized snapshot forward via rolloutStep() until a
     // terminal win/loss or `horizon` actions have elapsed, then values the
     // result from meIdx's own perspective (evaluateSnapshot already returns
     // ±WEIGHTS.evalWin for an already-terminal snapshot, so no special case
     // is needed here beyond stopping the loop).
     function rollout(startSnap, meIdx, horizon) {
         let snap = startSnap;
+        const depth = Math.max(1, WEIGHTS.mctsRolloutDepth | 0);
         for (let i = 0; i < horizon; i++) {
             if (window.BotSim.isTerminal(snap)) break;
-            const next = greedyStep(snap);
+            const next = rolloutStep(snap, depth);
             if (!next) break; // no legal action at all shouldn't happen (endTurn is always legal), but never loop forever
             snap = next;
         }
@@ -2377,6 +2425,7 @@
         searchPick,           // Stage 2 lookahead pick — used when WEIGHTS.searchDepth > 0
         mctsPick,             // Stage 2 step 5 multi-turn MCTS — used when WEIGHTS.mctsEnabled
         determinize,          // exposed for testing — samples one hidden-info completion
+        rolloutStep,          // exposed for testing — mctsPick()'s per-step rollout policy
         evaluateSnapshot,     // Stage 2 state evaluator (search leaves)
         resetMemory,          // wipe plan/history/blacklists (arena: call per game)
         castsApplied: () => _castsApplied, // monotonic cast counter — arena's no-cast stall cap reads deltas
