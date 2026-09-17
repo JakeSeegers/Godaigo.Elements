@@ -45,8 +45,13 @@
 //               the Current, Breath of Power (Tranche 6 — repeatable
 //               whole-turn stone manipulation, see "turn buffs" below and
 //               the 'moveStone' action); Freedom, Wandering River (Tranche
-//               7 — cross-turn buffs, see "cross-turn buffs" below); plus 9
-//               persistent TURN BUFFS — see "turn buffs" below. Each
+//               7 — cross-turn buffs, see "cross-turn buffs" below);
+//               Sacrificial Pyre (Tranche 8 — recursively runs its
+//               sacrificed scroll's own effect via the same simCastEffect()
+//               dispatch simCast() itself uses, mirroring the real chained
+//               execute() call; the sacrificed scroll's OWN element never
+//               activates win-condition, only Sacrificial Pyre's does); plus
+//               9 persistent TURN BUFFS — see "turn buffs" below. Each
 //               mirrors its real effect exactly (validated — see
 //               BotSim.validate()). Anything else is recorded in
 //               snap.sim.unsimulatedCasts so a search can score it with a
@@ -125,13 +130,14 @@
 //     tile. Rare (needs a still-hidden tile targeted, then revealed before
 //     the buff clears) and — unlike the shrine-collection site — would also
 //     require guessing which drawn card was in the pile's other slots
+//   - Sacrificial Pyre's stone grant is uncapped by source pool availability
+//     — NOT a simplification, a faithful mirror: enterScrollSacrificeMode's
+//     own stone-granting block has no `(snap.sourcePool[el]||0) > 0` guard
+//     at all (every other stone grant in this file — Create, Quick
+//     Reflexes, shrine collection — does check it), so simEffectSacrificial-
+//     Pyre doesn't either, on purpose
 //
 // DELIBERATELY NOT WHITELISTED (evaluated and rejected, not just unbuilt):
-//   - Sacrificial Pyre: its driver doesn't just grant stones — it also runs
-//     the SACRIFICED scroll's own execute() (a real chained cast, arbitrary
-//     scroll). Modeling only the stone grant would make this a WORSE
-//     approximation than leaving it unsimulated (validate() would show real
-//     divergence on the unmodeled chain), so it stays a flat heuristic.
 //   - Telekinesis, Excavate: each still needs action-vocabulary support this
 //     file doesn't have yet (tile-move validity beyond a swap; a deferred-
 //     to-next-turn effect) — see docs/bot-roadmap.md's Stage 2.5 notes for
@@ -220,6 +226,10 @@
         // survives simEndTurn crossing OTHER players' turns, see
         // simEffectFreedom/simEffectWanderingRiver): Freedom, Wandering River.
         'WIND_SCROLL_5', 'WATER_SCROLL_4',
+        // Tranche 8 (recursive effect dispatch — simCastEffect() factored
+        // out of simCast() so the sacrificed scroll's own effect can be
+        // simulated too, not just the stone grant): Sacrificial Pyre.
+        'FIRE_SCROLL_3',
     ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
@@ -1222,6 +1232,141 @@
         ct.wanderingRiver.push({ tileId: tile.id, newElement: el, playerIndex: p.index });
     }
 
+    // ── Tranche 8 (recursive effect dispatch) ──────────────────────────
+
+    // Sacrificial Pyre (FIRE_SCROLL_3): mirrors enterScrollSacrificeMode()
+    // + driveSacrificialPyre() exactly.
+    //   1. Choose the WEAKEST eligible hand scroll (real eligibility:
+    //      excludes response/counter-only scrolls — they have nothing to
+    //      respond to on your own turn; pickWeakestButton: a response-only
+    //      one first — impossible here, already excluded — else lowest
+    //      level).
+    //   2. Hand → common area (element-keyed replacement, same as any
+    //      discardToCommonArea).
+    //   3. Grant stones: level-based for an elemental scroll, summed by
+    //      component element for a catacomb one — capped at POOL_CAP but,
+    //      mirroring the real code's own gap, NEVER deducted from the
+    //      source pool (no `(snap.sourcePool[el]||0) > 0` guard exists in
+    //      enterScrollSacrificeMode's stone-granting block at all).
+    //   4. Recursively run the sacrificed scroll's own effect
+    //      (simCastEffect — mirrors `self.execute(selectedScroll,
+    //      casterIndex, {})`). Its element does NOT activate win-condition
+    //      (real code's own comment: "the sacrificed scroll's elements do
+    //      NOT count toward win condition" — only FIRE, from casting
+    //      Sacrificial Pyre ITSELF, activates, via simCast's normal
+    //      post-effect block using a.scroll = 'FIRE_SCROLL_3', unaffected
+    //      by this function). No extra AP cost, no unsimulatedCasts entry
+    //      for the chained scroll either — grantedNew would always be
+    //      false for it (nothing here ever touches p.activated), so
+    //      tracking it would never change a search's evaluation anyway.
+    function simEffectSacrificialPyre(snap, p) {
+        const hand = p.hand || [];
+        const eligible = hand.filter(name => {
+            const d = window.SCROLL_DEFINITIONS?.[name];
+            return d && !(d.canCounter === 'any' || d.isResponse === true);
+        });
+        if (!eligible.length) return; // real flow bails — nothing sacrificeable
+
+        let chosen = eligible[0];
+        let chosenLevel = window.SCROLL_DEFINITIONS?.[chosen]?.level ?? Infinity;
+        for (const name of eligible) {
+            const level = window.SCROLL_DEFINITIONS?.[name]?.level ?? Infinity;
+            if (level < chosenLevel) { chosenLevel = level; chosen = name; }
+        }
+        const def = window.SCROLL_DEFINITIONS[chosen];
+
+        const hi = p.hand.indexOf(chosen);
+        if (hi !== -1) { p.hand.splice(hi, 1); p.handCount--; }
+        if (!snap.commonArea) snap.commonArea = [];
+        snap.commonArea = snap.commonArea.filter(name =>
+            window.SCROLL_DEFINITIONS?.[name]?.element !== def.element);
+        if (!snap.commonArea.includes(chosen)) snap.commonArea.push(chosen);
+
+        if (def.element === 'catacomb' && def.patterns?.[0]) {
+            const counts = {};
+            for (const c of def.patterns[0]) counts[c.type] = (counts[c.type] || 0) + 1;
+            for (const [element, count] of Object.entries(counts)) {
+                p.pool[element] = Math.min(POOL_CAP, (p.pool[element] || 0) + count);
+            }
+        } else if (ELEMENTS.includes(def.element)) {
+            p.pool[def.element] = Math.min(POOL_CAP, (p.pool[def.element] || 0) + def.level);
+        }
+
+        simCastEffect(snap, p, chosen);
+    }
+
+    // The scroll-name-keyed effect dispatch, factored out of simCast() so
+    // Sacrificial Pyre (which runs a SACRIFICED scroll's own effect via the
+    // real code's `self.execute(selectedScroll, casterIndex, {})`) can
+    // recurse into it directly — mirrors that chained call exactly, without
+    // simCast()'s AP cost, hand→active move, or win-condition activation
+    // (all scroll-cast-specific, not effect-specific; the real chain skips
+    // them too — see enterScrollSacrificeMode's own "does NOT count toward
+    // win condition" comment).
+    function simCastEffect(snap, p, scrollName) {
+        if (scrollName === 'FIRE_SCROLL_4') {
+            // Transmute's execute() activates fire with NO source-pool gate
+            // (deliberate belt-and-suspenders in scroll-effects.js) — the
+            // real cast activates fire even when the fire source is empty.
+            if (!p.activated.includes('fire')) p.activated.push('fire');
+            simEffectTransmute(snap, p);
+        } else if (scrollName === 'VOID_SCROLL_5') {
+            simEffectCreate(snap, p);
+        } else if (scrollName === 'FIRE_SCROLL_5') {
+            simEffectArson(snap, p, scrollName);
+        } else if (scrollName === 'WATER_SCROLL_2') {
+            simEffectRefreshingThought(snap);
+        } else if (scrollName === 'EARTH_SCROLL_3') {
+            simEffectMasonsSavvy(snap, p);
+        } else if (scrollName === 'EARTH_SCROLL_4') {
+            simEffectHeavyStomp(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_10') {
+            simEffectCombust(snap);
+        } else if (scrollName === 'FIRE_SCROLL_2') {
+            simEffectBurningMotivation(snap);
+        } else if (scrollName === 'EARTH_SCROLL_5') {
+            simEffectAvalanche(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_6') {
+            simEffectSeedTheSkies(snap, p);
+        } else if (scrollName === 'WIND_SCROLL_2') {
+            simEffectRespirate(snap, p);
+        } else if (scrollName === 'VOID_SCROLL_3') {
+            simEffectSimplify(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_2') {
+            simEffectMine(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_5') {
+            simEffectSteamVents(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_1') {
+            simEffectMudslide(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_7') {
+            simEffectReflectingPool(snap, p);
+        } else if (scrollName === 'EARTH_SCROLL_2') {
+            simEffectShiftingSands(snap);
+        } else if (scrollName === 'VOID_SCROLL_4') {
+            simEffectScholarsInsight(snap);
+        } else if (scrollName === 'WATER_SCROLL_3') {
+            simEffectInspiringDraught(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_3') {
+            simEffectCallToAdventure(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_8') {
+            simEffectPlunder(snap, p, scrollName);
+        } else if (scrollName === 'WIND_SCROLL_4') {
+            simEffectTakeFlight(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_9') {
+            simEffectQuickReflexes(snap, p);
+        } else if (scrollName === 'WATER_SCROLL_5') {
+            simEffectControlTheCurrent(snap, p);
+        } else if (scrollName === 'WIND_SCROLL_3') {
+            simEffectBreathOfPower(snap, p);
+        } else if (scrollName === 'WIND_SCROLL_5') {
+            simEffectFreedom(snap, p);
+        } else if (scrollName === 'WATER_SCROLL_4') {
+            simEffectWanderingRiver(snap, p);
+        } else if (scrollName === 'FIRE_SCROLL_3') {
+            simEffectSacrificialPyre(snap, p);
+        }
+    }
+
     function simCast(snap, a) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
@@ -1250,65 +1395,7 @@
         // Mason's Savvy taking the last earth stones correctly forfeits
         // the earth activation. (Caught by the harness as a genuine
         // divergence when this block ran before the effect.)
-        if (a.scroll === 'FIRE_SCROLL_4') {
-            // Transmute's execute() activates fire with NO source-pool gate
-            // (deliberate belt-and-suspenders in scroll-effects.js) — the
-            // real cast activates fire even when the fire source is empty.
-            if (!p.activated.includes('fire')) p.activated.push('fire');
-            simEffectTransmute(snap, p);
-        } else if (a.scroll === 'VOID_SCROLL_5') {
-            simEffectCreate(snap, p);
-        } else if (a.scroll === 'FIRE_SCROLL_5') {
-            simEffectArson(snap, p, a.scroll);
-        } else if (a.scroll === 'WATER_SCROLL_2') {
-            simEffectRefreshingThought(snap);
-        } else if (a.scroll === 'EARTH_SCROLL_3') {
-            simEffectMasonsSavvy(snap, p);
-        } else if (a.scroll === 'EARTH_SCROLL_4') {
-            simEffectHeavyStomp(snap, p);
-        } else if (a.scroll === 'CATACOMB_SCROLL_10') {
-            simEffectCombust(snap);
-        } else if (a.scroll === 'FIRE_SCROLL_2') {
-            simEffectBurningMotivation(snap);
-        } else if (a.scroll === 'EARTH_SCROLL_5') {
-            simEffectAvalanche(snap);
-        } else if (a.scroll === 'CATACOMB_SCROLL_6') {
-            simEffectSeedTheSkies(snap, p);
-        } else if (a.scroll === 'WIND_SCROLL_2') {
-            simEffectRespirate(snap, p);
-        } else if (a.scroll === 'VOID_SCROLL_3') {
-            simEffectSimplify(snap);
-        } else if (a.scroll === 'CATACOMB_SCROLL_2') {
-            simEffectMine(snap, p);
-        } else if (a.scroll === 'CATACOMB_SCROLL_5') {
-            simEffectSteamVents(snap);
-        } else if (a.scroll === 'CATACOMB_SCROLL_1') {
-            simEffectMudslide(snap);
-        } else if (a.scroll === 'CATACOMB_SCROLL_7') {
-            simEffectReflectingPool(snap, p);
-        } else if (a.scroll === 'EARTH_SCROLL_2') {
-            simEffectShiftingSands(snap);
-        } else if (a.scroll === 'VOID_SCROLL_4') {
-            simEffectScholarsInsight(snap);
-        } else if (a.scroll === 'WATER_SCROLL_3') {
-            simEffectInspiringDraught(snap);
-        } else if (a.scroll === 'CATACOMB_SCROLL_3') {
-            simEffectCallToAdventure(snap, p);
-        } else if (a.scroll === 'CATACOMB_SCROLL_8') {
-            simEffectPlunder(snap, p, a.scroll);
-        } else if (a.scroll === 'WIND_SCROLL_4') {
-            simEffectTakeFlight(snap, p);
-        } else if (a.scroll === 'CATACOMB_SCROLL_9') {
-            simEffectQuickReflexes(snap, p);
-        } else if (a.scroll === 'WATER_SCROLL_5') {
-            simEffectControlTheCurrent(snap, p);
-        } else if (a.scroll === 'WIND_SCROLL_3') {
-            simEffectBreathOfPower(snap, p);
-        } else if (a.scroll === 'WIND_SCROLL_5') {
-            simEffectFreedom(snap, p);
-        } else if (a.scroll === 'WATER_SCROLL_4') {
-            simEffectWanderingRiver(snap, p);
-        }
+        simCastEffect(snap, p, a.scroll);
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):
         //  - catacomb scrolls credit each component element, no source guard
