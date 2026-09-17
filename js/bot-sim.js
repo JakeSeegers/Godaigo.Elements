@@ -50,8 +50,12 @@
 //               sacrificed scroll's own effect via the same simCastEffect()
 //               dispatch simCast() itself uses, mirroring the real chained
 //               execute() call; the sacrificed scroll's OWN element never
-//               activates win-condition, only Sacrificial Pyre's does); plus
-//               9 persistent TURN BUFFS — see "turn buffs" below. Each
+//               activates win-condition, only Sacrificial Pyre's does);
+//               Excavate, Telekinesis (Tranche 9 — see "cross-turn buffs"
+//               below for Excavate's deferred teleport; Telekinesis gets a
+//               brand new large-hex tile-position grid, see
+//               simEffectTelekinesis); plus 9 persistent TURN BUFFS — see
+//               "turn buffs" below. Each
 //               mirrors its real effect exactly (validated — see
 //               BotSim.validate()). Anything else is recorded in
 //               snap.sim.unsimulatedCasts so a search can score it with a
@@ -109,6 +113,17 @@
 //                   {tileId, newElement, playerIndex}; overrides a tile's
 //                   effective element for shrine collection (simEndTurn) —
 //                   first matching entry wins, mirrors getEffectiveTileElement()
+//                 excavate         Excavate (CATACOMB_4) — {playerIndex}; the
+//                   ONLY cross-turn buff whose clearing DOES something
+//                   (resolveExcavateTeleport, called from simEndTurn right
+//                   as the owner's turn starts) rather than just expiring —
+//                   mirrors processExcavateTeleport() always accepting the
+//                   free teleport prompt. Excavate's OTHER two real buffs
+//                   (immunity, no-response) have no consumer anywhere in
+//                   this simulator — nothing here models opponent-targeting
+//                   eligibility — so they aren't tracked at all, same
+//                   accepted gap as Quick Reflexes' unmodelled "level-1
+//                   scrolls free" buff
 //
 // KNOWN ACCEPTED DIVERGENCES (deliberate, all rare and all logged):
 //   - scroll-effect side effects of non-whitelisted casts
@@ -136,23 +151,22 @@
 //     at all (every other stone grant in this file — Create, Quick
 //     Reflexes, shrine collection — does check it), so simEffectSacrificial-
 //     Pyre doesn't either, on purpose
-//
-// DELIBERATELY NOT WHITELISTED (evaluated and rejected, not just unbuilt):
-//   - Telekinesis, Excavate: each still needs action-vocabulary support this
-//     file doesn't have yet (tile-move validity beyond a swap; a deferred-
-//     to-next-turn effect) — see docs/bot-roadmap.md's Stage 2.5 notes for
-//     the full reasoning. Control the Current and Breath of Power (Tranche
-//     6) got their action-vocabulary support (attemptControlTheCurrent-
-//     Transform's opportunistic transform; the 'moveStone' action);
-//     Wandering River and Freedom (Tranche 7) got crossTurnBuffs, state
-//     that survives simEndTurn crossing OTHER players' turns instead of
-//     being wiped every end turn like snap.turn.buffs — all four are now
-//     whitelisted above. Freedom's own TELEPORT action stays unmodelled in
-//     legalActions() (an existing root-only gap even for the ordinary
-//     catacomb-tile kind — see "KNOWN ACCEPTED DIVERGENCES" implicitly:
-//     teleport was never in this file's action vocabulary at all), so
-//     whitelisting just the cast doesn't unlock search-planned teleports,
-//     only correct real-snapshot awareness of an already-active Freedom.
+//   - Telekinesis' "cannot strand an adjacent tile" rule: the real game
+//     enforces this as a SEPARATE check at drag-START time (bot-effects.js's
+//     driveTelekinesis comment: "Bridge tiles still highlight but error on
+//     pickup"), not inside getEligibleTilesForShiftingSands() or
+//     findNearestSnapPoint() — so a tile this simulator treats as eligible
+//     could still be rejected by a real stranding check. No board-
+//     connectivity graph analysis here; rare in practice (needs a bridge
+//     tile whose removal would disconnect another tile from the rest of
+//     the board) and simEffectTelekinesis just no-ops on that tile exactly
+//     like every other "boxed in" case, rather than inventing a result
+//   - Freedom's own TELEPORT action stays unmodelled in legalActions() — an
+//     existing root-only gap even for the ordinary catacomb-tile kind
+//     (teleport was never in this file's action vocabulary at all), so
+//     whitelisting just the cast (Tranche 7) gives correct real-snapshot
+//     awareness of an already-active Freedom without unlocking
+//     search-planned teleports
 //
 // The only globals read are STATIC data (window.SCROLL_DEFINITIONS) and,
 // inside validate() only, the live BotState/BotSystem.
@@ -230,6 +244,15 @@
         // out of simCast() so the sacrificed scroll's own effect can be
         // simulated too, not just the stone grant): Sacrificial Pyre.
         'FIRE_SCROLL_3',
+        // Tranche 9 (the last two DELIBERATELY NOT WHITELISTED entries):
+        // Excavate — a deferred-to-next-turn effect, using the same
+        // crossTurnBuffs infrastructure Tranche 7 built, but one that DOES
+        // something on clear (resolveExcavateTeleport), not just expires;
+        // Telekinesis — free-form single-tile relocation on a NEW
+        // large-hex tile-position grid this file didn't have before
+        // (countTouchingTilesSim/LARGE_HEX), not just a Shifting-Sands-style
+        // swap.
+        'CATACOMB_SCROLL_4', 'VOID_SCROLL_2',
     ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
@@ -603,6 +626,14 @@
         if (Array.isArray(snap.crossTurnBuffs?.wanderingRiver)) {
             snap.crossTurnBuffs.wanderingRiver =
                 snap.crossTurnBuffs.wanderingRiver.filter(e => e.playerIndex !== next);
+        }
+        // Excavate (CATACOMB_SCROLL_4): unlike the two above, clearing this
+        // one DOES something — mirrors processExcavateTeleport(next) firing
+        // right as that player's turn begins and always accepting the
+        // teleport prompt (driveExcavateTeleportModal — free, no downside).
+        if (snap.crossTurnBuffs?.excavate?.playerIndex === next) {
+            resolveExcavateTeleport(snap, next);
+            snap.crossTurnBuffs.excavate = null;
         }
 
         // Search support: a state evaluator must know the turn boundary was
@@ -1232,6 +1263,104 @@
         ct.wanderingRiver.push({ tileId: tile.id, newElement: el, playerIndex: p.index });
     }
 
+    // Excavate (CATACOMB_SCROLL_4): the cast itself sets THREE real buffs
+    // (excavate immunity, excavateNoResponse, excavateTeleport), but only
+    // the teleport has any consumer in this simulator — immunity/no-response
+    // gate which scrolls can TARGET a player, and nothing here models
+    // opponent-targeting eligibility at all (same accepted gap as Quick
+    // Reflexes' unmodelled "level-1 scrolls free" buff). Only the deferred
+    // teleport (crossTurnBuffs.excavate) is tracked; resolveExcavateTeleport
+    // below is what actually moves the pawn, called from simEndTurn() right
+    // as the OWNER's own turn starts — mirrors processExcavateTeleport()
+    // firing at that exact moment in the real game.
+    function simEffectExcavate(snap, p) {
+        crossTurn(snap).excavate = { playerIndex: p.index };
+    }
+
+    // Resolves Excavate's deferred teleport — mirrors
+    // driveExcavateTeleportModal() (always accepts; teleporting is free
+    // with no downside) + driveExcavateTeleport()'s candidate filter
+    // (revealed non-player tile hex, no stone, no player) and destination
+    // heuristic (home if all 5 activated, else nearest hidden tile — same
+    // goal simEffectTakeFlight already uses) exactly. Called from
+    // simEndTurn(), never from simCastEffect() — this isn't part of the
+    // cast itself, it fires one full turn cycle later.
+    function resolveExcavateTeleport(snap, playerIndex) {
+        const p = snap.players[playerIndex];
+        if (!p) return;
+        const g = grid(snap);
+        const candidates = g.filter(h => {
+            if (!h.tileIds.some(id => {
+                const t = snap.tiles.find(tt => tt.id === id);
+                return t && t.revealed && !t.isPlayerTile;
+            })) return false;
+            if (stoneAt(snap, h.x, h.y)) return false;
+            if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) return false;
+            return true;
+        });
+        if (!candidates.length) return; // real flow: prompt just does nothing useful
+        let goal = null;
+        if (ELEMENTS.every(el => p.activated.includes(el))) {
+            goal = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === playerIndex);
+        } else {
+            const hidden = snap.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            goal = hidden.length
+                ? hidden.reduce((a, b) => (!a || dist(p.x, p.y, b.x, b.y) < dist(p.x, p.y, a.x, a.y)) ? b : a, null)
+                : null;
+        }
+        const dest = goal
+            ? candidates.reduce((a, b) => (!a || dist(goal.x, goal.y, b.x, b.y) < dist(goal.x, goal.y, a.x, a.y)) ? b : a, null)
+            : candidates[0];
+        p.x = dest.x; p.y = dest.y;
+    }
+
+    // Telekinesis (VOID_SCROLL_2): mirrors driveTelekinesis() exactly —
+    // same eligibility as Shifting Sands (no stones, at most 1 player — see
+    // tileStoneCount/tilePlayerIndices above; hidden tiles ARE eligible,
+    // same as Shifting Sands), but relocates ONE tile freely instead of
+    // swapping two. For each eligible tile (snap.tiles order, matching
+    // the driver's own iteration order), tries each of its 6 large-hex
+    // neighbor offsets in the driver's exact fixed order and takes the
+    // FIRST empty one that would still touch 2+ OTHER tiles after the move
+    // (excludeTileId semantics — the moving tile never counts as its own
+    // neighbor) — stops at the first tile/destination pair that works,
+    // same early-exit shape as the driver's nested loop. A lone occupant
+    // travels with their tile (mirrors simEffectShiftingSands).
+    const LARGE_HEX = TILE * 4; // matches game-core's largeHexSize (TILE_SIZE * 4)
+    const TILE_ADJACENT_OFFSETS = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+    function countTouchingTilesSim(snap, x, y, excludeTileId) {
+        const hex = pixelToHex(x, y, LARGE_HEX);
+        let count = 0;
+        for (const [dq, dr] of TILE_ADJACENT_OFFSETS) {
+            const p = hexToPixel(hex.q + dq, hex.r + dr, LARGE_HEX);
+            if (snap.tiles.some(t => t.id !== excludeTileId && dist(t.x, t.y, p.x, p.y) < TILE)) count++;
+        }
+        return count;
+    }
+    function simEffectTelekinesis(snap, p) {
+        const eligible = snap.tiles.filter(t =>
+            !t.isPlayerTile && tileStoneCount(snap, t) === 0 && tilePlayerIndices(snap, t).length <= 1);
+        let tile = null, dest = null;
+        for (const t of eligible) {
+            const hex = pixelToHex(t.x, t.y, LARGE_HEX);
+            for (const [dq, dr] of TILE_ADJACENT_OFFSETS) {
+                const cand = hexToPixel(hex.q + dq, hex.r + dr, LARGE_HEX);
+                if (snap.tiles.some(tt => dist(tt.x, tt.y, cand.x, cand.y) < TILE)) continue; // occupied
+                if (countTouchingTilesSim(snap, cand.x, cand.y, t.id) < 2) continue;
+                tile = t; dest = cand; break;
+            }
+            if (dest) break;
+        }
+        if (!dest) return; // every eligible tile boxed in — real flow no-ops the same way
+
+        const occupant = tilePlayerIndices(snap, tile)[0];
+        tile.x = dest.x; tile.y = dest.y;
+        if (occupant !== undefined) {
+            snap.players[occupant].x = dest.x;
+            snap.players[occupant].y = dest.y;
+        }
+    }
+
     // ── Tranche 8 (recursive effect dispatch) ──────────────────────────
 
     // Sacrificial Pyre (FIRE_SCROLL_3): mirrors enterScrollSacrificeMode()
@@ -1364,6 +1493,10 @@
             simEffectWanderingRiver(snap, p);
         } else if (scrollName === 'FIRE_SCROLL_3') {
             simEffectSacrificialPyre(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_4') {
+            simEffectExcavate(snap, p);
+        } else if (scrollName === 'VOID_SCROLL_2') {
+            simEffectTelekinesis(snap, p);
         }
     }
 

@@ -70,6 +70,12 @@
                 tileId: e.tileId, newElement: e.newElement, playerIndex: e.playerIndex,
             }));
         }
+        // Excavate: only the real activeBuffs.excavateTeleport (the pending
+        // deferred teleport) maps to bot-sim's crossTurnBuffs.excavate — the
+        // separate activeBuffs.excavate (immunity) and excavateNoResponse
+        // buffs have no consumer in bot-sim.js at all (see its own
+        // "cross-turn buffs" header comment), so they're not seeded here.
+        if (raw.excavateTeleport) out.excavate = { playerIndex: raw.excavateTeleport.playerIndex };
         return Object.keys(out).length ? out : undefined;
     }
 
