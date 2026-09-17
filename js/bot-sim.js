@@ -31,8 +31,14 @@
 //               pool/pattern effects); Shifting Sands, Scholar's Insight,
 //               Inspiring Draught, Call to Adventure (flip only — its
 //               reveal-triggered stone bonus is NOT modelled, see below),
-//               Plunder (Tranche 5 — deterministic Tier-2 target choices,
-//               mirroring each BotEffects driver's exact pick); plus 9
+//               Plunder, Take Flight, Quick Reflexes (Tranche 5 —
+//               deterministic Tier-2 target choices, mirroring each
+//               BotEffects driver's exact pick — Take Flight's driver was
+//               made deterministic specifically so this could be added,
+//               see bot-effects.js's _bestTakeFlightDestination; Quick
+//               Reflexes needed snap.level1Available from bot-state.js
+//               first, since which element gets picked depends on deck
+//               availability this snapshot didn't use to expose); plus 9
 //               persistent TURN BUFFS — see "turn buffs" below. Each
 //               mirrors its real effect exactly (validated — see
 //               BotSim.validate()). Anything else is recorded in
@@ -94,15 +100,6 @@
 //     expiresThisTurn every buff above uses), so it needs state that
 //     survives simEndTurn crossing OTHER players' turns. Out of scope for
 //     the wipe-every-endTurn buff model this file uses everywhere else.
-//   - Quick Reflexes: its search is over each element deck's REMAINING
-//     contents (a level-1 scroll already drawn earlier isn't offered), which
-//     this snapshot can't see — unlike Scholar's Insight/Inspiring Draught,
-//     the WRONG element could plausibly get picked here, not just an unknown
-//     card identity, so the risk of a real (not just accepted) divergence is
-//     too high to whitelist.
-//   - Take Flight: v1's own BotEffects driver picks its destination with
-//     Math.random() — genuinely nondeterministic, so no snapshot-only
-//     simulation can honestly claim to "match" it.
 //   - Telekinesis, Control the Current, Excavate, Breath of Power, Freedom:
 //     each needs new action-vocabulary support this file doesn't have yet
 //     (tile-move validity beyond a swap; a persistent whole-turn reposition
@@ -167,8 +164,12 @@
         // Tranche 5 (Tier-2 target-selection scrolls whose BotEffects driver
         // is fully deterministic — see the effect functions for each):
         // Shifting Sands, Scholar's Insight, Inspiring Draught, Call to
-        // Adventure (flip only — see simEffectCallToAdventure), Plunder.
+        // Adventure (flip only — see simEffectCallToAdventure), Plunder,
+        // Take Flight (its driver's Math.random() pick was replaced with a
+        // deterministic heuristic in bot-effects.js — see
+        // _bestTakeFlightDestination — specifically so this could be added).
         'EARTH_SCROLL_2', 'VOID_SCROLL_4', 'WATER_SCROLL_3', 'CATACOMB_SCROLL_3', 'CATACOMB_SCROLL_8',
+        'WIND_SCROLL_4', 'CATACOMB_SCROLL_9',
     ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
@@ -588,6 +589,31 @@
         }
     }
 
+    // Quick Reflexes (CATACOMB_SCROLL_9): the driver picks the most-needed
+    // element (rankedElements()) whose level-1 scroll is still findable —
+    // unlike Scholar's Insight/Inspiring Draught, this specific card's
+    // NAME is deterministic (ELEMENT_SCROLL_1), so with snap.level1Available
+    // (bot-state.js) telling us which elements still have theirs in the
+    // deck, the exact drawn scroll is knowable, not just "an unknown card".
+    // Also draws 2 of that element's stones (source/pool capped, same shape
+    // as Mason's Savvy). The "level-1 scrolls cost 0 AP" buff is NOT
+    // modelled: level-1 scrolls are response-only and never enumerated as a
+    // legal PROACTIVE cast (see legalActions()'s `def.level === 1` skip), so
+    // the buff has no consumer anywhere in this simulator to matter to.
+    function simEffectQuickReflexes(snap, p) {
+        if (!snap.level1Available) return; // older/real snapshot missing this field — no info, bail like an empty search
+        const el = effectRankedElements(snap, p).find(e => snap.level1Available[e]);
+        if (!el) return; // real flow shows "no level 1 scrolls available" and bails
+        const scrollName = `${el.toUpperCase()}_SCROLL_1`;
+        if (p.hand) { p.hand.push(scrollName); p.handCount++; }
+        snap.level1Available[el] = false; // drawn — no longer in that deck
+        const drawn = Math.min(2, snap.sourcePool[el] || 0, POOL_CAP - (p.pool[el] || 0));
+        if (drawn > 0) {
+            snap.sourcePool[el] -= drawn;
+            p.pool[el] = (p.pool[el] || 0) + drawn;
+        }
+    }
+
     // Transmute (FIRE_SCROLL_4): the driver discards the most-plentiful
     // NON-void stone (returned to the source pool, capped) for +2 AP each
     // (capped at 5 + void stones held), until total AP reaches
@@ -739,6 +765,59 @@
         b.x = ax; b.y = ay;
         if (aOccupant !== undefined) { snap.players[aOccupant].x = a.x; snap.players[aOccupant].y = a.y; }
         if (bOccupant !== undefined) { snap.players[bOccupant].x = b.x; snap.players[bOccupant].y = b.y; }
+    }
+
+    // Take Flight (WIND_SCROLL_4): self-target only — mirrors the real
+    // driver's own v1 scope exactly (bot-effects.js's
+    // driveTakeFlightPlayerModal always picks self; opponent-targeting is
+    // deliberately out of scope there too). Candidate hexes are every walkable
+    // hex on a tile currently occupied by ANOTHER player, excluding any
+    // player-tile hex, any hex on a still-hidden tile, occupied hexes, and
+    // stones — mirrors getValidTakeFlightDestinations() exactly (that
+    // function's own isPositionOnPlayerTile check is why this can NEVER
+    // double as a direct win, despite what an older roadmap note claimed).
+    // Among those, picks the one closest to the caster's own next
+    // objective — home if all 5 elements are activated, else the nearest
+    // hidden tile — the same _bestTakeFlightDestination() heuristic
+    // bot-effects.js's driver now uses (this used to roll a random valid
+    // destination, which no snapshot-only simulation could ever honestly
+    // claim to match).
+    function simEffectTakeFlight(snap, p) {
+        const g = grid(snap);
+        const occupiedTileIds = new Set();
+        for (const pl of snap.players) {
+            if (!pl || pl.index === p.index) continue;
+            const hex = g.find(h => dist(h.x, h.y, pl.x, pl.y) < HEX_NEAR);
+            if (hex) for (const id of hex.tileIds) occupiedTileIds.add(id);
+        }
+        if (!occupiedTileIds.size) return; // real flow bails, nothing to do
+
+        const candidates = g.filter(h => {
+            if (!h.tileIds.some(id => occupiedTileIds.has(id))) return false;
+            if (h.tileIds.some(id => {
+                const t = snap.tiles.find(tt => tt.id === id);
+                return t && (t.isPlayerTile || !t.revealed);
+            })) return false;
+            if (stoneAt(snap, h.x, h.y)) return false;
+            if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) return false;
+            return true;
+        });
+        if (!candidates.length) return;
+
+        let goal = null;
+        if (ELEMENTS.every(el => p.activated.includes(el))) {
+            goal = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === p.index);
+        } else {
+            const hidden = snap.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            goal = hidden.length
+                ? hidden.reduce((a, b) => (!a || dist(p.x, p.y, b.x, b.y) < dist(p.x, p.y, a.x, a.y)) ? b : a, null)
+                : null;
+        }
+        const dest = goal
+            ? candidates.reduce((a, b) => (!a || dist(goal.x, goal.y, b.x, b.y) < dist(goal.x, goal.y, a.x, a.y)) ? b : a, null)
+            : candidates[0];
+
+        p.x = dest.x; p.y = dest.y;
     }
 
     // Refreshing Thought (WATER_SCROLL_2): draw the top catacomb-deck
@@ -1031,6 +1110,10 @@
             simEffectCallToAdventure(snap, p);
         } else if (a.scroll === 'CATACOMB_SCROLL_8') {
             simEffectPlunder(snap, p, a.scroll);
+        } else if (a.scroll === 'WIND_SCROLL_4') {
+            simEffectTakeFlight(snap, p);
+        } else if (a.scroll === 'CATACOMB_SCROLL_9') {
+            simEffectQuickReflexes(snap, p);
         }
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):

@@ -709,6 +709,24 @@
         return true;
     }
 
+    // Shared with bot-sim.js's simEffectTakeFlight (mirrored there, not
+    // called directly — bot-sim is DOM/globals-free by design). Picks the
+    // candidate hex closest to the mover's own next objective: their home
+    // tile once all 5 elements are activated, else the nearest hidden tile.
+    function _bestTakeFlightDestination(candidates, mover) {
+        const s = snap();
+        let goal = null;
+        if (ELEMENTS.every(el => mover.activated.includes(el))) {
+            goal = s.tiles.find(t => t.isPlayerTile && t.playerIndex === mover.index);
+        } else {
+            const hidden = s.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            goal = hidden.length ? hidden.reduce((a, b) => (!a || dist(mover, b) < dist(mover, a)) ? b : a, null) : null;
+        }
+        return goal
+            ? candidates.reduce((a, b) => (!a || dist(goal, b) < dist(goal, a)) ? b : a, null)
+            : candidates[0];
+    }
+
     function driveTakeFlightDrag() {
         const tf = window.takeFlightState;
         if (!tf || !tf.active) return false;
@@ -722,11 +740,19 @@
             : [];
         if (!candidates.length) return false;
 
-        // v1: roll a random valid destination rather than modeling which one
-        // is actually best (same "no clear strategic value model" reasoning
-        // driveTileSwap uses for Shifting Sands) — good enough to always
-        // respond instead of stalling, refine later if it matters.
-        const dest = candidates[Math.floor(Math.random() * candidates.length)];
+        // Same "closest to whatever the bot is already aiming for" heuristic
+        // driveExcavateTeleport uses: home if all 5 elements are activated,
+        // else the nearest hidden tile to keep exploring. This can NEVER
+        // double as an instant win the way Excavate's own note once implied
+        // — getValidTakeFlightDestinations() excludes every player-tile hex
+        // outright (isPositionOnPlayerTile), matching the scroll's own rule
+        // text ("Cannot target player tiles"); pure repositioning, same as
+        // Excavate. (docs/bot-roadmap.md has a stale line claiming otherwise
+        // — worth fixing separately.) Previously rolled a random valid
+        // destination — no snapshot-only simulation could ever honestly
+        // claim to match a nondeterministic pick, so this was also blocking
+        // bot-sim.js from simulating the cast at all.
+        const dest = _bestTakeFlightDestination(candidates, target);
 
         if (tf.targetPlayerIndex === activePlayerIndex) {
             placePlayer(dest.x, dest.y);

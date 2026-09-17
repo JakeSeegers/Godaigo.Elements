@@ -52,6 +52,24 @@
         return Object.keys(out).length ? out : undefined;
     }
 
+    // Which elements' level-1 scroll (ELEMENT_SCROLL_1 — a deterministic
+    // name, not hidden information) is still sitting in that element's
+    // draw deck. Quick Reflexes (CATACOMB_SCROLL_9) searches exactly this
+    // set — a level-1 scroll already drawn earlier by anyone isn't offered
+    // — and without exposing it, a search has no way to tell "the
+    // most-needed element" apart from "the most-needed element whose
+    // level-1 is actually still findable," risking the WRONG element
+    // getting simulated as picked (not just an unknown-card-identity gap).
+    function level1DeckAvailability() {
+        const decks = window.spellSystem?.scrollDecks;
+        if (!decks) return undefined;
+        const out = {};
+        for (const el of ['earth', 'water', 'fire', 'wind', 'void']) {
+            out[el] = !!decks[el]?.includes(`${el.toUpperCase()}_SCROLL_1`);
+        }
+        return out;
+    }
+
     // ----------------------------------------------------------------
     // Snapshot — pure JSON, safe to serialize / diff / feed to a learner.
     // Hidden information is masked: unrevealed tiles report shrineType null,
@@ -104,6 +122,7 @@
             })),
             stones: placedStones.map(s => ({ x: +s.x.toFixed(1), y: +s.y.toFixed(1), type: s.type })),
             players,
+            level1Available: level1DeckAvailability(),
         };
     }
 
