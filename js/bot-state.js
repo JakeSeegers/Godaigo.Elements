@@ -24,6 +24,34 @@
 
     function log(...args) { console.log('🧠 [BotState]', ...args); }
 
+    // Turn-long scroll-effect buffs (Burning Motivation, Simplify, Avalanche,
+    // …) the REAL game currently has active for the active player, translated
+    // into bot-sim.js's snap.turn.buffs shape. Without this, a bot decision
+    // taken on a FRESH snapshot after the buff-granting cast already
+    // happened (a separate botAct()/searchPick() call, not a hypothetical
+    // ply inside one search tree) would have no way to know the buff is
+    // live — bot-sim.js's own simEndTurn()/clearTurnBuffs() parity guarantees
+    // any buff still present here belongs to the CURRENTLY active player (any
+    // OTHER player's buff was already wiped when their turn ended), but each
+    // mapped buff still checks playerIndex, matching every real consumption
+    // site (getSpellCost, replenishShrineStones, canPlayerMoveToHex, …).
+    function activeTurnBuffs(activePlayerIndex) {
+        const raw = window.spellSystem?.scrollEffects?.activeBuffs;
+        if (!raw) return undefined;
+        const mine = b => b && b.playerIndex === activePlayerIndex;
+        const out = {};
+        if (mine(raw.burningMotivation)) out.burningMotivationStacks = raw.burningMotivation.stacks || 1;
+        if (mine(raw.globalPlacement)) out.globalPlacement = true;
+        if (mine(raw.waterWindGlobalPlacement)) out.waterWindGlobalPlacement = true;
+        if (mine(raw.respirateWind)) out.respirateWind = true;
+        if (mine(raw.simplify)) out.simplify = true;
+        if (mine(raw.mine)) out.mineShrineType = raw.mine.shrineType;
+        if (mine(raw.steamVents)) out.steamVentsBanked = !!raw.steamVents.freeStepBanked;
+        if (mine(raw.mudslide)) out.mudslide = true;
+        if (mine(raw.reflectingPool)) out.reflectingPool = true;
+        return Object.keys(out).length ? out : undefined;
+    }
+
     // ----------------------------------------------------------------
     // Snapshot — pure JSON, safe to serialize / diff / feed to a learner.
     // Hidden information is masked: unrevealed tiles report shrineType null,
@@ -61,6 +89,7 @@
                 myPlayerIndex: my,
                 isMultiplayer: (typeof isMultiplayer !== 'undefined') ? !!isMultiplayer : false,
                 ap: getTotalAP(),
+                buffs: activeTurnBuffs(activePlayerIndex),
             },
             sourcePool: { ...window.stonePools },
             commonArea: window.spellSystem?.getCommonAreaScrolls?.() || [], // shared, public, castable by anyone

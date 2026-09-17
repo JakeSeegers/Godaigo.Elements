@@ -26,28 +26,53 @@
 //   cast        AP cost, hand→active, win-condition activation (incl. the
 //               empty-source-pool rule and catacomb component elements) are
 //               exact. The scroll EFFECT is simulated only for scrolls in
-//               SIMULATED_SCROLLS — currently Create (VOID_SCROLL_5),
-//               Transmute (FIRE_SCROLL_4), Arson (FIRE_SCROLL_5), Burning
-//               Motivation (FIRE_SCROLL_2, a persistent turn-buff — see
-//               "Turn buffs" below), each mirroring its real effect exactly
-//               — anything else is recorded in snap.sim.unsimulatedCasts so a
+//               SIMULATED_SCROLLS: Create, Transmute, Arson, Refreshing
+//               Thought, Mason's Savvy, Heavy Stomp, Combust (immediate
+//               pool/pattern effects) plus 9 persistent TURN BUFFS — see
+//               "turn buffs" below — each mirroring its real effect exactly.
+//               Anything else is recorded in snap.sim.unsimulatedCasts so a
 //               search can score it with a flat heuristic instead of
 //               pretending to know the outcome.
-//   turn buffs  snap.turn.buffs.burningMotivationStacks: set by casting
-//               FIRE_SCROLL_2 (increments; matches the real game's per-caster
-//               stacking rule), consumed by simPlaceStone() as +2 AP per
-//               stack per stone placed (capped at BASE_AP + void pool, same
-//               clamp addAP() applies for real), reset on every simEndTurn
-//               ("until end of turn"). This is what lets searchPick() plan
-//               "cast Burning Motivation, then place stones" as a real
-//               sequence — WEIGHTS.evalAp already values the resulting AP,
-//               no new heuristic needed once the buff exists in the snapshot.
+//   turn buffs  snap.turn.buffs.*: set by simCast() when a buff scroll is
+//               cast, consumed at the point each buff actually matters
+//               (legalActions' cast-cost/placement-range gates, canMoveTo,
+//               simMove, simEndTurn), reset EVERY simEndTurn — verified
+//               against the real clearTurnBuffs(), which wipes every
+//               `expiresThisTurn` buff on ANY end turn, not just the
+//               caster's own next one (true even for the couple of these
+//               whose flavor text says "until your next turn"):
+//                 burningMotivationStacks  Burning Motivation (FIRE_2) — +2 AP
+//                   per stack per stone placed (simPlaceStone)
+//                 globalPlacement          Avalanche (EARTH_5) — any stone
+//                   type placeable anywhere this turn (legalActions)
+//                 waterWindGlobalPlacement Seed the Skies (CATACOMB_6) —
+//                   water/wind only placeable anywhere this turn (legalActions)
+//                 respirateWind            Respirate (WIND_2) — ALL wind
+//                   returns to source at this end-of-turn (simEndTurn)
+//                 simplify                 Simplify (VOID_3) — casts cost 1
+//                   AP instead of 2 (castCost(), read by simCast + legalActions)
+//                 mineShrineType           Mine (CATACOMB_2) — that shrine
+//                   type's collection doubles this end-of-turn (simEndTurn)
+//                 steamVentsBanked         Steam Vents (CATACOMB_5) — paid/free
+//                   move steps alternate, starting free (simMove + legalActions)
+//                 mudslide                 Mudslide (CATACOMB_1) — earth/water
+//                   act as wind for movement (canMoveTo)
+//                 reflectingPool           Reflecting Pool (CATACOMB_7) — marks
+//                   the once-per-turn AP payout already taken (legalActions)
+//               This is what lets searchPick() plan sequences like "cast
+//               Burning Motivation, then place stones" or "cast Simplify,
+//               then cast twice more this turn" for real — WEIGHTS.evalAp
+//               already values the resulting AP, no new heuristic needed
+//               once a buff's consequence exists in the snapshot.
 //
 // KNOWN ACCEPTED DIVERGENCES (deliberate, all rare and all logged):
 //   - scroll-effect side effects of non-whitelisted casts
 //   - catacomb reveal's +1 AP (element of a hidden tile is unknowable)
-//   - active buffs OTHER than Burning Motivation (Mudslide, Simplify,
-//     Mason's Savvy's 5-hex placement range, …) — not in snapshot
+//   - active buffs NOT listed above (Mason's Savvy's 5-hex placement range,
+//     Wandering River, Call to Adventure, Quick Reflexes, …) — not in snapshot;
+//     Breath of Power and Freedom are also out of scope here — both need new
+//     action-vocabulary support (a reposition-stone action; teleport
+//     candidates at simulated depth, not just the real root), not just a buff
 //   - fire-destruction re-check cascades beyond the placed stone's neighbors
 //
 // The only globals read are STATIC data (window.SCROLL_DEFINITIONS) and,
@@ -68,7 +93,7 @@
     const STONE_NEIGHBOR_MAX = 50; // px — getNeighborStones() window (5..50)
     const POOL_CAP = 5;            // per-element player pool capacity
     const SOURCE_CAP = 25;         // per-element source pool capacity
-    const CAST_COST = 2;           // SPELL_AP_COST (buff discounts not modelled)
+    const CAST_COST = 2;           // SPELL_AP_COST — see castCost() for the Simplify discount
     const MAX_HAND = 2, MAX_ACTIVE = 2;
     const BASE_AP = 5;
 
@@ -99,6 +124,11 @@
     const SIMULATED_SCROLLS = new Set([
         'VOID_SCROLL_5', 'FIRE_SCROLL_4', 'FIRE_SCROLL_5', 'FIRE_SCROLL_2',
         'WATER_SCROLL_2', 'EARTH_SCROLL_3', 'EARTH_SCROLL_4', 'CATACOMB_SCROLL_10',
+        // Tranche 3/4 (turn buffs — see "Turn buffs" in the file header):
+        // Avalanche, Seed the Skies, Respirate, Simplify, Mine, Steam Vents,
+        // Mudslide, Reflecting Pool.
+        'EARTH_SCROLL_5', 'CATACOMB_SCROLL_6', 'WIND_SCROLL_2', 'VOID_SCROLL_3',
+        'CATACOMB_SCROLL_2', 'CATACOMB_SCROLL_5', 'CATACOMB_SCROLL_1', 'CATACOMB_SCROLL_7',
     ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
@@ -122,6 +152,24 @@
     function hexToPixel(q, r, s) {
         return { x: s * Math.sqrt(3) * (q + r / 2), y: s * 1.5 * r };
     }
+    // Inverse of hexToPixel — pure mirror of game-core.js's pixelToHex/hexRound,
+    // needed for Reflecting Pool's "within 5 hexes" check (a true hex-grid
+    // distance, not the euclidean px distance most of this file uses).
+    function hexRound(q, r) {
+        const s = -q - r;
+        let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
+        const qDiff = Math.abs(rq - q), rDiff = Math.abs(rr - r), sDiff = Math.abs(rs - s);
+        if (qDiff > rDiff && qDiff > sDiff) rq = -rr - rs;
+        else if (rDiff > sDiff) rr = -rq - rs;
+        return { q: rq, r: rr };
+    }
+    function pixelToHex(x, y, s) {
+        return hexRound((x * Math.sqrt(3) / 3 - y / 3) / s, (y * 2 / 3) / s);
+    }
+    function hexDistance(ax, ay, bx, by, s) {
+        const A = pixelToHex(ax, ay, s), B = pixelToHex(bx, by, s);
+        return Math.max(Math.abs(A.q - B.q), Math.abs(A.r - B.r), Math.abs((-A.q - A.r) - (-B.q - B.r)));
+    }
     const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
     const clone = snap => JSON.parse(JSON.stringify(snap));
 
@@ -132,6 +180,14 @@
     }
 
     function activePlayer(snap) { return snap.players[snap.turn.activePlayerIndex]; }
+
+    // Simplify (VOID_SCROLL_3): 1 AP per cast instead of 2, for whoever holds
+    // the buff — always the current active player, since turn.buffs is wiped
+    // every simEndTurn and can only be set by simCast() during that player's
+    // own turn (see the "Turn buffs" note in the file header).
+    function castCost(snap) {
+        return snap.turn.buffs?.simplify ? 1 : CAST_COST;
+    }
 
     function stoneAt(snap, x, y) {
         return snap.stones.find(s => dist(s.x, s.y, x, y) < HEX_NEAR) || null;
@@ -230,6 +286,16 @@
         const stone = stoneAt(snap, x, y);
         if (!stone) return { canMove: true, cost: 1 };
 
+        // Mudslide (CATACOMB_SCROLL_1): earth/water act as wind for the
+        // caster this turn — checked FIRST and returns early, exactly like
+        // game-core.js's getSteamVentsBuff-adjacent Mudslide check, which
+        // returns before ever reaching the water-chaining logic below.
+        if (snap.turn.buffs?.mudslide && (stone.type === 'earth' || stone.type === 'water')) {
+            return hasAdjacentVoid(snap, x, y)
+                ? { canMove: true, cost: 1 }
+                : { canMove: true, cost: 0 };
+        }
+
         if (stone.type === 'water') {
             const chained = chainedAbility(snap, x, y);
             if (chained === 'wind') return { canMove: true, cost: 0 };
@@ -323,7 +389,17 @@
     function simMove(snap, a) {
         const p = activePlayer(snap);
         p.x = a.x; p.y = a.y;
-        snap.turn.ap -= (a.cost ?? 1);
+        let cost = a.cost ?? 1;
+        // Steam Vents: every AP-costing step alternates paid/free, one
+        // hex-step at a time (simMove()'s own granularity) — mirrors
+        // game-core's calculatePathCost/commitSteamVentsState exactly.
+        // Already-free steps (cost 0, e.g. wind) never touch the bank.
+        const svBanked = snap.turn.buffs?.steamVentsBanked;
+        if (svBanked !== undefined && cost > 0) {
+            if (svBanked) { cost = 0; snap.turn.buffs.steamVentsBanked = false; }
+            else { snap.turn.buffs.steamVentsBanked = true; }
+        }
+        snap.turn.ap -= cost;
 
         // Landing on any hex of a face-down tile reveals it (handlePlayerLanding)
         const here = grid(snap).find(h => dist(h.x, h.y, a.x, a.y) < HEX_NEAR);
@@ -361,8 +437,13 @@
                     simNotes(snap).notes.push('endTurn on an unknown-element shrine — collection not modelled');
                 } else if (ELEMENTS.includes(shrine.shrineType)) {
                     const el = shrine.shrineType;
+                    // Mine (CATACOMB_SCROLL_2): double this specific shrine
+                    // type's output this turn — POOL_CAP below still applies,
+                    // matching the real "cannot exceed 5" text (it's just the
+                    // natural pool-capacity consequence, not a separate clamp).
+                    const mine = snap.turn.buffs?.mineShrineType === el;
                     const amount = Math.min(
-                        REPLENISH[el],
+                        REPLENISH[el] * (mine ? 2 : 1),
                         snap.sourcePool[el] || 0,
                         POOL_CAP - (p.pool[el] || 0)
                     );
@@ -371,6 +452,15 @@
                         p.pool[el] = (p.pool[el] || 0) + amount;
                     }
                 }
+            }
+
+            // Respirate (WIND_SCROLL_2): ALL of the caster's wind (not just
+            // what was drawn) returns to source at end of turn — mirrors
+            // clearTurnBuffs()'s respirateWind handler exactly.
+            if (snap.turn.buffs?.respirateWind && (p.pool.wind || 0) > 0) {
+                const amount = p.pool.wind;
+                p.pool.wind = 0;
+                snap.sourcePool.wind = Math.min(SOURCE_CAP, (snap.sourcePool.wind || 0) + amount);
             }
         }
 
@@ -605,12 +695,110 @@
         snap.turn.buffs.burningMotivationStacks = (snap.turn.buffs.burningMotivationStacks || 0) + 1;
     }
 
+    function buffs(snap) { return snap.turn.buffs || (snap.turn.buffs = {}); }
+
+    // ── Tranche 4 (more turn buffs) ──────────────────────────────────
+    // Same shape as Burning Motivation: no target choice, a flag on
+    // snap.turn.buffs, consumed elsewhere (legalActions, canMoveTo, simMove,
+    // simEndTurn), cleared by simEndTurn's blanket `snap.turn.buffs = {}` —
+    // verified to be the REAL clearing behavior too: scroll-effects.js's
+    // clearTurnBuffs() wipes every `expiresThisTurn` buff on ANY end turn,
+    // not just the caster's own next turn, despite what a couple of these
+    // scrolls' flavor text says ("until your next turn") — mirrored as-is.
+
+    // Avalanche (EARTH_SCROLL_5): place any stone type anywhere this turn.
+    // Consumed in legalActions()'s placeStone range gate.
+    function simEffectAvalanche(snap) {
+        buffs(snap).globalPlacement = true;
+    }
+
+    // Seed the Skies (CATACOMB_SCROLL_6): draw up to 5 water (source/pool
+    // capped, same shape as Mason's Savvy), then water/wind may be placed
+    // anywhere this turn. Consumed in legalActions()'s placeStone range gate.
+    function simEffectSeedTheSkies(snap, p) {
+        const drawn = Math.min(5, snap.sourcePool.water || 0, POOL_CAP - (p.pool.water || 0));
+        if (drawn > 0) {
+            snap.sourcePool.water -= drawn;
+            p.pool.water = (p.pool.water || 0) + drawn;
+        }
+        buffs(snap).waterWindGlobalPlacement = true;
+    }
+
+    // Respirate (WIND_SCROLL_2): draw up to 2 wind (source/pool capped) now;
+    // ALL of the caster's wind returns to source at end of THIS turn (even
+    // wind they already held before the cast — mirrors clearTurnBuffs()'s
+    // respirateWind handler, which zeroes the whole pool, not just the draw).
+    // The return itself is applied in simEndTurn().
+    function simEffectRespirate(snap, p) {
+        const drawn = Math.min(2, snap.sourcePool.wind || 0, POOL_CAP - (p.pool.wind || 0));
+        if (drawn > 0) {
+            snap.sourcePool.wind -= drawn;
+            p.pool.wind = (p.pool.wind || 0) + drawn;
+        }
+        buffs(snap).respirateWind = true;
+    }
+
+    // Simplify (VOID_SCROLL_3): no immediate effect — castCost() and
+    // legalActions()'s cast-affordability gate read this buff directly.
+    function simEffectSimplify(snap) {
+        buffs(snap).simplify = true;
+    }
+
+    // Mine (CATACOMB_SCROLL_2): if the caster is currently standing on the
+    // CENTRE of an elemental (non-catacomb) shrine tile, that shrine's
+    // collection amount doubles this turn. Consumed in simEndTurn().
+    function simEffectMine(snap, p) {
+        const shrine = snap.tiles.find(t =>
+            !t.isPlayerTile && t.revealed && ELEMENTS.includes(t.shrineType) &&
+            dist(t.x, t.y, p.x, p.y) < HEX_NEAR);
+        if (shrine) buffs(snap).mineShrineType = shrine.shrineType;
+    }
+
+    // Steam Vents (CATACOMB_SCROLL_5): the first AP-costing move step this
+    // turn is free; every AP-costing step after that alternates paid/free
+    // (mirrors game-core's calculatePathCost/commitSteamVentsState banked-step
+    // alternation exactly, one hex-step at a time since that's simMove()'s
+    // granularity — already-free steps, e.g. wind, don't touch the bank).
+    function simEffectSteamVents(snap) {
+        buffs(snap).steamVentsBanked = true;
+    }
+
+    // Mudslide (CATACOMB_SCROLL_1): earth/water stones act as wind for the
+    // caster's movement this turn (free unless void-adjacent). Consumed in
+    // canMoveTo(), checked BEFORE the normal earth/water branches — mirrors
+    // game-core.js, where the Mudslide check returns early and never reaches
+    // the water-chaining logic below it.
+    function simEffectMudslide(snap) {
+        buffs(snap).mudslide = true;
+    }
+
+    // Reflecting Pool (CATACOMB_SCROLL_7): +2 AP per DISTINCT stone type
+    // within true hex-distance 5 of the caster (cube-coordinate distance,
+    // not euclidean px — mirrors game-core's pixelToHex-based check exactly).
+    // Once per turn — legalActions() excludes a recast once the buff is set.
+    function simEffectReflectingPool(snap, p) {
+        const types = new Set();
+        for (const s of snap.stones) {
+            if (hexDistance(p.x, p.y, s.x, s.y, TILE) <= 5) types.add(s.type);
+        }
+        const apGain = types.size * 2;
+        if (apGain > 0) {
+            const cap = BASE_AP + (p.pool.void || 0);
+            snap.turn.ap = Math.min(cap, snap.turn.ap + apGain);
+        }
+        buffs(snap).reflectingPool = true;
+    }
+
     function simCast(snap, a) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
         const def = window.SCROLL_DEFINITIONS?.[a.scroll];
         const activatedBefore = p.activated.length;
-        snap.turn.ap -= CAST_COST;
+        // castCost() reads any Simplify buff already on the snapshot — a cast
+        // of Simplify itself still costs the normal 2 AP (its own buff isn't
+        // set until the effect branch below runs), only LATER casts this turn
+        // get the discount.
+        snap.turn.ap -= castCost(snap);
 
         // moveToActive if cast from hand; the scroll STAYS in active after the
         // cast (handleScrollDisposition: no auto-discard)
@@ -649,6 +837,22 @@
             simEffectCombust(snap);
         } else if (a.scroll === 'FIRE_SCROLL_2') {
             simEffectBurningMotivation(snap);
+        } else if (a.scroll === 'EARTH_SCROLL_5') {
+            simEffectAvalanche(snap);
+        } else if (a.scroll === 'CATACOMB_SCROLL_6') {
+            simEffectSeedTheSkies(snap, p);
+        } else if (a.scroll === 'WIND_SCROLL_2') {
+            simEffectRespirate(snap, p);
+        } else if (a.scroll === 'VOID_SCROLL_3') {
+            simEffectSimplify(snap);
+        } else if (a.scroll === 'CATACOMB_SCROLL_2') {
+            simEffectMine(snap, p);
+        } else if (a.scroll === 'CATACOMB_SCROLL_5') {
+            simEffectSteamVents(snap);
+        } else if (a.scroll === 'CATACOMB_SCROLL_1') {
+            simEffectMudslide(snap);
+        } else if (a.scroll === 'CATACOMB_SCROLL_7') {
+            simEffectReflectingPool(snap, p);
         }
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):
@@ -768,10 +972,14 @@
 
         // Casts (2 AP, pattern satisfied, never level-1 response scrolls) —
         // hand, active, and the shared common area (castable by anyone)
-        if (!pawnOnStone && ap >= CAST_COST) {
+        if (!pawnOnStone && ap >= castCost(snap)) {
             for (const name of new Set([...p.active, ...hand, ...(snap.commonArea || [])])) {
                 const def = window.SCROLL_DEFINITIONS?.[name];
                 if (!def || def.level === 1) continue; // also skips UNKNOWN_SCROLL
+                // Reflecting Pool: real once-per-turn guard (its own execute()
+                // returns success:false on a recast) — keep the search from
+                // "successfully" farming a second AP payout that never happens.
+                if (name === 'CATACOMB_SCROLL_7' && snap.turn.buffs?.reflectingPool) continue;
                 if (checkPattern(snap, name)) actions.push({ type: 'cast', scroll: name });
             }
         }
@@ -800,7 +1008,12 @@
                 for (const c of missing) {
                     if ((p.pool[c.type] || 0) <= 0) continue;
                     const d = dist(p.x, p.y, c.x, c.y);
-                    if (d <= HEX_NEAR || d >= HEX_STEP) continue; // base placement range: adjacent to pawn
+                    if (d <= HEX_NEAR) continue; // never the pawn's own hex
+                    // Avalanche (any type) / Seed the Skies (water & wind
+                    // only) lift the adjacency requirement this turn.
+                    const globalOk = snap.turn.buffs?.globalPlacement ||
+                        (snap.turn.buffs?.waterWindGlobalPlacement && (c.type === 'water' || c.type === 'wind'));
+                    if (!globalOk && d >= HEX_STEP) continue; // base placement range: adjacent to pawn
                     // Not on any face-down tile, no pawn standing there
                     // (mirrors findValidStonePosition)
                     const hex = g.find(h => dist(h.x, h.y, c.x, c.y) < HEX_NEAR);
@@ -822,11 +1035,18 @@
 
         // Moves
         if (ap > 0) {
+            // Steam Vents: a banked free step can make an otherwise-unaffordable
+            // move legal — filter on the EFFECTIVE cost, but still store the RAW
+            // terrain cost on the action; simMove() re-derives paid-vs-free from
+            // the banked state itself at simulation time (same input either way
+            // within one ply).
+            const svBanked = snap.turn.buffs?.steamVentsBanked;
             for (const h of g) {
                 const d = dist(h.x, h.y, p.x, p.y);
                 if (d <= HEX_NEAR || d >= HEX_STEP) continue;
                 const mv = canMoveTo(snap, h.x, h.y);
-                if (mv.canMove && mv.cost <= ap) {
+                const effCost = (svBanked && mv.cost > 0) ? 0 : mv.cost;
+                if (mv.canMove && effCost <= ap) {
                     actions.push({ type: 'move', x: h.x, y: h.y, cost: mv.cost });
                 }
             }
