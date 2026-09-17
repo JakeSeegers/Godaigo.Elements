@@ -4708,18 +4708,23 @@ document.getElementById('undo-move').onclick = function() {
                 });
                 panel.appendChild(placeAnywhereBtn);
 
-                // Bot Brain toggle — cycles Dumb → Smart → Hybrid.
+                // Bot Brain toggle — cycles Dumb → Smart → Hybrid → MCTS.
                 //   Dumb   = Stage-1 greedy scoring (default)
                 //   Smart  = Stage-2 lookahead search (3 plies) on every action
                 //   Hybrid = lookahead only when a cast/stone placement is on
                 //            the table; plain movement stays greedy (cheap)
+                //   MCTS   = Stage 2 step 5 multi-turn search (mctsPick() in
+                //            bot.js) — rolls real games forward through
+                //            opponent turns instead of stopping at our own
+                //            turn boundary; noticeably slower per decision.
                 // Persisted to localStorage; bot.js applies it at load, and we
                 // also apply it live so no reload is needed.
-                const BRAIN_ORDER = ['dumb', 'smart', 'hybrid'];
+                const BRAIN_ORDER = ['dumb', 'smart', 'hybrid', 'mcts'];
                 const BRAIN_UI = {
                     dumb:   { label: 'Bot Brain: Dumb (greedy)',        color: '#eee' },
                     smart:  { label: '🧠 Bot Brain: Smart (lookahead)', color: '#6ef' },
                     hybrid: { label: '🧠 Bot Brain: Hybrid',            color: '#fc6' },
+                    mcts:   { label: '🎲 Bot Brain: MCTS',              color: '#e6f' },
                 };
                 function currentBrain() {
                     // default matches DEFAULT_WEIGHTS (hybrid, per arena evidence)
@@ -4730,7 +4735,8 @@ document.getElementById('undo-move').onclick = function() {
                     const W = window.BotSystem?.WEIGHTS;
                     if (W) {
                         W.searchDepth = (mode === 'dumb') ? 0 : 3;
-                        W.searchHybrid = (mode === 'hybrid') ? 1 : 0;
+                        W.searchHybrid = (mode === 'hybrid' || mode === 'mcts') ? 1 : 0;
+                        W.mctsEnabled = (mode === 'mcts');
                     }
                     try { localStorage.setItem('godaigo_bot_brain', mode); } catch (e) {}
                 }
@@ -4742,7 +4748,8 @@ document.getElementById('undo-move').onclick = function() {
                     updateStatus(
                         next === 'dumb'  ? 'Bot brain: DUMB — one-step greedy scoring'
                       : next === 'smart' ? 'Bot brain: SMART — 3-ply lookahead on every action'
-                      : 'Bot brain: HYBRID — lookahead for casts/stone placements, greedy movement');
+                      : next === 'hybrid' ? 'Bot brain: HYBRID — lookahead for casts/stone placements, greedy movement'
+                      : 'Bot brain: MCTS — multi-turn search through opponent turns (slower)');
                 });
                 brainBtn.textContent = BRAIN_UI[currentBrain()].label;
                 brainBtn.style.color = BRAIN_UI[currentBrain()].color;
