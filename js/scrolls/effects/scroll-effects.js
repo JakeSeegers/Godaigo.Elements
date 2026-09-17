@@ -5,6 +5,89 @@
  * Each scroll has an execute() function that performs its effect.
  */
 
+// ============================================================
+// Shared "decision modal" chrome — every scroll-effect popup below
+// (Scholar's Insight, Quick Reflexes, Transmute, Take Flight's target
+// picker, Arson/Plunder's opponent picker, the deck/element/scroll pickers,
+// …) used to be a full-screen dark overlay fixed dead-centre: it hid the
+// board entirely, so a decision like "who should I target" or "which
+// stones do I have nearby" had to be made blind. Fixed once, here, for all
+// of them:
+//   - the backdrop (`overlay`) is invisible and click-through
+//     (pointer-events:none) — the board stays lit and interactive
+//     everywhere except the modal box itself
+//   - the modal box anchors near the top-right by default (out of the
+//     board's centre) instead of dead-centre, and is draggable by its
+//     title bar to wherever the player actually needs it clear
+// Call styleDecisionOverlay(overlay) where the old dark-backdrop
+// Object.assign used to go, and makeDecisionModalMovable(modal, titleEl,
+// overlay) right after the modal is built (its own border/color styling
+// can still run first — this only adds position/drag behavior on top).
+// ============================================================
+function styleDecisionOverlay(overlay) {
+    Object.assign(overlay.style, {
+        position: 'fixed',
+        top: '0', left: '0', right: '0', bottom: '0',
+        zIndex: '3000',
+        pointerEvents: 'none',
+    });
+}
+
+function makeDecisionModalMovable(modal, handle, overlay) {
+    Object.assign(modal.style, {
+        position: 'fixed',
+        top: '70px',
+        right: '20px',
+        pointerEvents: 'auto',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
+        maxHeight: 'calc(100vh - 100px)',
+        overflowY: modal.style.overflowY || 'auto',
+    });
+    handle.style.cursor = 'grab';
+    handle.title = 'Drag to move';
+    let ox, oy, ol, ot, active = false;
+    handle.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        active = true;
+        ox = e.clientX; oy = e.clientY;
+        const rect = modal.getBoundingClientRect();
+        ol = rect.left; ot = rect.top;
+        modal.style.right = 'auto'; // switch from right-anchored to left-anchored once dragged
+        modal.style.left = ol + 'px';
+        modal.style.top = ot + 'px';
+        handle.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+    const onMove = e => {
+        if (!active) return;
+        const nx = Math.max(0, Math.min(window.innerWidth - 60, ol + (e.clientX - ox)));
+        const ny = Math.max(0, Math.min(window.innerHeight - 40, ot + (e.clientY - oy)));
+        modal.style.left = nx + 'px';
+        modal.style.top = ny + 'px';
+    };
+    const onUp = () => {
+        if (!active) return;
+        active = false;
+        handle.style.cursor = 'grab';
+        document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    // Every call site closes its modal by calling overlay.remove() — hook
+    // that one shared exit point instead of touching each of the many
+    // button/cancel handlers that call it.
+    if (overlay && !overlay._decisionCleanupWired) {
+        overlay._decisionCleanupWired = true;
+        const originalRemove = overlay.remove.bind(overlay);
+        overlay.remove = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            originalRemove();
+        };
+    }
+}
+
 const ScrollEffects = {
     // Active buffs that persist during a turn
     activeBuffs: {},
@@ -1862,15 +1945,7 @@ const ScrollEffects = {
 
             const overlay = document.createElement('div');
             overlay.id = 'scholars-insight-modal';
-            Object.assign(overlay.style, {
-                position: 'fixed',
-                top: '0', left: '0', right: '0', bottom: '0',
-                backgroundColor: 'rgba(0,0,0,0.8)',
-                zIndex: '3000',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            });
+            styleDecisionOverlay(overlay);
 
             const modal = document.createElement('div');
             Object.assign(modal.style, {
@@ -1889,6 +1964,7 @@ const ScrollEffects = {
             titleEl.style.textAlign = 'center';
             titleEl.style.color = '#9458f4';
             modal.appendChild(titleEl);
+            makeDecisionModalMovable(modal, titleEl, overlay);
 
             const subtitle = document.createElement('div');
             subtitle.textContent = 'Select an element deck to search through.';
@@ -1970,15 +2046,7 @@ const ScrollEffects = {
 
             const overlay = document.createElement('div');
             overlay.id = 'scholars-insight-modal';
-            Object.assign(overlay.style, {
-                position: 'fixed',
-                top: '0', left: '0', right: '0', bottom: '0',
-                backgroundColor: 'rgba(0,0,0,0.8)',
-                zIndex: '3000',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            });
+            styleDecisionOverlay(overlay);
 
             const modal = document.createElement('div');
             Object.assign(modal.style, {
@@ -1999,6 +2067,7 @@ const ScrollEffects = {
             titleEl.style.textAlign = 'center';
             titleEl.style.color = info.color;
             modal.appendChild(titleEl);
+            makeDecisionModalMovable(modal, titleEl, overlay);
 
             const subtitle = document.createElement('div');
             subtitle.textContent = 'Click a scroll to add it to your hand.';
@@ -2176,15 +2245,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = 'create-stone-modal';
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -2203,6 +2264,7 @@ const ScrollEffects = {
         titleEl.style.textAlign = 'center';
         titleEl.style.color = '#9458f4';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         const subtitle = document.createElement('div');
         subtitle.textContent = 'Draw stones equal to that element\'s rank (max 5 in pool).';
@@ -2842,15 +2904,7 @@ const ScrollEffects = {
 
             const overlay = document.createElement('div');
             overlay.id = 'quick-reflexes-modal';
-            Object.assign(overlay.style, {
-                position: 'fixed',
-                top: '0', left: '0', right: '0', bottom: '0',
-                backgroundColor: 'rgba(0,0,0,0.8)',
-                zIndex: '3000',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            });
+            styleDecisionOverlay(overlay);
 
             const modal = document.createElement('div');
             Object.assign(modal.style, {
@@ -2871,6 +2925,7 @@ const ScrollEffects = {
             titleEl.style.textAlign = 'center';
             titleEl.style.color = '#ffce00';
             modal.appendChild(titleEl);
+            makeDecisionModalMovable(modal, titleEl, overlay);
 
             const subtitle = document.createElement('div');
             subtitle.textContent = 'Add it to your hand and draw 2 stones of its type.';
@@ -3574,15 +3629,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = 'water-transform-modal';
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -3599,6 +3646,7 @@ const ScrollEffects = {
         titleEl.style.marginBottom = '10px';
         titleEl.style.textAlign = 'center';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         const descEl = document.createElement('p');
         descEl.textContent = 'Choose an element to transform this water stone into:';
@@ -4394,15 +4442,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = overlayId;
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -4421,6 +4461,7 @@ const ScrollEffects = {
         titleEl.style.textAlign = 'center';
         titleEl.style.color = '#ed1b43';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         const subtitle = document.createElement('div');
         subtitle.textContent = 'Discard stones or scrolls to gain 2 AP each.';
@@ -4646,15 +4687,7 @@ const ScrollEffects = {
 
             const overlay = document.createElement('div');
             overlay.id = 'take-flight-player-modal';
-            Object.assign(overlay.style, {
-                position: 'fixed',
-                top: '0', left: '0', right: '0', bottom: '0',
-                backgroundColor: 'rgba(0,0,0,0.8)',
-                zIndex: '3000',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            });
+            styleDecisionOverlay(overlay);
 
             const modal = document.createElement('div');
             Object.assign(modal.style, {
@@ -4670,6 +4703,7 @@ const ScrollEffects = {
             titleEl.textContent = 'Take Flight: Select a player to teleport';
             titleEl.style.marginBottom = '15px';
             modal.appendChild(titleEl);
+            makeDecisionModalMovable(modal, titleEl, overlay);
 
             allPlayers.forEach(playerIdx => {
                 const name = (typeof getPlayerColorName === 'function')
@@ -4831,6 +4865,70 @@ const ScrollEffects = {
     // real-multiplayer opponent-target). The mouseup handler in game-ui.js
     // reads window.takeFlightState and validates drops via
     // isValidTakeFlightDestination() regardless of who set it up.
+    // Draws a pulsing indicator (same visual language as the catacomb/
+    // Freedom teleport markers — see updateCatacombIndicators in
+    // game-ui.js, .teleport-indicator in board.css) on every hex
+    // getValidTakeFlightDestinations() allows, and makes each one clickable
+    // as a one-click alternative to dragging the pawn. This was the main
+    // reason the scroll was hard to use well: the old flow only told the
+    // player the destination RULE in a status-line sentence ("an unoccupied
+    // hex on a tile occupied by another player") with nothing on the board
+    // showing WHICH hexes actually qualify — a genuinely non-obvious set to
+    // work out by eye on a multi-tile board. Clicking mirrors the real drop
+    // handler's own sequence exactly (game-ui.js's take-flight mouseup
+    // branch): move the pawn first, THEN call takeFlightState.onComplete —
+    // never just onComplete alone, which does not move the pawn.
+    // The current indicator set lives on window.takeFlightState.indicators
+    // (not a local closure variable) so both this function's own redraw
+    // path and _enterTakeFlightDrag's cleanup() always agree on which
+    // elements are live — a redraw (destination invalidated between render
+    // and click) replaces that shared list in place rather than losing
+    // track of the new set. Requires window.takeFlightState to already
+    // exist (see _enterTakeFlightDrag, which sets it up before drawing).
+    _showTakeFlightIndicators(targetPlayerIndex) {
+        const viewport = document.getElementById('viewport');
+        if (window.takeFlightState?.indicators) {
+            window.takeFlightState.indicators.forEach(ind => ind.remove());
+        }
+        if (!viewport || typeof this.getValidTakeFlightDestinations !== 'function') return [];
+        const destinations = this.getValidTakeFlightDestinations(targetPlayerIndex);
+        const indicators = destinations.map(pos => {
+            const indicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            indicator.setAttribute('cx', pos.x);
+            indicator.setAttribute('cy', pos.y);
+            indicator.setAttribute('r', '11');
+            indicator.setAttribute('fill', '#ffce00');
+            indicator.setAttribute('opacity', '0.55');
+            indicator.setAttribute('stroke', '#fff');
+            indicator.setAttribute('stroke-width', '2');
+            indicator.setAttribute('class', 'teleport-indicator');
+            indicator.style.animation = 'catacomb-teleport-pulse 3s ease-in-out infinite';
+            indicator.addEventListener('click', e => {
+                e.stopPropagation();
+                e.preventDefault();
+                const tf = window.takeFlightState;
+                if (!tf || !tf.active) return;
+                // Re-validate fresh — board state may have shifted (a stone
+                // placed, a player moved) since the indicator was drawn.
+                if (!this.isValidTakeFlightDestination(targetPlayerIndex, pos.x, pos.y)) {
+                    updateStatus('Take Flight: that hex is no longer valid — board changed.');
+                    tf.indicators = this._showTakeFlightIndicators(targetPlayerIndex); // redraw against current state
+                    return;
+                }
+                if (targetPlayerIndex === activePlayerIndex) {
+                    placePlayer(pos.x, pos.y);
+                } else if (typeof movePlayerVisually === 'function') {
+                    movePlayerVisually(targetPlayerIndex, pos.x, pos.y, 0);
+                }
+                tf.onComplete(pos.x, pos.y);
+            });
+            viewport.appendChild(indicator);
+            return indicator;
+        });
+        if (window.takeFlightState) window.takeFlightState.indicators = indicators;
+        return indicators;
+    },
+
     _enterTakeFlightDrag(casterIndex, targetPlayerIndex, targetPlayer, { onDone, onCancelled }) {
         const self = this;
         const cancelBtn = this.createCancelButton('Cancel Take Flight', () => {
@@ -4841,6 +4939,7 @@ const ScrollEffects = {
             if (cancelBtn && cancelBtn.parentNode) {
                 cancelBtn.parentNode.removeChild(cancelBtn);
             }
+            window.takeFlightState?.indicators?.forEach(ind => ind.remove());
             if (window.takeFlightState) {
                 window.takeFlightState.active = false;
                 window.takeFlightState = null;
@@ -4852,6 +4951,7 @@ const ScrollEffects = {
             active: true,
             casterIndex,
             targetPlayerIndex,
+            indicators: [],
             startPos: { x: targetPlayer.x, y: targetPlayer.y },
             onComplete: (destX, destY) => {
                 cleanup();
@@ -4862,6 +4962,7 @@ const ScrollEffects = {
                 if (typeof onCancelled === 'function') onCancelled();
             }
         };
+        window.takeFlightState.indicators = this._showTakeFlightIndicators(targetPlayerIndex);
 
         this.selectionMode = {
             type: 'take-flight-drag',
@@ -4874,7 +4975,7 @@ const ScrollEffects = {
         const targetName = (typeof getPlayerColorName === 'function')
             ? getPlayerColorName(targetPlayerIndex)
             : `Player ${targetPlayerIndex + 1}`;
-        updateStatus(`Take Flight: drag ${targetName} to an unoccupied hex on a tile occupied by another player.`);
+        updateStatus(`Take Flight: click a glowing hex to teleport ${targetName} there, or drag ${targetName} onto one.`);
     },
 
     // Runs on the TARGET's own client when a caster targets them for Take
@@ -5038,15 +5139,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = 'arson-element-modal';
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -5063,6 +5156,7 @@ const ScrollEffects = {
         titleEl.style.marginBottom = '15px';
         titleEl.style.color = '#ed1b43';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         const elementColors = {
             earth: '#69d83a',
@@ -5128,15 +5222,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = modalId;
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -5152,6 +5238,7 @@ const ScrollEffects = {
         titleEl.textContent = title;
         titleEl.style.marginBottom = '15px';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         scrollNames.forEach(scrollName => {
             const scrollDef = this.spellSystem?.patterns?.[scrollName];
@@ -5204,15 +5291,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = 'deck-select-modal';
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -5229,6 +5308,7 @@ const ScrollEffects = {
             : `Select ${count} deck(s) to draw from:`;
         titleEl.style.marginBottom = '15px';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         const selected = [];
         const elements = ['earth', 'water', 'fire', 'wind', 'void'];
@@ -5298,15 +5378,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = 'element-select-modal';
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -5321,6 +5393,7 @@ const ScrollEffects = {
         titleEl.textContent = 'Select an element:';
         titleEl.style.marginBottom = '15px';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         const elements = ['earth', 'water', 'fire', 'wind', 'void'];
         const elementColors = {
@@ -5362,15 +5435,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = 'opponent-select-modal';
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -5387,6 +5452,7 @@ const ScrollEffects = {
         titleEl.style.marginBottom = '15px';
         titleEl.style.color = '#ed1b43';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         opponents.forEach(opponentIndex => {
             // Get display name with username and color
@@ -5610,15 +5676,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = 'plunder-player-modal';
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -5635,6 +5693,7 @@ const ScrollEffects = {
         titleEl.style.marginBottom = '15px';
         titleEl.style.color = '#ff8c00';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         targets.forEach(playerIdx => {
             const name = (typeof getPlayerColorName === 'function')
@@ -5807,15 +5866,7 @@ const ScrollEffects = {
 
         const overlay = document.createElement('div');
         overlay.id = 'excavate-teleport-modal';
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0', left: '0', right: '0', bottom: '0',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            zIndex: '3000',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-        });
+        styleDecisionOverlay(overlay);
 
         const modal = document.createElement('div');
         Object.assign(modal.style, {
@@ -5833,6 +5884,7 @@ const ScrollEffects = {
         titleEl.style.marginBottom = '10px';
         titleEl.style.color = '#8b4513';
         modal.appendChild(titleEl);
+        makeDecisionModalMovable(modal, titleEl, overlay);
 
         const descEl = document.createElement('p');
         descEl.textContent = 'You emerge from the catacombs! You may teleport to any unoccupied hex on a revealed tile.';
