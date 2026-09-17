@@ -443,6 +443,32 @@
             }
         }
 
+        // ── moveStone: Breath of Power (WIND_SCROLL_3) — move any stone
+        // adjacent to the pawn onto a DIFFERENT, currently-empty in-range
+        // hex, free, repeatable all turn. hasWindStoneMove() is the exact
+        // same gate game-core.js's stone mousedown handlers check before
+        // allowing a drag; there is no selectionMode/modal here (unlike
+        // Control the Current), so this is a genuine elective action rather
+        // than something driven automatically — see game-core.js's
+        // moveStoneTo() (added alongside this) for the completion. Not
+        // gated by `onStone`: startStoneDrag() itself never checks
+        // isPlayerRestingOnStone, only stone adjacency.
+        if (window.spellSystem?.scrollEffects?.hasWindStoneMove?.(activePlayerIndex)) {
+            const grid = hexGrid();
+            for (const s of placedStones) {
+                const dFromPlayer = Math.hypot(s.x - player.x, s.y - player.y);
+                if (dFromPlayer <= HEX_NEAR || dFromPlayer >= HEX_STEP) continue;
+                for (const h of grid) {
+                    if (Math.hypot(h.x - s.x, h.y - s.y) < HEX_NEAR) continue; // must actually move
+                    if (typeof isInPlacementRange === 'function' && !isInPlacementRange(h.x, h.y, s.type)) continue;
+                    if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(h.x, h.y, grid)) continue;
+                    if (placedStones.some(o => o !== s && Math.hypot(o.x - h.x, o.y - h.y) < HEX_NEAR)) continue;
+                    if (playerPositions.some(p => p && Math.hypot(p.x - h.x, p.y - h.y) < HEX_NEAR)) continue;
+                    actions.push({ type: 'moveStone', fromX: s.x, fromY: s.y, toX: h.x, toY: h.y, stoneType: s.type });
+                }
+            }
+        }
+
         // ── teleport: standing on a revealed catacomb shrine (or ANY
         // elemental shrine while Freedom is active) lets the player jump to
         // any revealed ELEMENTAL shrine centre, free (0 AP). EXPLORATION:
@@ -698,6 +724,35 @@
                 // attemptBreakStone() is the same function the UI's right-click/
                 // long-press handlers call — never reimplement the break itself.
                 attemptBreakStone(a.stoneId);
+                return { ok: true };
+            }
+            case 'moveStone': {
+                const stone = placedStones.find(s => Math.hypot(s.x - a.fromX, s.y - a.fromY) < HEX_NEAR);
+                if (!stone) return { ok: false, reason: 'stone not found at source' };
+                const player = playerPositions[activePlayerIndex];
+                if (!player) return { ok: false, reason: 'pawn not found' };
+                const d = Math.hypot(stone.x - player.x, stone.y - player.y);
+                if (d <= HEX_NEAR || d >= HEX_STEP) return { ok: false, reason: 'stone not adjacent to pawn' };
+                if (!window.spellSystem?.scrollEffects?.hasWindStoneMove?.(activePlayerIndex)) {
+                    return { ok: false, reason: 'Breath of Power not active' };
+                }
+                // Re-validate the destination fresh, same discipline as
+                // placeStone/teleport above — the board may have changed
+                // since legalActions() was computed.
+                if (placedStones.some(s => s !== stone && Math.hypot(s.x - a.toX, s.y - a.toY) < HEX_NEAR)) {
+                    return { ok: false, reason: 'destination occupied by a stone' };
+                }
+                if (playerPositions.some(p => p && Math.hypot(p.x - a.toX, p.y - a.toY) < HEX_NEAR)) {
+                    return { ok: false, reason: 'destination occupied by a pawn' };
+                }
+                if (typeof isInPlacementRange === 'function' && !isInPlacementRange(a.toX, a.toY, stone.type)) {
+                    return { ok: false, reason: 'out of placement range' };
+                }
+                if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(a.toX, a.toY, hexGrid())) {
+                    return { ok: false, reason: 'cannot move onto a face-down tile' };
+                }
+                if (typeof window.moveStoneTo !== 'function') return { ok: false, reason: 'moveStoneTo not available' };
+                window.moveStoneTo(stone.id, a.toX, a.toY);
                 return { ok: true };
             }
             case 'discardScroll': {

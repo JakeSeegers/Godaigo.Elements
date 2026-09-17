@@ -7459,6 +7459,34 @@ function clearPlayerPath() {
             return resolvedId;
         }
 
+        // Bot-only: atomically move an existing board stone to a different
+        // hex, with none of the drag-and-drop UI (ghost stone, mouse
+        // tracking). Mirrors startStoneDrag()'s removal step +
+        // placeMovedStone()'s placement step exactly, run back-to-back with
+        // no user input in between — used by BotState.applyAction('moveStone')
+        // to drive Breath of Power (WIND_SCROLL_3), which has no
+        // selectionMode/modal for waitForQuiescence to drive (see
+        // hasWindStoneMove — it just re-enables the ordinary drag handler).
+        function moveStoneTo(stoneId, x, y) {
+            const stone = placedStones.find(s => s.id === stoneId);
+            if (!stone) return false;
+            const type = stone.type;
+            stone.element.remove();
+            placedStones = placedStones.filter(s => s.id !== stoneId);
+            updateTileClasses();
+            recheckAllStoneInteractions();
+            updateAllWaterStoneVisuals();
+            updateAllVoidNullificationVisuals();
+
+            placeMovedStone(x, y, type, stoneId);
+
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                broadcastGameAction('stone-move', { stoneId, x, y, stoneType: type });
+            }
+            return true;
+        }
+        window.moveStoneTo = moveStoneTo;
+
         // Visual-only stone move (called when receiving broadcast from other players)
         function moveStoneVisually(stoneId, x, y, stoneType) {
             const stone = placedStones.find(s => s.id === stoneId);

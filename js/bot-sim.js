@@ -21,6 +21,9 @@
 //               advance in COLOR_RANK order, AP reset to 5 + void stones
 //   placeStone  pool decrement + the fire-destruction interaction rules
 //   discard     hand/active removal
+//   moveStone   Breath of Power only — relocate a board stone to a
+//               different empty in-range hex; same fire-destruction check
+//               placeStone gets (simMoveStone)
 //
 // WHAT IS ONLY PARTIALLY MODELLED:
 //   cast        AP cost, hand→active, win-condition activation (incl. the
@@ -38,8 +41,11 @@
 //               see bot-effects.js's _bestTakeFlightDestination; Quick
 //               Reflexes needed snap.level1Available from bot-state.js
 //               first, since which element gets picked depends on deck
-//               availability this snapshot didn't use to expose); plus 9
-//               persistent TURN BUFFS — see "turn buffs" below. Each
+//               availability this snapshot didn't use to expose); Control
+//               the Current, Breath of Power (Tranche 6 — repeatable
+//               whole-turn stone manipulation, see "turn buffs" below and
+//               the 'moveStone' action); plus 9 persistent TURN BUFFS —
+//               see "turn buffs" below. Each
 //               mirrors its real effect exactly (validated — see
 //               BotSim.validate()). Anything else is recorded in
 //               snap.sim.unsimulatedCasts so a search can score it with a
@@ -70,6 +76,13 @@
 //                   act as wind for movement (canMoveTo)
 //                 reflectingPool           Reflecting Pool (CATACOMB_7) — marks
 //                   the once-per-turn AP payout already taken (legalActions)
+//                 controlTheCurrent       Control the Current (WATER_5) — an
+//                   adjacent water stone transforms into the caster's best-
+//                   need element, opportunistically after every action
+//                   (attemptControlTheCurrentTransform, called from both
+//                   simEffectControlTheCurrent and simulate() itself)
+//                 breathOfPower           Breath of Power (WIND_3) — enables
+//                   the 'moveStone' action (legalActions + simMoveStone)
 //               This is what lets searchPick() plan sequences like "cast
 //               Burning Motivation, then place stones" or "cast Simplify,
 //               then cast twice more this turn" for real — WEIGHTS.evalAp
@@ -100,12 +113,14 @@
 //     expiresThisTurn every buff above uses), so it needs state that
 //     survives simEndTurn crossing OTHER players' turns. Out of scope for
 //     the wipe-every-endTurn buff model this file uses everywhere else.
-//   - Telekinesis, Control the Current, Excavate, Breath of Power, Freedom:
-//     each needs new action-vocabulary support this file doesn't have yet
-//     (tile-move validity beyond a swap; a persistent whole-turn reposition
-//     action; a deferred-to-next-turn effect; a reposition-stone action;
-//     teleport candidates at simulated depth, not just the real root) —
-//     see docs/bot-roadmap.md's Stage 2.5 notes for the full reasoning.
+//   - Telekinesis, Excavate, Freedom: each still needs action-vocabulary
+//     support this file doesn't have yet (tile-move validity beyond a swap;
+//     a deferred-to-next-turn effect; teleport candidates at simulated
+//     depth, not just the real root) — see docs/bot-roadmap.md's Stage 2.5
+//     notes for the full reasoning. Control the Current and Breath of Power
+//     (Tranche 6) got their action-vocabulary support (attemptControlThe-
+//     CurrentTransform's opportunistic transform; the 'moveStone' action)
+//     and are now whitelisted above.
 //
 // The only globals read are STATIC data (window.SCROLL_DEFINITIONS) and,
 // inside validate() only, the live BotState/BotSystem.
@@ -170,6 +185,11 @@
         // _bestTakeFlightDestination — specifically so this could be added).
         'EARTH_SCROLL_2', 'VOID_SCROLL_4', 'WATER_SCROLL_3', 'CATACOMB_SCROLL_3', 'CATACOMB_SCROLL_8',
         'WIND_SCROLL_4', 'CATACOMB_SCROLL_9',
+        // Tranche 6 (repeatable whole-turn stone-manipulation actions — new
+        // action-vocabulary support, see simEffectControlTheCurrent/
+        // simEffectBreathOfPower/simMoveStone): Control the Current,
+        // Breath of Power.
+        'WATER_SCROLL_5', 'WIND_SCROLL_3',
     ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
@@ -1036,6 +1056,75 @@
         buffs(snap).reflectingPool = true;
     }
 
+    // Control the Current (WATER_SCROLL_5): this turn, whenever a water
+    // stone is adjacent to the caster — right after the cast, or after any
+    // later move — it's transformed into their most-needed non-water
+    // element. Mirrors bot-effects.js's driveWaterTransform() exactly: it
+    // always acts on the FIRST adjacent water stone (same array order as
+    // placedStones/snap.stones), and clickBestElement(rankedElements())
+    // always lands on the best-ranked element whose source pool isn't
+    // empty (see attemptControlTheCurrentTransform below). No "Done"
+    // button in the real effect — it's driven opportunistically for the
+    // rest of the turn, not a one-shot choice at cast time, so this only
+    // sets the buff and makes the one attempt that's possible immediately;
+    // simulate() makes the same attempt again after every later action
+    // while the buff is active (mirrors waitForQuiescence() polling
+    // driveWaterTransform() after every bot action in a real game).
+    function simEffectControlTheCurrent(snap, p) {
+        buffs(snap).controlTheCurrent = { playerIndex: p.index };
+        attemptControlTheCurrentTransform(snap);
+    }
+
+    // Shared by simEffectControlTheCurrent (right after the cast) and
+    // simulate() (after every later action while the buff is active) —
+    // mirrors scroll-effects.js's showWaterTransformPopup()/
+    // transformWaterStone(): the transformed stone returns 1 to the water
+    // source pool, the new element leaves its source pool, and the same
+    // fire/void interaction check a freshly placed stone gets runs at its
+    // (unchanged) position.
+    function attemptControlTheCurrentTransform(snap) {
+        const buff = snap.turn.buffs?.controlTheCurrent;
+        if (!buff) return;
+        const p = snap.players[buff.playerIndex];
+        if (!p) return;
+        const stone = neighborStones(snap, p.x, p.y).find(s => s.type === 'water');
+        if (!stone) return;
+        const el = effectRankedElements(snap, p)
+            .find(e => e !== 'water' && (snap.sourcePool[e] || 0) > 0);
+        if (!el) return; // every non-water source pool empty — real modal has nothing clickable
+        snap.sourcePool.water = Math.min(SOURCE_CAP, (snap.sourcePool.water || 0) + 1);
+        snap.sourcePool[el]--;
+        stone.type = el;
+        applyFireInteractions(snap, stone);
+    }
+
+    // Breath of Power (WIND_SCROLL_3): this turn, the caster may move any
+    // stone adjacent to them onto another adjacent empty hex — free,
+    // repeatable (see the 'moveStone' action in legalActions()/simulate()).
+    // Unlike Control the Current, the real effect has NO selectionMode or
+    // modal at all — hasWindStoneMove() just re-enables the ordinary
+    // drag-and-drop mousedown handler on every placed stone (game-core.js)
+    // — so there is no BotEffects driver to mirror a deterministic pick
+    // from; 'moveStone' is a genuine elective search action instead, scored
+    // like any other. game-core.js's moveStoneTo() + BotState's own
+    // 'moveStone' case are what let a real bot actually use this now (it
+    // never has before — waitForQuiescence() had nothing to drive).
+    function simEffectBreathOfPower(snap, p) {
+        buffs(snap).breathOfPower = { playerIndex: p.index };
+    }
+
+    // moveStone (Breath of Power only): relocate a stone already on the
+    // board to a different, currently-empty hex — reuses the exact same
+    // fire/void interaction check placeStone gets, since arriving at a new
+    // position is the only thing that matters to that check.
+    function simMoveStone(snap, a) {
+        const stone = stoneAt(snap, a.fromX, a.fromY);
+        if (!stone) return;
+        stone.x = +a.toX.toFixed(1);
+        stone.y = +a.toY.toFixed(1);
+        applyFireInteractions(snap, stone);
+    }
+
     function simCast(snap, a) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
@@ -1114,6 +1203,10 @@
             simEffectTakeFlight(snap, p);
         } else if (a.scroll === 'CATACOMB_SCROLL_9') {
             simEffectQuickReflexes(snap, p);
+        } else if (a.scroll === 'WATER_SCROLL_5') {
+            simEffectControlTheCurrent(snap, p);
+        } else if (a.scroll === 'WIND_SCROLL_3') {
+            simEffectBreathOfPower(snap, p);
         }
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):
@@ -1182,10 +1275,17 @@
             case 'endTurn':       simEndTurn(next); break;
             case 'placeStone':    simPlaceStone(next, action); break;
             case 'cast':          simCast(next, action); break;
+            case 'moveStone':     simMoveStone(next, action); break;
             case 'discardScroll': simDiscard(next, action); break;
             default:
                 simNotes(next).notes.push(`unsupported action type: ${action?.type}`);
         }
+        // Control the Current (WATER_SCROLL_5): opportunistic, no "Done"
+        // button — mirrors waitForQuiescence() re-running driveWaterTransform()
+        // after EVERY bot action for the rest of the turn, not just at cast
+        // time. endTurn already wiped turn.buffs above, so this is a no-op
+        // then; harmless to call unconditionally otherwise.
+        if (action?.type !== 'endTurn') attemptControlTheCurrentTransform(next);
         return next;
     }
 
@@ -1289,6 +1389,34 @@
                     actions.push({
                         type: 'placeStone', x: c.x, y: c.y, stoneType: c.type,
                         scroll: name, progress: (placed + 1) / cells.length,
+                    });
+                }
+            }
+        }
+
+        // Breath of Power (WIND_SCROLL_3): move a stone adjacent to the pawn
+        // onto a DIFFERENT, currently-empty hex within the same placement
+        // range placeStone uses (honors Avalanche/Seed the Skies too, same
+        // as a real placement would through isInPlacementRange) — free,
+        // repeatable, no AP gate. Not restricted by pawnOnStone (mirrors
+        // 'move', not 'cast'/'placeStone' — see BotState.legalActions()).
+        if (snap.turn.buffs?.breathOfPower?.playerIndex === snap.turn.activePlayerIndex) {
+            for (const stone of neighborStones(snap, p.x, p.y)) {
+                for (const h of g) {
+                    if (dist(h.x, h.y, stone.x, stone.y) < HEX_NEAR) continue; // must actually move
+                    const d = dist(h.x, h.y, p.x, p.y);
+                    const globalOk = snap.turn.buffs?.globalPlacement ||
+                        (snap.turn.buffs?.waterWindGlobalPlacement && (stone.type === 'water' || stone.type === 'wind'));
+                    if (!globalOk && d >= HEX_STEP) continue;
+                    if (h.tileIds.some(id => {
+                        const t = snap.tiles.find(tt => tt.id === id);
+                        return t && !t.revealed && !t.isPlayerTile;
+                    })) continue;
+                    if (stoneAt(snap, h.x, h.y)) continue;
+                    if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) continue;
+                    actions.push({
+                        type: 'moveStone', fromX: stone.x, fromY: stone.y,
+                        toX: h.x, toY: h.y, stoneType: stone.type,
                     });
                 }
             }

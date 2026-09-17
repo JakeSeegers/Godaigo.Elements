@@ -1180,8 +1180,26 @@ const ScrollPanelSystem = (() => {
         // — the generic, non-scroll-card fit added alongside them), same ↕
         // button hand/active/common show. Elemental Stones keeps noAutofit —
         // it's a fixed 5-card horizontal row, nothing to fit as content changes.
+        // Game Log's body is a small wrapper (#game-log-body-wrap, becomes
+        // the panel's actual .fsp-body) around TWO children: a persistent,
+        // non-scrolling "Active Buffs" strip (#game-log-buffs, populated by
+        // game-log-ui.js's renderActiveBuffs() — hidden via display:none
+        // until at least one buff is active) and the existing scrolling
+        // entry list (#game-log-content, unchanged — game-log-ui.js's
+        // CONTENT_ID still points at it directly). See css/styles.css's
+        // "OPPONENT STATUS + GAME LOG panel bodies" section for the layout.
+        const gamelogWrap = document.createElement('div');
+        gamelogWrap.id = 'game-log-body-wrap';
+        const gamelogBuffs = document.createElement('div');
+        gamelogBuffs.id = 'game-log-buffs';
+        gamelogBuffs.style.display = 'none';
+        const gamelogEntries = document.createElement('div');
+        gamelogEntries.id = 'game-log-content';
+        gamelogWrap.appendChild(gamelogBuffs);
+        gamelogWrap.appendChild(gamelogEntries);
+
         createPanel('gamelog', 'Game Log', {
-            bodyId: 'game-log-content',
+            bodyEl: gamelogWrap,
             noBadge: true,
             // Unlike Opponent Status, autofit permanently on doesn't actually
             // serve Game Log well: new lines keep arriving all game, so a

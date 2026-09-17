@@ -806,23 +806,67 @@ body {
 /* Opponent Status (#right-panel) and Game Log (#fsp-gamelog) are now both
    js/scroll-panels.js panels — position/background/border/drag/resize all
    come from the shared .fsp rules. Their bodies (#new-opponent-cards,
-   #game-log-content) just need to stack vertically instead of .fsp-body's
+   #game-log-body-wrap) just need to stack vertically instead of .fsp-body's
    own default flex-direction: row (built for a horizontal row of scroll
    cards, which is right for Hand/Active/Common/Elemental Stones but wrong
    for a card list or a line-by-line log). */
 #new-opponent-cards,
-#game-log-content {
+#game-log-body-wrap {
     flex-direction: column;
     align-items: stretch;
+}
+#new-opponent-cards {
     overflow-x: hidden;
     overflow-y: auto;
 }
 
+/* Game Log's actual .fsp-body is now #game-log-body-wrap (see
+   scroll-panels.js's createPanel('gamelog', ...) call) so a persistent
+   "Active Buffs" strip (#game-log-buffs, game-log-ui.js's
+   renderActiveBuffs()) can sit above the scrolling entry list
+   (#game-log-content) without scrolling away with it — the wrapper itself
+   never scrolls (.fsp-body's own overflow-y:hidden default is left alone),
+   only #game-log-content does. */
+#game-log-buffs {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex-shrink: 0;
+    gap: 3px;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-family: var(--font-terminal);
+    font-size: 12px;
+}
+
+.gl-buffs-title {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.gl-buff-row {
+    padding: 2px 0 2px 6px;
+    border-left: 2px solid var(--text-muted);
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
 #game-log-content {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
     gap: 3px;
     font-family: var(--font-terminal);
     font-size: 13px;
     line-height: 1.35;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .gl-line {

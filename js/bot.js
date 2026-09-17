@@ -171,6 +171,14 @@
         breakStoneBase:      3,
         breakStoneApPenalty: -1,  // × AP cost — cheap breaks (void, wind) preferred over earth
 
+        // Breath of Power's moveStone action (free, repeatable) — a small,
+        // rarely-decisive nudge (mostly useful for clearing a hex the pawn
+        // wants to step onto, or dodging a stone about to be destroyed) so
+        // it isn't hard-vetoed like an unhandled action type, but doesn't
+        // compete with anything that has real pattern/AP value either.
+        moveStoneBase:          1,
+        moveStoneDoomedPenalty: -5, // moving a stone somewhere it'd just be fire-destroyed
+
         // returning home — with all 5 elements activated the win now requires
         // standing on the centre of the bot's own player tile (player shrine),
         // so walking home dominates everything else once the set is complete
@@ -774,6 +782,14 @@
 
             case 'breakStone': {
                 return WEIGHTS.breakStoneBase + WEIGHTS.breakStoneApPenalty * a.cost;
+            }
+
+            case 'moveStone': {
+                let s = WEIGHTS.moveStoneBase;
+                if (window.BotSim && !window.BotSim.stoneWouldSurvive(snap, a.toX, a.toY, a.stoneType)) {
+                    s += WEIGHTS.moveStoneDoomedPenalty;
+                }
+                return s;
             }
 
             case 'endTurn': {
