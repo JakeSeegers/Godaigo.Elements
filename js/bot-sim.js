@@ -44,8 +44,9 @@
 //               availability this snapshot didn't use to expose); Control
 //               the Current, Breath of Power (Tranche 6 — repeatable
 //               whole-turn stone manipulation, see "turn buffs" below and
-//               the 'moveStone' action); plus 9 persistent TURN BUFFS —
-//               see "turn buffs" below. Each
+//               the 'moveStone' action); Freedom, Wandering River (Tranche
+//               7 — cross-turn buffs, see "cross-turn buffs" below); plus 9
+//               persistent TURN BUFFS — see "turn buffs" below. Each
 //               mirrors its real effect exactly (validated — see
 //               BotSim.validate()). Anything else is recorded in
 //               snap.sim.unsimulatedCasts so a search can score it with a
@@ -88,6 +89,21 @@
 //               then cast twice more this turn" for real — WEIGHTS.evalAp
 //               already values the resulting AP, no new heuristic needed
 //               once a buff's consequence exists in the snapshot.
+//   cross-turn  snap.crossTurnBuffs.*: set by simCast(), but NEVER touched
+//   buffs       by simEndTurn()'s blanket snap.turn.buffs = {} wipe — each
+//               clears individually, by owner, only when THAT owner's own
+//               next turn starts (mirrors clearFreedomForPlayer(next)/
+//               clearWanderingRiverForPlayer(next), called right as that
+//               player's turn begins, real code never wires these off
+//               clearTurnBuffs() at all):
+//                 freedom          Freedom (WIND_5) — teleport gate only,
+//                   read by bot-state.js's hasFreedomActive() (real
+//                   legalActions() 'teleport'); the action itself stays
+//                   unmodelled in THIS file's legalActions() (see "cast" above)
+//                 wanderingRiver   Wandering River (WATER_4) — array of
+//                   {tileId, newElement, playerIndex}; overrides a tile's
+//                   effective element for shrine collection (simEndTurn) —
+//                   first matching entry wins, mirrors getEffectiveTileElement()
 //
 // KNOWN ACCEPTED DIVERGENCES (deliberate, all rare and all logged):
 //   - scroll-effect side effects of non-whitelisted casts
@@ -101,6 +117,14 @@
 //     contents/order/size aren't in the snapshot (same class as Refreshing
 //     Thought's already-accepted "exhausted deck" gap)
 //   - fire-destruction re-check cascades beyond the placed stone's neighbors
+//   - Wandering River's OTHER consumption site (game-core.js's reveal-time
+//     draw uses getEffectiveTileElement() too — a River-covered hidden
+//     tile draws the OVERRIDE element's scroll, not its true one): only the
+//     shrine-collection site (simEndTurn) is mirrored; simMove()'s reveal
+//     still always masks shrineType as 'unknown', same as any other hidden
+//     tile. Rare (needs a still-hidden tile targeted, then revealed before
+//     the buff clears) and — unlike the shrine-collection site — would also
+//     require guessing which drawn card was in the pile's other slots
 //
 // DELIBERATELY NOT WHITELISTED (evaluated and rejected, not just unbuilt):
 //   - Sacrificial Pyre: its driver doesn't just grant stones — it also runs
@@ -108,19 +132,21 @@
 //     scroll). Modeling only the stone grant would make this a WORSE
 //     approximation than leaving it unsimulated (validate() would show real
 //     divergence on the unmodeled chain), so it stays a flat heuristic.
-//   - Wandering River: its buff genuinely lasts until the CASTER's own next
-//     turn (a per-tile array, cleared by playerIndex — not the blanket
-//     expiresThisTurn every buff above uses), so it needs state that
-//     survives simEndTurn crossing OTHER players' turns. Out of scope for
-//     the wipe-every-endTurn buff model this file uses everywhere else.
-//   - Telekinesis, Excavate, Freedom: each still needs action-vocabulary
-//     support this file doesn't have yet (tile-move validity beyond a swap;
-//     a deferred-to-next-turn effect; teleport candidates at simulated
-//     depth, not just the real root) — see docs/bot-roadmap.md's Stage 2.5
-//     notes for the full reasoning. Control the Current and Breath of Power
-//     (Tranche 6) got their action-vocabulary support (attemptControlThe-
-//     CurrentTransform's opportunistic transform; the 'moveStone' action)
-//     and are now whitelisted above.
+//   - Telekinesis, Excavate: each still needs action-vocabulary support this
+//     file doesn't have yet (tile-move validity beyond a swap; a deferred-
+//     to-next-turn effect) — see docs/bot-roadmap.md's Stage 2.5 notes for
+//     the full reasoning. Control the Current and Breath of Power (Tranche
+//     6) got their action-vocabulary support (attemptControlTheCurrent-
+//     Transform's opportunistic transform; the 'moveStone' action);
+//     Wandering River and Freedom (Tranche 7) got crossTurnBuffs, state
+//     that survives simEndTurn crossing OTHER players' turns instead of
+//     being wiped every end turn like snap.turn.buffs — all four are now
+//     whitelisted above. Freedom's own TELEPORT action stays unmodelled in
+//     legalActions() (an existing root-only gap even for the ordinary
+//     catacomb-tile kind — see "KNOWN ACCEPTED DIVERGENCES" implicitly:
+//     teleport was never in this file's action vocabulary at all), so
+//     whitelisting just the cast doesn't unlock search-planned teleports,
+//     only correct real-snapshot awareness of an already-active Freedom.
 //
 // The only globals read are STATIC data (window.SCROLL_DEFINITIONS) and,
 // inside validate() only, the live BotState/BotSystem.
@@ -190,6 +216,10 @@
         // simEffectBreathOfPower/simMoveStone): Control the Current,
         // Breath of Power.
         'WATER_SCROLL_5', 'WIND_SCROLL_3',
+        // Tranche 7 (cross-turn buffs — new crossTurnBuffs state that
+        // survives simEndTurn crossing OTHER players' turns, see
+        // simEffectFreedom/simEffectWanderingRiver): Freedom, Wandering River.
+        'WIND_SCROLL_5', 'WATER_SCROLL_4',
     ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
@@ -493,11 +523,22 @@
         if (p) {
             const shrine = snap.tiles.find(t =>
                 !t.isPlayerTile && t.revealed && dist(t.x, t.y, p.x, p.y) < HEX_NEAR);
-            if (shrine && shrine.shrineType && shrine.shrineType !== 'catacomb') {
-                if (shrine.shrineType === 'unknown') {
+            // Wandering River (WATER_SCROLL_4): getEffectiveTileElement()'s
+            // override, mirrored exactly — first matching entry (real code
+            // never dedupes on push, so an earlier override on the same
+            // tile always wins), applies unconditionally including over a
+            // 'catacomb' or still-'unknown' original type (the override
+            // value is the ACTING PLAYER's own choice, never invented hidden
+            // info, so a Wandering-River-covered tile can be a known
+            // collectible even while its own reveal is still masked).
+            const wr = shrine && snap.crossTurnBuffs?.wanderingRiver;
+            const wrEntry = Array.isArray(wr) ? wr.find(e => e.tileId === shrine.id) : null;
+            const effEl = shrine ? (wrEntry ? wrEntry.newElement : shrine.shrineType) : null;
+            if (effEl && effEl !== 'catacomb') {
+                if (effEl === 'unknown') {
                     simNotes(snap).notes.push('endTurn on an unknown-element shrine — collection not modelled');
-                } else if (ELEMENTS.includes(shrine.shrineType)) {
-                    const el = shrine.shrineType;
+                } else if (ELEMENTS.includes(effEl)) {
+                    const el = effEl;
                     // Mine (CATACOMB_SCROLL_2): double this specific shrine
                     // type's output this turn — POOL_CAP below still applies,
                     // matching the real "cannot exceed 5" text (it's just the
@@ -539,6 +580,20 @@
         const nextPool = snap.players[next]?.pool || {};
         snap.turn.ap = BASE_AP + (nextPool.void || 0); // AP reset + refreshVoidAP
         snap.turn.buffs = {}; // "until end of turn" buffs (Burning Motivation) expire
+
+        // Cross-turn buffs (Freedom, Wandering River): unlike turn.buffs
+        // above, these persist through every OTHER player's turn and only
+        // clear at their OWN OWNER's next turn start — mirrors
+        // clearFreedomForPlayer(next)/clearWanderingRiverForPlayer(next)
+        // being called right as that player's turn begins (game-ui.js/
+        // lobby.js), never touched by clearTurnBuffs()'s blanket wipe.
+        if (snap.crossTurnBuffs?.freedom?.playerIndex === next) {
+            snap.crossTurnBuffs.freedom = null;
+        }
+        if (Array.isArray(snap.crossTurnBuffs?.wanderingRiver)) {
+            snap.crossTurnBuffs.wanderingRiver =
+                snap.crossTurnBuffs.wanderingRiver.filter(e => e.playerIndex !== next);
+        }
 
         // Search support: a state evaluator must know the turn boundary was
         // crossed — otherwise the AP reset makes endTurn look like free value
@@ -964,6 +1019,11 @@
 
     function buffs(snap) { return snap.turn.buffs || (snap.turn.buffs = {}); }
 
+    // Cross-turn buffs (Freedom, Wandering River) live OUTSIDE snap.turn —
+    // simEndTurn()'s blanket `snap.turn.buffs = {}` must never touch them;
+    // they're cleared individually, by owner, at that owner's own next turn.
+    function crossTurn(snap) { return snap.crossTurnBuffs || (snap.crossTurnBuffs = {}); }
+
     // ── Tranche 4 (more turn buffs) ──────────────────────────────────
     // Same shape as Burning Motivation: no target choice, a flag on
     // snap.turn.buffs, consumed elsewhere (legalActions, canMoveTo, simMove,
@@ -1125,6 +1185,43 @@
         applyFireInteractions(snap, stone);
     }
 
+    // ── Tranche 7 (cross-turn buffs — see crossTurn() above) ──────────
+
+    // Freedom (WIND_SCROLL_5): until the caster's own next turn, they may
+    // teleport free between any revealed elemental shrine centre, same as
+    // standing on a catacomb tile. Only the buff itself is simulated here —
+    // the TELEPORT action it enables was already a root-only gap before
+    // Freedom existed (bot-sim's legalActions() has never modelled
+    // 'teleport', even the catacomb-tile kind — see the file header), so
+    // whitelisting the cast doesn't need new action-vocabulary support: it
+    // just makes hasFreedomActive()'s real-game teleport gate (bot-state.js)
+    // correctly reflect a Freedom cast from an EARLIER turn, same as
+    // activeTurnBuffs()/crossTurnBuffs() already do for every other buff.
+    function simEffectFreedom(snap, p) {
+        crossTurn(snap).freedom = { playerIndex: p.index };
+    }
+
+    // Wandering River (WATER_SCROLL_4): mirrors driveWanderingRiver() —
+    // picks the non-player tile closest to the caster (revealed or not;
+    // eligibility never depends on the hidden element, only geometry, so
+    // this never invents hidden info), then the best-ranked element with
+    // NO availability filter (showElementSelectionModal's 5 buttons are
+    // always clickable, unlike Control the Current's — see
+    // effectRankedElements()[0] used unfiltered here). Real code never
+    // dedupes on push (see getEffectiveTileElement's own comment at its
+    // simEndTurn call site for why lookup order matters), so this doesn't
+    // either — just appends.
+    function simEffectWanderingRiver(snap, p) {
+        const eligible = snap.tiles.filter(t => !t.isPlayerTile);
+        if (!eligible.length) return; // real flow bails before any selection
+        const tile = eligible.reduce((a, b) =>
+            (!a || dist(p.x, p.y, b.x, b.y) < dist(p.x, p.y, a.x, a.y)) ? b : a, null);
+        const el = effectRankedElements(snap, p)[0];
+        const ct = crossTurn(snap);
+        ct.wanderingRiver = ct.wanderingRiver || [];
+        ct.wanderingRiver.push({ tileId: tile.id, newElement: el, playerIndex: p.index });
+    }
+
     function simCast(snap, a) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
@@ -1207,6 +1304,10 @@
             simEffectControlTheCurrent(snap, p);
         } else if (a.scroll === 'WIND_SCROLL_3') {
             simEffectBreathOfPower(snap, p);
+        } else if (a.scroll === 'WIND_SCROLL_5') {
+            simEffectFreedom(snap, p);
+        } else if (a.scroll === 'WATER_SCROLL_4') {
+            simEffectWanderingRiver(snap, p);
         }
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):

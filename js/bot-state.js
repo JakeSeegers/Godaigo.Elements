@@ -52,6 +52,27 @@
         return Object.keys(out).length ? out : undefined;
     }
 
+    // Cross-turn buffs (Freedom, Wandering River): unlike activeTurnBuffs()
+    // above, these are NOT filtered to the active player's own — Wandering
+    // River's tile override affects shrine collection/reveal for WHOEVER
+    // stands there, not just its caster, and a multi-ply search needs to
+    // see every player's still-active entry, not only whoever is about to
+    // act right now. Never cleared by clearTurnBuffs(); only by
+    // clearFreedomForPlayer()/clearWanderingRiverForPlayer() at that
+    // buff's own OWNER's next turn start — see bot-sim.js's simEndTurn().
+    function crossTurnBuffs() {
+        const raw = window.spellSystem?.scrollEffects?.activeBuffs;
+        if (!raw) return undefined;
+        const out = {};
+        if (raw.freedom) out.freedom = { playerIndex: raw.freedom.playerIndex };
+        if (Array.isArray(raw.wanderingRiver) && raw.wanderingRiver.length) {
+            out.wanderingRiver = raw.wanderingRiver.map(e => ({
+                tileId: e.tileId, newElement: e.newElement, playerIndex: e.playerIndex,
+            }));
+        }
+        return Object.keys(out).length ? out : undefined;
+    }
+
     // Which elements' level-1 scroll (ELEMENT_SCROLL_1 — a deterministic
     // name, not hidden information) is still sitting in that element's
     // draw deck. Quick Reflexes (CATACOMB_SCROLL_9) searches exactly this
@@ -123,6 +144,7 @@
             stones: placedStones.map(s => ({ x: +s.x.toFixed(1), y: +s.y.toFixed(1), type: s.type })),
             players,
             level1Available: level1DeckAvailability(),
+            crossTurnBuffs: crossTurnBuffs(),
         };
     }
 
