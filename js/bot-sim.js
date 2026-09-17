@@ -28,11 +28,16 @@
 //               exact. The scroll EFFECT is simulated only for scrolls in
 //               SIMULATED_SCROLLS: Create, Transmute, Arson, Refreshing
 //               Thought, Mason's Savvy, Heavy Stomp, Combust (immediate
-//               pool/pattern effects) plus 9 persistent TURN BUFFS — see
-//               "turn buffs" below — each mirroring its real effect exactly.
-//               Anything else is recorded in snap.sim.unsimulatedCasts so a
-//               search can score it with a flat heuristic instead of
-//               pretending to know the outcome.
+//               pool/pattern effects); Shifting Sands, Scholar's Insight,
+//               Inspiring Draught, Call to Adventure (flip only — its
+//               reveal-triggered stone bonus is NOT modelled, see below),
+//               Plunder (Tranche 5 — deterministic Tier-2 target choices,
+//               mirroring each BotEffects driver's exact pick); plus 9
+//               persistent TURN BUFFS — see "turn buffs" below. Each
+//               mirrors its real effect exactly (validated — see
+//               BotSim.validate()). Anything else is recorded in
+//               snap.sim.unsimulatedCasts so a search can score it with a
+//               flat heuristic instead of pretending to know the outcome.
 //   turn buffs  snap.turn.buffs.*: set by simCast() when a buff scroll is
 //               cast, consumed at the point each buff actually matters
 //               (legalActions' cast-cost/placement-range gates, canMoveTo,
@@ -68,12 +73,42 @@
 // KNOWN ACCEPTED DIVERGENCES (deliberate, all rare and all logged):
 //   - scroll-effect side effects of non-whitelisted casts
 //   - catacomb reveal's +1 AP (element of a hidden tile is unknowable)
-//   - active buffs NOT listed above (Mason's Savvy's 5-hex placement range,
-//     Wandering River, Call to Adventure, Quick Reflexes, …) — not in snapshot;
-//     Breath of Power and Freedom are also out of scope here — both need new
-//     action-vocabulary support (a reposition-stone action; teleport
-//     candidates at simulated depth, not just the real root), not just a buff
+//   - Call to Adventure's reveal-triggered stone bonus (the flip itself IS
+//     simulated — see simEffectCallToAdventure) and Mason's Savvy's 5-hex
+//     placement range — both need the element of a possibly-still-hidden
+//     tile, which this simulator refuses to invent
+//   - Scholar's Insight / Inspiring Draught: drawn scroll identity, and
+//     whether the chosen deck/level was actually available at all — deck
+//     contents/order/size aren't in the snapshot (same class as Refreshing
+//     Thought's already-accepted "exhausted deck" gap)
 //   - fire-destruction re-check cascades beyond the placed stone's neighbors
+//
+// DELIBERATELY NOT WHITELISTED (evaluated and rejected, not just unbuilt):
+//   - Sacrificial Pyre: its driver doesn't just grant stones — it also runs
+//     the SACRIFICED scroll's own execute() (a real chained cast, arbitrary
+//     scroll). Modeling only the stone grant would make this a WORSE
+//     approximation than leaving it unsimulated (validate() would show real
+//     divergence on the unmodeled chain), so it stays a flat heuristic.
+//   - Wandering River: its buff genuinely lasts until the CASTER's own next
+//     turn (a per-tile array, cleared by playerIndex — not the blanket
+//     expiresThisTurn every buff above uses), so it needs state that
+//     survives simEndTurn crossing OTHER players' turns. Out of scope for
+//     the wipe-every-endTurn buff model this file uses everywhere else.
+//   - Quick Reflexes: its search is over each element deck's REMAINING
+//     contents (a level-1 scroll already drawn earlier isn't offered), which
+//     this snapshot can't see — unlike Scholar's Insight/Inspiring Draught,
+//     the WRONG element could plausibly get picked here, not just an unknown
+//     card identity, so the risk of a real (not just accepted) divergence is
+//     too high to whitelist.
+//   - Take Flight: v1's own BotEffects driver picks its destination with
+//     Math.random() — genuinely nondeterministic, so no snapshot-only
+//     simulation can honestly claim to "match" it.
+//   - Telekinesis, Control the Current, Excavate, Breath of Power, Freedom:
+//     each needs new action-vocabulary support this file doesn't have yet
+//     (tile-move validity beyond a swap; a persistent whole-turn reposition
+//     action; a deferred-to-next-turn effect; a reposition-stone action;
+//     teleport candidates at simulated depth, not just the real root) —
+//     see docs/bot-roadmap.md's Stage 2.5 notes for the full reasoning.
 //
 // The only globals read are STATIC data (window.SCROLL_DEFINITIONS) and,
 // inside validate() only, the live BotState/BotSystem.
@@ -129,6 +164,11 @@
         // Mudslide, Reflecting Pool.
         'EARTH_SCROLL_5', 'CATACOMB_SCROLL_6', 'WIND_SCROLL_2', 'VOID_SCROLL_3',
         'CATACOMB_SCROLL_2', 'CATACOMB_SCROLL_5', 'CATACOMB_SCROLL_1', 'CATACOMB_SCROLL_7',
+        // Tranche 5 (Tier-2 target-selection scrolls whose BotEffects driver
+        // is fully deterministic — see the effect functions for each):
+        // Shifting Sands, Scholar's Insight, Inspiring Draught, Call to
+        // Adventure (flip only — see simEffectCallToAdventure), Plunder.
+        'EARTH_SCROLL_2', 'VOID_SCROLL_4', 'WATER_SCROLL_3', 'CATACOMB_SCROLL_3', 'CATACOMB_SCROLL_8',
     ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
@@ -609,6 +649,38 @@
         if (!snap.commonArea.includes(scrollName)) snap.commonArea.push(scrollName);
     }
 
+    // Plunder (CATACOMB_SCROLL_8): same "biggest threat" opponent targeting
+    // as Arson (rankedOpponents), filtered to opponents who actually have a
+    // plunderable active scroll; takes their HIGHEST-level active scroll
+    // (pickStrongestButton — opposite of Sacrificial Pyre/Inspiring
+    // Draught's "give up the weakest") to the common area (element-keyed
+    // replacement, same as discardToCommonArea/Arson above — note this
+    // replaces by the PLUNDERED scroll's element, not always fire).
+    // Excavate immunity: same accepted divergence as Arson.
+    function simEffectPlunder(snap, p, scrollName) {
+        const meIdx = snap.turn.activePlayerIndex;
+        let target = null, bestScore = -1;
+        for (const op of snap.players) {
+            if (!op || op.index === meIdx || !op.active || !op.active.length) continue;
+            const score = op.activated.length * 1000 +
+                ELEMENTS.reduce((s, el) => s + (op.pool[el] || 0), 0);
+            if (score > bestScore) { bestScore = score; target = op; }
+        }
+        if (!target) return; // nobody has a plunderable active scroll
+        let best = null, bestLevel = -1;
+        for (const name of target.active) {
+            const level = window.SCROLL_DEFINITIONS?.[name]?.level ?? 0;
+            if (level > bestLevel) { bestLevel = level; best = name; }
+        }
+        if (!best) return;
+        const ti = target.active.indexOf(best);
+        target.active.splice(ti, 1); target.activeCount--;
+        const el = window.SCROLL_DEFINITIONS?.[best]?.element;
+        if (!snap.commonArea) snap.commonArea = [];
+        if (el) snap.commonArea = snap.commonArea.filter(name => window.SCROLL_DEFINITIONS?.[name]?.element !== el);
+        if (!snap.commonArea.includes(best)) snap.commonArea.push(best);
+    }
+
     // ── Tranche 2 ────────────────────────────────────────────────────
     // Tile-geometry rule shared by flip/combust eligibility: a stone or
     // pawn "on a tile" = within TILE_SIZE*4 of the tile centre (mirrors
@@ -620,12 +692,83 @@
     function tileHasPawns(snap, t) {
         return snap.players.some(pl => pl && dist(pl.x, pl.y, t.x, t.y) < TILE_RADIUS);
     }
+    // Indices of every player standing on this tile (mirrors getPlayersOnTile)
+    function tilePlayerIndices(snap, t) {
+        const out = [];
+        snap.players.forEach((pl, i) => { if (pl && dist(pl.x, pl.y, t.x, t.y) < TILE_RADIUS) out.push(i); });
+        return out;
+    }
+
+    // Shifting Sands (EARTH_SCROLL_2): eligible = non-player tiles, no
+    // stones, AT MOST 1 player (looser than Heavy Stomp/Combust's "zero
+    // players" — isTileEligibleForShiftingSands allows one lone occupant,
+    // who then travels with their tile). The driver picks the GLOBALLY
+    // closest eligible pair: a double loop over every ordered pair tracks
+    // the single minimum distance found and keeps whichever tile ("a") was
+    // on the winning side of it (mirrors driveTileSwap's exact loop, not
+    // just "any tile with a close neighbor" — ties break on iteration
+    // order = snap.tiles order, same convention as Combust/Arson). Only
+    // positions swap; each tile's own stones/rotation/id stay put. A lone
+    // occupant is recentred onto their tile's NEW position (mirrors
+    // recenterPlayerOnTile) — never both tiles at once, since eligibility
+    // caps each at one player.
+    function simEffectShiftingSands(snap) {
+        const eligible = snap.tiles.filter(t =>
+            !t.isPlayerTile && tileStoneCount(snap, t) === 0 && tilePlayerIndices(snap, t).length <= 1);
+        if (eligible.length < 2) return; // real flow bails before any selection
+        let a = null, bestDist = Infinity;
+        for (const x of eligible) {
+            for (const y of eligible) {
+                if (x.id === y.id) continue;
+                const d = dist(x.x, x.y, y.x, y.y);
+                if (d < bestDist) { bestDist = d; a = x; }
+            }
+        }
+        if (!a) return;
+        const rest = eligible.filter(t => t.id !== a.id);
+        let b = null, bestB = Infinity;
+        for (const t of rest) {
+            const d = dist(a.x, a.y, t.x, t.y);
+            if (d < bestB) { bestB = d; b = t; }
+        }
+        if (!b) return;
+        const aOccupant = tilePlayerIndices(snap, a)[0];
+        const bOccupant = tilePlayerIndices(snap, b)[0];
+        const ax = a.x, ay = a.y;
+        a.x = b.x; a.y = b.y;
+        b.x = ax; b.y = ay;
+        if (aOccupant !== undefined) { snap.players[aOccupant].x = a.x; snap.players[aOccupant].y = a.y; }
+        if (bOccupant !== undefined) { snap.players[bOccupant].x = b.x; snap.players[bOccupant].y = b.y; }
+    }
 
     // Refreshing Thought (WATER_SCROLL_2): draw the top catacomb-deck
     // scroll to hand. Identity (and deck emptiness) aren't in the snapshot
     // — drawn as UNKNOWN_SCROLL; an exhausted deck's no-op is an accepted
     // rare divergence.
     function simEffectRefreshingThought(snap) {
+        drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+    }
+
+    // Scholar's Insight (VOID_SCROLL_4): the driver picks the most-needed
+    // element's deck (rankedElements()[0] whose button is actually
+    // clickable — a deck-emptiness check this snapshot can't make, same
+    // accepted-divergence class as Refreshing Thought above), then the
+    // highest-level scroll IN that deck. Which scroll that specific level
+    // turns out to be isn't knowable either (deck contents/order aren't in
+    // the snapshot) — drawn as UNKNOWN_SCROLL, same convention as every
+    // other "we know a draw happens, not which card" case in this file.
+    function simEffectScholarsInsight(snap) {
+        drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+    }
+
+    // Inspiring Draught (WATER_SCROLL_3): draws 2 from the most-needed
+    // element's deck, puts 1 back — net effect is always "keep exactly 1"
+    // (even when only 1 was drawable, it's auto-kept), so this is a plain
+    // +1 UNKNOWN_SCROLL from that deck, same shape as Scholar's Insight.
+    // The put-back choice (response-only first, else lowest-level) only
+    // affects the DECK, which isn't in the snapshot, so it has no visible
+    // consequence here.
+    function simEffectInspiringDraught(snap) {
         drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
     }
 
@@ -646,7 +789,12 @@
     // ties); only with zero hidden eligible tiles does it hide
     // eligible[0]. Reveal side effects mirror simMove's: element becomes
     // 'unknown', a scroll is drawn to hand, catacomb's +1 AP unmodelled.
-    function simEffectHeavyStomp(snap, p) {
+    // Shared by Heavy Stomp (EARTH_SCROLL_4) and Call to Adventure
+    // (CATACOMB_SCROLL_3) — both route through the SAME real function
+    // (enterTileFlipMode/getEligibleTilesForFlip) and the SAME driver
+    // (driveTileFlip: prefer revealing the nearest hidden eligible tile,
+    // else hide eligible[0]).
+    function flipNearestEligibleTile(snap, p, label) {
         const eligible = snap.tiles.filter(t =>
             !t.isPlayerTile && tileStoneCount(snap, t) === 0 && !tileHasPawns(snap, t));
         if (!eligible.length) return; // real flow bails before any selection
@@ -660,12 +808,32 @@
             pick.revealed = true;
             pick.shrineType = 'unknown'; // NEVER invent the hidden element
             drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
-            simNotes(snap).notes.push(`Heavy Stomp revealed tile ${pick.id} (element unknown; catacomb +1 AP not modelled)`);
+            simNotes(snap).notes.push(`${label} revealed tile ${pick.id} (element unknown; catacomb +1 AP not modelled)`);
         } else {
             const t = eligible[0];
             t.revealed = false;
             t.shrineType = null; // face-down tiles mask their element
         }
+    }
+
+    function simEffectHeavyStomp(snap, p) {
+        flipNearestEligibleTile(snap, p, 'Heavy Stomp');
+    }
+
+    // Call to Adventure (CATACOMB_SCROLL_3): the flip itself mirrors Heavy
+    // Stomp exactly (same function, same driver). The buff's OWN extra
+    // effect — future reveals this turn immediately granting shrine
+    // stones — is NOT modelled: the element of a just-flipped or
+    // not-yet-flipped tile is exactly the hidden information this
+    // simulator refuses to invent (same reasoning that excludes it from
+    // simEffectHeavyStomp's reveal above). Accepted divergence, flagged so
+    // an evaluator could eventually credit "this turn's reveals are worth
+    // more" once someone builds a value model that doesn't need to know
+    // the element to do it.
+    function simEffectCallToAdventure(snap, p) {
+        flipNearestEligibleTile(snap, p, 'Call to Adventure');
+        buffs(snap).callToAdventure = true;
+        simNotes(snap).notes.push('Call to Adventure buff active — future-reveal stone grants not modelled (element unknowable)');
     }
 
     // Combust (CATACOMB_SCROLL_10): destroy EVERY stone on the non-player
@@ -853,6 +1021,16 @@
             simEffectMudslide(snap);
         } else if (a.scroll === 'CATACOMB_SCROLL_7') {
             simEffectReflectingPool(snap, p);
+        } else if (a.scroll === 'EARTH_SCROLL_2') {
+            simEffectShiftingSands(snap);
+        } else if (a.scroll === 'VOID_SCROLL_4') {
+            simEffectScholarsInsight(snap);
+        } else if (a.scroll === 'WATER_SCROLL_3') {
+            simEffectInspiringDraught(snap);
+        } else if (a.scroll === 'CATACOMB_SCROLL_3') {
+            simEffectCallToAdventure(snap, p);
+        } else if (a.scroll === 'CATACOMB_SCROLL_8') {
+            simEffectPlunder(snap, p, a.scroll);
         }
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):
