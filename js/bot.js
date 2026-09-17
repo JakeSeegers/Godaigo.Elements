@@ -878,9 +878,39 @@
                 turnRepeatStreak: 0,
                 unproductiveStreak: 0,  // consecutive own turns with no cast/placeStone — see botTurn()
                 noCreditScrolls: new Set(), // scrolls whose special effect cancelled without granting win credit — see trackCastCredit()
+                lastBrainSignalAt: 0,   // throttle for signalBrainMode()'s emoji — see its own comment
             };
         }
         return _mem[idx];
+    }
+
+    // Decision-transparency emoji: floats a small icon over the bot's own
+    // pawn whenever a non-greedy brain mode actually decided the current
+    // action (not on the greedy fallback — that's the ordinary case and
+    // would just be visual noise every turn). Reuses window.emojiSystem's
+    // existing display mechanism directly (showEmojiOverPawn has no
+    // purchase/ownership gate of its own — that's only in useEmoji(), the
+    // human "spend gold" path this deliberately bypasses) and broadcasts
+    // it in multiplayer the same way a real player's emoji does, so every
+    // client watching sees it, not just whichever browser is driving the
+    // bot. Throttled per player (mem().lastBrainSignalAt) so a burst of
+    // several tactical decisions within one turn doesn't spam duplicate
+    // floats.
+    const BRAIN_SIGNAL_EMOJI = { mcts: '🎲', search: '🧠' };
+    const BRAIN_SIGNAL_COOLDOWN_MS = 2000;
+    function signalBrainMode(playerIndex, mode) {
+        const es = window.emojiSystem;
+        if (!es || typeof es.showEmojiOverPawn !== 'function') return;
+        const display = BRAIN_SIGNAL_EMOJI[mode];
+        if (!display) return;
+        const m = mem(playerIndex);
+        const now = Date.now();
+        if (now - m.lastBrainSignalAt < BRAIN_SIGNAL_COOLDOWN_MS) return;
+        m.lastBrainSignalAt = now;
+        es.showEmojiOverPawn(playerIndex, display, false);
+        if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+            broadcastGameAction('emoji', { playerIndex, display, isText: false });
+        }
     }
     function resetAllMemory() {
         for (const k of Object.keys(_mem)) delete _mem[k];
@@ -1641,6 +1671,15 @@
     // the same evaluateSnapshot() scale, not undefined).
     // opts.seed: optional, for reproducible tests — omitted in real play so
     // consecutive calls sample fresh completions.
+    // Bonus pseudo-visits per matching js/bot-memory.js retrieval, seeded
+    // onto the root's arms before real UCB1 iterations begin — a PRIOR,
+    // not an override: an arm this seeds still competes on equal footing
+    // afterward (its pseudo-average only holds until real rollouts either
+    // confirm or swamp it), and any arm memory has nothing to say about
+    // still gets its own force-tried real rollout.
+    const MEMORY_PRIOR_K = 5;
+    const MEMORY_PRIOR_VISITS = 2;
+
     function mctsPick(opts = {}) {
         const sim = window.BotSim;
         if (!sim || !window.BotState) return null;
@@ -1664,6 +1703,16 @@
             if (!legal.length || legal[0].type === 'placeTile') continue;
 
             const arms = legal.map(a => ({ a, visits: 0, total: 0 }));
+            if (window.BotMemory?.retrieveSimilar) {
+                const baseline = evaluateSnapshot(detSnap, meIdx);
+                const similar = window.BotMemory.retrieveSimilar(detSnap, meIdx, MEMORY_PRIOR_K);
+                for (const ep of similar) {
+                    const arm = arms.find(x => window.BotMemory.actionKey(x.a) === ep.actionKey);
+                    if (!arm) continue;
+                    arm.visits += MEMORY_PRIOR_VISITS;
+                    arm.total += MEMORY_PRIOR_VISITS * (baseline + ep.swing);
+                }
+            }
             for (let it = 0; it < iterations; it++) {
                 let arm = arms.find(x => x.visits === 0);
                 if (!arm) {
@@ -1922,7 +1971,10 @@
         // actions this determinization, etc.).
         if (!choice && WEIGHTS.mctsEnabled && window.BotSim) {
             choice = mctsPick();
-            if (choice) log(`MCTS (${choice.samples} samples, ${choice.votes}/${choice.samples} votes) picked ${choice.action.type}`);
+            if (choice) {
+                log(`MCTS (${choice.samples} samples, ${choice.votes}/${choice.samples} votes) picked ${choice.action.type}`);
+                signalBrainMode(snap.turn.activePlayerIndex, 'mcts');
+            }
         }
 
         // Stage 2: lookahead search when enabled, greedy Stage-1 argmax otherwise.
@@ -1956,7 +2008,10 @@
             }
             if (useSearch) {
                 choice = searchPick();
-                if (choice) log(`Search (depth ${WEIGHTS.searchDepth | 0}${WEIGHTS.searchHybrid ? ', hybrid' : ''}) picked ${choice.action.type}`);
+                if (choice) {
+                    log(`Search (depth ${WEIGHTS.searchDepth | 0}${WEIGHTS.searchHybrid ? ', hybrid' : ''}) picked ${choice.action.type}`);
+                    signalBrainMode(snap.turn.activePlayerIndex, 'search');
+                }
             }
         }
         if (!choice) {
@@ -1997,6 +2052,15 @@
 
         const res = window.BotState.applyAction(action);
         if (!res.ok) { log(`Action failed: ${res.reason}`); return null; }
+        // Episodic memory (js/bot-memory.js, optional — window.BotMemory may
+        // not be loaded): record this decision if it swung the position
+        // sharply, for MCTS's root to later seed as a prior in a similar
+        // future situation. Reads the REAL post-action snapshot rather than
+        // BotSim.simulate()'s prediction, so it reflects whatever actually
+        // happened (response windows, cascades, etc. included).
+        if (window.BotMemory?.recordFromBotDecision) {
+            window.BotMemory.recordFromBotDecision(snap, window.BotState.snapshot(), action, idx);
+        }
         if (action.type === 'move') recordVisited(idx, action.x, action.y);
         if (action.type === 'teleport') {
             // Record BOTH ends of the hop: the origin first, so "teleport
