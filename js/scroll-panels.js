@@ -56,6 +56,10 @@ const ScrollPanelSystem = (() => {
         gamelog:         { x: 1184, y: 103, w: 235, h: 195, collapsed: false, autofit: false },
         opponents:       { x: 1429, y: 92,  w: 273, h: 461, collapsed: false, autofit: true },
         elementalstones: { x: 1,    y: 761, w: 628, h: 100, collapsed: false, autofit: false },
+        // Closed by default (not in DEFAULT_OPEN_IDS) — it's an on-demand
+        // reference, same spirit as the Scroll Reference popup, not an
+        // ambient panel a player wants up the whole game.
+        rulebook:        { x: 360,  y: 150, w: 560, h: 520, collapsed: false, autofit: false },
     };
     // All six now default OPEN (not just the three ambient ones) — see
     // openAmbientPanels()/init()'s call site below.
@@ -328,6 +332,34 @@ const ScrollPanelSystem = (() => {
     function toggleCollapse(id) {
         _applyCollapsed(id, !panels[id].state.collapsed);
         saveState();
+    }
+
+    // ---- Reset to defaults ----
+    // Re-applies each panel's DEFAULTS position/size/collapsed state to both
+    // panels[id].state and the live DOM, without touching what's saved in
+    // localStorage — used by the tutorial so its walkthrough always starts
+    // from the same known layout regardless of how a player previously
+    // dragged/resized these panels in a real game. Omit `ids` to reset all.
+    function resetToDefaults(ids) {
+        (ids || Object.keys(DEFAULTS)).forEach(id => {
+            const p = panels[id];
+            if (!p || !DEFAULTS[id]) return;
+            const state = { ...DEFAULTS[id] };
+            _clampToViewport(state);
+            p.state = state;
+            if (id === 'elementalstones') {
+                // autoHeight panel (see createPanel's opts.autoHeight) — no
+                // inline width/height, ever; just reposition it.
+                p.el.style.left = state.x + 'px';
+                p.el.style.top  = state.y + 'px';
+            } else {
+                p.el.style.left   = state.x + 'px';
+                p.el.style.top    = state.y + 'px';
+                p.el.style.width  = state.w + 'px';
+                p.el.style.height = state.collapsed ? '' : state.h + 'px';
+            }
+            _applyCollapsed(id, state.collapsed);
+        });
     }
 
     // ---- Open / close ----
@@ -680,7 +712,7 @@ const ScrollPanelSystem = (() => {
         titleWrap.appendChild(nameEl);
         const metaEl = document.createElement('span');
         metaEl.className = 'fsp-card-meta';
-        metaEl.textContent = `Rank ${info.rank} · ${info.cost} AP`;
+        metaEl.textContent = `Rank ${info.rank} · ${info.cost} AP to break`;
         titleWrap.appendChild(metaEl);
         hdr.appendChild(titleWrap);
         card.appendChild(hdr);
@@ -699,6 +731,159 @@ const ScrollPanelSystem = (() => {
         }
 
         return card;
+    }
+
+    // ---- Rulebook ----
+    // Static reference content for the Rulebook panel. Stone entries are
+    // generated from STONE_INFO (declared above) so ability text can never
+    // drift out of sync with the Elemental Stones hover preview.
+    const RULEBOOK_TABS = [
+        { id: 'basics',   label: 'Basics & Movement', color: '#8ecdf0' },
+        { id: 'stones',   label: 'Stones & Shrines',  color: '#c8a870' },
+        { id: 'scrolls',  label: 'Scrolls',           color: '#e8dcc8' },
+        { id: 'win',      label: 'Win Condition',     color: '#ffd700' },
+        { id: 'advanced', label: 'Advanced Rules',    color: '#ff8c69' },
+    ];
+
+    function _rulebookEntries() {
+        const stoneEntries = ['void', 'wind', 'fire', 'water', 'earth'].map(el => {
+            const info = STONE_INFO[el];
+            const interactionText = info.interaction ? ` ${info.interaction}.` : '';
+            return { title: info.name, body: `${info.ability} Rank ${info.rank}.${interactionText}` };
+        });
+        return {
+            basics: [
+                { title: 'Board Setup', body: 'The tile deck holds one of each tile type (Earth, Water, Fire, Wind, Void, and Catacomb) for every player, minus one. All of these tiles are shuffled together to form the hidden board.' },
+                { title: 'Turns & Action Points', body: 'Each turn gives you 5 AP. Moving into a hex costs 1 AP, except through a Wind stone (or a Water stone adjacent to a Wind stone), which cost 0 AP. Unused AP does not carry over to your next turn.' },
+                { title: 'Exploring Tiles', body: 'All tiles start face-down. Stepping onto a face-down tile flips it, revealing its shrine type and drawing a scroll into your hand.' },
+                { title: 'Undo Step', body: "Undo Step reverses your most recent action: a move, a stone placement or break, or a scroll move. It only works until you end your turn." },
+                { title: 'Player Tiles', body: "You can't end your turn on the center hex of another player's tile. You can end your turn on your own. You can't place a stone anywhere on a player tile, including your own." },
+                { title: 'Sharing a Hex', body: "You can never move onto a hex that another player currently occupies." },
+            ],
+            stones: [
+                ...stoneEntries,
+                { title: 'Placing Stones', body: "A stone you place must land adjacent to your pawn's current position, and never on a player tile." },
+                { title: 'Breaking Stones', body: "Right-click a stone adjacent to your pawn to break it. This costs AP equal to the stone's rank (Void 1, Wind 2, Fire 3, Water 4, Earth 5). You can break any stone within reach, not just your own, but not while standing on a stone yourself. A broken stone returns to the shared source pool, not to any player's pool." },
+                { title: 'Shrine Types', body: "There are six shrine tile types: Earth, Water, Fire, Wind, Void, and Catacomb. Ending your turn on a shrine's center hex grants stones of that type from the shared source pool. The amount depends on the element's rank." },
+                { title: 'Catacomb Shrines', body: "Revealing a Catacomb tile instantly refunds 1 AP and draws a Catacomb scroll. Standing on a Catacomb shrine lets you teleport for free to the center of any other revealed, empty elemental shrine. A stone placed there blocks the teleport." },
+            ],
+            scrolls: [
+                { title: 'Hand, Active & Common', body: 'Scrolls live in three areas: Hand (private, max 2), Active (face-up, anyone can activate), and Common Area (a shared pool anyone can activate from).' },
+                { title: 'Building a Pattern', body: "A scroll's stone pattern is always checked relative to your pawn's current hex. It doesn't matter what tile type you're standing on, and you don't need to be in a tile's center." },
+                { title: 'Level 1 Response Scrolls', body: "Level 1 scrolls are Response scrolls: they activate on an opponent's turn, not yours. Only one response scroll resolves per turn. Competing responses are resolved by element rank." },
+                { title: 'Stacking Activations', body: 'Most scrolls have no once-per-turn limit. Activate the same scroll multiple times in one turn to stack its effect. A few, mostly Level 1 response/counter scrolls, are limited to once per turn.' },
+                { title: 'Catacomb Scrolls', body: 'Catacomb scrolls span two element types and reward or activate both at once.' },
+            ],
+            win: [
+                { title: 'How to Win', body: 'Activate at least one scroll of each of the five elements (Earth, Water, Fire, Wind, and Void) over the course of the game, then return to the center of your own player shrine.' },
+                { title: 'Empty Source Pools', body: "Activating a scroll, including a Catacomb scroll, doesn't count toward your win condition for an element whose shared source pool is empty. Destroy a placed stone of that type to free one up in the source pool." },
+            ],
+            advanced: [
+                { title: 'Empty Source Pools', body: "Activating a scroll doesn't count toward your win condition if that element's source pool is empty. Destroy a placed stone of that type to free one up and get around this." },
+                { title: 'Element Rank Resolves Conflicts', body: "When scroll effects conflict (for example, two players' response scrolls both try to fire on the same turn), they resolve by element rank." },
+                { title: "Scrolls Don't Need a Tile Center", body: "You don't need to be standing in the center of a tile to activate a scroll. This is a common mistake." },
+                { title: 'Stacking', body: 'Some scrolls can be activated more than once in the same turn. Stack repeated activations to maximize your control of the board.' },
+                { title: 'Player Tile Restrictions', body: "You can't end your turn on another player's tile, and you can't place stones on any player tile. You can end your turn on your own tile." },
+                { title: 'Catacomb Teleport Blocking', body: "Placing a stone on an elemental shrine's center blocks other players from teleporting there." },
+                { title: 'No Shared Hexes', body: "You can't stand on the same hex as another player." },
+            ],
+        };
+    }
+
+    function _buildRulebookBody(bodyEl) {
+        if (!bodyEl) return;
+        const entriesByTab = _rulebookEntries();
+        bodyEl.innerHTML = '';
+        bodyEl.classList.add('rulebook-body');
+
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'rulebook-search-wrap';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'rulebook-search';
+        searchInput.placeholder = 'Search the rulebook…';
+        searchWrap.appendChild(searchInput);
+        bodyEl.appendChild(searchWrap);
+
+        const tabBar = document.createElement('div');
+        tabBar.className = 'rulebook-tabs';
+        RULEBOOK_TABS.forEach(tab => {
+            const btn = document.createElement('button');
+            btn.className = 'rulebook-tab-btn';
+            btn.textContent = tab.label;
+            btn.dataset.tab = tab.id;
+            btn.style.setProperty('--tab-color', tab.color);
+            btn.addEventListener('click', () => {
+                searchInput.value = '';
+                setActiveTab(tab.id);
+            });
+            tabBar.appendChild(btn);
+        });
+        bodyEl.appendChild(tabBar);
+
+        const list = document.createElement('div');
+        list.className = 'rulebook-list';
+        bodyEl.appendChild(list);
+
+        function renderEntries(entries, color) {
+            list.innerHTML = '';
+            if (entries.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'rulebook-empty';
+                empty.textContent = 'No matching rules found.';
+                list.appendChild(empty);
+                return;
+            }
+            entries.forEach(entry => {
+                const card = document.createElement('div');
+                card.className = 'rulebook-entry';
+                card.style.setProperty('--el-color', entry.color || color);
+                const title = document.createElement('div');
+                title.className = 'rulebook-entry-title';
+                title.textContent = entry.title;
+                const body = document.createElement('div');
+                body.className = 'rulebook-entry-body';
+                body.textContent = entry.body;
+                card.appendChild(title);
+                card.appendChild(body);
+                list.appendChild(card);
+            });
+        }
+
+        // Tracked separately from the DOM's .active class, which the search
+        // handler below clears on every keystroke while searching — without
+        // this, clearing the search box would always fall back to the first
+        // tab instead of the one the player was actually on before they typed.
+        let lastTab = RULEBOOK_TABS[0].id;
+
+        function setActiveTab(tabId) {
+            lastTab = tabId;
+            tabBar.querySelectorAll('.rulebook-tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tabId);
+            });
+            const tab = RULEBOOK_TABS.find(t => t.id === tabId) || RULEBOOK_TABS[0];
+            renderEntries(entriesByTab[tab.id] || [], tab.color);
+        }
+
+        searchInput.addEventListener('input', () => {
+            const q = searchInput.value.trim().toLowerCase();
+            if (!q) {
+                setActiveTab(lastTab);
+                return;
+            }
+            tabBar.querySelectorAll('.rulebook-tab-btn').forEach(btn => btn.classList.remove('active'));
+            const matches = [];
+            RULEBOOK_TABS.forEach(tab => {
+                (entriesByTab[tab.id] || []).forEach(entry => {
+                    if (entry.title.toLowerCase().includes(q) || entry.body.toLowerCase().includes(q)) {
+                        matches.push({ ...entry, color: tab.color });
+                    }
+                });
+            });
+            renderEntries(matches);
+        });
+
+        setActiveTab(RULEBOOK_TABS[0].id);
     }
 
     // ---- Autofit ----
@@ -1032,8 +1217,14 @@ const ScrollPanelSystem = (() => {
             autoHeight: true, // one fixed-size row of stone cards — no fixed pixel guess to keep in sync, just hug it
             noResize: true,   // nothing to gain from resizing fixed content — see createPanel()'s opts doc
         });
+        createPanel('rulebook', 'Rulebook', {
+            noBadge: true,
+            noAutofit: true, // fixed reference content, not a growing feed — manual resize only, same as Game Log
+            noCollapse: true, // collapsing would show an empty box — nothing populates fsp-compact-rulebook, same as Elemental Stones
+        });
+        _buildRulebookBody(document.getElementById('fsp-body-rulebook'));
 
-        ['gamelog', 'opponents', 'elementalstones'].forEach(id => {
+        ['gamelog', 'opponents', 'elementalstones', 'rulebook'].forEach(id => {
             const btn = document.getElementById(panels[id].dockBtnId);
             if (!btn) return;
             btn.addEventListener('click', e => {
@@ -1176,6 +1367,9 @@ const ScrollPanelSystem = (() => {
         // it isn't meaningful (opponent cards aren't the viewer's to move).
         function showPreview(scrollName, anchorEl, area) {
             currentArea = area; // kept fresh regardless of the currentKey guard in _showCardPreview
+            if (window.isTutorialMode && window.TutorialMode?.onScrollHovered) {
+                window.TutorialMode.onScrollHovered(scrollName);
+            }
             const sp = window.spellSystem;
             const element = (sp && typeof sp.getScrollElement === 'function')
                 ? sp.getScrollElement(scrollName) : 'earth';
@@ -1273,5 +1467,5 @@ const ScrollPanelSystem = (() => {
         setTimeout(init, 0);
     }
 
-    return { init, toggle, refresh, openPanel, closePanel, animateCardMove, animateCardToDeck };
+    return { init, toggle, refresh, openPanel, closePanel, animateCardMove, animateCardToDeck, resetToDefaults };
 })();

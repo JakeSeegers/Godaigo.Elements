@@ -1485,6 +1485,15 @@
                             return Math.abs(ax - finalPos.x) < 70 && Math.abs(ay - finalPos.y) < 70;
                         });
 
+                    // Tutorial gate: reject the whole move (not just the reveal) if
+                    // it would step onto a still-hidden tile before the current
+                    // step actually expects a flip — e.g. a Wind stone's free
+                    // movement could otherwise walk the pawn onto unrevealed
+                    // territory even though nothing there ever gets shown.
+                    const tutorialFlipBlocked = window.isTutorialMode &&
+                        window.TutorialMode?.isTileFlipExpected && !window.TutorialMode.isTileFlipExpected() &&
+                        typeof pathHasHiddenTile === 'function' && pathHasHiddenTile(playerPath.slice(1));
+
                     if (cannotEndTurnHere) {
                         console.log(`❌ Movement rejected: Cannot end turn on ${stoneAtFinal.type} stone at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)})`);
                         placePlayer(startPos.x, startPos.y);
@@ -1492,6 +1501,9 @@
                     } else if (tutorialBlocked) {
                         placePlayer(startPos.x, startPos.y);
                         if (window.TutorialMode) window.TutorialMode.showMovementHint();
+                    } else if (tutorialFlipBlocked) {
+                        placePlayer(startPos.x, startPos.y);
+                        alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
                     } else if (moveCheck.canMove && totalCost <= getTotalAP()) {
                         console.log(`✅ Movement successful: ${playerPath.length - 1} hexes, cost ${totalCost} AP`);
                         // Store the last move for undo (snapshot AP before spending)
@@ -1809,15 +1821,28 @@
                         });
                         const cannotEndTurnHere = stoneAtTarget && stoneAtTarget.type !== 'void';
 
+                        // Compute the actual path early (used both for the reveal
+                        // walk below and the tutorial flip-block check) — the
+                        // same shortest-path search the drag-path uses, so a
+                        // tile merely passed through still counts.
+                        const startPosForPath = { x: playerPosition.x, y: playerPosition.y };
+                        const tapPath = _dijkstraPath(startPosForPath, targetHex);
+
+                        const tutorialFlipBlocked = window.isTutorialMode &&
+                            window.TutorialMode?.isTileFlipExpected && !window.TutorialMode.isTileFlipExpected() &&
+                            typeof pathHasHiddenTile === 'function' && pathHasHiddenTile(tapPath ? tapPath.slice(1) : []);
+
                         if (cannotEndTurnHere) {
                             updateStatus('Cannot end movement on a ' + stoneAtTarget.type + ' stone!');
                         } else if (!moveCheck.canMove) {
                             updateStatus(moveCheck.reason || 'Cannot move there');
                         } else if (pathCost > getTotalAP()) {
                             updateStatus(`Not enough AP (need ~${pathCost}, have ${getTotalAP()})`);
+                        } else if (tutorialFlipBlocked) {
+                            alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
                         } else {
                             // Calculate actual path cost by building path
-                            const startPos = { x: playerPosition.x, y: playerPosition.y };
+                            const startPos = startPosForPath;
                             const actualCost = calculateTapMoveCost(startPos, targetHex);
 
                             if (actualCost > 0 && actualCost <= getTotalAP()) {
@@ -1847,9 +1872,7 @@
 
                                 // Check for hidden tile reveal — walk every hex the
                                 // path actually crosses (not just the destination),
-                                // via the same shortest-path search the drag-path
-                                // uses, so a tile merely passed through still flips.
-                                const tapPath = _dijkstraPath(startPos, targetHex);
+                                // so a tile merely passed through still flips.
                                 const revealedAlongPath = revealFlippedTilesAlongPath(tapPath ? tapPath.slice(1) : []);
 
                                 if (revealedAlongPath === 0) {
@@ -2054,12 +2077,21 @@
                         });
                         const cannotEndTurnHere = stoneAtFinal && stoneAtFinal.type !== 'void';
 
+                        // Tutorial gate: reject the whole move if it would step onto
+                        // a still-hidden tile before the current step expects a flip
+                        // — see the drag-handler's own copy of this check above.
+                        const tutorialFlipBlocked = window.isTutorialMode &&
+                            window.TutorialMode?.isTileFlipExpected && !window.TutorialMode.isTileFlipExpected() &&
+                            typeof pathHasHiddenTile === 'function' && pathHasHiddenTile(playerPath.slice(1));
+
                         if (cannotEndTurnHere) {
                             updateStatus('Cannot end movement on a ' + stoneAtFinal.type + ' stone!');
                         } else if (!moveCheck.canMove) {
                             updateStatus(moveCheck.reason || 'Cannot move to this position');
                         } else if (totalCost > getTotalAP()) {
                             updateStatus(`Not enough AP (need ${totalCost}, have ${getTotalAP()})`);
+                        } else if (tutorialFlipBlocked) {
+                            alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
                         } else {
                             // Store the last move for undo (snapshot AP before spending)
                             lastMove = {
@@ -2520,6 +2552,9 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             }
             placePlayer(shrine.x, shrine.y);
             updateStatus(`Teleported to the ${shrine.shrineType} shrine!`);
+            if (window.isTutorialMode && window.TutorialMode?.onCatacombTeleport) {
+                window.TutorialMode.onCatacombTeleport();
+            }
             if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
                 const playerIndex = (typeof myPlayerIndex !== 'undefined' && myPlayerIndex !== null) ? myPlayerIndex : activePlayerIndex;
                 broadcastGameAction('catacomb-teleport', { playerIndex, x: shrine.x, y: shrine.y });
@@ -2948,7 +2983,18 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     cancelMovePreview();
                     const startPos = { x: playerPosition.x, y: playerPosition.y };
                     const actualCost = calculateTapMoveCost(startPos, target);
-                    if (actualCost >= 0 && actualCost <= getTotalAP()) {
+                    // Reveal hidden tiles anywhere along the path — not just
+                    // the hex the pawn stops on — using the same shortest-path
+                    // search the drag-path uses to find which hexes it crossed.
+                    // Computed before committing so the tutorial gate below can
+                    // reject the whole move, not just the reveal.
+                    const previewPath = _dijkstraPath(startPos, target);
+                    const tutorialFlipBlocked = window.isTutorialMode &&
+                        window.TutorialMode?.isTileFlipExpected && !window.TutorialMode.isTileFlipExpected() &&
+                        typeof pathHasHiddenTile === 'function' && pathHasHiddenTile(previewPath ? previewPath.slice(1) : []);
+                    if (tutorialFlipBlocked) {
+                        alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
+                    } else if (actualCost >= 0 && actualCost <= getTotalAP()) {
                         lastMove = { type: 'move', prevPos: startPos, prevCurrentAP: currentAP, prevVoidAP: voidAP };
                         window.lastScrollAction = null;
                         // Only play footstep if AP was spent (wind steps cost 0)
@@ -2966,10 +3012,6 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                                 cosmetics: window.cosmeticsSystem?.getEquippedAll() || null
                             });
                         }
-                        // Reveal hidden tiles anywhere along the path — not just
-                        // the hex the pawn stops on — using the same shortest-path
-                        // search the drag-path uses to find which hexes it crossed.
-                        const previewPath = _dijkstraPath(startPos, target);
                         const revealedAlongPath = revealFlippedTilesAlongPath(previewPath ? previewPath.slice(1) : []);
                         if (revealedAlongPath === 0) {
                             updateStatus(`Moved (cost: ${actualCost} AP, ${getTotalAP()} AP remaining)`);
@@ -3724,6 +3766,9 @@ document.getElementById('undo-move').onclick = function() {
                     // Teleport player (no AP cost)
                     placePlayer(shrine.x, shrine.y);
                     updateStatus(`Teleported to the ${shrine.shrineType} shrine!`);
+                    if (window.isTutorialMode && window.TutorialMode?.onCatacombTeleport) {
+                        window.TutorialMode.onCatacombTeleport();
+                    }
 
                     // Broadcast teleport so other clients stay in sync
                     if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
@@ -6692,6 +6737,158 @@ document.getElementById('undo-move').onclick = function() {
                 load();
             }
 
+            // ── Admin: stored session game logs ──────────────────────────────
+            // Lists rows from game_session_logs (only ever non-empty for this
+            // account — RLS restricts SELECT to is_hermit()) and lets the
+            // developer download an individual log or all of them, in the same
+            // {meta, entries} JSON shape action-log.js's own "Download Action
+            // Log" cheat-panel button already produces.
+            function openGameLogsPanel() {
+                const existing = document.getElementById('game-logs-overlay');
+                if (existing) { existing.remove(); return; }
+
+                const overlay = document.createElement('div');
+                overlay.id = 'game-logs-overlay';
+                Object.assign(overlay.style, {
+                    position: 'fixed', inset: '0', zIndex: '10060',
+                    background: 'rgba(0,0,0,0.7)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center'
+                });
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+                const panel = document.createElement('div');
+                Object.assign(panel.style, {
+                    background: '#1a1a2e', border: '1px solid #444', borderRadius: '10px',
+                    width: 'min(640px, 92vw)', maxHeight: '82vh', display: 'flex',
+                    flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+                    color: '#eee', fontSize: '13px'
+                });
+
+                const header = document.createElement('div');
+                Object.assign(header.style, {
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px', borderBottom: '1px solid #333', gap: '10px'
+                });
+                const title = document.createElement('div');
+                title.textContent = 'Game Session Logs';
+                Object.assign(title.style, { fontSize: '16px', fontWeight: 'bold', color: '#d9b08c', flex: '1' });
+                const downloadAllBtn = document.createElement('button');
+                downloadAllBtn.textContent = 'Download All';
+                Object.assign(downloadAllBtn.style, {
+                    background: '#222', border: '1px solid #444', borderRadius: '5px',
+                    color: '#ccc', cursor: 'pointer', padding: '4px 10px', fontSize: '12px'
+                });
+                const closeX = document.createElement('button');
+                closeX.textContent = '✕';
+                Object.assign(closeX.style, {
+                    background: 'none', border: '1px solid #444', borderRadius: '5px',
+                    color: '#ccc', cursor: 'pointer', padding: '2px 9px'
+                });
+                closeX.onclick = () => overlay.remove();
+                header.appendChild(title);
+                header.appendChild(downloadAllBtn);
+                header.appendChild(closeX);
+
+                const list = document.createElement('div');
+                Object.assign(list.style, { overflowY: 'auto', padding: '8px', flex: '1' });
+                list.textContent = 'Loading…';
+
+                panel.appendChild(header);
+                panel.appendChild(list);
+                overlay.appendChild(panel);
+                document.body.appendChild(overlay);
+
+                function fmtDate(s) {
+                    if (!s) return '—';
+                    const d = new Date(s);
+                    return isNaN(d) ? '—' : d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+                }
+
+                function downloadJSON(obj, filename) {
+                    const blob = new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                }
+
+                let loadedRows = [];
+
+                async function load() {
+                    list.textContent = 'Loading…';
+                    const { data, error } = await supabase
+                        .from('game_session_logs')
+                        .select('id, user_id, game_id, is_multiplayer, player_count, created_at, log')
+                        .order('created_at', { ascending: false })
+                        .limit(200);
+                    if (error) {
+                        list.textContent = 'Error: ' + (error.message || 'could not load session logs');
+                        return;
+                    }
+                    loadedRows = data || [];
+                    title.textContent = `Game Session Logs (${loadedRows.length})`;
+                    list.innerHTML = '';
+
+                    loadedRows.forEach((row) => {
+                        const item = document.createElement('div');
+                        Object.assign(item.style, {
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            gap: '10px', padding: '8px 10px', borderBottom: '1px solid #2a2a3a'
+                        });
+
+                        const info = document.createElement('div');
+                        info.style.minWidth = '0';
+                        const dateLine = document.createElement('div');
+                        dateLine.style.fontWeight = 'bold';
+                        dateLine.textContent = fmtDate(row.created_at);
+                        const badge = document.createElement('span');
+                        badge.textContent = row.is_multiplayer ? ' MP' : ' Solo';
+                        Object.assign(badge.style, {
+                            fontSize: '10px', color: '#1a1a2e',
+                            background: row.is_multiplayer ? '#8cd9b0' : '#d9b08c',
+                            borderRadius: '3px', padding: '1px 5px', marginLeft: '6px',
+                            fontWeight: 'bold', verticalAlign: 'middle'
+                        });
+                        dateLine.appendChild(badge);
+                        const meta = document.createElement('div');
+                        Object.assign(meta.style, { fontSize: '11px', color: '#999', marginTop: '2px' });
+                        meta.textContent =
+                            `${row.player_count ?? '?'} player(s) · ${row.log?.entries?.length ?? '?'} actions · user ${(row.user_id || '').slice(0, 8)}…`;
+                        info.appendChild(dateLine);
+                        info.appendChild(meta);
+
+                        const dl = document.createElement('button');
+                        dl.textContent = 'Download';
+                        Object.assign(dl.style, {
+                            flex: '0 0 auto', padding: '5px 10px', borderRadius: '5px',
+                            cursor: 'pointer', fontSize: '12px', border: '1px solid #4a4',
+                            background: '#1f3a28', color: '#b8f2c0'
+                        });
+                        dl.onclick = () => {
+                            const dateStr = new Date(row.created_at).toISOString().slice(0, 10);
+                            downloadJSON(row.log, `godaigo-session-log-${row.id}-${dateStr}.json`);
+                        };
+
+                        item.appendChild(info);
+                        item.appendChild(dl);
+                        list.appendChild(item);
+                    });
+
+                    if (!loadedRows.length) list.textContent = 'No session logs found.';
+                }
+
+                downloadAllBtn.onclick = () => {
+                    if (!loadedRows.length) return;
+                    downloadJSON({ logs: loadedRows.map(r => r.log) }, `godaigo-all-session-logs-${Date.now()}.json`);
+                };
+
+                load();
+            }
+
             // ── Board Rotation tool ──────────────────────────────────────────
             // Lets the developer spin the whole board (viewport) flat, in-plane,
             // live, with a readout of the exact degree value so it can be
@@ -7015,6 +7212,7 @@ document.getElementById('undo-move').onclick = function() {
                 });
                 menu.appendChild(imitationItem);
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
+                menu.appendChild(makeItem('Game Logs', openGameLogsPanel));
                 menu.appendChild(makeItem('Board Rotation', openBoardRotationPanel));
                 menu.appendChild(makeItem('Board Angle', openBoardTiltPanel));
                 menu.appendChild(makeItem('☢️ Nuke All Rooms', async () => {
