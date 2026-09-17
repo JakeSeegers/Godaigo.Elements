@@ -27,16 +27,27 @@
 //               empty-source-pool rule and catacomb component elements) are
 //               exact. The scroll EFFECT is simulated only for scrolls in
 //               SIMULATED_SCROLLS — currently Create (VOID_SCROLL_5),
-//               Transmute (FIRE_SCROLL_4), Arson (FIRE_SCROLL_5), each
-//               mirroring its BotEffects driver's deterministic choice —
-//               anything else is recorded in snap.sim.unsimulatedCasts so a
+//               Transmute (FIRE_SCROLL_4), Arson (FIRE_SCROLL_5), Burning
+//               Motivation (FIRE_SCROLL_2, a persistent turn-buff — see
+//               "Turn buffs" below), each mirroring its real effect exactly
+//               — anything else is recorded in snap.sim.unsimulatedCasts so a
 //               search can score it with a flat heuristic instead of
 //               pretending to know the outcome.
+//   turn buffs  snap.turn.buffs.burningMotivationStacks: set by casting
+//               FIRE_SCROLL_2 (increments; matches the real game's per-caster
+//               stacking rule), consumed by simPlaceStone() as +2 AP per
+//               stack per stone placed (capped at BASE_AP + void pool, same
+//               clamp addAP() applies for real), reset on every simEndTurn
+//               ("until end of turn"). This is what lets searchPick() plan
+//               "cast Burning Motivation, then place stones" as a real
+//               sequence — WEIGHTS.evalAp already values the resulting AP,
+//               no new heuristic needed once the buff exists in the snapshot.
 //
 // KNOWN ACCEPTED DIVERGENCES (deliberate, all rare and all logged):
 //   - scroll-effect side effects of non-whitelisted casts
 //   - catacomb reveal's +1 AP (element of a hidden tile is unknowable)
-//   - active buffs (Mudslide, Simplify, Mason's Savvy, …) — not in snapshot
+//   - active buffs OTHER than Burning Motivation (Mudslide, Simplify,
+//     Mason's Savvy's 5-hex placement range, …) — not in snapshot
 //   - fire-destruction re-check cascades beyond the placed stone's neighbors
 //
 // The only globals read are STATIC data (window.SCROLL_DEFINITIONS) and,
@@ -86,7 +97,7 @@
     // branch), and that element is hidden information — an honest
     // simulation cannot predict the pool change.
     const SIMULATED_SCROLLS = new Set([
-        'VOID_SCROLL_5', 'FIRE_SCROLL_4', 'FIRE_SCROLL_5',
+        'VOID_SCROLL_5', 'FIRE_SCROLL_4', 'FIRE_SCROLL_5', 'FIRE_SCROLL_2',
         'WATER_SCROLL_2', 'EARTH_SCROLL_3', 'EARTH_SCROLL_4', 'CATACOMB_SCROLL_10',
     ]);
 
@@ -376,6 +387,7 @@
         snap.turn.activePlayerIndex = next;
         const nextPool = snap.players[next]?.pool || {};
         snap.turn.ap = BASE_AP + (nextPool.void || 0); // AP reset + refreshVoidAP
+        snap.turn.buffs = {}; // "until end of turn" buffs (Burning Motivation) expire
 
         // Search support: a state evaluator must know the turn boundary was
         // crossed — otherwise the AP reset makes endTurn look like free value
@@ -389,6 +401,19 @@
         p.pool[a.stoneType]--;
         const placed = { x: +a.x.toFixed(1), y: +a.y.toFixed(1), type: a.stoneType };
         snap.stones.push(placed);
+        // Burning Motivation (FIRE_SCROLL_2): +2 AP per stack, granted the
+        // instant the stone is placed — BEFORE the fire-interaction check, so
+        // a stone that gets destroyed the same instant still paid out (mirrors
+        // game-core.js's placeStone handler, which calls addAP() ahead of
+        // processStoneInteractions()). Capped the same way addAP() clamps
+        // (base 5 + current void pool) — the simplified single `turn.ap`
+        // number this simulator uses throughout already folds base+void into
+        // one cap, same as simEndTurn()'s AP reset does.
+        const stacks = snap.turn.buffs?.burningMotivationStacks || 0;
+        if (stacks > 0) {
+            const cap = BASE_AP + (p.pool.void || 0);
+            snap.turn.ap = Math.min(cap, snap.turn.ap + stacks * 2);
+        }
         applyFireInteractions(snap, placed);
     }
 
@@ -569,6 +594,17 @@
         snap.stones = snap.stones.filter(s => dist(s.x, s.y, pick.x, pick.y) >= TILE_RADIUS);
     }
 
+    // ── Tranche 3 (turn buffs) ──────────────────────────────────────
+    // Burning Motivation (FIRE_SCROLL_2): no target choice — mirrors
+    // scroll-effects.js's execute() exactly: re-casting by the SAME player
+    // (the only caster a single-active-player simulation ever has) increments
+    // stacks rather than resetting it. The AP payout itself lives in
+    // simPlaceStone(), since that's when the real game grants it.
+    function simEffectBurningMotivation(snap) {
+        if (!snap.turn.buffs) snap.turn.buffs = {};
+        snap.turn.buffs.burningMotivationStacks = (snap.turn.buffs.burningMotivationStacks || 0) + 1;
+    }
+
     function simCast(snap, a) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
@@ -611,6 +647,8 @@
             simEffectHeavyStomp(snap, p);
         } else if (a.scroll === 'CATACOMB_SCROLL_10') {
             simEffectCombust(snap);
+        } else if (a.scroll === 'FIRE_SCROLL_2') {
+            simEffectBurningMotivation(snap);
         }
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):
