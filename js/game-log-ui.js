@@ -93,6 +93,73 @@
         return /^[aeiou]/i.test(word || '') ? 'an' : 'a';
     }
 
+    // ---- Active Buffs strip (#game-log-buffs) ----
+    // spellSystem.scrollEffects.activeBuffs is a plain object mutated
+    // directly by ~20 different scroll execute()s and cleared piecemeal
+    // (clearTurnBuffs() on End Turn, plus a couple of player-specific
+    // clearXForPlayer() calls at that player's own next-turn start) — there
+    // is no single "a buff changed" hook to subscribe to without adding a
+    // call at every one of those sites. Polling a plain object read (cheap,
+    // and skipped entirely when the signature hasn't changed since the last
+    // tick — see the signature check below) is simpler and can't miss an
+    // update the way trying to enumerate every mutation site could.
+    // Only buffs meaningful to show a player (not internal bookkeeping like
+    // suppressVoidAPSync, or arrays like wanderingRiver/reflectPending that
+    // don't fit this "one row per player+buff" shape) are listed here.
+    const BUFF_META = {
+        burningMotivation:        { scroll: 'FIRE_SCROLL_2', extra: b => (b.stacks > 1 ? ` ×${b.stacks}` : '') },
+        controlTheCurrent:        { scroll: 'WATER_SCROLL_5' },
+        breathOfPower:             { scroll: 'WIND_SCROLL_3' },
+        respirateWind:             { scroll: 'WIND_SCROLL_2' },
+        simplify:                  { scroll: 'VOID_SCROLL_3' },
+        mine:                      { scroll: 'CATACOMB_SCROLL_2', extra: b => (b.shrineType ? ` (${b.shrineType})` : '') },
+        steamVents:                { scroll: 'CATACOMB_SCROLL_5' },
+        mudslide:                  { scroll: 'CATACOMB_SCROLL_1' },
+        reflectingPool:            { scroll: 'CATACOMB_SCROLL_7' },
+        globalPlacement:           { scroll: 'EARTH_SCROLL_5' },
+        waterWindGlobalPlacement:  { scroll: 'CATACOMB_SCROLL_6' },
+        earthExtendedPlacement:    { scroll: 'EARTH_SCROLL_3' },
+        freedom:                   { scroll: 'WIND_SCROLL_5' },
+        quickReflexes:             { scroll: 'CATACOMB_SCROLL_9' },
+        excavate:                  { scroll: 'CATACOMB_SCROLL_4' },
+        unbiddenLamplight:         { scroll: 'FIRE_SCROLL_1' },
+    };
+    const BUFFS_ID = 'game-log-buffs';
+    let lastBuffsSignature = null;
+
+    function renderActiveBuffs() {
+        const el = document.getElementById(BUFFS_ID);
+        const active = window.spellSystem?.scrollEffects?.activeBuffs;
+        if (!el || !active) return;
+
+        const rows = [];
+        for (const key of Object.keys(BUFF_META)) {
+            const buff = active[key];
+            if (!buff || buff.playerIndex == null) continue;
+            const meta = BUFF_META[key];
+            const label = scrollDisplayName(meta.scroll) + (meta.extra ? meta.extra(buff) : '');
+            rows.push({ key, playerIndex: buff.playerIndex, label, element: elementOf(meta.scroll) });
+        }
+
+        const signature = rows.map(r => `${r.playerIndex}:${r.key}:${r.label}`).sort().join('|');
+        if (signature === lastBuffsSignature) return; // nothing visibly changed — skip the DOM churn
+        lastBuffsSignature = signature;
+
+        if (!rows.length) {
+            el.style.display = 'none';
+            el.innerHTML = '';
+            _fit();
+            return;
+        }
+
+        el.style.display = '';
+        el.innerHTML = '<div class="gl-buffs-title">Active Buffs</div>' +
+            rows.map(r => `<div class="gl-buff-row" style="border-left-color:${elColor(r.element)}">` +
+                `${playerSpan(r.playerIndex)}: <span style="color:${elColor(r.element)}">${esc(r.label)}</span></div>`
+            ).join('');
+        _fit();
+    }
+
     // ---- Movement collapsing ----
     let pendingMove = null; // { turn, player, count }
 
@@ -285,6 +352,10 @@
         if (window.ActionLog?.onRecord) {
             window.ActionLog.onRecord(handle);
         }
+        // Active Buffs strip: see renderActiveBuffs()'s own comment for why
+        // this is a poll rather than a hook off any single event.
+        renderActiveBuffs();
+        setInterval(renderActiveBuffs, 800);
     }
 
     if (document.readyState === 'loading') {

@@ -83,5 +83,6 @@ All prefixed `tmode-` (new interactive tutorial) or `tutorial-` (shared/legacy):
 | `.tutorial-highlight-ring` | SVG circle on board with pulse animation |
 | `.tmode-next` | "Continue" / "Got it" button inside tutorial modal |
 | `.tmode-exit` | ✕ exit button — top-right of every modal |
+| `.tmode-skip` | Muted "Skip Preamble" button (steps with a `skipTo` id — currently the 5 designer's-note pages) — jumps straight to that step, inline-styled in tutorial-mode.js's showModal() |
 | `.auth-btn-tutorial` | Tutorial entry button on auth screen |
 | `.auth-tutorial-divider` | "or" divider above tutorial button |

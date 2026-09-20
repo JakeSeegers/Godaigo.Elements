@@ -24,6 +24,79 @@
 
     function log(...args) { console.log('🧠 [BotState]', ...args); }
 
+    // Turn-long scroll-effect buffs (Burning Motivation, Simplify, Avalanche,
+    // …) the REAL game currently has active for the active player, translated
+    // into bot-sim.js's snap.turn.buffs shape. Without this, a bot decision
+    // taken on a FRESH snapshot after the buff-granting cast already
+    // happened (a separate botAct()/searchPick() call, not a hypothetical
+    // ply inside one search tree) would have no way to know the buff is
+    // live — bot-sim.js's own simEndTurn()/clearTurnBuffs() parity guarantees
+    // any buff still present here belongs to the CURRENTLY active player (any
+    // OTHER player's buff was already wiped when their turn ended), but each
+    // mapped buff still checks playerIndex, matching every real consumption
+    // site (getSpellCost, replenishShrineStones, canPlayerMoveToHex, …).
+    function activeTurnBuffs(activePlayerIndex) {
+        const raw = window.spellSystem?.scrollEffects?.activeBuffs;
+        if (!raw) return undefined;
+        const mine = b => b && b.playerIndex === activePlayerIndex;
+        const out = {};
+        if (mine(raw.burningMotivation)) out.burningMotivationStacks = raw.burningMotivation.stacks || 1;
+        if (mine(raw.globalPlacement)) out.globalPlacement = true;
+        if (mine(raw.waterWindGlobalPlacement)) out.waterWindGlobalPlacement = true;
+        if (mine(raw.respirateWind)) out.respirateWind = true;
+        if (mine(raw.simplify)) out.simplify = true;
+        if (mine(raw.mine)) out.mineShrineType = raw.mine.shrineType;
+        if (mine(raw.steamVents)) out.steamVentsBanked = !!raw.steamVents.freeStepBanked;
+        if (mine(raw.mudslide)) out.mudslide = true;
+        if (mine(raw.reflectingPool)) out.reflectingPool = true;
+        return Object.keys(out).length ? out : undefined;
+    }
+
+    // Cross-turn buffs (Freedom, Wandering River): unlike activeTurnBuffs()
+    // above, these are NOT filtered to the active player's own — Wandering
+    // River's tile override affects shrine collection/reveal for WHOEVER
+    // stands there, not just its caster, and a multi-ply search needs to
+    // see every player's still-active entry, not only whoever is about to
+    // act right now. Never cleared by clearTurnBuffs(); only by
+    // clearFreedomForPlayer()/clearWanderingRiverForPlayer() at that
+    // buff's own OWNER's next turn start — see bot-sim.js's simEndTurn().
+    function crossTurnBuffs() {
+        const raw = window.spellSystem?.scrollEffects?.activeBuffs;
+        if (!raw) return undefined;
+        const out = {};
+        if (raw.freedom) out.freedom = { playerIndex: raw.freedom.playerIndex };
+        if (Array.isArray(raw.wanderingRiver) && raw.wanderingRiver.length) {
+            out.wanderingRiver = raw.wanderingRiver.map(e => ({
+                tileId: e.tileId, newElement: e.newElement, playerIndex: e.playerIndex,
+            }));
+        }
+        // Excavate: only the real activeBuffs.excavateTeleport (the pending
+        // deferred teleport) maps to bot-sim's crossTurnBuffs.excavate — the
+        // separate activeBuffs.excavate (immunity) and excavateNoResponse
+        // buffs have no consumer in bot-sim.js at all (see its own
+        // "cross-turn buffs" header comment), so they're not seeded here.
+        if (raw.excavateTeleport) out.excavate = { playerIndex: raw.excavateTeleport.playerIndex };
+        return Object.keys(out).length ? out : undefined;
+    }
+
+    // Which elements' level-1 scroll (ELEMENT_SCROLL_1 — a deterministic
+    // name, not hidden information) is still sitting in that element's
+    // draw deck. Quick Reflexes (CATACOMB_SCROLL_9) searches exactly this
+    // set — a level-1 scroll already drawn earlier by anyone isn't offered
+    // — and without exposing it, a search has no way to tell "the
+    // most-needed element" apart from "the most-needed element whose
+    // level-1 is actually still findable," risking the WRONG element
+    // getting simulated as picked (not just an unknown-card-identity gap).
+    function level1DeckAvailability() {
+        const decks = window.spellSystem?.scrollDecks;
+        if (!decks) return undefined;
+        const out = {};
+        for (const el of ['earth', 'water', 'fire', 'wind', 'void']) {
+            out[el] = !!decks[el]?.includes(`${el.toUpperCase()}_SCROLL_1`);
+        }
+        return out;
+    }
+
     // ----------------------------------------------------------------
     // Snapshot — pure JSON, safe to serialize / diff / feed to a learner.
     // Hidden information is masked: unrevealed tiles report shrineType null,
@@ -61,6 +134,7 @@
                 myPlayerIndex: my,
                 isMultiplayer: (typeof isMultiplayer !== 'undefined') ? !!isMultiplayer : false,
                 ap: getTotalAP(),
+                buffs: activeTurnBuffs(activePlayerIndex),
             },
             sourcePool: { ...window.stonePools },
             commonArea: window.spellSystem?.getCommonAreaScrolls?.() || [], // shared, public, castable by anyone
@@ -75,6 +149,8 @@
             })),
             stones: placedStones.map(s => ({ x: +s.x.toFixed(1), y: +s.y.toFixed(1), type: s.type })),
             players,
+            level1Available: level1DeckAvailability(),
+            crossTurnBuffs: crossTurnBuffs(),
         };
     }
 
@@ -395,6 +471,32 @@
             }
         }
 
+        // ── moveStone: Breath of Power (WIND_SCROLL_3) — move any stone
+        // adjacent to the pawn onto a DIFFERENT, currently-empty in-range
+        // hex, free, repeatable all turn. hasWindStoneMove() is the exact
+        // same gate game-core.js's stone mousedown handlers check before
+        // allowing a drag; there is no selectionMode/modal here (unlike
+        // Control the Current), so this is a genuine elective action rather
+        // than something driven automatically — see game-core.js's
+        // moveStoneTo() (added alongside this) for the completion. Not
+        // gated by `onStone`: startStoneDrag() itself never checks
+        // isPlayerRestingOnStone, only stone adjacency.
+        if (window.spellSystem?.scrollEffects?.hasWindStoneMove?.(activePlayerIndex)) {
+            const grid = hexGrid();
+            for (const s of placedStones) {
+                const dFromPlayer = Math.hypot(s.x - player.x, s.y - player.y);
+                if (dFromPlayer <= HEX_NEAR || dFromPlayer >= HEX_STEP) continue;
+                for (const h of grid) {
+                    if (Math.hypot(h.x - s.x, h.y - s.y) < HEX_NEAR) continue; // must actually move
+                    if (typeof isInPlacementRange === 'function' && !isInPlacementRange(h.x, h.y, s.type)) continue;
+                    if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(h.x, h.y, grid)) continue;
+                    if (placedStones.some(o => o !== s && Math.hypot(o.x - h.x, o.y - h.y) < HEX_NEAR)) continue;
+                    if (playerPositions.some(p => p && Math.hypot(p.x - h.x, p.y - h.y) < HEX_NEAR)) continue;
+                    actions.push({ type: 'moveStone', fromX: s.x, fromY: s.y, toX: h.x, toY: h.y, stoneType: s.type });
+                }
+            }
+        }
+
         // ── teleport: standing on a revealed catacomb shrine (or ANY
         // elemental shrine while Freedom is active) lets the player jump to
         // any revealed ELEMENTAL shrine centre, free (0 AP). EXPLORATION:
@@ -650,6 +752,35 @@
                 // attemptBreakStone() is the same function the UI's right-click/
                 // long-press handlers call — never reimplement the break itself.
                 attemptBreakStone(a.stoneId);
+                return { ok: true };
+            }
+            case 'moveStone': {
+                const stone = placedStones.find(s => Math.hypot(s.x - a.fromX, s.y - a.fromY) < HEX_NEAR);
+                if (!stone) return { ok: false, reason: 'stone not found at source' };
+                const player = playerPositions[activePlayerIndex];
+                if (!player) return { ok: false, reason: 'pawn not found' };
+                const d = Math.hypot(stone.x - player.x, stone.y - player.y);
+                if (d <= HEX_NEAR || d >= HEX_STEP) return { ok: false, reason: 'stone not adjacent to pawn' };
+                if (!window.spellSystem?.scrollEffects?.hasWindStoneMove?.(activePlayerIndex)) {
+                    return { ok: false, reason: 'Breath of Power not active' };
+                }
+                // Re-validate the destination fresh, same discipline as
+                // placeStone/teleport above — the board may have changed
+                // since legalActions() was computed.
+                if (placedStones.some(s => s !== stone && Math.hypot(s.x - a.toX, s.y - a.toY) < HEX_NEAR)) {
+                    return { ok: false, reason: 'destination occupied by a stone' };
+                }
+                if (playerPositions.some(p => p && Math.hypot(p.x - a.toX, p.y - a.toY) < HEX_NEAR)) {
+                    return { ok: false, reason: 'destination occupied by a pawn' };
+                }
+                if (typeof isInPlacementRange === 'function' && !isInPlacementRange(a.toX, a.toY, stone.type)) {
+                    return { ok: false, reason: 'out of placement range' };
+                }
+                if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(a.toX, a.toY, hexGrid())) {
+                    return { ok: false, reason: 'cannot move onto a face-down tile' };
+                }
+                if (typeof window.moveStoneTo !== 'function') return { ok: false, reason: 'moveStoneTo not available' };
+                window.moveStoneTo(stone.id, a.toX, a.toY);
                 return { ok: true };
             }
             case 'discardScroll': {

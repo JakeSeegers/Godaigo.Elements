@@ -31,6 +31,10 @@
                 this.MAX_HAND_SIZE = 2;
                 this.MAX_ACTIVE_SIZE = 2;
 
+                // Shows the "why am I over the limit" explainer once per session the
+                // first time showEndTurnOverflowModal() fires — see that method.
+                this._overflowExplained = false;
+
                 // Common area - shared scrolls any player can activate
                 // Max 1 scroll per element type. When a new scroll of same element enters,
                 // the old one goes to bottom of deck
@@ -1147,6 +1151,24 @@
                     window.ScrollPanelSystem.refresh();
                 }
 
+                // First time a player hits overflow this session, explain what's
+                // going on — the banner alone says the counts, not why the limit
+                // exists or what discarding to the Common Area actually does.
+                if (!self._overflowExplained) {
+                    self._overflowExplained = true;
+                    const old2 = document.getElementById('scroll-overflow-explainer');
+                    if (old2) old2.remove();
+                    const explainer = document.createElement('div');
+                    explainer.id = 'scroll-overflow-explainer';
+                    explainer.innerHTML = `
+                        <div class="overflow-explainer-title">Scroll Overflow</div>
+                        <div class="overflow-explainer-body">Your Hand and Active Area can each hold at most 2 scrolls. When you're over the limit, discard down to 2 before you can end your turn, sometimes down to the Common Area, where any player can use it. Sending a scroll to the Common Area replaces a scroll of the same type already there.</div>
+                        <button class="overflow-explainer-btn">Got it</button>
+                    `;
+                    document.body.appendChild(explainer);
+                    explainer.querySelector('.overflow-explainer-btn').addEventListener('click', () => explainer.remove());
+                }
+
                 // Remove any stale banner from a previous call
                 const old = document.getElementById('scroll-overflow-banner');
                 if (old) old.remove();
@@ -1705,15 +1727,22 @@
                             return;
                         }
                         if (spell.element === 'catacomb' && spell.patterns && spell.patterns[0]) {
-                            // Catacomb scrolls activate each component element
+                            // Catacomb scrolls activate each component element — the same
+                            // source-pool guard as regular scrolls applies per component
+                            // element (a component whose source is depleted doesn't count).
                             const elements = new Set(spell.patterns[0].map(pos => pos.type));
                             elements.forEach(el => {
-                                const ps = this.getPlayerScrolls(false);
-                                const isNew = !ps.activated.has(el);
-                                ps.activated.add(el);
-                                if (isNew) window.SoundSystem?.onWinCondition(el);
-                                if (typeof window.gami?.onElementActivated === 'function') {
-                                    window.gami.onElementActivated(el, Array.from(this.getPlayerScrolls(false).activated));
+                                const elSourcePool = window.stonePools?.[el] ?? 1;
+                                if (elSourcePool > 0) {
+                                    const ps = this.getPlayerScrolls(false);
+                                    const isNew = !ps.activated.has(el);
+                                    ps.activated.add(el);
+                                    if (isNew) window.SoundSystem?.onWinCondition(el);
+                                    if (typeof window.gami?.onElementActivated === 'function') {
+                                        window.gami.onElementActivated(el, Array.from(this.getPlayerScrolls(false).activated));
+                                    }
+                                } else {
+                                    console.log(`📜 Win condition skipped for ${el} (catacomb component): source pool is empty.`);
                                 }
                             });
                         } else {
@@ -1791,11 +1820,17 @@
                         );
                         updateStoneCount(element);
 
-                        // Track activated element for win condition (for active player)
-                        const ps0 = this.getPlayerScrolls(false);
-                        const isNew0 = !ps0.activated.has(element);
-                        ps0.activated.add(element);
-                        if (isNew0) window.SoundSystem?.onWinCondition(element);
+                        // Track activated element for win condition (for active player) —
+                        // source pool guard applies per component element here too.
+                        const elSourcePool0 = window.stonePools?.[element] ?? 1;
+                        if (elSourcePool0 > 0) {
+                            const ps0 = this.getPlayerScrolls(false);
+                            const isNew0 = !ps0.activated.has(element);
+                            ps0.activated.add(element);
+                            if (isNew0) window.SoundSystem?.onWinCondition(element);
+                        } else {
+                            console.log(`📜 Win condition skipped for ${element} (catacomb component, default path): source pool is empty.`);
+                        }
                         rewards.push(`+${count} ${element}`);
                     });
 
@@ -5136,6 +5171,27 @@
         // Make revealTile available globally for scroll effects
         window.revealTile = revealTile;
 
+        // Read-only check, same hex-matching as revealFlippedTilesAlongPath
+        // below: would committing this movement path step onto any hidden
+        // (still face-down, non-player) tile? Used by game-ui.js's movement
+        // handlers to reject the move itself — not just skip the reveal —
+        // when the tutorial isn't currently expecting a flip, so the pawn
+        // never ends up standing on a tile that stays hidden underneath it.
+        function pathHasHiddenTile(steps) {
+            if (!steps || steps.length === 0) return false;
+            const allHexes = getAllHexagonPositions();
+            return steps.some(step => {
+                let hex = null, minDist = Infinity;
+                allHexes.forEach(hexPos => {
+                    const dist = Math.hypot(hexPos.x - step.x, hexPos.y - step.y);
+                    if (dist < minDist) { minDist = dist; hex = hexPos; }
+                });
+                if (!hex || minDist >= 5 || !hex.tiles) return false;
+                return hex.tiles.some(t => t.flipped && !t.isPlayerTile);
+            });
+        }
+        window.pathHasHiddenTile = pathHasHiddenTile;
+
         // A single movement action can cross several hexes in one go (a
         // dragged path, a tap-to-move hop, or the keyboard move preview).
         // Only checking the hex the pawn STOPS on misses any face-down tile
@@ -5149,6 +5205,7 @@
         function revealFlippedTilesAlongPath(steps) {
             if (!steps || steps.length === 0) return 0;
             let revealedCount = 0;
+            let tutorialFlipBlockedAlerted = false; // one alert per path, not one per hidden tile crossed
             const allHexes = getAllHexagonPositions();
             steps.forEach(step => {
                 let hex = null, minDist = Infinity;
@@ -5160,6 +5217,19 @@
 
                 const flippedTiles = hex.tiles.filter(t => t.flipped && !t.isPlayerTile);
                 if (flippedTiles.length === 0) return;
+
+                // Tutorial: block revealing a tile before the current step
+                // actually expects one — otherwise exploring ahead could draw
+                // an extra scroll early or eat a later step's forced shrine
+                // tile before the tutorial is ready for it.
+                if (window.isTutorialMode && window.TutorialMode?.isTileFlipExpected
+                    && !window.TutorialMode.isTileFlipExpected()) {
+                    if (!tutorialFlipBlockedAlerted) {
+                        tutorialFlipBlockedAlerted = true;
+                        alert("Sorry, we can't let you do that yet, it breaks the tutorial!");
+                    }
+                    return;
+                }
 
                 // If multiple flipped tiles share this hex, reveal the one
                 // whose centre is closest to the point actually stepped on.
@@ -6415,6 +6485,13 @@ function clearPlayerPath() {
             if (isLocalWinner) {
                 spellSystem.showLevelComplete(playerIndex);
             }
+            // Solo games have no handleGameOver() call (multiplayer-only) — upload
+            // the session log here instead, gated on the same consent flag.
+            // Multiplayer relies solely on handleGameOver() below to avoid a
+            // double-fire race between this branch and that one.
+            if (!isMultiplayer && typeof window.uploadSessionLogIfConsented === 'function') {
+                window.uploadSessionLogIfConsented({ isMultiplayer: false });
+            }
             if (isMultiplayer && typeof handleGameOver === 'function') {
                 handleGameOver(playerIndex);
             }
@@ -7402,6 +7479,34 @@ function clearPlayerPath() {
             return resolvedId;
         }
 
+        // Bot-only: atomically move an existing board stone to a different
+        // hex, with none of the drag-and-drop UI (ghost stone, mouse
+        // tracking). Mirrors startStoneDrag()'s removal step +
+        // placeMovedStone()'s placement step exactly, run back-to-back with
+        // no user input in between — used by BotState.applyAction('moveStone')
+        // to drive Breath of Power (WIND_SCROLL_3), which has no
+        // selectionMode/modal for waitForQuiescence to drive (see
+        // hasWindStoneMove — it just re-enables the ordinary drag handler).
+        function moveStoneTo(stoneId, x, y) {
+            const stone = placedStones.find(s => s.id === stoneId);
+            if (!stone) return false;
+            const type = stone.type;
+            stone.element.remove();
+            placedStones = placedStones.filter(s => s.id !== stoneId);
+            updateTileClasses();
+            recheckAllStoneInteractions();
+            updateAllWaterStoneVisuals();
+            updateAllVoidNullificationVisuals();
+
+            placeMovedStone(x, y, type, stoneId);
+
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+                broadcastGameAction('stone-move', { stoneId, x, y, stoneType: type });
+            }
+            return true;
+        }
+        window.moveStoneTo = moveStoneTo;
+
         // Visual-only stone move (called when receiving broadcast from other players)
         function moveStoneVisually(stoneId, x, y, stoneType) {
             const stone = placedStones.find(s => s.id === stoneId);
@@ -7589,6 +7694,12 @@ function clearPlayerPath() {
                         }
 
                         console.log(`✨ ${stone.type} at (${stone.x.toFixed(1)}, ${stone.y.toFixed(1)}) is nullified by void`);
+
+                        // Tutorial hook — fires with the actual nullified stone,
+                        // not a proxy "any non-void neighbor" guess.
+                        if (window.isTutorialMode && window.TutorialMode?.onStoneNullified) {
+                            window.TutorialMode.onStoneNullified(stone);
+                        }
                     }
                 }
             });
@@ -7602,6 +7713,13 @@ function clearPlayerPath() {
         function updateWaterStoneVisual(waterStone) {
             const effectiveType = getEffectiveStoneType(waterStone);
             const chainedAbility = getChainedAbility(waterStone.x, waterStone.y);
+
+            // Tutorial hook — fires with the water stone's actual, authoritative
+            // resolved mimicry type (same value that drives the ring indicator
+            // below), not a proxy adjacency guess.
+            if (window.isTutorialMode && window.TutorialMode?.onWaterMimicUpdated) {
+                window.TutorialMode.onWaterMimicUpdated(waterStone, effectiveType);
+            }
 
             // Remember whether an adoption indicator existed BEFORE we clear it
             const hadIndicator = !!(

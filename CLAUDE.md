@@ -92,7 +92,18 @@ Order matters — later scripts depend on earlier ones.
                              wired from bot.js and bot-driver.js respectively)
 24. bot.js                 ← window.BotSystem — utility-scored bot + optional lookahead (WEIGHTS.searchDepth, default 0);
                              Shift+R = one step, Shift+B = full turn; waitForQuiescence() tries BotEffects
-                             before cancelling a selection it can't drive
+                             before cancelling a selection it can't drive. Also owns mctsPick() (Stage 2 step
+                             5 — determinized root-level UCT, WEIGHTS.mctsEnabled) and signalBrainMode()
+                             (emoji over the acting pawn — 🧠 search / 🎲 MCTS — when a bot's brain mode
+                             switches, broadcast in multiplayer via broadcastGameAction('emoji', ...))
+24b. bot-memory.js         ← window.BotMemory — episodic "what happened after decisions like this" memory.
+                             Captures a fingerprint+action+outcome row whenever a bot decision's immediate
+                             evaluateSnapshot() swing is extreme; retrieveSimilar() feeds mctsPick()'s root
+                             UCB1 arms bonus pseudo-visits as a PRIOR (never an override). Shared via the
+                             Supabase `bot_episodes` table (same RLS shape as bot_champion_weights: public
+                             SELECT, authenticated insert with created_by = auth.uid()) — local
+                             (localStorage godaigo_bot_episodes) is only the fallback/offline cache. Must
+                             follow bot.js (needs window.BotSystem.evaluateSnapshot).
 25. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
                              host's client impersonates the bot's index to drive its turns
 26. bot-arena.js           ← window.BotArena — self-play arena (bot-vs-bot local games, weight evolution).

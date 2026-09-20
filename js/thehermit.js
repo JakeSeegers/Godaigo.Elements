@@ -49,7 +49,7 @@
         {
             id: 'hud-left',
             selector: '.hud-section.left',
-            itemIds: ['leave-game', 'scroll-reference-btn', 'panel-btn-gamelog'],
+            itemIds: ['leave-game', 'scroll-reference-btn', 'panel-btn-gamelog', 'panel-btn-rulebook'],
         },
         {
             id: 'hud-center',

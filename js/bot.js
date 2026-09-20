@@ -171,6 +171,14 @@
         breakStoneBase:      3,
         breakStoneApPenalty: -1,  // × AP cost — cheap breaks (void, wind) preferred over earth
 
+        // Breath of Power's moveStone action (free, repeatable) — a small,
+        // rarely-decisive nudge (mostly useful for clearing a hex the pawn
+        // wants to step onto, or dodging a stone about to be destroyed) so
+        // it isn't hard-vetoed like an unhandled action type, but doesn't
+        // compete with anything that has real pattern/AP value either.
+        moveStoneBase:          1,
+        moveStoneDoomedPenalty: -5, // moving a stone somewhere it'd just be fire-destroyed
+
         // returning home — with all 5 elements activated the win now requires
         // standing on the centre of the bot's own player tile (player shrine),
         // so walking home dominates everything else once the set is complete
@@ -228,6 +236,46 @@
         searchHybrid:        1,   // 1 = only search when a tactical choice exists
                                   // (cast/placeStone among the legal actions);
                                   // plain movement stays greedy.
+
+        // ── Stage 2 step 5: multi-turn MCTS (docs/bot-roadmap.md — "optional,
+        // not started" until mctsPick() below). searchPick() above stops the
+        // instant the active player would change; mctsPick() instead rolls
+        // real games forward THROUGH opponent turns via a fixed rollout
+        // policy, so opponent responses actually shape which of our current
+        // options looks best. OFF by default: unlike searchDepth/searchHybrid
+        // this has not yet been measured at arena scale. Enable via the cheat
+        // panel's Bot Brain cycle (4th step, "MCTS") or WEIGHTS.mctsEnabled =
+        // true from the console; takes priority over searchDepth when on.
+        // Budget: measured ~560ms/decision on a mid-game 2-tile-hand board
+        // (headless Chromium) at these settings — mctsIterations/mctsHorizon
+        // were cut down from an initial 60/40 guess (~4.5s/decision, far too
+        // slow for real play) by timing a sweep from cheap to expensive and
+        // picking the cheapest budget that still keeps the full mctsSamples=8
+        // the roadmap calls "plenty" for hidden-info determinization.
+        mctsEnabled:      false,
+        mctsSamples:      8,     // K determinized hidden-info completions, root action majority-voted across them
+        mctsIterations:   20,    // UCB1 simulations per sample
+        mctsHorizon:      15,    // max actions per rollout before falling back to evaluateSnapshot()
+        mctsExploration:  1.4,   // UCB1 C (exploration term)
+        // Root candidates are pruned to the top mctsRootBreadth by one-ply
+        // evaluateSnapshot() BEFORE UCB1 spends any iterations — see
+        // mctsPick()'s own comment for why: a real position routinely offers
+        // 20-40+ legal actions (every hand scroll is also a voluntary-discard
+        // option, plus placeStone/cast/move), which used to silently outrun
+        // mctsIterations and turn "UCB1" into "whichever action
+        // legalActions() happened to enumerate first."
+        mctsRootBreadth:  10,
+        // rolloutStep()'s own lookahead, applied at every step of every
+        // rollout (not just the root) — see the "Stage 2 step 5" block
+        // comment above mulberry32() for why plain one-ply greedy here was
+        // losing every decided arena game to hybrid search even after the
+        // mctsRootBreadth fix. depth=2/breadth=3 costs roughly the same
+        // simulate() calls per step as the old one-ply full scan did on a
+        // typical branching factor (~12 vs ~20-40), so this isn't expected
+        // to meaningfully slow decisions down — needs its own arena
+        // confirmation once shipped, same as mctsRootBreadth did.
+        mctsRolloutDepth:    2,
+        mctsRolloutBreadth:  3,
 
         // evaluateSnapshot() — STATE value, only used when searchDepth > 0.
         // Rough scale: one activated element (400) ≫ anything else per turn.
@@ -288,12 +336,17 @@
     //   'dumb'   → greedy Stage-1 scoring (searchDepth 0)
     //   'smart'  → 3-ply lookahead on every action
     //   'hybrid' → lookahead only at tactical decision points
+    //   'mcts'   → Stage 2 step 5 multi-turn MCTS (see mctsPick()); falls
+    //              back to hybrid search underneath for anything it can't
+    //              handle itself (placement phase, etc.), so searchDepth/
+    //              searchHybrid are set the same as 'hybrid' here too.
     function applyBrainPreference() {
         try {
             const brain = localStorage.getItem('godaigo_bot_brain');
-            if (brain === 'smart')       { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 0; }
-            else if (brain === 'hybrid') { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 1; }
-            else if (brain === 'dumb')   { WEIGHTS.searchDepth = 0; WEIGHTS.searchHybrid = 0; }
+            if (brain === 'smart')       { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 0; WEIGHTS.mctsEnabled = false; }
+            else if (brain === 'hybrid') { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 1; WEIGHTS.mctsEnabled = false; }
+            else if (brain === 'dumb')   { WEIGHTS.searchDepth = 0; WEIGHTS.searchHybrid = 0; WEIGHTS.mctsEnabled = false; }
+            else if (brain === 'mcts')   { WEIGHTS.searchDepth = 3; WEIGHTS.searchHybrid = 1; WEIGHTS.mctsEnabled = true; }
             if (brain) log(`Bot brain: ${brain}`);
         } catch (e) { /* keep whatever the weights said */ }
     }
@@ -776,6 +829,14 @@
                 return WEIGHTS.breakStoneBase + WEIGHTS.breakStoneApPenalty * a.cost;
             }
 
+            case 'moveStone': {
+                let s = WEIGHTS.moveStoneBase;
+                if (window.BotSim && !window.BotSim.stoneWouldSurvive(snap, a.toX, a.toY, a.stoneType)) {
+                    s += WEIGHTS.moveStoneDoomedPenalty;
+                }
+                return s;
+            }
+
             case 'endTurn': {
                 let s = contrib('endTurnBase', 1);
                 if (ctx.onShrine) {
@@ -836,9 +897,39 @@
                 turnRepeatStreak: 0,
                 unproductiveStreak: 0,  // consecutive own turns with no cast/placeStone — see botTurn()
                 noCreditScrolls: new Set(), // scrolls whose special effect cancelled without granting win credit — see trackCastCredit()
+                lastBrainSignalAt: 0,   // throttle for signalBrainMode()'s emoji — see its own comment
             };
         }
         return _mem[idx];
+    }
+
+    // Decision-transparency emoji: floats a small icon over the bot's own
+    // pawn whenever a non-greedy brain mode actually decided the current
+    // action (not on the greedy fallback — that's the ordinary case and
+    // would just be visual noise every turn). Reuses window.emojiSystem's
+    // existing display mechanism directly (showEmojiOverPawn has no
+    // purchase/ownership gate of its own — that's only in useEmoji(), the
+    // human "spend gold" path this deliberately bypasses) and broadcasts
+    // it in multiplayer the same way a real player's emoji does, so every
+    // client watching sees it, not just whichever browser is driving the
+    // bot. Throttled per player (mem().lastBrainSignalAt) so a burst of
+    // several tactical decisions within one turn doesn't spam duplicate
+    // floats.
+    const BRAIN_SIGNAL_EMOJI = { mcts: '🎲', search: '🧠' };
+    const BRAIN_SIGNAL_COOLDOWN_MS = 2000;
+    function signalBrainMode(playerIndex, mode) {
+        const es = window.emojiSystem;
+        if (!es || typeof es.showEmojiOverPawn !== 'function') return;
+        const display = BRAIN_SIGNAL_EMOJI[mode];
+        if (!display) return;
+        const m = mem(playerIndex);
+        const now = Date.now();
+        if (now - m.lastBrainSignalAt < BRAIN_SIGNAL_COOLDOWN_MS) return;
+        m.lastBrainSignalAt = now;
+        es.showEmojiOverPawn(playerIndex, display, false);
+        if (typeof isMultiplayer !== 'undefined' && isMultiplayer && typeof broadcastGameAction === 'function') {
+            broadcastGameAction('emoji', { playerIndex, display, isText: false });
+        }
     }
     function resetAllMemory() {
         for (const k of Object.keys(_mem)) delete _mem[k];
@@ -1477,6 +1568,257 @@
         return best;
     }
 
+    // ----------------------------------------------------------------
+    // Stage 2 step 5: multi-turn MCTS. searchPick() above treats a would-be
+    // opponent turn as a leaf (evaluateSnapshot() the instant
+    // activePlayerIndex would change) — it never actually sees how an
+    // opponent might respond. mctsPick() instead rolls real games forward
+    // THROUGH opponent turns (and our own later turns) via a fixed rollout
+    // policy, so opponent responses genuinely shape which current option
+    // looks best — the "UCT over turns" the roadmap describes, plus the
+    // opponent-awareness a single-turn search structurally can't have.
+    //
+    // Root-level UCT: one bandit arm per legal action available RIGHT NOW.
+    // Each simulation plays that arm, then rolls the WHOLE REST OF THE GAME
+    // forward — every player's turn, including ours, via rolloutStep() below
+    // — until a terminal win or mctsHorizon actions elapse, then values the
+    // leaf from OUR OWN perspective. Not full adversarial minimax; "how
+    // would a reasonable opponent actually respond" via the same
+    // evaluateSnapshot()-driven policy every player uses for themselves.
+    //
+    // Hidden information: DETERMINIZED (see determinize() below) — mctsPick
+    // samples mctsSamples plausible completions, runs one full UCT search
+    // per sample, and majority-votes the root action across them.
+    //
+    // rolloutStep()'s policy strength matters more than it first looks:
+    // arena testing (see mctsRootBreadth's own comment for the sibling root-
+    // arm bug this doesn't cover) showed MCTS losing every decided game to
+    // the existing depth-3/breadth-5 hybrid searchPick() even after that fix
+    // — because a rollout's OWN future turns, including the acting player's,
+    // were being played by plain one-ply Stage-1 greedy, far weaker than the
+    // real depth-3 search that bot would actually use later. That mismatch
+    // makes a good root move look worse than it is, since the rollout can't
+    // capitalize on it as well as real play would. rolloutStep() replaces
+    // the one-ply scan with a small WEIGHTS.mctsRolloutDepth-ply,
+    // WEIGHTS.mctsRolloutBreadth-wide beam per step — still self-interested/
+    // greedy in spirit (every ply keeps optimizing the SAME acting player,
+    // no adversarial minimax), just less myopic. Applied uniformly to every
+    // player, same as before, so this doesn't make opponents any more or
+    // less "AI" than the acting player's own future turns — only deeper.
+    // ----------------------------------------------------------------
+
+    // Same algorithm as bot-sim.js's mulberry32 (used by BotSim.validate()),
+    // duplicated here rather than reached into — bot-sim.js keeps it
+    // module-private and it's a 5-line pure function.
+    function mulberry32(seed) {
+        let a = seed >>> 0;
+        return function () {
+            a |= 0; a = (a + 0x6D2B79F5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    // Samples one plausible "fully known" completion of the real snapshot's
+    // hidden information: each still-hidden tile gets a uniformly-random
+    // element (never invented for real decisions — bot-sim.js's own reveal
+    // logic is untouched; this is a throwaway hypothetical copy used only
+    // for this rollout) and gets marked revealed in the RETURNED copy —
+    // within this one hypothetical it isn't meaningfully hidden anymore, so
+    // evaluateSnapshot()'s explore-toward-hidden-tiles shaping correctly
+    // doesn't fire during the rollout (nothing left to "explore" in a world
+    // we've already decided the contents of). Each opponent's hidden hand
+    // gets a plausible CONCRETE scroll per card, matching its already-public
+    // element (bot-state.js's handElements) — drawn from that element's
+    // deck, excluding any scroll name already visible anywhere in the
+    // snapshot (own hand, any active area, common area) so the guess is at
+    // least not an obvious duplicate.
+    function determinize(realSnap, rng) {
+        const snap = JSON.parse(JSON.stringify(realSnap));
+        for (const t of snap.tiles) {
+            if (t.isPlayerTile || t.revealed) continue;
+            t.shrineType = ELEMENTS[Math.floor(rng() * ELEMENTS.length)];
+            t.revealed = true;
+        }
+        const seen = new Set();
+        for (const p of snap.players) {
+            if (!p) continue;
+            for (const s of p.hand || []) seen.add(s);
+            for (const s of p.active || []) seen.add(s);
+        }
+        for (const s of snap.commonArea || []) seen.add(s);
+
+        for (const p of snap.players) {
+            if (!p || p.hand) continue; // already known (our own hand) — leave alone
+            const guessed = [];
+            for (const el of p.handElements || []) {
+                const deck = window.SCROLL_DECKS?.[el] || [];
+                const pool = deck.filter(name => !seen.has(name));
+                const pick = pool.length ? pool[Math.floor(rng() * pool.length)] : (deck[0] || null);
+                if (pick) { guessed.push(pick); seen.add(pick); }
+            }
+            p.hand = guessed;
+        }
+        return snap;
+    }
+
+    // Whoever's turn snap.turn.activePlayerIndex says it is picks ONE
+    // action — the rollout's step function, applied uniformly to every
+    // player (ourselves included, on later turns) so opponents are modeled
+    // as reasonably self-interested rather than absent or random. Not plain
+    // one-ply greedy: prunes to the top `breadth` legal actions by one-ply
+    // evaluateSnapshot(), then (while `depth` remains) recurses ONE more
+    // ply past each survivor and re-ranks by that deeper value — still
+    // scored entirely from the CURRENT acting player's own perspective at
+    // every ply (self-interested "how does this look a couple of moves from
+    // now," not adversarial minimax against whoever's turn a deeper ply
+    // lands on). depth=1 collapses to the original one-ply scan. Returns
+    // the snapshot right after the ONE action chosen at this ply, same
+    // contract the old one-ply-only version had, so rollout() below is
+    // unchanged.
+    function rolloutStep(snap, depth) {
+        const acting = snap.turn.activePlayerIndex;
+        const acts = creditFilter(snap, window.BotSim.legalActions(snap));
+        if (!acts.length) return null;
+        const breadth = Math.max(1, WEIGHTS.mctsRolloutBreadth | 0);
+        const ranked = acts
+            .map(a => { const s1 = window.BotSim.simulate(snap, a); return { s1, v1: evaluateSnapshot(s1, acting) }; })
+            .sort((x, y) => y.v1 - x.v1)
+            .slice(0, breadth);
+        if (depth <= 1 || ranked.length === 1) return ranked[0].s1;
+        let bestSnap = ranked[0].s1, bestV = -Infinity;
+        for (const c of ranked) {
+            if (window.BotSim.isTerminal(c.s1)) {
+                const v = evaluateSnapshot(c.s1, acting);
+                if (v > bestV) { bestV = v; bestSnap = c.s1; }
+                continue;
+            }
+            const deeper = rolloutStep(c.s1, depth - 1);
+            const v = evaluateSnapshot(deeper || c.s1, acting);
+            if (v > bestV) { bestV = v; bestSnap = c.s1; }
+        }
+        return bestSnap;
+    }
+
+    // Rolls a determinized snapshot forward via rolloutStep() until a
+    // terminal win/loss or `horizon` actions have elapsed, then values the
+    // result from meIdx's own perspective (evaluateSnapshot already returns
+    // ±WEIGHTS.evalWin for an already-terminal snapshot, so no special case
+    // is needed here beyond stopping the loop).
+    function rollout(startSnap, meIdx, horizon) {
+        let snap = startSnap;
+        const depth = Math.max(1, WEIGHTS.mctsRolloutDepth | 0);
+        for (let i = 0; i < horizon; i++) {
+            if (window.BotSim.isTerminal(snap)) break;
+            const next = rolloutStep(snap, depth);
+            if (!next) break; // no legal action at all shouldn't happen (endTurn is always legal), but never loop forever
+            snap = next;
+        }
+        return evaluateSnapshot(snap, meIdx);
+    }
+
+    // Public: root-level UCT over the CURRENT set of legal actions, K
+    // determinized samples majority-voted. Returns {action, score, votes,
+    // samples} or null when it can't run here (placement phase, no BotSim,
+    // no legal actions) — same shape as searchPick()'s return (score is the
+    // winning arm's average rollout value, so callers that inspect
+    // choice.score — e.g. botAct()'s anti-freeze check — see a number on
+    // the same evaluateSnapshot() scale, not undefined).
+    // opts.seed: optional, for reproducible tests — omitted in real play so
+    // consecutive calls sample fresh completions.
+    //
+    // Root arms are pruned to the top WEIGHTS.mctsRootBreadth by one-ply
+    // evaluateSnapshot() before any UCB1 iteration runs (same trick as
+    // searchPick()'s root). Without this, a position with more legal
+    // actions than mctsIterations (routine — see mctsRootBreadth's own
+    // comment) forces every arm to be visited at most once each, UCB1
+    // comparison never actually triggers (arms.find(x => x.visits === 0)
+    // keeps finding a fresh arm every iteration), and the final "most
+    // visited" tiebreak silently falls back to whichever action
+    // legalActions() happened to enumerate first — a real bug, confirmed by
+    // a reproduction where the dominant action, placed past index
+    // mctsIterations in enumeration order, was never even sampled.
+    // Bonus pseudo-visits per matching js/bot-memory.js retrieval, seeded
+    // onto the root's arms before real UCB1 iterations begin — a PRIOR,
+    // not an override: an arm this seeds still competes on equal footing
+    // afterward (its pseudo-average only holds until real rollouts either
+    // confirm or swamp it), and any arm memory has nothing to say about
+    // still gets its own force-tried real rollout.
+    const MEMORY_PRIOR_K = 5;
+    const MEMORY_PRIOR_VISITS = 2;
+
+    function mctsPick(opts = {}) {
+        const sim = window.BotSim;
+        if (!sim || !window.BotState) return null;
+        const realSnap = window.BotState.snapshot();
+        const meIdx = realSnap.turn.activePlayerIndex;
+        if (!realSnap.players[meIdx]) return null;
+
+        const K          = Math.max(1, WEIGHTS.mctsSamples | 0);
+        const iterations = Math.max(1, WEIGHTS.mctsIterations | 0);
+        const horizon    = Math.max(1, WEIGHTS.mctsHorizon | 0);
+        const C          = WEIGHTS.mctsExploration;
+        const baseSeed   = (opts.seed ?? Date.now()) >>> 0;
+
+        const votes = new Map();      // actionKey -> vote count
+        const actionByKey = new Map(); // actionKey -> {action, avgValue}
+
+        for (let k = 0; k < K; k++) {
+            const rng = mulberry32((baseSeed ^ Math.imul(k + 1, 2654435761)) >>> 0);
+            const detSnap = determinize(realSnap, rng);
+            const legal = creditFilter(detSnap, sim.legalActions(detSnap));
+            if (!legal.length || legal[0].type === 'placeTile') continue;
+
+            const rootBreadth = Math.max(2, WEIGHTS.mctsRootBreadth | 0);
+            const pruned = legal.length <= rootBreadth ? legal : legal
+                .map(a => { const s1 = sim.simulate(detSnap, a); return { a, v1: evaluateSnapshot(s1, meIdx) }; })
+                .sort((x, y) => y.v1 - x.v1)
+                .slice(0, rootBreadth)
+                .map(x => x.a);
+
+            const arms = pruned.map(a => ({ a, visits: 0, total: 0 }));
+            if (window.BotMemory?.retrieveSimilar) {
+                const baseline = evaluateSnapshot(detSnap, meIdx);
+                const similar = window.BotMemory.retrieveSimilar(detSnap, meIdx, MEMORY_PRIOR_K);
+                for (const ep of similar) {
+                    const arm = arms.find(x => window.BotMemory.actionKey(x.a) === ep.actionKey);
+                    if (!arm) continue;
+                    arm.visits += MEMORY_PRIOR_VISITS;
+                    arm.total += MEMORY_PRIOR_VISITS * (baseline + ep.swing);
+                }
+            }
+            for (let it = 0; it < iterations; it++) {
+                let arm = arms.find(x => x.visits === 0);
+                if (!arm) {
+                    const totalVisits = arms.reduce((s, x) => s + x.visits, 0);
+                    let bestUCB = -Infinity;
+                    for (const x of arms) {
+                        const ucb = (x.total / x.visits) + C * Math.sqrt(Math.log(totalVisits + 1) / x.visits);
+                        if (ucb > bestUCB) { bestUCB = ucb; arm = x; }
+                    }
+                }
+                const s1 = sim.simulate(detSnap, arm.a);
+                arm.visits++;
+                arm.total += rollout(s1, meIdx, horizon);
+            }
+            // Final pick: most-VISITED arm — standard UCT choice, more
+            // robust than highest-average against a single lucky rollout.
+            const chosen = arms.reduce((best, x) => (!best || x.visits > best.visits) ? x : best, null);
+            const key = JSON.stringify(chosen.a);
+            votes.set(key, (votes.get(key) || 0) + 1);
+            actionByKey.set(key, { action: chosen.a, avgValue: chosen.total / chosen.visits });
+        }
+
+        if (!votes.size) return null;
+        let bestKey = null, bestVotes = -1;
+        for (const [key, count] of votes) {
+            if (count > bestVotes) { bestVotes = count; bestKey = key; }
+        }
+        const winner = actionByKey.get(bestKey);
+        return { action: winner.action, score: winner.avgValue, votes: bestVotes, samples: K };
+    }
+
     // Rank all legal actions for the current position (debug + decision core)
     // fixationTarget: optional {x,y} from findFixationTarget(), passed by
     // botAct()'s turn-repeat circuit breaker (see turnRepeatStreak below) —
@@ -1697,6 +2039,19 @@
             }
         }
 
+        // Stage 2 step 5: multi-turn MCTS, when explicitly enabled — takes
+        // priority over single-turn search below. Off by default (see
+        // WEIGHTS.mctsEnabled's own comment); falls through to the existing
+        // path unchanged when it returns null (placement phase, no legal
+        // actions this determinization, etc.).
+        if (!choice && WEIGHTS.mctsEnabled && window.BotSim) {
+            choice = mctsPick();
+            if (choice) {
+                log(`MCTS (${choice.samples} samples, ${choice.votes}/${choice.samples} votes) picked ${choice.action.type}`);
+                signalBrainMode(snap.turn.activePlayerIndex, 'mcts');
+            }
+        }
+
         // Stage 2: lookahead search when enabled, greedy Stage-1 argmax otherwise.
         // Hybrid mode saves the lookahead for states where it can actually pay
         // off — a cast or stone placement is available — and stays greedy for
@@ -1728,7 +2083,10 @@
             }
             if (useSearch) {
                 choice = searchPick();
-                if (choice) log(`Search (depth ${WEIGHTS.searchDepth | 0}${WEIGHTS.searchHybrid ? ', hybrid' : ''}) picked ${choice.action.type}`);
+                if (choice) {
+                    log(`Search (depth ${WEIGHTS.searchDepth | 0}${WEIGHTS.searchHybrid ? ', hybrid' : ''}) picked ${choice.action.type}`);
+                    signalBrainMode(snap.turn.activePlayerIndex, 'search');
+                }
             }
         }
         if (!choice) {
@@ -1750,7 +2108,8 @@
             snap.turn.ap >= 3 && m.recentPositions.length) {
             m.recentPositions.length = 0;
             log('Anti-freeze: endTurn chosen with AP to spare — clearing move memory and re-deciding');
-            const redo = ((WEIGHTS.searchDepth | 0) > 0 && window.BotSim) ? searchPick() : null;
+            const redo = (WEIGHTS.mctsEnabled && window.BotSim) ? mctsPick()
+                : ((WEIGHTS.searchDepth | 0) > 0 && window.BotSim) ? searchPick() : null;
             const rankedRedo = redo ? null : rankActions();
             choice = redo || (rankedRedo && rankedRedo.length ? rankedRedo[0] : choice);
         }
@@ -1768,6 +2127,15 @@
 
         const res = window.BotState.applyAction(action);
         if (!res.ok) { log(`Action failed: ${res.reason}`); return null; }
+        // Episodic memory (js/bot-memory.js, optional — window.BotMemory may
+        // not be loaded): record this decision if it swung the position
+        // sharply, for MCTS's root to later seed as a prior in a similar
+        // future situation. Reads the REAL post-action snapshot rather than
+        // BotSim.simulate()'s prediction, so it reflects whatever actually
+        // happened (response windows, cascades, etc. included).
+        if (window.BotMemory?.recordFromBotDecision) {
+            window.BotMemory.recordFromBotDecision(snap, window.BotState.snapshot(), action, idx);
+        }
         if (action.type === 'move') recordVisited(idx, action.x, action.y);
         if (action.type === 'teleport') {
             // Record BOTH ends of the hop: the origin first, so "teleport
@@ -2055,6 +2423,9 @@
         rank:  rankActions,   // scored candidate list (top = what greedy step() would do)
         score: scoreAction,   // (action, snapshot, ctx) → utility
         searchPick,           // Stage 2 lookahead pick — used when WEIGHTS.searchDepth > 0
+        mctsPick,             // Stage 2 step 5 multi-turn MCTS — used when WEIGHTS.mctsEnabled
+        determinize,          // exposed for testing — samples one hidden-info completion
+        rolloutStep,          // exposed for testing — mctsPick()'s per-step rollout policy
         evaluateSnapshot,     // Stage 2 state evaluator (search leaves)
         resetMemory,          // wipe plan/history/blacklists (arena: call per game)
         castsApplied: () => _castsApplied, // monotonic cast counter — arena's no-cast stall cap reads deltas

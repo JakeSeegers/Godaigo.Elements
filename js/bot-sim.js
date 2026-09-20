@@ -21,23 +21,152 @@
 //               advance in COLOR_RANK order, AP reset to 5 + void stones
 //   placeStone  pool decrement + the fire-destruction interaction rules
 //   discard     hand/active removal
+//   moveStone   Breath of Power only — relocate a board stone to a
+//               different empty in-range hex; same fire-destruction check
+//               placeStone gets (simMoveStone)
 //
 // WHAT IS ONLY PARTIALLY MODELLED:
 //   cast        AP cost, hand→active, win-condition activation (incl. the
 //               empty-source-pool rule and catacomb component elements) are
 //               exact. The scroll EFFECT is simulated only for scrolls in
-//               SIMULATED_SCROLLS — currently Create (VOID_SCROLL_5),
-//               Transmute (FIRE_SCROLL_4), Arson (FIRE_SCROLL_5), each
-//               mirroring its BotEffects driver's deterministic choice —
-//               anything else is recorded in snap.sim.unsimulatedCasts so a
-//               search can score it with a flat heuristic instead of
-//               pretending to know the outcome.
+//               SIMULATED_SCROLLS: Create, Transmute, Arson, Refreshing
+//               Thought, Mason's Savvy, Heavy Stomp, Combust (immediate
+//               pool/pattern effects); Shifting Sands, Scholar's Insight,
+//               Inspiring Draught, Call to Adventure (flip only — its
+//               reveal-triggered stone bonus is NOT modelled, see below),
+//               Plunder, Take Flight, Quick Reflexes (Tranche 5 —
+//               deterministic Tier-2 target choices, mirroring each
+//               BotEffects driver's exact pick — Take Flight's driver was
+//               made deterministic specifically so this could be added,
+//               see bot-effects.js's _bestTakeFlightDestination; Quick
+//               Reflexes needed snap.level1Available from bot-state.js
+//               first, since which element gets picked depends on deck
+//               availability this snapshot didn't use to expose); Control
+//               the Current, Breath of Power (Tranche 6 — repeatable
+//               whole-turn stone manipulation, see "turn buffs" below and
+//               the 'moveStone' action); Freedom, Wandering River (Tranche
+//               7 — cross-turn buffs, see "cross-turn buffs" below);
+//               Sacrificial Pyre (Tranche 8 — recursively runs its
+//               sacrificed scroll's own effect via the same simCastEffect()
+//               dispatch simCast() itself uses, mirroring the real chained
+//               execute() call; the sacrificed scroll's OWN element never
+//               activates win-condition, only Sacrificial Pyre's does);
+//               Excavate, Telekinesis (Tranche 9 — see "cross-turn buffs"
+//               below for Excavate's deferred teleport; Telekinesis gets a
+//               brand new large-hex tile-position grid, see
+//               simEffectTelekinesis); plus 9 persistent TURN BUFFS — see
+//               "turn buffs" below. Each
+//               mirrors its real effect exactly (validated — see
+//               BotSim.validate()). Anything else is recorded in
+//               snap.sim.unsimulatedCasts so a search can score it with a
+//               flat heuristic instead of pretending to know the outcome.
+//   turn buffs  snap.turn.buffs.*: set by simCast() when a buff scroll is
+//               cast, consumed at the point each buff actually matters
+//               (legalActions' cast-cost/placement-range gates, canMoveTo,
+//               simMove, simEndTurn), reset EVERY simEndTurn — verified
+//               against the real clearTurnBuffs(), which wipes every
+//               `expiresThisTurn` buff on ANY end turn, not just the
+//               caster's own next one (true even for the couple of these
+//               whose flavor text says "until your next turn"):
+//                 burningMotivationStacks  Burning Motivation (FIRE_2) — +2 AP
+//                   per stack per stone placed (simPlaceStone)
+//                 globalPlacement          Avalanche (EARTH_5) — any stone
+//                   type placeable anywhere this turn (legalActions)
+//                 waterWindGlobalPlacement Seed the Skies (CATACOMB_6) —
+//                   water/wind only placeable anywhere this turn (legalActions)
+//                 respirateWind            Respirate (WIND_2) — ALL wind
+//                   returns to source at this end-of-turn (simEndTurn)
+//                 simplify                 Simplify (VOID_3) — casts cost 1
+//                   AP instead of 2 (castCost(), read by simCast + legalActions)
+//                 mineShrineType           Mine (CATACOMB_2) — that shrine
+//                   type's collection doubles this end-of-turn (simEndTurn)
+//                 steamVentsBanked         Steam Vents (CATACOMB_5) — paid/free
+//                   move steps alternate, starting free (simMove + legalActions)
+//                 mudslide                 Mudslide (CATACOMB_1) — earth/water
+//                   act as wind for movement (canMoveTo)
+//                 reflectingPool           Reflecting Pool (CATACOMB_7) — marks
+//                   the once-per-turn AP payout already taken (legalActions)
+//                 controlTheCurrent       Control the Current (WATER_5) — an
+//                   adjacent water stone transforms into the caster's best-
+//                   need element, opportunistically after every action
+//                   (attemptControlTheCurrentTransform, called from both
+//                   simEffectControlTheCurrent and simulate() itself)
+//                 breathOfPower           Breath of Power (WIND_3) — enables
+//                   the 'moveStone' action (legalActions + simMoveStone)
+//               This is what lets searchPick() plan sequences like "cast
+//               Burning Motivation, then place stones" or "cast Simplify,
+//               then cast twice more this turn" for real — WEIGHTS.evalAp
+//               already values the resulting AP, no new heuristic needed
+//               once a buff's consequence exists in the snapshot.
+//   cross-turn  snap.crossTurnBuffs.*: set by simCast(), but NEVER touched
+//   buffs       by simEndTurn()'s blanket snap.turn.buffs = {} wipe — each
+//               clears individually, by owner, only when THAT owner's own
+//               next turn starts (mirrors clearFreedomForPlayer(next)/
+//               clearWanderingRiverForPlayer(next), called right as that
+//               player's turn begins, real code never wires these off
+//               clearTurnBuffs() at all):
+//                 freedom          Freedom (WIND_5) — teleport gate only,
+//                   read by bot-state.js's hasFreedomActive() (real
+//                   legalActions() 'teleport'); the action itself stays
+//                   unmodelled in THIS file's legalActions() (see "cast" above)
+//                 wanderingRiver   Wandering River (WATER_4) — array of
+//                   {tileId, newElement, playerIndex}; overrides a tile's
+//                   effective element for shrine collection (simEndTurn) —
+//                   first matching entry wins, mirrors getEffectiveTileElement()
+//                 excavate         Excavate (CATACOMB_4) — {playerIndex}; the
+//                   ONLY cross-turn buff whose clearing DOES something
+//                   (resolveExcavateTeleport, called from simEndTurn right
+//                   as the owner's turn starts) rather than just expiring —
+//                   mirrors processExcavateTeleport() always accepting the
+//                   free teleport prompt. Excavate's OTHER two real buffs
+//                   (immunity, no-response) have no consumer anywhere in
+//                   this simulator — nothing here models opponent-targeting
+//                   eligibility — so they aren't tracked at all, same
+//                   accepted gap as Quick Reflexes' unmodelled "level-1
+//                   scrolls free" buff
 //
 // KNOWN ACCEPTED DIVERGENCES (deliberate, all rare and all logged):
 //   - scroll-effect side effects of non-whitelisted casts
 //   - catacomb reveal's +1 AP (element of a hidden tile is unknowable)
-//   - active buffs (Mudslide, Simplify, Mason's Savvy, …) — not in snapshot
+//   - Call to Adventure's reveal-triggered stone bonus (the flip itself IS
+//     simulated — see simEffectCallToAdventure) and Mason's Savvy's 5-hex
+//     placement range — both need the element of a possibly-still-hidden
+//     tile, which this simulator refuses to invent
+//   - Scholar's Insight / Inspiring Draught: drawn scroll identity, and
+//     whether the chosen deck/level was actually available at all — deck
+//     contents/order/size aren't in the snapshot (same class as Refreshing
+//     Thought's already-accepted "exhausted deck" gap)
 //   - fire-destruction re-check cascades beyond the placed stone's neighbors
+//   - Wandering River's OTHER consumption site (game-core.js's reveal-time
+//     draw uses getEffectiveTileElement() too — a River-covered hidden
+//     tile draws the OVERRIDE element's scroll, not its true one): only the
+//     shrine-collection site (simEndTurn) is mirrored; simMove()'s reveal
+//     still always masks shrineType as 'unknown', same as any other hidden
+//     tile. Rare (needs a still-hidden tile targeted, then revealed before
+//     the buff clears) and — unlike the shrine-collection site — would also
+//     require guessing which drawn card was in the pile's other slots
+//   - Sacrificial Pyre's stone grant is uncapped by source pool availability
+//     — NOT a simplification, a faithful mirror: enterScrollSacrificeMode's
+//     own stone-granting block has no `(snap.sourcePool[el]||0) > 0` guard
+//     at all (every other stone grant in this file — Create, Quick
+//     Reflexes, shrine collection — does check it), so simEffectSacrificial-
+//     Pyre doesn't either, on purpose
+//   - Telekinesis' "cannot strand an adjacent tile" rule: the real game
+//     enforces this as a SEPARATE check at drag-START time (bot-effects.js's
+//     driveTelekinesis comment: "Bridge tiles still highlight but error on
+//     pickup"), not inside getEligibleTilesForShiftingSands() or
+//     findNearestSnapPoint() — so a tile this simulator treats as eligible
+//     could still be rejected by a real stranding check. No board-
+//     connectivity graph analysis here; rare in practice (needs a bridge
+//     tile whose removal would disconnect another tile from the rest of
+//     the board) and simEffectTelekinesis just no-ops on that tile exactly
+//     like every other "boxed in" case, rather than inventing a result
+//   - Freedom's own TELEPORT action stays unmodelled in legalActions() — an
+//     existing root-only gap even for the ordinary catacomb-tile kind
+//     (teleport was never in this file's action vocabulary at all), so
+//     whitelisting just the cast (Tranche 7) gives correct real-snapshot
+//     awareness of an already-active Freedom without unlocking
+//     search-planned teleports
 //
 // The only globals read are STATIC data (window.SCROLL_DEFINITIONS) and,
 // inside validate() only, the live BotState/BotSystem.
@@ -57,7 +186,7 @@
     const STONE_NEIGHBOR_MAX = 50; // px — getNeighborStones() window (5..50)
     const POOL_CAP = 5;            // per-element player pool capacity
     const SOURCE_CAP = 25;         // per-element source pool capacity
-    const CAST_COST = 2;           // SPELL_AP_COST (buff discounts not modelled)
+    const CAST_COST = 2;           // SPELL_AP_COST — see castCost() for the Simplify discount
     const MAX_HAND = 2, MAX_ACTIVE = 2;
     const BASE_AP = 5;
 
@@ -86,8 +215,44 @@
     // branch), and that element is hidden information — an honest
     // simulation cannot predict the pool change.
     const SIMULATED_SCROLLS = new Set([
-        'VOID_SCROLL_5', 'FIRE_SCROLL_4', 'FIRE_SCROLL_5',
+        'VOID_SCROLL_5', 'FIRE_SCROLL_4', 'FIRE_SCROLL_5', 'FIRE_SCROLL_2',
         'WATER_SCROLL_2', 'EARTH_SCROLL_3', 'EARTH_SCROLL_4', 'CATACOMB_SCROLL_10',
+        // Tranche 3/4 (turn buffs — see "Turn buffs" in the file header):
+        // Avalanche, Seed the Skies, Respirate, Simplify, Mine, Steam Vents,
+        // Mudslide, Reflecting Pool.
+        'EARTH_SCROLL_5', 'CATACOMB_SCROLL_6', 'WIND_SCROLL_2', 'VOID_SCROLL_3',
+        'CATACOMB_SCROLL_2', 'CATACOMB_SCROLL_5', 'CATACOMB_SCROLL_1', 'CATACOMB_SCROLL_7',
+        // Tranche 5 (Tier-2 target-selection scrolls whose BotEffects driver
+        // is fully deterministic — see the effect functions for each):
+        // Shifting Sands, Scholar's Insight, Inspiring Draught, Call to
+        // Adventure (flip only — see simEffectCallToAdventure), Plunder,
+        // Take Flight (its driver's Math.random() pick was replaced with a
+        // deterministic heuristic in bot-effects.js — see
+        // _bestTakeFlightDestination — specifically so this could be added).
+        'EARTH_SCROLL_2', 'VOID_SCROLL_4', 'WATER_SCROLL_3', 'CATACOMB_SCROLL_3', 'CATACOMB_SCROLL_8',
+        'WIND_SCROLL_4', 'CATACOMB_SCROLL_9',
+        // Tranche 6 (repeatable whole-turn stone-manipulation actions — new
+        // action-vocabulary support, see simEffectControlTheCurrent/
+        // simEffectBreathOfPower/simMoveStone): Control the Current,
+        // Breath of Power.
+        'WATER_SCROLL_5', 'WIND_SCROLL_3',
+        // Tranche 7 (cross-turn buffs — new crossTurnBuffs state that
+        // survives simEndTurn crossing OTHER players' turns, see
+        // simEffectFreedom/simEffectWanderingRiver): Freedom, Wandering River.
+        'WIND_SCROLL_5', 'WATER_SCROLL_4',
+        // Tranche 8 (recursive effect dispatch — simCastEffect() factored
+        // out of simCast() so the sacrificed scroll's own effect can be
+        // simulated too, not just the stone grant): Sacrificial Pyre.
+        'FIRE_SCROLL_3',
+        // Tranche 9 (the last two DELIBERATELY NOT WHITELISTED entries):
+        // Excavate — a deferred-to-next-turn effect, using the same
+        // crossTurnBuffs infrastructure Tranche 7 built, but one that DOES
+        // something on clear (resolveExcavateTeleport), not just expires;
+        // Telekinesis — free-form single-tile relocation on a NEW
+        // large-hex tile-position grid this file didn't have before
+        // (countTouchingTilesSim/LARGE_HEX), not just a Shifting-Sands-style
+        // swap.
+        'CATACOMB_SCROLL_4', 'VOID_SCROLL_2',
     ]);
 
     // Small-hex offsets making up one large tile (getAllHexagonPositions):
@@ -111,6 +276,24 @@
     function hexToPixel(q, r, s) {
         return { x: s * Math.sqrt(3) * (q + r / 2), y: s * 1.5 * r };
     }
+    // Inverse of hexToPixel — pure mirror of game-core.js's pixelToHex/hexRound,
+    // needed for Reflecting Pool's "within 5 hexes" check (a true hex-grid
+    // distance, not the euclidean px distance most of this file uses).
+    function hexRound(q, r) {
+        const s = -q - r;
+        let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
+        const qDiff = Math.abs(rq - q), rDiff = Math.abs(rr - r), sDiff = Math.abs(rs - s);
+        if (qDiff > rDiff && qDiff > sDiff) rq = -rr - rs;
+        else if (rDiff > sDiff) rr = -rq - rs;
+        return { q: rq, r: rr };
+    }
+    function pixelToHex(x, y, s) {
+        return hexRound((x * Math.sqrt(3) / 3 - y / 3) / s, (y * 2 / 3) / s);
+    }
+    function hexDistance(ax, ay, bx, by, s) {
+        const A = pixelToHex(ax, ay, s), B = pixelToHex(bx, by, s);
+        return Math.max(Math.abs(A.q - B.q), Math.abs(A.r - B.r), Math.abs((-A.q - A.r) - (-B.q - B.r)));
+    }
     const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
     const clone = snap => JSON.parse(JSON.stringify(snap));
 
@@ -121,6 +304,14 @@
     }
 
     function activePlayer(snap) { return snap.players[snap.turn.activePlayerIndex]; }
+
+    // Simplify (VOID_SCROLL_3): 1 AP per cast instead of 2, for whoever holds
+    // the buff — always the current active player, since turn.buffs is wiped
+    // every simEndTurn and can only be set by simCast() during that player's
+    // own turn (see the "Turn buffs" note in the file header).
+    function castCost(snap) {
+        return snap.turn.buffs?.simplify ? 1 : CAST_COST;
+    }
 
     function stoneAt(snap, x, y) {
         return snap.stones.find(s => dist(s.x, s.y, x, y) < HEX_NEAR) || null;
@@ -219,6 +410,16 @@
         const stone = stoneAt(snap, x, y);
         if (!stone) return { canMove: true, cost: 1 };
 
+        // Mudslide (CATACOMB_SCROLL_1): earth/water act as wind for the
+        // caster this turn — checked FIRST and returns early, exactly like
+        // game-core.js's getSteamVentsBuff-adjacent Mudslide check, which
+        // returns before ever reaching the water-chaining logic below.
+        if (snap.turn.buffs?.mudslide && (stone.type === 'earth' || stone.type === 'water')) {
+            return hasAdjacentVoid(snap, x, y)
+                ? { canMove: true, cost: 1 }
+                : { canMove: true, cost: 0 };
+        }
+
         if (stone.type === 'water') {
             const chained = chainedAbility(snap, x, y);
             if (chained === 'wind') return { canMove: true, cost: 0 };
@@ -312,7 +513,17 @@
     function simMove(snap, a) {
         const p = activePlayer(snap);
         p.x = a.x; p.y = a.y;
-        snap.turn.ap -= (a.cost ?? 1);
+        let cost = a.cost ?? 1;
+        // Steam Vents: every AP-costing step alternates paid/free, one
+        // hex-step at a time (simMove()'s own granularity) — mirrors
+        // game-core's calculatePathCost/commitSteamVentsState exactly.
+        // Already-free steps (cost 0, e.g. wind) never touch the bank.
+        const svBanked = snap.turn.buffs?.steamVentsBanked;
+        if (svBanked !== undefined && cost > 0) {
+            if (svBanked) { cost = 0; snap.turn.buffs.steamVentsBanked = false; }
+            else { snap.turn.buffs.steamVentsBanked = true; }
+        }
+        snap.turn.ap -= cost;
 
         // Landing on any hex of a face-down tile reveals it (handlePlayerLanding)
         const here = grid(snap).find(h => dist(h.x, h.y, a.x, a.y) < HEX_NEAR);
@@ -345,13 +556,29 @@
         if (p) {
             const shrine = snap.tiles.find(t =>
                 !t.isPlayerTile && t.revealed && dist(t.x, t.y, p.x, p.y) < HEX_NEAR);
-            if (shrine && shrine.shrineType && shrine.shrineType !== 'catacomb') {
-                if (shrine.shrineType === 'unknown') {
+            // Wandering River (WATER_SCROLL_4): getEffectiveTileElement()'s
+            // override, mirrored exactly — first matching entry (real code
+            // never dedupes on push, so an earlier override on the same
+            // tile always wins), applies unconditionally including over a
+            // 'catacomb' or still-'unknown' original type (the override
+            // value is the ACTING PLAYER's own choice, never invented hidden
+            // info, so a Wandering-River-covered tile can be a known
+            // collectible even while its own reveal is still masked).
+            const wr = shrine && snap.crossTurnBuffs?.wanderingRiver;
+            const wrEntry = Array.isArray(wr) ? wr.find(e => e.tileId === shrine.id) : null;
+            const effEl = shrine ? (wrEntry ? wrEntry.newElement : shrine.shrineType) : null;
+            if (effEl && effEl !== 'catacomb') {
+                if (effEl === 'unknown') {
                     simNotes(snap).notes.push('endTurn on an unknown-element shrine — collection not modelled');
-                } else if (ELEMENTS.includes(shrine.shrineType)) {
-                    const el = shrine.shrineType;
+                } else if (ELEMENTS.includes(effEl)) {
+                    const el = effEl;
+                    // Mine (CATACOMB_SCROLL_2): double this specific shrine
+                    // type's output this turn — POOL_CAP below still applies,
+                    // matching the real "cannot exceed 5" text (it's just the
+                    // natural pool-capacity consequence, not a separate clamp).
+                    const mine = snap.turn.buffs?.mineShrineType === el;
                     const amount = Math.min(
-                        REPLENISH[el],
+                        REPLENISH[el] * (mine ? 2 : 1),
                         snap.sourcePool[el] || 0,
                         POOL_CAP - (p.pool[el] || 0)
                     );
@@ -360,6 +587,15 @@
                         p.pool[el] = (p.pool[el] || 0) + amount;
                     }
                 }
+            }
+
+            // Respirate (WIND_SCROLL_2): ALL of the caster's wind (not just
+            // what was drawn) returns to source at end of turn — mirrors
+            // clearTurnBuffs()'s respirateWind handler exactly.
+            if (snap.turn.buffs?.respirateWind && (p.pool.wind || 0) > 0) {
+                const amount = p.pool.wind;
+                p.pool.wind = 0;
+                snap.sourcePool.wind = Math.min(SOURCE_CAP, (snap.sourcePool.wind || 0) + amount);
             }
         }
 
@@ -376,6 +612,29 @@
         snap.turn.activePlayerIndex = next;
         const nextPool = snap.players[next]?.pool || {};
         snap.turn.ap = BASE_AP + (nextPool.void || 0); // AP reset + refreshVoidAP
+        snap.turn.buffs = {}; // "until end of turn" buffs (Burning Motivation) expire
+
+        // Cross-turn buffs (Freedom, Wandering River): unlike turn.buffs
+        // above, these persist through every OTHER player's turn and only
+        // clear at their OWN OWNER's next turn start — mirrors
+        // clearFreedomForPlayer(next)/clearWanderingRiverForPlayer(next)
+        // being called right as that player's turn begins (game-ui.js/
+        // lobby.js), never touched by clearTurnBuffs()'s blanket wipe.
+        if (snap.crossTurnBuffs?.freedom?.playerIndex === next) {
+            snap.crossTurnBuffs.freedom = null;
+        }
+        if (Array.isArray(snap.crossTurnBuffs?.wanderingRiver)) {
+            snap.crossTurnBuffs.wanderingRiver =
+                snap.crossTurnBuffs.wanderingRiver.filter(e => e.playerIndex !== next);
+        }
+        // Excavate (CATACOMB_SCROLL_4): unlike the two above, clearing this
+        // one DOES something — mirrors processExcavateTeleport(next) firing
+        // right as that player's turn begins and always accepting the
+        // teleport prompt (driveExcavateTeleportModal — free, no downside).
+        if (snap.crossTurnBuffs?.excavate?.playerIndex === next) {
+            resolveExcavateTeleport(snap, next);
+            snap.crossTurnBuffs.excavate = null;
+        }
 
         // Search support: a state evaluator must know the turn boundary was
         // crossed — otherwise the AP reset makes endTurn look like free value
@@ -389,6 +648,19 @@
         p.pool[a.stoneType]--;
         const placed = { x: +a.x.toFixed(1), y: +a.y.toFixed(1), type: a.stoneType };
         snap.stones.push(placed);
+        // Burning Motivation (FIRE_SCROLL_2): +2 AP per stack, granted the
+        // instant the stone is placed — BEFORE the fire-interaction check, so
+        // a stone that gets destroyed the same instant still paid out (mirrors
+        // game-core.js's placeStone handler, which calls addAP() ahead of
+        // processStoneInteractions()). Capped the same way addAP() clamps
+        // (base 5 + current void pool) — the simplified single `turn.ap`
+        // number this simulator uses throughout already folds base+void into
+        // one cap, same as simEndTurn()'s AP reset does.
+        const stacks = snap.turn.buffs?.burningMotivationStacks || 0;
+        if (stacks > 0) {
+            const cap = BASE_AP + (p.pool.void || 0);
+            snap.turn.ap = Math.min(cap, snap.turn.ap + stacks * 2);
+        }
         applyFireInteractions(snap, placed);
     }
 
@@ -427,6 +699,31 @@
             snap.sourcePool[el] || 0,
             POOL_CAP - (p.pool[el] || 0)
         );
+        if (drawn > 0) {
+            snap.sourcePool[el] -= drawn;
+            p.pool[el] = (p.pool[el] || 0) + drawn;
+        }
+    }
+
+    // Quick Reflexes (CATACOMB_SCROLL_9): the driver picks the most-needed
+    // element (rankedElements()) whose level-1 scroll is still findable —
+    // unlike Scholar's Insight/Inspiring Draught, this specific card's
+    // NAME is deterministic (ELEMENT_SCROLL_1), so with snap.level1Available
+    // (bot-state.js) telling us which elements still have theirs in the
+    // deck, the exact drawn scroll is knowable, not just "an unknown card".
+    // Also draws 2 of that element's stones (source/pool capped, same shape
+    // as Mason's Savvy). The "level-1 scrolls cost 0 AP" buff is NOT
+    // modelled: level-1 scrolls are response-only and never enumerated as a
+    // legal PROACTIVE cast (see legalActions()'s `def.level === 1` skip), so
+    // the buff has no consumer anywhere in this simulator to matter to.
+    function simEffectQuickReflexes(snap, p) {
+        if (!snap.level1Available) return; // older/real snapshot missing this field — no info, bail like an empty search
+        const el = effectRankedElements(snap, p).find(e => snap.level1Available[e]);
+        if (!el) return; // real flow shows "no level 1 scrolls available" and bails
+        const scrollName = `${el.toUpperCase()}_SCROLL_1`;
+        if (p.hand) { p.hand.push(scrollName); p.handCount++; }
+        snap.level1Available[el] = false; // drawn — no longer in that deck
+        const drawn = Math.min(2, snap.sourcePool[el] || 0, POOL_CAP - (p.pool[el] || 0));
         if (drawn > 0) {
             snap.sourcePool[el] -= drawn;
             p.pool[el] = (p.pool[el] || 0) + drawn;
@@ -494,6 +791,38 @@
         if (!snap.commonArea.includes(scrollName)) snap.commonArea.push(scrollName);
     }
 
+    // Plunder (CATACOMB_SCROLL_8): same "biggest threat" opponent targeting
+    // as Arson (rankedOpponents), filtered to opponents who actually have a
+    // plunderable active scroll; takes their HIGHEST-level active scroll
+    // (pickStrongestButton — opposite of Sacrificial Pyre/Inspiring
+    // Draught's "give up the weakest") to the common area (element-keyed
+    // replacement, same as discardToCommonArea/Arson above — note this
+    // replaces by the PLUNDERED scroll's element, not always fire).
+    // Excavate immunity: same accepted divergence as Arson.
+    function simEffectPlunder(snap, p, scrollName) {
+        const meIdx = snap.turn.activePlayerIndex;
+        let target = null, bestScore = -1;
+        for (const op of snap.players) {
+            if (!op || op.index === meIdx || !op.active || !op.active.length) continue;
+            const score = op.activated.length * 1000 +
+                ELEMENTS.reduce((s, el) => s + (op.pool[el] || 0), 0);
+            if (score > bestScore) { bestScore = score; target = op; }
+        }
+        if (!target) return; // nobody has a plunderable active scroll
+        let best = null, bestLevel = -1;
+        for (const name of target.active) {
+            const level = window.SCROLL_DEFINITIONS?.[name]?.level ?? 0;
+            if (level > bestLevel) { bestLevel = level; best = name; }
+        }
+        if (!best) return;
+        const ti = target.active.indexOf(best);
+        target.active.splice(ti, 1); target.activeCount--;
+        const el = window.SCROLL_DEFINITIONS?.[best]?.element;
+        if (!snap.commonArea) snap.commonArea = [];
+        if (el) snap.commonArea = snap.commonArea.filter(name => window.SCROLL_DEFINITIONS?.[name]?.element !== el);
+        if (!snap.commonArea.includes(best)) snap.commonArea.push(best);
+    }
+
     // ── Tranche 2 ────────────────────────────────────────────────────
     // Tile-geometry rule shared by flip/combust eligibility: a stone or
     // pawn "on a tile" = within TILE_SIZE*4 of the tile centre (mirrors
@@ -505,12 +834,136 @@
     function tileHasPawns(snap, t) {
         return snap.players.some(pl => pl && dist(pl.x, pl.y, t.x, t.y) < TILE_RADIUS);
     }
+    // Indices of every player standing on this tile (mirrors getPlayersOnTile)
+    function tilePlayerIndices(snap, t) {
+        const out = [];
+        snap.players.forEach((pl, i) => { if (pl && dist(pl.x, pl.y, t.x, t.y) < TILE_RADIUS) out.push(i); });
+        return out;
+    }
+
+    // Shifting Sands (EARTH_SCROLL_2): eligible = non-player tiles, no
+    // stones, AT MOST 1 player (looser than Heavy Stomp/Combust's "zero
+    // players" — isTileEligibleForShiftingSands allows one lone occupant,
+    // who then travels with their tile). The driver picks the GLOBALLY
+    // closest eligible pair: a double loop over every ordered pair tracks
+    // the single minimum distance found and keeps whichever tile ("a") was
+    // on the winning side of it (mirrors driveTileSwap's exact loop, not
+    // just "any tile with a close neighbor" — ties break on iteration
+    // order = snap.tiles order, same convention as Combust/Arson). Only
+    // positions swap; each tile's own stones/rotation/id stay put. A lone
+    // occupant is recentred onto their tile's NEW position (mirrors
+    // recenterPlayerOnTile) — never both tiles at once, since eligibility
+    // caps each at one player.
+    function simEffectShiftingSands(snap) {
+        const eligible = snap.tiles.filter(t =>
+            !t.isPlayerTile && tileStoneCount(snap, t) === 0 && tilePlayerIndices(snap, t).length <= 1);
+        if (eligible.length < 2) return; // real flow bails before any selection
+        let a = null, bestDist = Infinity;
+        for (const x of eligible) {
+            for (const y of eligible) {
+                if (x.id === y.id) continue;
+                const d = dist(x.x, x.y, y.x, y.y);
+                if (d < bestDist) { bestDist = d; a = x; }
+            }
+        }
+        if (!a) return;
+        const rest = eligible.filter(t => t.id !== a.id);
+        let b = null, bestB = Infinity;
+        for (const t of rest) {
+            const d = dist(a.x, a.y, t.x, t.y);
+            if (d < bestB) { bestB = d; b = t; }
+        }
+        if (!b) return;
+        const aOccupant = tilePlayerIndices(snap, a)[0];
+        const bOccupant = tilePlayerIndices(snap, b)[0];
+        const ax = a.x, ay = a.y;
+        a.x = b.x; a.y = b.y;
+        b.x = ax; b.y = ay;
+        if (aOccupant !== undefined) { snap.players[aOccupant].x = a.x; snap.players[aOccupant].y = a.y; }
+        if (bOccupant !== undefined) { snap.players[bOccupant].x = b.x; snap.players[bOccupant].y = b.y; }
+    }
+
+    // Take Flight (WIND_SCROLL_4): self-target only — mirrors the real
+    // driver's own v1 scope exactly (bot-effects.js's
+    // driveTakeFlightPlayerModal always picks self; opponent-targeting is
+    // deliberately out of scope there too). Candidate hexes are every walkable
+    // hex on a tile currently occupied by ANOTHER player, excluding any
+    // player-tile hex, any hex on a still-hidden tile, occupied hexes, and
+    // stones — mirrors getValidTakeFlightDestinations() exactly (that
+    // function's own isPositionOnPlayerTile check is why this can NEVER
+    // double as a direct win, despite what an older roadmap note claimed).
+    // Among those, picks the one closest to the caster's own next
+    // objective — home if all 5 elements are activated, else the nearest
+    // hidden tile — the same _bestTakeFlightDestination() heuristic
+    // bot-effects.js's driver now uses (this used to roll a random valid
+    // destination, which no snapshot-only simulation could ever honestly
+    // claim to match).
+    function simEffectTakeFlight(snap, p) {
+        const g = grid(snap);
+        const occupiedTileIds = new Set();
+        for (const pl of snap.players) {
+            if (!pl || pl.index === p.index) continue;
+            const hex = g.find(h => dist(h.x, h.y, pl.x, pl.y) < HEX_NEAR);
+            if (hex) for (const id of hex.tileIds) occupiedTileIds.add(id);
+        }
+        if (!occupiedTileIds.size) return; // real flow bails, nothing to do
+
+        const candidates = g.filter(h => {
+            if (!h.tileIds.some(id => occupiedTileIds.has(id))) return false;
+            if (h.tileIds.some(id => {
+                const t = snap.tiles.find(tt => tt.id === id);
+                return t && (t.isPlayerTile || !t.revealed);
+            })) return false;
+            if (stoneAt(snap, h.x, h.y)) return false;
+            if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) return false;
+            return true;
+        });
+        if (!candidates.length) return;
+
+        let goal = null;
+        if (ELEMENTS.every(el => p.activated.includes(el))) {
+            goal = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === p.index);
+        } else {
+            const hidden = snap.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            goal = hidden.length
+                ? hidden.reduce((a, b) => (!a || dist(p.x, p.y, b.x, b.y) < dist(p.x, p.y, a.x, a.y)) ? b : a, null)
+                : null;
+        }
+        const dest = goal
+            ? candidates.reduce((a, b) => (!a || dist(goal.x, goal.y, b.x, b.y) < dist(goal.x, goal.y, a.x, a.y)) ? b : a, null)
+            : candidates[0];
+
+        p.x = dest.x; p.y = dest.y;
+    }
 
     // Refreshing Thought (WATER_SCROLL_2): draw the top catacomb-deck
     // scroll to hand. Identity (and deck emptiness) aren't in the snapshot
     // — drawn as UNKNOWN_SCROLL; an exhausted deck's no-op is an accepted
     // rare divergence.
     function simEffectRefreshingThought(snap) {
+        drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+    }
+
+    // Scholar's Insight (VOID_SCROLL_4): the driver picks the most-needed
+    // element's deck (rankedElements()[0] whose button is actually
+    // clickable — a deck-emptiness check this snapshot can't make, same
+    // accepted-divergence class as Refreshing Thought above), then the
+    // highest-level scroll IN that deck. Which scroll that specific level
+    // turns out to be isn't knowable either (deck contents/order aren't in
+    // the snapshot) — drawn as UNKNOWN_SCROLL, same convention as every
+    // other "we know a draw happens, not which card" case in this file.
+    function simEffectScholarsInsight(snap) {
+        drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+    }
+
+    // Inspiring Draught (WATER_SCROLL_3): draws 2 from the most-needed
+    // element's deck, puts 1 back — net effect is always "keep exactly 1"
+    // (even when only 1 was drawable, it's auto-kept), so this is a plain
+    // +1 UNKNOWN_SCROLL from that deck, same shape as Scholar's Insight.
+    // The put-back choice (response-only first, else lowest-level) only
+    // affects the DECK, which isn't in the snapshot, so it has no visible
+    // consequence here.
+    function simEffectInspiringDraught(snap) {
         drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
     }
 
@@ -531,7 +984,12 @@
     // ties); only with zero hidden eligible tiles does it hide
     // eligible[0]. Reveal side effects mirror simMove's: element becomes
     // 'unknown', a scroll is drawn to hand, catacomb's +1 AP unmodelled.
-    function simEffectHeavyStomp(snap, p) {
+    // Shared by Heavy Stomp (EARTH_SCROLL_4) and Call to Adventure
+    // (CATACOMB_SCROLL_3) — both route through the SAME real function
+    // (enterTileFlipMode/getEligibleTilesForFlip) and the SAME driver
+    // (driveTileFlip: prefer revealing the nearest hidden eligible tile,
+    // else hide eligible[0]).
+    function flipNearestEligibleTile(snap, p, label) {
         const eligible = snap.tiles.filter(t =>
             !t.isPlayerTile && tileStoneCount(snap, t) === 0 && !tileHasPawns(snap, t));
         if (!eligible.length) return; // real flow bails before any selection
@@ -545,12 +1003,32 @@
             pick.revealed = true;
             pick.shrineType = 'unknown'; // NEVER invent the hidden element
             drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
-            simNotes(snap).notes.push(`Heavy Stomp revealed tile ${pick.id} (element unknown; catacomb +1 AP not modelled)`);
+            simNotes(snap).notes.push(`${label} revealed tile ${pick.id} (element unknown; catacomb +1 AP not modelled)`);
         } else {
             const t = eligible[0];
             t.revealed = false;
             t.shrineType = null; // face-down tiles mask their element
         }
+    }
+
+    function simEffectHeavyStomp(snap, p) {
+        flipNearestEligibleTile(snap, p, 'Heavy Stomp');
+    }
+
+    // Call to Adventure (CATACOMB_SCROLL_3): the flip itself mirrors Heavy
+    // Stomp exactly (same function, same driver). The buff's OWN extra
+    // effect — future reveals this turn immediately granting shrine
+    // stones — is NOT modelled: the element of a just-flipped or
+    // not-yet-flipped tile is exactly the hidden information this
+    // simulator refuses to invent (same reasoning that excludes it from
+    // simEffectHeavyStomp's reveal above). Accepted divergence, flagged so
+    // an evaluator could eventually credit "this turn's reveals are worth
+    // more" once someone builds a value model that doesn't need to know
+    // the element to do it.
+    function simEffectCallToAdventure(snap, p) {
+        flipNearestEligibleTile(snap, p, 'Call to Adventure');
+        buffs(snap).callToAdventure = true;
+        simNotes(snap).notes.push('Call to Adventure buff active — future-reveal stone grants not modelled (element unknowable)');
     }
 
     // Combust (CATACOMB_SCROLL_10): destroy EVERY stone on the non-player
@@ -569,12 +1047,469 @@
         snap.stones = snap.stones.filter(s => dist(s.x, s.y, pick.x, pick.y) >= TILE_RADIUS);
     }
 
+    // ── Tranche 3 (turn buffs) ──────────────────────────────────────
+    // Burning Motivation (FIRE_SCROLL_2): no target choice — mirrors
+    // scroll-effects.js's execute() exactly: re-casting by the SAME player
+    // (the only caster a single-active-player simulation ever has) increments
+    // stacks rather than resetting it. The AP payout itself lives in
+    // simPlaceStone(), since that's when the real game grants it.
+    function simEffectBurningMotivation(snap) {
+        if (!snap.turn.buffs) snap.turn.buffs = {};
+        snap.turn.buffs.burningMotivationStacks = (snap.turn.buffs.burningMotivationStacks || 0) + 1;
+    }
+
+    function buffs(snap) { return snap.turn.buffs || (snap.turn.buffs = {}); }
+
+    // Cross-turn buffs (Freedom, Wandering River) live OUTSIDE snap.turn —
+    // simEndTurn()'s blanket `snap.turn.buffs = {}` must never touch them;
+    // they're cleared individually, by owner, at that owner's own next turn.
+    function crossTurn(snap) { return snap.crossTurnBuffs || (snap.crossTurnBuffs = {}); }
+
+    // ── Tranche 4 (more turn buffs) ──────────────────────────────────
+    // Same shape as Burning Motivation: no target choice, a flag on
+    // snap.turn.buffs, consumed elsewhere (legalActions, canMoveTo, simMove,
+    // simEndTurn), cleared by simEndTurn's blanket `snap.turn.buffs = {}` —
+    // verified to be the REAL clearing behavior too: scroll-effects.js's
+    // clearTurnBuffs() wipes every `expiresThisTurn` buff on ANY end turn,
+    // not just the caster's own next turn, despite what a couple of these
+    // scrolls' flavor text says ("until your next turn") — mirrored as-is.
+
+    // Avalanche (EARTH_SCROLL_5): place any stone type anywhere this turn.
+    // Consumed in legalActions()'s placeStone range gate.
+    function simEffectAvalanche(snap) {
+        buffs(snap).globalPlacement = true;
+    }
+
+    // Seed the Skies (CATACOMB_SCROLL_6): draw up to 5 water (source/pool
+    // capped, same shape as Mason's Savvy), then water/wind may be placed
+    // anywhere this turn. Consumed in legalActions()'s placeStone range gate.
+    function simEffectSeedTheSkies(snap, p) {
+        const drawn = Math.min(5, snap.sourcePool.water || 0, POOL_CAP - (p.pool.water || 0));
+        if (drawn > 0) {
+            snap.sourcePool.water -= drawn;
+            p.pool.water = (p.pool.water || 0) + drawn;
+        }
+        buffs(snap).waterWindGlobalPlacement = true;
+    }
+
+    // Respirate (WIND_SCROLL_2): draw up to 2 wind (source/pool capped) now;
+    // ALL of the caster's wind returns to source at end of THIS turn (even
+    // wind they already held before the cast — mirrors clearTurnBuffs()'s
+    // respirateWind handler, which zeroes the whole pool, not just the draw).
+    // The return itself is applied in simEndTurn().
+    function simEffectRespirate(snap, p) {
+        const drawn = Math.min(2, snap.sourcePool.wind || 0, POOL_CAP - (p.pool.wind || 0));
+        if (drawn > 0) {
+            snap.sourcePool.wind -= drawn;
+            p.pool.wind = (p.pool.wind || 0) + drawn;
+        }
+        buffs(snap).respirateWind = true;
+    }
+
+    // Simplify (VOID_SCROLL_3): no immediate effect — castCost() and
+    // legalActions()'s cast-affordability gate read this buff directly.
+    function simEffectSimplify(snap) {
+        buffs(snap).simplify = true;
+    }
+
+    // Mine (CATACOMB_SCROLL_2): if the caster is currently standing on the
+    // CENTRE of an elemental (non-catacomb) shrine tile, that shrine's
+    // collection amount doubles this turn. Consumed in simEndTurn().
+    function simEffectMine(snap, p) {
+        const shrine = snap.tiles.find(t =>
+            !t.isPlayerTile && t.revealed && ELEMENTS.includes(t.shrineType) &&
+            dist(t.x, t.y, p.x, p.y) < HEX_NEAR);
+        if (shrine) buffs(snap).mineShrineType = shrine.shrineType;
+    }
+
+    // Steam Vents (CATACOMB_SCROLL_5): the first AP-costing move step this
+    // turn is free; every AP-costing step after that alternates paid/free
+    // (mirrors game-core's calculatePathCost/commitSteamVentsState banked-step
+    // alternation exactly, one hex-step at a time since that's simMove()'s
+    // granularity — already-free steps, e.g. wind, don't touch the bank).
+    function simEffectSteamVents(snap) {
+        buffs(snap).steamVentsBanked = true;
+    }
+
+    // Mudslide (CATACOMB_SCROLL_1): earth/water stones act as wind for the
+    // caster's movement this turn (free unless void-adjacent). Consumed in
+    // canMoveTo(), checked BEFORE the normal earth/water branches — mirrors
+    // game-core.js, where the Mudslide check returns early and never reaches
+    // the water-chaining logic below it.
+    function simEffectMudslide(snap) {
+        buffs(snap).mudslide = true;
+    }
+
+    // Reflecting Pool (CATACOMB_SCROLL_7): +2 AP per DISTINCT stone type
+    // within true hex-distance 5 of the caster (cube-coordinate distance,
+    // not euclidean px — mirrors game-core's pixelToHex-based check exactly).
+    // Once per turn — legalActions() excludes a recast once the buff is set.
+    function simEffectReflectingPool(snap, p) {
+        const types = new Set();
+        for (const s of snap.stones) {
+            if (hexDistance(p.x, p.y, s.x, s.y, TILE) <= 5) types.add(s.type);
+        }
+        const apGain = types.size * 2;
+        if (apGain > 0) {
+            const cap = BASE_AP + (p.pool.void || 0);
+            snap.turn.ap = Math.min(cap, snap.turn.ap + apGain);
+        }
+        buffs(snap).reflectingPool = true;
+    }
+
+    // Control the Current (WATER_SCROLL_5): this turn, whenever a water
+    // stone is adjacent to the caster — right after the cast, or after any
+    // later move — it's transformed into their most-needed non-water
+    // element. Mirrors bot-effects.js's driveWaterTransform() exactly: it
+    // always acts on the FIRST adjacent water stone (same array order as
+    // placedStones/snap.stones), and clickBestElement(rankedElements())
+    // always lands on the best-ranked element whose source pool isn't
+    // empty (see attemptControlTheCurrentTransform below). No "Done"
+    // button in the real effect — it's driven opportunistically for the
+    // rest of the turn, not a one-shot choice at cast time, so this only
+    // sets the buff and makes the one attempt that's possible immediately;
+    // simulate() makes the same attempt again after every later action
+    // while the buff is active (mirrors waitForQuiescence() polling
+    // driveWaterTransform() after every bot action in a real game).
+    function simEffectControlTheCurrent(snap, p) {
+        buffs(snap).controlTheCurrent = { playerIndex: p.index };
+        attemptControlTheCurrentTransform(snap);
+    }
+
+    // Shared by simEffectControlTheCurrent (right after the cast) and
+    // simulate() (after every later action while the buff is active) —
+    // mirrors scroll-effects.js's showWaterTransformPopup()/
+    // transformWaterStone(): the transformed stone returns 1 to the water
+    // source pool, the new element leaves its source pool, and the same
+    // fire/void interaction check a freshly placed stone gets runs at its
+    // (unchanged) position.
+    function attemptControlTheCurrentTransform(snap) {
+        const buff = snap.turn.buffs?.controlTheCurrent;
+        if (!buff) return;
+        const p = snap.players[buff.playerIndex];
+        if (!p) return;
+        const stone = neighborStones(snap, p.x, p.y).find(s => s.type === 'water');
+        if (!stone) return;
+        const el = effectRankedElements(snap, p)
+            .find(e => e !== 'water' && (snap.sourcePool[e] || 0) > 0);
+        if (!el) return; // every non-water source pool empty — real modal has nothing clickable
+        snap.sourcePool.water = Math.min(SOURCE_CAP, (snap.sourcePool.water || 0) + 1);
+        snap.sourcePool[el]--;
+        stone.type = el;
+        applyFireInteractions(snap, stone);
+    }
+
+    // Breath of Power (WIND_SCROLL_3): this turn, the caster may move any
+    // stone adjacent to them onto another adjacent empty hex — free,
+    // repeatable (see the 'moveStone' action in legalActions()/simulate()).
+    // Unlike Control the Current, the real effect has NO selectionMode or
+    // modal at all — hasWindStoneMove() just re-enables the ordinary
+    // drag-and-drop mousedown handler on every placed stone (game-core.js)
+    // — so there is no BotEffects driver to mirror a deterministic pick
+    // from; 'moveStone' is a genuine elective search action instead, scored
+    // like any other. game-core.js's moveStoneTo() + BotState's own
+    // 'moveStone' case are what let a real bot actually use this now (it
+    // never has before — waitForQuiescence() had nothing to drive).
+    function simEffectBreathOfPower(snap, p) {
+        buffs(snap).breathOfPower = { playerIndex: p.index };
+    }
+
+    // moveStone (Breath of Power only): relocate a stone already on the
+    // board to a different, currently-empty hex — reuses the exact same
+    // fire/void interaction check placeStone gets, since arriving at a new
+    // position is the only thing that matters to that check.
+    function simMoveStone(snap, a) {
+        const stone = stoneAt(snap, a.fromX, a.fromY);
+        if (!stone) return;
+        stone.x = +a.toX.toFixed(1);
+        stone.y = +a.toY.toFixed(1);
+        applyFireInteractions(snap, stone);
+    }
+
+    // ── Tranche 7 (cross-turn buffs — see crossTurn() above) ──────────
+
+    // Freedom (WIND_SCROLL_5): until the caster's own next turn, they may
+    // teleport free between any revealed elemental shrine centre, same as
+    // standing on a catacomb tile. Only the buff itself is simulated here —
+    // the TELEPORT action it enables was already a root-only gap before
+    // Freedom existed (bot-sim's legalActions() has never modelled
+    // 'teleport', even the catacomb-tile kind — see the file header), so
+    // whitelisting the cast doesn't need new action-vocabulary support: it
+    // just makes hasFreedomActive()'s real-game teleport gate (bot-state.js)
+    // correctly reflect a Freedom cast from an EARLIER turn, same as
+    // activeTurnBuffs()/crossTurnBuffs() already do for every other buff.
+    function simEffectFreedom(snap, p) {
+        crossTurn(snap).freedom = { playerIndex: p.index };
+    }
+
+    // Wandering River (WATER_SCROLL_4): mirrors driveWanderingRiver() —
+    // picks the non-player tile closest to the caster (revealed or not;
+    // eligibility never depends on the hidden element, only geometry, so
+    // this never invents hidden info), then the best-ranked element with
+    // NO availability filter (showElementSelectionModal's 5 buttons are
+    // always clickable, unlike Control the Current's — see
+    // effectRankedElements()[0] used unfiltered here). Real code never
+    // dedupes on push (see getEffectiveTileElement's own comment at its
+    // simEndTurn call site for why lookup order matters), so this doesn't
+    // either — just appends.
+    function simEffectWanderingRiver(snap, p) {
+        const eligible = snap.tiles.filter(t => !t.isPlayerTile);
+        if (!eligible.length) return; // real flow bails before any selection
+        const tile = eligible.reduce((a, b) =>
+            (!a || dist(p.x, p.y, b.x, b.y) < dist(p.x, p.y, a.x, a.y)) ? b : a, null);
+        const el = effectRankedElements(snap, p)[0];
+        const ct = crossTurn(snap);
+        ct.wanderingRiver = ct.wanderingRiver || [];
+        ct.wanderingRiver.push({ tileId: tile.id, newElement: el, playerIndex: p.index });
+    }
+
+    // Excavate (CATACOMB_SCROLL_4): the cast itself sets THREE real buffs
+    // (excavate immunity, excavateNoResponse, excavateTeleport), but only
+    // the teleport has any consumer in this simulator — immunity/no-response
+    // gate which scrolls can TARGET a player, and nothing here models
+    // opponent-targeting eligibility at all (same accepted gap as Quick
+    // Reflexes' unmodelled "level-1 scrolls free" buff). Only the deferred
+    // teleport (crossTurnBuffs.excavate) is tracked; resolveExcavateTeleport
+    // below is what actually moves the pawn, called from simEndTurn() right
+    // as the OWNER's own turn starts — mirrors processExcavateTeleport()
+    // firing at that exact moment in the real game.
+    function simEffectExcavate(snap, p) {
+        crossTurn(snap).excavate = { playerIndex: p.index };
+    }
+
+    // Resolves Excavate's deferred teleport — mirrors
+    // driveExcavateTeleportModal() (always accepts; teleporting is free
+    // with no downside) + driveExcavateTeleport()'s candidate filter
+    // (revealed non-player tile hex, no stone, no player) and destination
+    // heuristic (home if all 5 activated, else nearest hidden tile — same
+    // goal simEffectTakeFlight already uses) exactly. Called from
+    // simEndTurn(), never from simCastEffect() — this isn't part of the
+    // cast itself, it fires one full turn cycle later.
+    function resolveExcavateTeleport(snap, playerIndex) {
+        const p = snap.players[playerIndex];
+        if (!p) return;
+        const g = grid(snap);
+        const candidates = g.filter(h => {
+            if (!h.tileIds.some(id => {
+                const t = snap.tiles.find(tt => tt.id === id);
+                return t && t.revealed && !t.isPlayerTile;
+            })) return false;
+            if (stoneAt(snap, h.x, h.y)) return false;
+            if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) return false;
+            return true;
+        });
+        if (!candidates.length) return; // real flow: prompt just does nothing useful
+        let goal = null;
+        if (ELEMENTS.every(el => p.activated.includes(el))) {
+            goal = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === playerIndex);
+        } else {
+            const hidden = snap.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            goal = hidden.length
+                ? hidden.reduce((a, b) => (!a || dist(p.x, p.y, b.x, b.y) < dist(p.x, p.y, a.x, a.y)) ? b : a, null)
+                : null;
+        }
+        const dest = goal
+            ? candidates.reduce((a, b) => (!a || dist(goal.x, goal.y, b.x, b.y) < dist(goal.x, goal.y, a.x, a.y)) ? b : a, null)
+            : candidates[0];
+        p.x = dest.x; p.y = dest.y;
+    }
+
+    // Telekinesis (VOID_SCROLL_2): mirrors driveTelekinesis() exactly —
+    // same eligibility as Shifting Sands (no stones, at most 1 player — see
+    // tileStoneCount/tilePlayerIndices above; hidden tiles ARE eligible,
+    // same as Shifting Sands), but relocates ONE tile freely instead of
+    // swapping two. For each eligible tile (snap.tiles order, matching
+    // the driver's own iteration order), tries each of its 6 large-hex
+    // neighbor offsets in the driver's exact fixed order and takes the
+    // FIRST empty one that would still touch 2+ OTHER tiles after the move
+    // (excludeTileId semantics — the moving tile never counts as its own
+    // neighbor) — stops at the first tile/destination pair that works,
+    // same early-exit shape as the driver's nested loop. A lone occupant
+    // travels with their tile (mirrors simEffectShiftingSands).
+    const LARGE_HEX = TILE * 4; // matches game-core's largeHexSize (TILE_SIZE * 4)
+    const TILE_ADJACENT_OFFSETS = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+    function countTouchingTilesSim(snap, x, y, excludeTileId) {
+        const hex = pixelToHex(x, y, LARGE_HEX);
+        let count = 0;
+        for (const [dq, dr] of TILE_ADJACENT_OFFSETS) {
+            const p = hexToPixel(hex.q + dq, hex.r + dr, LARGE_HEX);
+            if (snap.tiles.some(t => t.id !== excludeTileId && dist(t.x, t.y, p.x, p.y) < TILE)) count++;
+        }
+        return count;
+    }
+    function simEffectTelekinesis(snap, p) {
+        const eligible = snap.tiles.filter(t =>
+            !t.isPlayerTile && tileStoneCount(snap, t) === 0 && tilePlayerIndices(snap, t).length <= 1);
+        let tile = null, dest = null;
+        for (const t of eligible) {
+            const hex = pixelToHex(t.x, t.y, LARGE_HEX);
+            for (const [dq, dr] of TILE_ADJACENT_OFFSETS) {
+                const cand = hexToPixel(hex.q + dq, hex.r + dr, LARGE_HEX);
+                if (snap.tiles.some(tt => dist(tt.x, tt.y, cand.x, cand.y) < TILE)) continue; // occupied
+                if (countTouchingTilesSim(snap, cand.x, cand.y, t.id) < 2) continue;
+                tile = t; dest = cand; break;
+            }
+            if (dest) break;
+        }
+        if (!dest) return; // every eligible tile boxed in — real flow no-ops the same way
+
+        const occupant = tilePlayerIndices(snap, tile)[0];
+        tile.x = dest.x; tile.y = dest.y;
+        if (occupant !== undefined) {
+            snap.players[occupant].x = dest.x;
+            snap.players[occupant].y = dest.y;
+        }
+    }
+
+    // ── Tranche 8 (recursive effect dispatch) ──────────────────────────
+
+    // Sacrificial Pyre (FIRE_SCROLL_3): mirrors enterScrollSacrificeMode()
+    // + driveSacrificialPyre() exactly.
+    //   1. Choose the WEAKEST eligible hand scroll (real eligibility:
+    //      excludes response/counter-only scrolls — they have nothing to
+    //      respond to on your own turn; pickWeakestButton: a response-only
+    //      one first — impossible here, already excluded — else lowest
+    //      level).
+    //   2. Hand → common area (element-keyed replacement, same as any
+    //      discardToCommonArea).
+    //   3. Grant stones: level-based for an elemental scroll, summed by
+    //      component element for a catacomb one — capped at POOL_CAP but,
+    //      mirroring the real code's own gap, NEVER deducted from the
+    //      source pool (no `(snap.sourcePool[el]||0) > 0` guard exists in
+    //      enterScrollSacrificeMode's stone-granting block at all).
+    //   4. Recursively run the sacrificed scroll's own effect
+    //      (simCastEffect — mirrors `self.execute(selectedScroll,
+    //      casterIndex, {})`). Its element does NOT activate win-condition
+    //      (real code's own comment: "the sacrificed scroll's elements do
+    //      NOT count toward win condition" — only FIRE, from casting
+    //      Sacrificial Pyre ITSELF, activates, via simCast's normal
+    //      post-effect block using a.scroll = 'FIRE_SCROLL_3', unaffected
+    //      by this function). No extra AP cost, no unsimulatedCasts entry
+    //      for the chained scroll either — grantedNew would always be
+    //      false for it (nothing here ever touches p.activated), so
+    //      tracking it would never change a search's evaluation anyway.
+    function simEffectSacrificialPyre(snap, p) {
+        const hand = p.hand || [];
+        const eligible = hand.filter(name => {
+            const d = window.SCROLL_DEFINITIONS?.[name];
+            return d && !(d.canCounter === 'any' || d.isResponse === true);
+        });
+        if (!eligible.length) return; // real flow bails — nothing sacrificeable
+
+        let chosen = eligible[0];
+        let chosenLevel = window.SCROLL_DEFINITIONS?.[chosen]?.level ?? Infinity;
+        for (const name of eligible) {
+            const level = window.SCROLL_DEFINITIONS?.[name]?.level ?? Infinity;
+            if (level < chosenLevel) { chosenLevel = level; chosen = name; }
+        }
+        const def = window.SCROLL_DEFINITIONS[chosen];
+
+        const hi = p.hand.indexOf(chosen);
+        if (hi !== -1) { p.hand.splice(hi, 1); p.handCount--; }
+        if (!snap.commonArea) snap.commonArea = [];
+        snap.commonArea = snap.commonArea.filter(name =>
+            window.SCROLL_DEFINITIONS?.[name]?.element !== def.element);
+        if (!snap.commonArea.includes(chosen)) snap.commonArea.push(chosen);
+
+        if (def.element === 'catacomb' && def.patterns?.[0]) {
+            const counts = {};
+            for (const c of def.patterns[0]) counts[c.type] = (counts[c.type] || 0) + 1;
+            for (const [element, count] of Object.entries(counts)) {
+                p.pool[element] = Math.min(POOL_CAP, (p.pool[element] || 0) + count);
+            }
+        } else if (ELEMENTS.includes(def.element)) {
+            p.pool[def.element] = Math.min(POOL_CAP, (p.pool[def.element] || 0) + def.level);
+        }
+
+        simCastEffect(snap, p, chosen);
+    }
+
+    // The scroll-name-keyed effect dispatch, factored out of simCast() so
+    // Sacrificial Pyre (which runs a SACRIFICED scroll's own effect via the
+    // real code's `self.execute(selectedScroll, casterIndex, {})`) can
+    // recurse into it directly — mirrors that chained call exactly, without
+    // simCast()'s AP cost, hand→active move, or win-condition activation
+    // (all scroll-cast-specific, not effect-specific; the real chain skips
+    // them too — see enterScrollSacrificeMode's own "does NOT count toward
+    // win condition" comment).
+    function simCastEffect(snap, p, scrollName) {
+        if (scrollName === 'FIRE_SCROLL_4') {
+            // Transmute's execute() activates fire with NO source-pool gate
+            // (deliberate belt-and-suspenders in scroll-effects.js) — the
+            // real cast activates fire even when the fire source is empty.
+            if (!p.activated.includes('fire')) p.activated.push('fire');
+            simEffectTransmute(snap, p);
+        } else if (scrollName === 'VOID_SCROLL_5') {
+            simEffectCreate(snap, p);
+        } else if (scrollName === 'FIRE_SCROLL_5') {
+            simEffectArson(snap, p, scrollName);
+        } else if (scrollName === 'WATER_SCROLL_2') {
+            simEffectRefreshingThought(snap);
+        } else if (scrollName === 'EARTH_SCROLL_3') {
+            simEffectMasonsSavvy(snap, p);
+        } else if (scrollName === 'EARTH_SCROLL_4') {
+            simEffectHeavyStomp(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_10') {
+            simEffectCombust(snap);
+        } else if (scrollName === 'FIRE_SCROLL_2') {
+            simEffectBurningMotivation(snap);
+        } else if (scrollName === 'EARTH_SCROLL_5') {
+            simEffectAvalanche(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_6') {
+            simEffectSeedTheSkies(snap, p);
+        } else if (scrollName === 'WIND_SCROLL_2') {
+            simEffectRespirate(snap, p);
+        } else if (scrollName === 'VOID_SCROLL_3') {
+            simEffectSimplify(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_2') {
+            simEffectMine(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_5') {
+            simEffectSteamVents(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_1') {
+            simEffectMudslide(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_7') {
+            simEffectReflectingPool(snap, p);
+        } else if (scrollName === 'EARTH_SCROLL_2') {
+            simEffectShiftingSands(snap);
+        } else if (scrollName === 'VOID_SCROLL_4') {
+            simEffectScholarsInsight(snap);
+        } else if (scrollName === 'WATER_SCROLL_3') {
+            simEffectInspiringDraught(snap);
+        } else if (scrollName === 'CATACOMB_SCROLL_3') {
+            simEffectCallToAdventure(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_8') {
+            simEffectPlunder(snap, p, scrollName);
+        } else if (scrollName === 'WIND_SCROLL_4') {
+            simEffectTakeFlight(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_9') {
+            simEffectQuickReflexes(snap, p);
+        } else if (scrollName === 'WATER_SCROLL_5') {
+            simEffectControlTheCurrent(snap, p);
+        } else if (scrollName === 'WIND_SCROLL_3') {
+            simEffectBreathOfPower(snap, p);
+        } else if (scrollName === 'WIND_SCROLL_5') {
+            simEffectFreedom(snap, p);
+        } else if (scrollName === 'WATER_SCROLL_4') {
+            simEffectWanderingRiver(snap, p);
+        } else if (scrollName === 'FIRE_SCROLL_3') {
+            simEffectSacrificialPyre(snap, p);
+        } else if (scrollName === 'CATACOMB_SCROLL_4') {
+            simEffectExcavate(snap, p);
+        } else if (scrollName === 'VOID_SCROLL_2') {
+            simEffectTelekinesis(snap, p);
+        }
+    }
+
     function simCast(snap, a) {
         const ai = snap.turn.activePlayerIndex;
         const p = snap.players[ai];
         const def = window.SCROLL_DEFINITIONS?.[a.scroll];
         const activatedBefore = p.activated.length;
-        snap.turn.ap -= CAST_COST;
+        // castCost() reads any Simplify buff already on the snapshot — a cast
+        // of Simplify itself still costs the normal 2 AP (its own buff isn't
+        // set until the effect branch below runs), only LATER casts this turn
+        // get the discount.
+        snap.turn.ap -= castCost(snap);
 
         // moveToActive if cast from hand; the scroll STAYS in active after the
         // cast (handleScrollDisposition: no auto-discard)
@@ -593,25 +1528,7 @@
         // Mason's Savvy taking the last earth stones correctly forfeits
         // the earth activation. (Caught by the harness as a genuine
         // divergence when this block ran before the effect.)
-        if (a.scroll === 'FIRE_SCROLL_4') {
-            // Transmute's execute() activates fire with NO source-pool gate
-            // (deliberate belt-and-suspenders in scroll-effects.js) — the
-            // real cast activates fire even when the fire source is empty.
-            if (!p.activated.includes('fire')) p.activated.push('fire');
-            simEffectTransmute(snap, p);
-        } else if (a.scroll === 'VOID_SCROLL_5') {
-            simEffectCreate(snap, p);
-        } else if (a.scroll === 'FIRE_SCROLL_5') {
-            simEffectArson(snap, p, a.scroll);
-        } else if (a.scroll === 'WATER_SCROLL_2') {
-            simEffectRefreshingThought(snap);
-        } else if (a.scroll === 'EARTH_SCROLL_3') {
-            simEffectMasonsSavvy(snap, p);
-        } else if (a.scroll === 'EARTH_SCROLL_4') {
-            simEffectHeavyStomp(snap, p);
-        } else if (a.scroll === 'CATACOMB_SCROLL_10') {
-            simEffectCombust(snap);
-        }
+        simCastEffect(snap, p, a.scroll);
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):
         //  - catacomb scrolls credit each component element, no source guard
@@ -679,10 +1596,17 @@
             case 'endTurn':       simEndTurn(next); break;
             case 'placeStone':    simPlaceStone(next, action); break;
             case 'cast':          simCast(next, action); break;
+            case 'moveStone':     simMoveStone(next, action); break;
             case 'discardScroll': simDiscard(next, action); break;
             default:
                 simNotes(next).notes.push(`unsupported action type: ${action?.type}`);
         }
+        // Control the Current (WATER_SCROLL_5): opportunistic, no "Done"
+        // button — mirrors waitForQuiescence() re-running driveWaterTransform()
+        // after EVERY bot action for the rest of the turn, not just at cast
+        // time. endTurn already wiped turn.buffs above, so this is a no-op
+        // then; harmless to call unconditionally otherwise.
+        if (action?.type !== 'endTurn') attemptControlTheCurrentTransform(next);
         return next;
     }
 
@@ -730,10 +1654,14 @@
 
         // Casts (2 AP, pattern satisfied, never level-1 response scrolls) —
         // hand, active, and the shared common area (castable by anyone)
-        if (!pawnOnStone && ap >= CAST_COST) {
+        if (!pawnOnStone && ap >= castCost(snap)) {
             for (const name of new Set([...p.active, ...hand, ...(snap.commonArea || [])])) {
                 const def = window.SCROLL_DEFINITIONS?.[name];
                 if (!def || def.level === 1) continue; // also skips UNKNOWN_SCROLL
+                // Reflecting Pool: real once-per-turn guard (its own execute()
+                // returns success:false on a recast) — keep the search from
+                // "successfully" farming a second AP payout that never happens.
+                if (name === 'CATACOMB_SCROLL_7' && snap.turn.buffs?.reflectingPool) continue;
                 if (checkPattern(snap, name)) actions.push({ type: 'cast', scroll: name });
             }
         }
@@ -762,7 +1690,12 @@
                 for (const c of missing) {
                     if ((p.pool[c.type] || 0) <= 0) continue;
                     const d = dist(p.x, p.y, c.x, c.y);
-                    if (d <= HEX_NEAR || d >= HEX_STEP) continue; // base placement range: adjacent to pawn
+                    if (d <= HEX_NEAR) continue; // never the pawn's own hex
+                    // Avalanche (any type) / Seed the Skies (water & wind
+                    // only) lift the adjacency requirement this turn.
+                    const globalOk = snap.turn.buffs?.globalPlacement ||
+                        (snap.turn.buffs?.waterWindGlobalPlacement && (c.type === 'water' || c.type === 'wind'));
+                    if (!globalOk && d >= HEX_STEP) continue; // base placement range: adjacent to pawn
                     // Not on any face-down tile, no pawn standing there
                     // (mirrors findValidStonePosition)
                     const hex = g.find(h => dist(h.x, h.y, c.x, c.y) < HEX_NEAR);
@@ -782,13 +1715,48 @@
             }
         }
 
+        // Breath of Power (WIND_SCROLL_3): move a stone adjacent to the pawn
+        // onto a DIFFERENT, currently-empty hex within the same placement
+        // range placeStone uses (honors Avalanche/Seed the Skies too, same
+        // as a real placement would through isInPlacementRange) — free,
+        // repeatable, no AP gate. Not restricted by pawnOnStone (mirrors
+        // 'move', not 'cast'/'placeStone' — see BotState.legalActions()).
+        if (snap.turn.buffs?.breathOfPower?.playerIndex === snap.turn.activePlayerIndex) {
+            for (const stone of neighborStones(snap, p.x, p.y)) {
+                for (const h of g) {
+                    if (dist(h.x, h.y, stone.x, stone.y) < HEX_NEAR) continue; // must actually move
+                    const d = dist(h.x, h.y, p.x, p.y);
+                    const globalOk = snap.turn.buffs?.globalPlacement ||
+                        (snap.turn.buffs?.waterWindGlobalPlacement && (stone.type === 'water' || stone.type === 'wind'));
+                    if (!globalOk && d >= HEX_STEP) continue;
+                    if (h.tileIds.some(id => {
+                        const t = snap.tiles.find(tt => tt.id === id);
+                        return t && !t.revealed && !t.isPlayerTile;
+                    })) continue;
+                    if (stoneAt(snap, h.x, h.y)) continue;
+                    if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) continue;
+                    actions.push({
+                        type: 'moveStone', fromX: stone.x, fromY: stone.y,
+                        toX: h.x, toY: h.y, stoneType: stone.type,
+                    });
+                }
+            }
+        }
+
         // Moves
         if (ap > 0) {
+            // Steam Vents: a banked free step can make an otherwise-unaffordable
+            // move legal — filter on the EFFECTIVE cost, but still store the RAW
+            // terrain cost on the action; simMove() re-derives paid-vs-free from
+            // the banked state itself at simulation time (same input either way
+            // within one ply).
+            const svBanked = snap.turn.buffs?.steamVentsBanked;
             for (const h of g) {
                 const d = dist(h.x, h.y, p.x, p.y);
                 if (d <= HEX_NEAR || d >= HEX_STEP) continue;
                 const mv = canMoveTo(snap, h.x, h.y);
-                if (mv.canMove && mv.cost <= ap) {
+                const effCost = (svBanked && mv.cost > 0) ? 0 : mv.cost;
+                if (mv.canMove && effCost <= ap) {
                     actions.push({ type: 'move', x: h.x, y: h.y, cost: mv.cost });
                 }
             }
