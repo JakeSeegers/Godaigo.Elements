@@ -377,12 +377,19 @@ function canPlaceTile() {
     return myPlayerIndex === activePlayerIndex && !playerTilesPlaced.has(myPlayerIndex);
 }
 
-// Check if player can take actions (turn AND no pending cascade)
+// Check if player can take actions (turn AND no pending cascade AND no pending end-turn overflow)
 function canTakeAction() {
     if (!isMyTurn()) return false;
     // Check for pending cascade
     const playerIdx = isMultiplayer ? myPlayerIndex : activePlayerIndex;
     if (typeof spellSystem !== 'undefined' && spellSystem.hasPendingCascade(playerIdx)) {
+        return false;
+    }
+    // Check for a pending end-of-turn scroll-overflow discard (see
+    // showEndTurnOverflowModal) — the turn isn't actually over yet at this
+    // point (activePlayerIndex hasn't advanced), so this must keep blocking
+    // other actions until the player discards down to size.
+    if (typeof spellSystem !== 'undefined' && spellSystem.hasPendingEndTurnOverflow(playerIdx)) {
         return false;
     }
     return true;
@@ -397,6 +404,11 @@ function notYourTurn() {
         updateStatus(`You must cascade a scroll before taking other actions!`);
         // Re-show the cascade prompt
         spellSystem.showPendingCascadePrompt(playerIdx);
+        return;
+    }
+
+    if (typeof spellSystem !== 'undefined' && spellSystem.hasPendingEndTurnOverflow(playerIdx)) {
+        updateStatus(`Discard down to your hand/active limits before your turn can end!`);
         return;
     }
 

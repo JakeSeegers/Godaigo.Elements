@@ -87,11 +87,22 @@
                 // Pending cascade state - blocks all actions until resolved
                 // Stored per player: { playerIndex: { scrollName, scrollInfo, shrineType, canCascadeToActive } }
                 this.pendingCascades = {};
+
+                // Pending end-of-turn overflow state - blocks all actions until the
+                // player's hand/active scroll counts are back within limits (see
+                // showEndTurnOverflowModal). Stored per player: { playerIndex: true }
+                this.pendingEndTurnOverflow = {};
             }
 
             // Check if a player has a pending cascade that must be resolved
             hasPendingCascade(playerIndex) {
                 return !!this.pendingCascades[playerIndex];
+            }
+
+            // Check if a player must resolve a scroll-overflow discard before
+            // taking any other action (see showEndTurnOverflowModal)
+            hasPendingEndTurnOverflow(playerIndex) {
+                return !!this.pendingEndTurnOverflow[playerIndex];
             }
 
             // Get the pending cascade for a player
@@ -1121,6 +1132,14 @@
             showEndTurnOverflowModal(onResolved) {
                 const self = this;
 
+                // Lock out all other actions (tile/stone placement, movement, etc.)
+                // for the rest of this turn — the turn isn't actually over yet
+                // (activePlayerIndex hasn't advanced), so without this the player
+                // could keep acting while "must discard" is displayed. Cleared
+                // below once the overflow is actually resolved.
+                const playerIdx = activePlayerIndex;
+                self.pendingEndTurnOverflow[playerIdx] = true;
+
                 // Open Hand + Active panels so the player can manage scrolls
                 if (window.ScrollPanelSystem) {
                     window.ScrollPanelSystem.openPanel('hand');
@@ -1183,6 +1202,7 @@
                     const handOver   = scrolls.hand.size   > self.MAX_HAND_SIZE;
                     const activeOver = scrolls.active.size > self.MAX_ACTIVE_SIZE;
                     if (handOver || activeOver) return;
+                    delete self.pendingEndTurnOverflow[playerIdx];
                     clearInterval(pollInterval);
                     banner.remove();
                     onResolved();
