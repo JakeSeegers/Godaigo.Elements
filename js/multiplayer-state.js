@@ -4,6 +4,10 @@
 const SUPABASE_URL = 'https://lovybwpypkaarstnvkbz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxvdnlid3B5cGthYXJzdG52a2J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMzI4NTgsImV4cCI6MjA4NDYwODg1OH0.lqobDTaopRJ5sA0yZQvzDwudq2x4zz9HMtTkSuJulFU';
 
+// A password reset link lands with "#...type=recovery". The client below
+// reads and clears that hash on its own, so remember it first for
+// js/account-recovery.js (which loads later) to show "Choose a new password".
+window.__godaigoRecoveryLink = /(^|[#&])type=recovery(&|$)/.test(location.hash);
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Multiplayer state

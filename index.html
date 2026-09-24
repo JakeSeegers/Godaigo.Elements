@@ -85,6 +85,7 @@
                 <button id="auth-login-btn" onclick="authLogin()" class="auth-btn-primary">Log In</button>
                 <button id="auth-register-btn" onclick="authRegister()" class="auth-btn-secondary">Register</button>
             </div>
+            <button type="button" class="auth-forgot-link" onclick="window.AccountRecovery?.openForgot()">Forgot password?</button>
             <div id="auth-error" class="auth-error" style="display:none;"></div>
             <div id="auth-loading" class="auth-loading" style="display:none;">Signing in...</div>
 
@@ -676,6 +677,7 @@
     <script src="js/crt-overlay.js" charset="UTF-8"></script>
     <script src="js/gamification-ui.js" charset="UTF-8"></script>
     <script src="js/changelog-ui.js" charset="UTF-8"></script>
+    <script src="js/account-recovery.js" charset="UTF-8"></script>
     <script src="js/lobby.js" charset="UTF-8"></script>
     <script src="js/emoji-system.js" charset="UTF-8"></script>
     <script src="js/cosmetics-system.js" charset="UTF-8"></script>

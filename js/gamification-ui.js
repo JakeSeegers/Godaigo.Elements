@@ -739,13 +739,16 @@ function _renderSettingsView(content) {
                 <button class="pp-menu-btn" onclick="_gami_setSettingsCategory('audio')">Audio</button>
                 <button class="pp-menu-btn" onclick="_gami_setSettingsCategory('controls')">Controls</button>
                 <button class="pp-menu-btn" onclick="_gami_setSettingsCategory('privacy')">Privacy</button>
+                <button class="pp-menu-btn" onclick="_gami_setSettingsCategory('account')">Account</button>
             </div>
         `;
         return;
     }
 
-    const titles = { display: 'Display', audio: 'Audio', controls: 'Controls', privacy: 'Privacy' };
-    const bodies  = { display: displayHtml, audio: audioHtml, controls: controlsHtml, privacy: privacyHtml };
+    // Account is filled in async by js/account-recovery.js (recovery email).
+    const accountHtml = '<div id="acct-settings-slot"></div>';
+    const titles = { display: 'Display', audio: 'Audio', controls: 'Controls', privacy: 'Privacy', account: 'Account' };
+    const bodies  = { display: displayHtml, audio: audioHtml, controls: controlsHtml, privacy: privacyHtml, account: accountHtml };
     content.innerHTML = `
         <div class="gami-settings-list gami-settings-detail">
             <div class="pp-flanked-label pp-flanked-label--back">
@@ -755,6 +758,9 @@ function _renderSettingsView(content) {
             ${bodies[_gamiSettingsCategory]}
         </div>
     `;
+    if (_gamiSettingsCategory === 'account') {
+        window.AccountRecovery?.renderSettings(document.getElementById('acct-settings-slot'));
+    }
 }
 
 function _gami_toggleCrt(key, btn) {

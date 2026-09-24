@@ -339,3 +339,67 @@
 .changelog-entry li { margin-bottom: 4px; line-height: 1.35; }
 .changelog-empty { text-align: center; color: var(--pp-ink-soft); padding: 12px; }
 .changelog-close { align-self: center; margin-top: 10px; padding: 6px 18px; font-size: 17px; }
+
+/* ── Account recovery (js/account-recovery.js) ──────────────────────────── */
+.auth-forgot-link {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--pp-ink-soft, #bbb);
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin: 4px auto 0;
+  display: block;
+}
+.auth-forgot-link:hover { color: var(--pp-ink, #fff); }
+/* Above #boot-splash (100000): a reset link can land while the intro plays */
+#acct-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 100001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.acct-modal {
+  background: var(--pp-parch, #1a1a2e);
+  color: var(--pp-ink, #eee);
+  border: 2px solid var(--pp-maroon, #9b59b6);
+  border-radius: 8px;
+  padding: 16px 20px;
+  width: 100%;
+  max-width: 420px;
+  font-size: 17px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+.acct-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: var(--pp-maroon, #9b59b6);
+  text-align: center;
+  margin-bottom: 10px;
+}
+.acct-text { margin: 0 0 12px; line-height: 1.4; }
+.acct-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  margin: 4px 0;
+  font-size: 16px;
+  font-family: inherit;
+  background: var(--pp-parch-lt, #222);
+  color: var(--pp-ink, #eee);
+  border: 1px solid var(--pp-maroon, #9b59b6);
+  border-radius: 4px;
+}
+.acct-status { min-height: 20px; font-size: 14px; color: var(--pp-gold, #f0c040); margin: 4px 0; }
+.acct-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.acct-actions-left { justify-content: flex-start; }
+.acct-btn { padding: 6px 16px; font-size: 16px; cursor: pointer; }
+.acct-btn:disabled { opacity: 0.6; cursor: default; }
+.acct-btn-secondary { opacity: 0.8; }
+.acct-settings .acct-current { margin: 6px 0; }
