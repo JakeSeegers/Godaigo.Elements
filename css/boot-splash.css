@@ -93,13 +93,16 @@ body.boot-splash-active .site-logo {
     filter:
         drop-shadow(0 0 20px rgba(255, 250, 230, 0.4))
         drop-shadow(0 0 46px rgba(255, 240, 200, 0.22));
-    /* Hard, time-based hold — independent of js/boot-splash.js's
-       frame-count-based skip, deliberately, so a bug in one can't sink
-       both: stays fully invisible for 0.25s no matter what's being drawn
-       underneath, then fades in over 0.2s. By ~0.45s the JS-side frame
-       skip has long since moved past any bad early content. */
+    /* Hidden until js/boot-splash.js has drawn its first real frame (it
+       adds .boot-splash-canvas-ready), then fades in over 0.2s. Used to be
+       a fixed 0.25s hold from page load, which a slow-starting video
+       outlasted — the first (sometimes wrongly decoded, purple) frame then
+       drew onto an already-visible canvas. */
     opacity: 0;
-    animation: boot-splash-canvas-fade-in 0.2s ease 0.25s forwards;
+}
+
+#boot-splash-canvas.boot-splash-canvas-ready {
+    animation: boot-splash-canvas-fade-in 0.2s ease forwards;
 }
 
 @keyframes boot-splash-canvas-fade-in {

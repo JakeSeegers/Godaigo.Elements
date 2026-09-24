@@ -187,17 +187,18 @@
             ctx.drawImage(video, EDGE_TRIM_PX, TOP_TRIM_PX, sw, sh, EDGE_TRIM_PX, TOP_TRIM_PX, sw, sh);
         }
 
-        // This source clip's actual frame 0 is a stray dark lead-in frame
-        // baked into the file itself (confirmed with ffmpeg: frame 1
-        // averages to a dark rgb(121,111,122); every frame after it
-        // averages to a near-white rgb(255,250,255)) — not a browser-
-        // readiness thing. Skip drawing several frames up front, generous
-        // margin past the 1 confirmed-dark one — this is belt-and-suspenders
-        // with the CSS-side hard hold in css/boot-splash.css (independent,
-        // time-based rather than frame-count-based, so a bug in one doesn't
-        // sink both).
-        const SKIP_FIRST_N_FRAMES = 6;
-        let framesDrawn = 0;
+        // Don't draw anything until playback has really moved past the
+        // start. The browser's first decoded frame(s) can come out wrong
+        // (a purple flash on real H.264 playback in Chrome — the file
+        // itself is clean: every early frame decodes as near-white with
+        // ffmpeg, edit list honoured or not). Gate on the video's own
+        // clock, not on draw-loop ticks: the loop can tick many times
+        // while a slow-starting video still holds frame 0, so a tick
+        // count ran out before any real frame had played. 0.1s = 3 frames
+        // at 30fps; the clip's first frames are blank white (keyed fully
+        // transparent anyway), so nothing visible is lost.
+        const SKIP_UNTIL_SECONDS = 0.1;
+        let revealed = false;
 
         // 3x3 median filter on just the alpha channel — unlike a box/mean
         // blur, a median only ever replaces a pixel that disagrees with
@@ -290,11 +291,15 @@
                 canvas.width  = video.videoWidth;
                 canvas.height = video.videoHeight;
             }
-            if (framesDrawn < SKIP_FIRST_N_FRAMES) { framesDrawn++; return; }
+            if (video.currentTime < SKIP_UNTIL_SECONDS && !video.ended) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawVideoFrame();
             keyAndShimmerFrame(t);
             drawSignInOverlay();
+            // Canvas stays hidden (css/boot-splash.css) until a real frame
+            // is on it — a time-from-page-load hold can't know when a slow
+            // video actually starts.
+            if (!revealed) { revealed = true; canvas.classList.add('boot-splash-canvas-ready'); }
         }
 
         // Keeps redrawing (and so keeps waving/shimmering) even once the
