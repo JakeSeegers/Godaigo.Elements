@@ -15,7 +15,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Supabase -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
+    <!-- Preload only (non-blocking): the <script> itself runs just after
+         js/boot-splash.js at the end of <body>, so a slow unpkg response
+         no longer holds up the first paint / boot screen. -->
+    <link rel="preload" as="script" href="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js">
     <!-- CSS -->
     <link rel="stylesheet" href="css/variables.css">
     <link rel="stylesheet" href="css/base.css">
@@ -651,6 +654,9 @@
     <!-- JavaScript -->
     <!-- Boot splash (no game deps — runs first) -->
     <script src="js/boot-splash.js" charset="UTF-8"></script>
+    <!-- Supabase: must precede multiplayer-state.js; kept after boot-splash.js
+         so the boot screen is up before this third-party script runs. -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
     <!-- Scroll System (load before main.js) -->
     <script src="js/scrolls/scroll-definitions.js" charset="UTF-8"></script>
     <script src="js/scrolls/effects/scroll-effects.js" charset="UTF-8"></script>
