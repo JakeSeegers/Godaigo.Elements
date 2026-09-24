@@ -17,8 +17,8 @@
 //      are shortened), with play / pause / speed / step controls.
 // Leaving the replay reloads the page, which restores everything.
 //
-// Status: prototype, hermit-only (window.Replay.open(matchId) from the
-// console). Screens for players come in step 3.
+// Players open it from the lobby "Replays" button (openBrowser below): their
+// own games, and games other players posted publicly.
 (function () {
     const SPECTATOR = -1;
     const MAX_GAP_MS = 1500;      // longest pause between moves at 1x speed
@@ -203,5 +203,108 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autostart);
     else autostart();
 
-    window.Replay = { open, play, pause, step, get state() { return state; } };
+    // ── Replay browser (lobby "Replays" button) ─────────────────
+    // Two lists: my finished games (with Watch + Post publicly / Remove from
+    // public) and games other players posted (Watch). Data comes from
+    // list_my_matches / list_public_matches (sql/replay-access.sql).
+    let browserTab = 'mine';
+
+    function esc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function fmtDuration(sec) {
+        if (!(sec > 0)) return '';
+        const m = Math.floor(sec / 60), s = sec % 60;
+        return m ? `${m} min` : `${s} s`;
+    }
+
+    function fmtWhen(iso) {
+        if (!iso) return '';
+        try {
+            return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        } catch (e) { return ''; }
+    }
+
+    function rowHtml(m, mine) {
+        const players = (m.players || []).slice().sort((a, b) => a.index - b.index).map(p => {
+            const won = m.winner_index === p.index;
+            return `<span class="replay-player${won ? ' won' : ''}" style="--pc:${esc(p.color)}">${won ? '👑 ' : ''}${esc(p.username)}</span>`;
+        }).join('<span class="replay-vs">vs</span>');
+        const info = [fmtWhen(m.started_at), fmtDuration(m.duration_s),
+                      m.status === 'abandoned' ? 'not finished' : ''].filter(Boolean).join(' · ');
+        const post = mine
+            ? `<button class="replay-post" data-id="${m.id}" data-public="${m.is_public ? 1 : 0}">${m.is_public ? 'Remove from public' : 'Post publicly'}</button>`
+            : '';
+        return `
+            <div class="replay-row">
+                <div class="replay-row-main">
+                    <div class="replay-players">${players}</div>
+                    <div class="replay-info">${esc(info)}${mine && m.is_public ? ' · <b>public</b>' : ''}</div>
+                </div>
+                <div class="replay-row-actions">
+                    <button class="replay-watch" data-id="${m.id}">Watch</button>
+                    ${post}
+                </div>
+            </div>`;
+    }
+
+    async function renderList() {
+        const overlay = document.getElementById('replay-browser');
+        if (!overlay) return;
+        overlay.querySelectorAll('.replay-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === browserTab));
+        const list = overlay.querySelector('.replay-list');
+        list.innerHTML = '<div class="replay-empty">Loading...</div>';
+        const mine = browserTab === 'mine';
+        const { data, error } = await supabase.rpc(mine ? 'list_my_matches' : 'list_public_matches', { p_limit: 30 });
+        if (!document.getElementById('replay-browser') || (browserTab === 'mine') !== mine) return;
+        if (error) { list.innerHTML = `<div class="replay-empty">Could not load games: ${esc(error.message)}</div>`; return; }
+        const rows = Array.isArray(data) ? data : [];
+        list.innerHTML = rows.length
+            ? rows.map(m => rowHtml(m, mine)).join('')
+            : `<div class="replay-empty">${mine
+                ? 'No games yet. Your online games show up here when they end.'
+                : 'Nobody has posted a game yet. Post one of yours from "My games".'}</div>`;
+    }
+
+    function openBrowser(tab) {
+        document.getElementById('replay-browser')?.remove();
+        if (tab) browserTab = tab;
+        const overlay = document.createElement('div');
+        overlay.id = 'replay-browser';
+        overlay.innerHTML = `
+            <div class="replay-modal" role="dialog" aria-label="Replays">
+                <div class="replay-modal-title">Replays</div>
+                <div class="replay-tabs">
+                    <button class="replay-tab" data-tab="mine">My games</button>
+                    <button class="replay-tab" data-tab="public">Public</button>
+                </div>
+                <div class="replay-list"></div>
+                <div class="replay-note">Games are kept for 30 days. Posted games are kept until you remove them. Posting shows the whole game, with every player's name, to everyone.</div>
+                <button class="replay-close">Close</button>
+            </div>`;
+        overlay.addEventListener('click', async (ev) => {
+            const t = ev.target;
+            if (t === overlay || t.classList.contains('replay-close')) { overlay.remove(); return; }
+            if (t.classList.contains('replay-tab')) { browserTab = t.dataset.tab; renderList(); return; }
+            if (t.classList.contains('replay-watch')) {
+                t.disabled = true; t.textContent = 'Loading...';
+                overlay.remove();
+                open(+t.dataset.id);
+                return;
+            }
+            if (t.classList.contains('replay-post')) {
+                const makePublic = t.dataset.public !== '1';
+                if (makePublic && !confirm('Post this game publicly? Everyone will be able to watch it, with every player\'s name.')) return;
+                t.disabled = true;
+                const { error } = await supabase.rpc('set_match_public', { p_match_id: +t.dataset.id, p_public: makePublic });
+                if (error) { alert('Could not change this game: ' + error.message); t.disabled = false; return; }
+                renderList();
+            }
+        });
+        document.body.appendChild(overlay);
+        renderList();
+    }
+
+    window.Replay = { open, openBrowser, play, pause, step, get state() { return state; } };
 })();

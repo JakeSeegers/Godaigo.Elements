@@ -177,6 +177,20 @@ reach/beat it from here.
   Stop hook checks it. Tested headless with a max-age=600 server: reload picked up new files,
   typing blocks the reload, no loop. Next: splash + lore intro lag, and the loading screen
   (owner says it is not fully working).
+- **Phase 3 step 3 DONE (2026-09-24): Replays screen.** Lobby "Replays" button ->
+  Replay.openBrowser() (js/replay-viewer.js): My games (Watch, Post publicly / Remove from
+  public) + Public (Watch). End screen says END OF REPLAY (no XP). Headless-tested on the full
+  match 5 recording: replay fingerprints == seat 0's real fingerprints on turns 2-22 (turn 1
+  differs: real snapshot taken mid-placement). This is the Phase 2 "replay verification"
+  check working by hand.
+- **Create (VOID_SCROLL_5) desync, found by that replay check:** selection scrolls only
+  broadcast 'scroll-effect' (activated elements) from onSelectionEffectComplete, and Create,
+  Scholar's Insight, Transmute, Scorched Earth, Tile Element Change and Scroll Sacrifice never
+  call it on some or all paths. Fix in game-core applyScrollEffects: broadcast 'scroll-effect'
+  at cast time for selection scrolls too (element is already activated locally there). Later
+  completion repeats it (harmless). Tested: Create pick + cancel both broadcast void.
+- **Next:** automatic replay verification (server or hermit tool: replay each finished match,
+  compare fingerprints, flag mismatches), then Phase 4 stats + hermit suspicious-player screen.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

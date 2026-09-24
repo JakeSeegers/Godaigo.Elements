@@ -429,3 +429,63 @@
 #replay-controls select { padding: 4px 10px; font-size: 15px; cursor: pointer; }
 #replay-controls .replay-title { font-weight: bold; color: var(--pp-maroon, #9b59b6); }
 #replay-controls .replay-progress { min-width: 120px; color: var(--pp-ink-soft, #bbb); }
+
+/* ── Replay browser (js/replay-viewer.js openBrowser) ───────────────────── */
+#replay-browser {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.replay-modal {
+  background: var(--pp-parch);
+  color: var(--pp-ink);
+  border: 2px solid var(--pp-maroon);
+  border-radius: 8px;
+  padding: 16px 20px;
+  width: 100%;
+  max-width: 620px;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  font-size: 17px;
+}
+.replay-modal-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: var(--pp-maroon);
+  text-align: center;
+  margin-bottom: 10px;
+}
+.replay-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.replay-tab { flex: 1; padding: 6px 10px; font-size: 16px; opacity: 0.65; }
+.replay-tab.active { opacity: 1; font-weight: bold; }
+.replay-list { overflow-y: auto; flex: 1; min-height: 80px; }
+.replay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--pp-maroon);
+}
+.replay-row-main { min-width: 0; }
+.replay-players { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.replay-player { font-weight: bold; border-left: 4px solid var(--pc, #888); padding-left: 5px; }
+.replay-player.won { color: var(--pp-maroon); }
+.replay-vs { font-size: 13px; color: var(--pp-ink-soft); }
+.replay-info { font-size: 13px; color: var(--pp-ink-soft); margin-top: 2px; }
+.replay-row-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.replay-row-actions button { padding: 4px 10px; font-size: 14px; white-space: nowrap; }
+.replay-empty { text-align: center; color: var(--pp-ink-soft); padding: 16px; }
+.replay-note { font-size: 12px; color: var(--pp-ink-soft); margin-top: 8px; line-height: 1.35; }
+.replay-close { align-self: center; margin-top: 10px; padding: 6px 18px; font-size: 17px; }
+@media (max-width: 480px) {
+  .replay-row { flex-direction: column; align-items: stretch; }
+  .replay-row-actions { flex-direction: row; }
+}

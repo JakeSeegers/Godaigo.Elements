@@ -154,8 +154,10 @@ Order matters — later scripts depend on earlier ones.
                              from recorded seats + deck seed -> myPlayerIndex = -1 (spectator; game-core
                              getPlayerScrolls shows the ACTIVE player's hand for a negative seat) -> recorded
                              messages dispatched into setupGameBroadcast()'s own handlers, timed, with
-                             play/pause/step/speed. Exit/Restart reload the page. Prototype: console
-                             Replay.open(matchId); player screens not built yet.
+                             play/pause/step/speed. Exit/Restart reload the page. Players: lobby "Replays"
+                             button -> Replay.openBrowser(): "My games" (Watch, Post publicly / Remove from
+                             public) and "Public" (Watch). Verified: match 5 replay equals the real board
+                             fingerprints on turns 2-22.
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)

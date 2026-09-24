@@ -1544,12 +1544,15 @@
                         // selection was never completed.)
                         checkWinCondition(activePlayerIndex, { announce: true });
 
-                        // If effect requires selection, don't continue with broadcast yet
-                        if (result.requiresSelection) {
-                            return; // Selection mode will call onSelectionEffectComplete when done
-                        }
-
-                        // Broadcast the effect in multiplayer
+                        // Broadcast the effect in multiplayer. Selection scrolls
+                        // (Create, Scholar's Insight, Transmute, ...) send it now
+                        // too: the element is already activated on this board,
+                        // and several of them never call onSelectionEffectComplete,
+                        // so the other players never heard about it (match 5:
+                        // Create's void activation was missing on the other board,
+                        // found by comparing the replay with its fingerprints).
+                        // A later onSelectionEffectComplete repeats it; adding an
+                        // element twice is harmless.
                         if (isMultiplayer) {
                             // For catacomb scrolls, send component elements for win condition tracking
                             const activatedElements = (spell.element === 'catacomb' && spell.patterns && spell.patterns[0])
@@ -1565,8 +1568,8 @@
                             syncPlayerState();
                         }
 
-                        // Win condition already checked above (before the
-                        // requiresSelection early return).
+                        // Win condition already checked above. A selection
+                        // effect finishes later (onSelectionEffectComplete).
                         return;
                     } else {
                         console.warn(`📜 No effect defined for scroll "${name}" – using default (give stones). Add effect in scroll-effects.js for "${name}".`);
