@@ -589,7 +589,7 @@
         if (positionalTypes.includes(a?.type) &&
             typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex) &&
             !(a.type === 'endTurn' && typeof isPlayerStrandedOnStone === 'function' && isPlayerStrandedOnStone(activePlayerIndex))) {
-            return { ok: false, reason: 'standing on a stone — must move to an empty hex first' };
+            return { ok: false, reason: 'standing on a stone - must move to an empty hex first' };
         }
 
         switch (a?.type) {
@@ -799,5 +799,5 @@
     }
 
     window.BotState = { snapshot, legalActions, applyAction, hexGrid, findPath };
-    log('Loaded — window.BotState ready (snapshot / legalActions / applyAction)');
+    log('Loaded - window.BotState ready (snapshot / legalActions / applyAction)');
 })();

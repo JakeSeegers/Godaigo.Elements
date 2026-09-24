@@ -205,7 +205,7 @@
         const botTag = entry.actor === 'bot' ? ' (bot)' : '';
         const div = document.createElement('div');
         div.className = 'gl-turn-header';
-        div.innerHTML = `Turn ${entry.turn} — ${playerSpan(entry.player)}${botTag}`;
+        div.innerHTML = `Turn ${entry.turn} - ${playerSpan(entry.player)}${botTag}`;
         content.appendChild(div);
         content.scrollTop = content.scrollHeight;
         _fit();
@@ -267,7 +267,7 @@
             }
             case 'counter_negated': {
                 return {
-                    html: `${playerSpan(entry.player)} pays ${entry.ransomAP ?? 2} AP — negates ` +
+                    html: `${playerSpan(entry.player)} pays ${entry.ransomAP ?? 2} AP - negates ` +
                         `${playerSpan(entry.casterIndex)}'s ${esc(scrollDisplayName(entry.scrollName))}!`,
                     className: 'gl-negated',
                 };

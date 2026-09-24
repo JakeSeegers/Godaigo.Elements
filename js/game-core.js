@@ -892,7 +892,7 @@
 
                 if (scrolls.hand.size > this.MAX_HAND_SIZE) {
                     // Over limit — remind the player they must cascade before ending their turn
-                    updateStatus(`Picked up "${scrollInfo?.name || selected}" — hand is over the limit. Cascade a scroll before ending your turn!`);
+                    updateStatus(`Picked up "${scrollInfo?.name || selected}" - hand is over the limit. Cascade a scroll before ending your turn!`);
                 } else {
                     this.showScrollNotification(scrollInfo, shrineType, selected);
                 }
@@ -969,14 +969,14 @@
                     const stillOver  = handOver || activeOver;
 
                     if (stillOver) {
-                        let msg = `⚠ Scroll Overflow — `;
+                        let msg = `⚠ Scroll Overflow - `;
                         if (handOver)   msg += `Hand: ${scrolls.hand.size}/${self.MAX_HAND_SIZE}  `;
                         if (activeOver) msg += `Active: ${scrolls.active.size}/${self.MAX_ACTIVE_SIZE}`;
                         statusEl.textContent = msg.trimEnd();
                         banner.classList.remove('overflow-resolved');
                         endTurnBtn.disabled = true;
                     } else {
-                        statusEl.textContent = `✓ Resolved — Hand: ${scrolls.hand.size}/${self.MAX_HAND_SIZE}  Active: ${scrolls.active.size}/${self.MAX_ACTIVE_SIZE}`;
+                        statusEl.textContent = `✓ Resolved - Hand: ${scrolls.hand.size}/${self.MAX_HAND_SIZE}  Active: ${scrolls.active.size}/${self.MAX_ACTIVE_SIZE}`;
                         banner.classList.add('overflow-resolved');
                         endTurnBtn.disabled = false;
                     }
@@ -1132,7 +1132,7 @@
                 // must move off before casting (see isPlayerRestingOnStone).
                 if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
                     window.SoundSystem?.play('error');
-                    updateStatus('Cannot activate while standing on a stone — move to an empty hex first.');
+                    updateStatus('Cannot activate while standing on a stone - move to an empty hex first.');
                     return false;
                 }
                 // Scrolls in Active Area OR Common Area can be activated
@@ -1258,7 +1258,7 @@
             castSpecificScroll(scrollName) {
                 if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
                     window.SoundSystem?.play('error');
-                    updateStatus('Cannot activate while standing on a stone — move to an empty hex first.');
+                    updateStatus('Cannot activate while standing on a stone - move to an empty hex first.');
                     return false;
                 }
 
@@ -1492,7 +1492,7 @@
                         // Track activated element(s) for win condition regardless of effect result
                         // (but skip if the effect was cancelled, e.g. Sacrificial Pyre with empty hand)
                         if (result.cancelled) {
-                            console.log(`📜 Effect cancelled — skipping win-condition tracking for ${name}`);
+                            console.log(`📜 Effect cancelled - skipping win-condition tracking for ${name}`);
                             return;
                         }
                         if (spell.element === 'catacomb' && spell.patterns && spell.patterns[0]) {
@@ -1528,7 +1528,7 @@
                                     window.gami.onElementActivated(spell.element, Array.from(this.getPlayerScrolls(false).activated));
                                 }
                             } else {
-                                updateStatus(`The ${spell.element} shrine source is depleted — scroll effect activated, but win condition not met.`);
+                                updateStatus(`The ${spell.element} shrine source is depleted - scroll effect activated, but win condition not met.`);
                                 // Normal rules enforcement (empty-source-pool rule), not an anomaly — log, don't warn
                                 console.log(`📜 Win condition skipped for ${spell.element}: source pool is empty.`);
                             }
@@ -1622,7 +1622,7 @@
                         if (isNew1) window.SoundSystem?.onWinCondition(spell.element);
                         updateStatus(`Scroll activated! Added +${spell.level} ${spell.element} stones!`);
                     } else {
-                        updateStatus(`The ${spell.element} shrine source is depleted — scroll effect activated, but win condition not met.`);
+                        updateStatus(`The ${spell.element} shrine source is depleted - scroll effect activated, but win condition not met.`);
                         // Normal rules enforcement (empty-source-pool rule), not an anomaly — log, don't warn
                         console.log(`📜 Win condition skipped for ${spell.element}: source pool is empty (default path).`);
                     }
@@ -1731,7 +1731,7 @@
                     // makes the player resolve it (no separate cascade popup)
                     const lamplightScrolls = this.playerScrolls[lamplightCasterIndex];
                     if (lamplightScrolls.hand.size > this.MAX_HAND_SIZE) {
-                        updateStatus(`Unbidden Lamplight sent "${scrollName}" to your hand — hand is over the limit. Cascade a scroll before ending your turn!`);
+                        updateStatus(`Unbidden Lamplight sent "${scrollName}" to your hand - hand is over the limit. Cascade a scroll before ending your turn!`);
                     } else {
                         updateStatus('Unbidden Lamplight sent the scroll to your hand!');
                     }
@@ -1801,7 +1801,7 @@
                 box.appendChild(playerName);
 
                 const msg = document.createElement('div');
-                msg.textContent = 'All five elements mastered — and returned to the shrine!';
+                msg.textContent = 'All five elements mastered - and returned to the shrine!';
                 msg.className = 'game-over-msg';
                 box.appendChild(msg);
 
@@ -2187,7 +2187,7 @@
                 popup.appendChild(handSection);
 
                 const infoText = document.createElement('div');
-                infoText.innerHTML = '<strong>Tip:</strong> Move scrolls from Hand to Active Area (0 AP) to prepare for activating. Scrolls in Active Area stay there after activating. Scrolls cannot be moved back to Hand — discard to Common Area instead. Common Area scrolls are shared (max 1 per element).';
+                infoText.innerHTML = '<strong>Tip:</strong> Move scrolls from Hand to Active Area (0 AP) to prepare for activating. Scrolls in Active Area stay there after activating. Scrolls cannot be moved back to Hand - discard to Common Area instead. Common Area scrolls are shared (max 1 per element).';
                 infoText.className = 'si-tip';
                 popup.appendChild(infoText);
 
@@ -2516,7 +2516,7 @@
             // Mid-transit across a stone — must move off before acting (see
             // isPlayerRestingOnStone).
             if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(activePlayerIndex)) {
-                updateStatus('Cannot break a stone while standing on a stone — move to an empty hex first.');
+                updateStatus('Cannot break a stone while standing on a stone - move to an empty hex first.');
                 window.SoundSystem?.play('error');
                 return;
             }
@@ -3577,8 +3577,8 @@
             };
             window.showDebugCommands = function () {
                 console.log('Commands:');
-                console.log('- dumpGameDebug()  /  debug()     — full game state snapshot (replaces dumpScrollDebug)');
-                console.log('- dumpScrollDebug()               — alias for dumpGameDebug');
+                console.log('- dumpGameDebug()  /  debug()     - full game state snapshot (replaces dumpScrollDebug)');
+                console.log('- dumpScrollDebug()               - alias for dumpGameDebug');
                 console.log('- dumpScrollEvents()');
                 console.log('- showScrollFinderUI()');
                 console.log('- hideScrollFinderUI()');
@@ -3587,7 +3587,7 @@
                 console.log('- showdeck()  // toggle scroll deck browser');
                 console.log('- givePlayersFiveStones()');
                 console.log('- fillstones()');
-                console.log('- window.KNOWN_BUGS              — list of open bug tickets');
+                console.log('- window.KNOWN_BUGS              - list of open bug tickets');
                 console.log('- window.DEBUG_LOG_VERBOSE = true/false');
             };
             window.help = function () {
@@ -3626,7 +3626,7 @@
         ];
         (function printKnownBugs() {
             if (window.KNOWN_BUGS.length === 0) return;
-            console.group('%c📋 Known Bugs (' + window.KNOWN_BUGS.length + ') — run dumpGameDebug() for full state', 'color:#e67e22;font-weight:bold');
+            console.group('%c📋 Known Bugs (' + window.KNOWN_BUGS.length + ') - run dumpGameDebug() for full state', 'color:#e67e22;font-weight:bold');
             window.KNOWN_BUGS.forEach(function(b) {
                 console.log('%c[' + b.status.toUpperCase() + '] ' + b.id + ': ' + b.title, 'color:#f39c12;font-weight:bold');
                 console.log('   ' + b.description);
@@ -3689,7 +3689,7 @@
                     } : null;
 
                     // ── output ────────────────────────────────────────────────
-                    console.group('%c🔍 dumpGameDebug() — Full Game Snapshot', 'color:#d4ac0d;font-weight:bold;font-size:14px');
+                    console.group('%c🔍 dumpGameDebug() - Full Game Snapshot', 'color:#d4ac0d;font-weight:bold;font-size:14px');
 
                     // Players & multiplayer
                     console.group('👥 Players & Multiplayer');
@@ -3714,7 +3714,7 @@
                     console.group('🔄 Turn Order');
                     console.log('sorted:', sortedD.map(p => '[' + p.index + '] ' + (p.color || '?') + ' rank' + p.rank).join(' → '));
                     console.log('currentSortedIndex:', curSortIdx,
-                        curSortIdx === -1 ? ' ⚠️ ACTIVE PLAYER NOT FOUND IN SORT — TURN ORDER BUG' :
+                        curSortIdx === -1 ? ' ⚠️ ACTIVE PLAYER NOT FOUND IN SORT - TURN ORDER BUG' :
                         curSortIdx >= 0 && sortedD.length > 0 ? ' → next: [' + sortedD[(curSortIdx + 1) % sortedD.length].index + ']' : '');
                     console.groupEnd();
 
@@ -4400,7 +4400,7 @@
                         updateStatus('Cannot move a tile with more than one player on it!');
                     } else if (tkBlockBridge) {
                         console.log(`   ✗ Cannot drag: removing tile would strand a neighbor`);
-                        updateStatus('Cannot move this tile — it would strand an adjacent tile!');
+                        updateStatus('Cannot move this tile - it would strand an adjacent tile!');
                     } else {
                         console.log(`   ✗ Cannot drag: hasStones=${tileHasStones(tileId)}, isPanning=${isPanning}, isDraggingStone=${isDraggingStone}`);
                     }
@@ -4880,7 +4880,7 @@
             // Catacomb tile reveal: refund 1 AP
             const isCatacombReveal = tile.shrineType === 'catacomb';
             if (isCatacombReveal) {
-                console.log(`⚡ Catacomb tile revealed — refunding 1 AP`);
+                console.log(`⚡ Catacomb tile revealed - refunding 1 AP`);
                 addAP(1);
             }
 
@@ -5826,8 +5826,8 @@ function clearPlayerPath() {
 
             // SPECIAL CASE: During placement phase, timeout should kick all players back to lobby
             if (isPlacementPhase) {
-                console.log('⏰ Turn timeout during placement phase — resetting game to lobby');
-                updateStatus('⏰ Player tile placement timed out — returning all players to lobby');
+                console.log('⏰ Turn timeout during placement phase - resetting game to lobby');
+                updateStatus('⏰ Player tile placement timed out - returning all players to lobby');
 
                 // First, kick the AFK player from the lobby
                 const { data: allPlayers } = await supabase
@@ -5890,7 +5890,7 @@ function clearPlayerPath() {
                 const forfeiterName = typeof getPlayerColorName === 'function'
                     ? getPlayerColorName(activePlayerIndex) : `Player ${activePlayerIndex + 1}`;
                 console.log(`⏰ Cascade forfeit: ${forfeiterName} ran out of time with unresolved cascade`);
-                updateStatus(`⏰ ${forfeiterName} ran out of time with an unresolved scroll cascade — forfeiting!`);
+                updateStatus(`⏰ ${forfeiterName} ran out of time with an unresolved scroll cascade - forfeiting!`);
                 if (typeof broadcastGameAction === 'function') {
                     broadcastGameAction('cascade-forfeit', { playerIndex: activePlayerIndex });
                 }
@@ -5932,7 +5932,7 @@ function clearPlayerPath() {
                     console.warn('⚠️ Turn timeout expired but active player not found in DB');
                 }
             } else {
-                updateStatus('⏰ Turn timer expired — auto-passing turn.');
+                updateStatus('⏰ Turn timer expired - auto-passing turn.');
             }
 
             // Advance to next available player and restart the timer

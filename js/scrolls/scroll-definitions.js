@@ -86,7 +86,7 @@ const FIRE_SCROLL_EFFECTS = {
 
 // Void scroll effect definitions
 const VOID_SCROLL_EFFECTS = {
-    1: { name: 'Psychic', description: "Counter the previous scroll, then play it during your turn — unless its caster pays 2 AP to negate Psychic. Move Psychic to the common area.", isCounter: true, oncePerTurn: true },
+    1: { name: 'Psychic', description: "Counter the previous scroll, then play it during your turn - unless its caster pays 2 AP to negate Psychic. Move Psychic to the common area.", isCounter: true, oncePerTurn: true },
     2: { name: 'Telekinesis', description: 'Move a tile that has no stones on it. If one player is on the tile, they move to its center. Cannot move a tile with multiple players on it. It must be touching 1 other tile. Cannot move a tile if it would strand an adjacent tile.' },
     3: { name: 'Simplify', description: 'Scrolls cost 1 AP for you to activate until the beginning of your next turn.' },
     4: { name: "Scholar's Insight", description: 'Search through a Scroll Deck and add a scroll of your choice to your hand. Shuffle that deck afterwards.' },
@@ -296,7 +296,7 @@ const SCROLL_DECKS = {
 const SCROLL_RULINGS = {
     WATER_SCROLL_5: [
         "If an element has no stones remaining in the source pool, you cannot transform a water stone into that element.",
-        "Each transformation pulls a replacement stone from the source pool — pool counts update immediately and affect all future placements this game."
+        "Each transformation pulls a replacement stone from the source pool - pool counts update immediately and affect all future placements this game."
     ]
 };
 

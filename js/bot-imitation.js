@@ -82,7 +82,7 @@
     function setEnabled(v) {
         enabled = !!v && isHermitUser(); // never persists ON for a non-hermit account
         try { localStorage.setItem(ENABLED_KEY, enabled ? '1' : '0'); } catch (e) { /* ignore */ }
-        console.log(`🧠 [Imitation] ${enabled ? 'ON — watching your play' : 'OFF'}`);
+        console.log(`🧠 [Imitation] ${enabled ? 'ON - watching your play' : 'OFF'}`);
         renderBadge();
     }
     function isEnabled() { return enabled && isHermitUser(); }
@@ -271,7 +271,7 @@
     function onHumanAction(entry) {
         if (!isEnabled()) return;
         if (typeof myPlayerIndex === 'undefined' || entry.player !== myPlayerIndex) return;
-        console.log(`🧠 [Imitation] your action: ${entry.type}${entry.scroll ? ' (' + entry.scroll + ')' : ''} — had a cached bot pick? ${!!pending}${pending ? ` (bot wanted: ${pending.bestType})` : ''}`);
+        console.log(`🧠 [Imitation] your action: ${entry.type}${entry.scroll ? ' (' + entry.scroll + ')' : ''} - had a cached bot pick? ${!!pending}${pending ? ` (bot wanted: ${pending.bestType})` : ''}`);
         if (!pending) return; // nothing cached to compare against — skip, don't guess
         const snapshot = pending;
         pending = null; // this decision is spent; next poll tick builds a fresh one
@@ -303,7 +303,7 @@
     if (typeof window.ActionLog?.onRecord === 'function') {
         window.ActionLog.onRecord(onHumanAction);
     } else {
-        console.warn('⚠️ [Imitation] ActionLog not loaded yet — load order issue, see file header');
+        console.warn('⚠️ [Imitation] ActionLog not loaded yet - load order issue, see file header');
     }
 
     // ── tiny hermit-only readout — never intrusive, just proof it's alive ──
@@ -322,7 +322,7 @@
             document.body.appendChild(badge);
         }
         badge.style.display = 'block';
-        badge.textContent = `🧠 learning — ${stats.watched} watched, ${stats.agreed} agreed, ${stats.nudged} nudged`;
+        badge.textContent = `🧠 learning - ${stats.watched} watched, ${stats.agreed} agreed, ${stats.nudged} nudged`;
     }
 
     window.BotImitation = {
@@ -339,5 +339,5 @@
         debugPending: () => { console.log('🧠 [Imitation] pending:', pending); return pending; },
     };
     renderBadge();
-    console.log('🧠 [Imitation] Loaded — hermit-only, off by default (see hermit menu)');
+    console.log('🧠 [Imitation] Loaded - hermit-only, off by default (see hermit menu)');
 })();

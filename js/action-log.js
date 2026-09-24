@@ -183,5 +183,5 @@
     function clear() { log.length = 0; }
 
     window.ActionLog = { record, download, clear, setRoster, onRecord, entries: () => log.slice() };
-    console.log('📋 [ActionLog] Loaded — window.ActionLog.download() or the cheat panel button');
+    console.log('📋 [ActionLog] Loaded - window.ActionLog.download() or the cheat panel button');
 })();

@@ -265,7 +265,7 @@
                       </div>`;
                 } else {
                     html += `
-                      <div class="shop-item" title="${_esc(item.name)} — ${item.cost}g">
+                      <div class="shop-item" title="${_esc(item.name)} - ${item.cost}g">
                         <button class="${btnCls}" onclick="window.emojiSystem.purchaseEmoji('${item.id}')">${_esc(item.display)}</button>
                         <div class="shop-item-name">${_esc(item.name)}</div>
                         <button class="shop-buy-btn" style="border-color:${tier.color};color:${tier.color}" onclick="window.emojiSystem.purchaseEmoji('${item.id}')">${item.cost}g</button>
@@ -299,7 +299,7 @@
 
         if (currentGold < item.cost) {
             if (window.gami.notify) {
-                window.gami.notify(`Need ${item.cost}g — you have ${currentGold}g`, null, 'gold');
+                window.gami.notify(`Need ${item.cost}g - you have ${currentGold}g`, null, 'gold');
             } else {
                 alert(`Not enough gold! Need ${item.cost}g but you have ${currentGold}g.`);
             }
@@ -484,7 +484,7 @@
         createPanelDOM();
         loadInventory();
         renderCurrentView();
-        console.log('✅ Emoji system ready —', EMOJI_ITEMS.length, 'emojis in', EMOJI_TIERS.length, 'tiers');
+        console.log('✅ Emoji system ready -', EMOJI_ITEMS.length, 'emojis in', EMOJI_TIERS.length, 'tiers');
     }
 
     // ----------------------------------------------------------------

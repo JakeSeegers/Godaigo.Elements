@@ -28,7 +28,7 @@ try {
 console.log([
     'GODAIGO HOUSE RULES (full list: "HOUSE RULES" in CLAUDE.md). Short version:',
     '- Never use em dashes in anything you write (code, comments, docs, commit messages, game text).',
-    '- Any change a player can see or feel needs an entry in changelog.json (simple English, no em dashes).',
+    '- Release notes (changelog.json): at most ONE entry per day, max 5 lines. Same day = rewrite that day\'s summary, never add a second entry. Only changes players notice; small fixes go in one "Small fixes and polish" line.',
     '- Start from planning/current.md and the INDEX.md files before reading source.',
-    'A Stop hook (tools/claude-hooks/stop-check.js) checks the first two rules before you finish.'
+    'A Stop hook (tools/claude-hooks/stop-check.js) checks these rules before you finish.'
 ].join('\n'));

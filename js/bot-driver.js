@@ -197,7 +197,7 @@
 
             // Safety net: never leave the game hanging on a stuck bot turn
             if (activePlayerIndex === botIndex) {
-                log('Bot turn did not end on its own — forcing end turn');
+                log('Bot turn did not end on its own - forcing end turn');
                 const btn = document.getElementById('end-turn');
                 if (btn && !btn.disabled) btn.click();
             }
@@ -285,7 +285,7 @@
         await asBot(targetPlayerIndex, async () => {
             const candidates = se.getValidTakeFlightDestinations(targetPlayerIndex);
             if (!candidates.length) {
-                log(`Bot ${targetPlayerIndex}: no valid Take Flight destination — cancelling`);
+                log(`Bot ${targetPlayerIndex}: no valid Take Flight destination - cancelling`);
                 if (typeof broadcastGameAction === 'function') {
                     broadcastGameAction('take-flight-cancel-request', { casterIndex, targetPlayerIndex });
                 }
@@ -346,5 +346,5 @@
         _driveBotTurn: driveBotTurn,
     };
 
-    log('Loaded — host lobbies get a 🤖 Add Bot button; host client drives bot turns');
+    log('Loaded - host lobbies get a 🤖 Add Bot button; host client drives bot turns');
 })();

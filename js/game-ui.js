@@ -2546,7 +2546,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             const hasStone = placedStones.some(s => Math.sqrt(Math.pow(s.x - shrine.x, 2) + Math.pow(s.y - shrine.y, 2)) < 5);
             const hasPlayer = playerPositions.some(p => p && Math.sqrt(Math.pow(p.x - shrine.x, 2) + Math.pow(p.y - shrine.y, 2)) < 5);
             if (hasStone || hasPlayer) {
-                updateStatus('Cannot teleport there — destination is now blocked!');
+                updateStatus('Cannot teleport there - destination is now blocked!');
                 updateCatacombIndicators();
                 return;
             }
@@ -2608,7 +2608,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             handNavActive = true;
             handNavIndex = 0;
             highlightScrollCard('hand', 0);
-            updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · Tab=common · Space=activate · Esc cancel`);
+            updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} - ← → pick · Enter=active · Tab=common · Space=activate · Esc cancel`);
         }
 
         function enterActiveNav() {
@@ -2621,7 +2621,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             activeNavActive = true;
             activeNavIndex = 0;
             highlightScrollCard('active', 0);
-            updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Tab=common · Space=activate · Esc cancel`);
+            updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} - ← → pick · Tab=common · Space=activate · Esc cancel`);
         }
 
         function enterCommonNav() {
@@ -2634,7 +2634,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             commonNavActive = true;
             commonNavIndex = 0;
             highlightScrollCard('common', 0);
-            updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} — ← → pick · Space=activate · Esc cancel`);
+            updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} - ← → pick · Space=activate · Esc cancel`);
         }
 
         // Stone placement keyboard-preview state
@@ -2737,7 +2737,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             stonePreviewIndex = 0;
             stonePreviewActive = true;
             showStonePreviewGhost(positions[0], type);
-            updateStatus(`${type} stone — pos 1 of ${positions.length} — ← → to move, Enter to place, ${STONE_KEY_ORDER.indexOf(type) + 1} or Esc to cancel`);
+            updateStatus(`${type} stone - pos 1 of ${positions.length} - ← → to move, Enter to place, ${STONE_KEY_ORDER.indexOf(type) + 1} or Esc to cancel`);
         }
 
         document.addEventListener('keydown', (e) => {
@@ -2854,7 +2854,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         else sp.castSpell();
                         sps?.refresh();
                     } else {
-                        updateStatus(`Pattern not matched — place the required stones first.`);
+                        updateStatus(`Pattern not matched - place the required stones first.`);
                     }
                 }
             }
@@ -2901,7 +2901,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                         cataPreviewIndex = 0;
                         cataPreviewActive = true;
                         showCataPreviewGhost(dests[0]);
-                        updateStatus(`Catacomb teleport — destination 1 of ${dests.length} — ← → to cycle, T to confirm, Esc to cancel`);
+                        updateStatus(`Catacomb teleport - destination 1 of ${dests.length} - ← → to cycle, T to confirm, Esc to cancel`);
                     }
                 }
             }
@@ -3031,7 +3031,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     tilePreviewIndex = Math.floor(Math.random() * positions.length);
                     tilePreviewActive = true;
                     showTilePreviewGhost(tilePreviewPositions[tilePreviewIndex]);
-                    updateStatus(`Tile position ${tilePreviewIndex + 1} of ${tilePreviewPositions.length} — ← → to move, Enter to confirm, Esc to cancel`);
+                    updateStatus(`Tile position ${tilePreviewIndex + 1} of ${tilePreviewPositions.length} - ← → to move, Enter to confirm, Esc to cancel`);
                     return;
                 }
 
@@ -3044,7 +3044,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     movePreviewActive = true;
                     showMovePreviewGhost(movePreviewPositions[0]);
                     const cost = canPlayerMoveToHex(movePreviewPositions[0].x, movePreviewPositions[0].y, false).cost;
-                    updateStatus(`Move 1 of ${positions.length} (${cost} AP) — ← → to choose, Enter to confirm, Esc to cancel`);
+                    updateStatus(`Move 1 of ${positions.length} (${cost} AP) - ← → to choose, Enter to confirm, Esc to cancel`);
                 }
             }
 
@@ -3057,34 +3057,34 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     const scrolls = getHandScrolls();
                     handNavIndex = (handNavIndex + dir + scrolls.length) % scrolls.length;
                     highlightScrollCard('hand', handNavIndex);
-                    updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} — ← → pick · Enter=active · Tab=common · Space=activate · Esc cancel`);
+                    updateStatus(`Hand ${handNavIndex + 1}/${scrolls.length} - ← → pick · Enter=active · Tab=common · Space=activate · Esc cancel`);
                 } else if (activeNavActive) {
                     const scrolls = getActiveScrolls();
                     activeNavIndex = (activeNavIndex + dir + scrolls.length) % scrolls.length;
                     highlightScrollCard('active', activeNavIndex);
-                    updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} — ← → pick · Tab=common · Space=activate · Esc cancel`);
+                    updateStatus(`Active ${activeNavIndex + 1}/${scrolls.length} - ← → pick · Tab=common · Space=activate · Esc cancel`);
                 } else if (commonNavActive) {
                     const scrolls = getCommonScrolls();
                     commonNavIndex = (commonNavIndex + dir + scrolls.length) % scrolls.length;
                     highlightScrollCard('common', commonNavIndex);
-                    updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} — ← → pick · Space=activate · Esc cancel`);
+                    updateStatus(`Common ${commonNavIndex + 1}/${scrolls.length} - ← → pick · Space=activate · Esc cancel`);
                 } else if (tilePreviewActive) {
                     tilePreviewIndex = (tilePreviewIndex + dir + tilePreviewPositions.length) % tilePreviewPositions.length;
                     showTilePreviewGhost(tilePreviewPositions[tilePreviewIndex]);
-                    updateStatus(`Tile position ${tilePreviewIndex + 1} of ${tilePreviewPositions.length} — ← → to move, Enter to confirm, Esc to cancel`);
+                    updateStatus(`Tile position ${tilePreviewIndex + 1} of ${tilePreviewPositions.length} - ← → to move, Enter to confirm, Esc to cancel`);
                 } else if (stonePreviewActive) {
                     stonePreviewIndex = (stonePreviewIndex + dir + stonePreviewPositions.length) % stonePreviewPositions.length;
                     showStonePreviewGhost(stonePreviewPositions[stonePreviewIndex], stonePreviewType);
-                    updateStatus(`${stonePreviewType} stone — pos ${stonePreviewIndex + 1} of ${stonePreviewPositions.length} — ← → to move, Enter to place, ${STONE_KEY_ORDER.indexOf(stonePreviewType) + 1} or Esc to cancel`);
+                    updateStatus(`${stonePreviewType} stone - pos ${stonePreviewIndex + 1} of ${stonePreviewPositions.length} - ← → to move, Enter to place, ${STONE_KEY_ORDER.indexOf(stonePreviewType) + 1} or Esc to cancel`);
                 } else if (cataPreviewActive) {
                     cataPreviewIndex = (cataPreviewIndex + dir + cataPreviewDestinations.length) % cataPreviewDestinations.length;
                     showCataPreviewGhost(cataPreviewDestinations[cataPreviewIndex]);
-                    updateStatus(`Catacomb teleport — destination ${cataPreviewIndex + 1} of ${cataPreviewDestinations.length} — ← → to cycle, T to confirm, Esc to cancel`);
+                    updateStatus(`Catacomb teleport - destination ${cataPreviewIndex + 1} of ${cataPreviewDestinations.length} - ← → to cycle, T to confirm, Esc to cancel`);
                 } else {
                     movePreviewIndex = (movePreviewIndex + dir + movePreviewPositions.length) % movePreviewPositions.length;
                     showMovePreviewGhost(movePreviewPositions[movePreviewIndex]);
                     const cost = canPlayerMoveToHex(movePreviewPositions[movePreviewIndex].x, movePreviewPositions[movePreviewIndex].y, false).cost;
-                    updateStatus(`Move ${movePreviewIndex + 1} of ${movePreviewPositions.length} (${cost} AP) — ← → to choose, Enter to confirm, Esc to cancel`);
+                    updateStatus(`Move ${movePreviewIndex + 1} of ${movePreviewPositions.length} (${cost} AP) - ← → to choose, Enter to confirm, Esc to cancel`);
                 }
             }
 
@@ -3146,7 +3146,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
             // ending the turn HAS to stay legal, or the game hard-deadlocks.
             if (typeof isPlayerRestingOnStone === 'function' && isPlayerRestingOnStone(turnPlayerIdx) &&
                 !(typeof isPlayerStrandedOnStone === 'function' && isPlayerStrandedOnStone(turnPlayerIdx))) {
-                updateStatus('Cannot end your turn while standing on a stone — move to an empty hex first.');
+                updateStatus('Cannot end your turn while standing on a stone - move to an empty hex first.');
                 window.SoundSystem?.play('error');
                 return;
             }
@@ -3163,7 +3163,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 }).then(({ data, error }) => {
                     if (error) { console.warn('⚠️ [R2 shadow-validator] call failed:', error); return; }
                     if (data?.legal === false) {
-                        console.warn(`⚠️ [R2 shadow-validator] DISAGREEMENT — DB says turn belongs to player ${data.currentTurnIndex}, client ended turn for player ${endingPlayerIndex}`);
+                        console.warn(`⚠️ [R2 shadow-validator] DISAGREEMENT - DB says turn belongs to player ${data.currentTurnIndex}, client ended turn for player ${endingPlayerIndex}`);
                     } else {
                         console.log(`✅ [R2 shadow-validator] confirmed endTurn legal for player ${endingPlayerIndex}`);
                     }
@@ -3214,13 +3214,13 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                             .filter((_, idx) => playerPositions[idx] != null)
                             .sort((a, b) => a.rank - b.rank);
                         if (sortedPlayers.length === 0) {
-                            console.warn('⚠️ sortedPlayers is empty — cannot advance turn');
+                            console.warn('⚠️ sortedPlayers is empty - cannot advance turn');
                             isEndingTurn = false;
                             return;
                         }
                         let currentSortedIndex = sortedPlayers.findIndex(p => p.index === activePlayerIndex);
                         if (currentSortedIndex === -1) {
-                            console.warn('⚠️ activePlayerIndex', activePlayerIndex, 'not found in sortedPlayers — defaulting to first player');
+                            console.warn('⚠️ activePlayerIndex', activePlayerIndex, 'not found in sortedPlayers - defaulting to first player');
                             currentSortedIndex = sortedPlayers.length - 1; // will wrap to 0
                         }
                         const nextSortedIndex = (currentSortedIndex + 1) % sortedPlayers.length;
@@ -3329,7 +3329,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                     .sort((a, b) => a.rank - b.rank);
 
                 if (sortedPlayers.length === 0) {
-                    console.warn('⚠️ sortedPlayers is empty — cannot advance turn (no placed player positions)');
+                    console.warn('⚠️ sortedPlayers is empty - cannot advance turn (no placed player positions)');
                     isEndingTurn = false;
                     return;
                 }
@@ -3337,7 +3337,7 @@ boardSvg.addEventListener('touchstart', handleBoardTouchStart, { passive: false 
                 // Find current player in sorted list
                 let currentSortedIndex = sortedPlayers.findIndex(p => p.index === activePlayerIndex);
                 if (currentSortedIndex === -1) {
-                    console.warn('⚠️ activePlayerIndex', activePlayerIndex, 'not in sortedPlayers — defaulting to first player. Sorted:', sortedPlayers);
+                    console.warn('⚠️ activePlayerIndex', activePlayerIndex, 'not in sortedPlayers - defaulting to first player. Sorted:', sortedPlayers);
                     currentSortedIndex = sortedPlayers.length - 1; // wraps to 0 below
                 }
 
@@ -3733,7 +3733,7 @@ document.getElementById('undo-move').onclick = function() {
                     // control passes to whoever's turn it is now.
                     const fresh = catacombEligibility();
                     if (!fresh.shrine || !fresh.isCatacombLike(fresh.shrine)) {
-                        updateStatus('Cannot teleport — no catacomb/Freedom access from here anymore.');
+                        updateStatus('Cannot teleport - no catacomb/Freedom access from here anymore.');
                         updateCatacombIndicators();
                         return;
                     }
@@ -4281,7 +4281,7 @@ document.getElementById('undo-move').onclick = function() {
                 if (!data?.length || !data[0].weights || typeof data[0].weights !== 'object') throw new Error('no champion rows in bot_champion_weights');
                 baseline = data[0].weights;
             } catch (e) {
-                throw new Error(`Hill Climb needs the online champion to anchor to, not defaults — couldn't fetch it (${e.message}). Try again when online.`);
+                throw new Error(`Hill Climb needs the online champion to anchor to, not defaults - couldn't fetch it (${e.message}). Try again when online.`);
             }
 
             // Noisy anchor (opts.noisyAnchor): climb from a perturbed copy of
@@ -4313,7 +4313,7 @@ document.getElementById('undo-move').onclick = function() {
             // CURRENT game number every report, not a fixed assignment.
             // Hex values match config.js's PLAYER_COLORS exactly.
             function sideColors() {
-                if (!lastGameNum) return { aName: '—', bName: '—', aHex: '#555', bHex: '#555' };
+                if (!lastGameNum) return { aName: '-', bName: '-', aHex: '#555', bHex: '#555' };
                 const aIsPlayer0 = (lastGameNum - 1) % 2 === 0;
                 return aIsPlayer0
                     ? { aName: 'Purple', bName: 'Yellow', aHex: '#9458f4', bHex: '#ffce00' }
@@ -4428,14 +4428,14 @@ document.getElementById('undo-move').onclick = function() {
             if (uid) {
                 try {
                     const runGold = Math.max(8, Math.min(40, Math.round(gamesDone / 4)));
-                    await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: runGold, p_description: `Bot training — completed a ${gamesDone}-game run` });
+                    await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: runGold, p_description: `Bot training - completed a ${gamesDone}-game run` });
                     attemptGold = runGold;
                 } catch (e) { console.warn('run bonus failed (continuing):', e); }
             }
 
             if (rewarded && tierGold) {
                 try {
-                    await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: tierGold, p_description: `Bot training — beat the champion (${tier})` });
+                    await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: tierGold, p_description: `Bot training - beat the champion (${tier})` });
                 } catch (e) { console.warn('tier gold failed (continuing):', e); rewarded = false; }
             }
 
@@ -4493,7 +4493,7 @@ document.getElementById('undo-move').onclick = function() {
                     </div>
                     <div id="bt-popup-progress-text" style="font-size:10px;color:#888;margin-bottom:10px;"></div>
 
-                    <div id="bt-popup-history-label" style="font-size:10px;color:#888;margin-bottom:4px;display:none;">Round history — filled = promoted</div>
+                    <div id="bt-popup-history-label" style="font-size:10px;color:#888;margin-bottom:4px;display:none;">Round history - filled = promoted</div>
                     <div id="bt-popup-history" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:10px;"></div>
 
                     <div id="bt-popup-summary" style="font-size:11px;color:#aaa;margin-bottom:10px;"></div>
@@ -4511,13 +4511,13 @@ document.getElementById('undo-move').onclick = function() {
             el.querySelector('#bt-popup-end-early').onclick = () => {
                 if (window.BotArena?.isRunning()) {
                     window.BotArena.endEarly();
-                    updateStatus('Ending training early — running the confirmation match against the starting weights with the best result so far…');
+                    updateStatus('Ending training early - running the confirmation match against the starting weights with the best result so far…');
                 }
             };
             el.querySelector('#bt-popup-stop').onclick = () => {
                 if (window.BotArena?.isRunning()) {
                     window.BotArena.stop();
-                    updateStatus('Stopping — this run\'s result will be discarded, keeping the previous weights.');
+                    updateStatus('Stopping - this run\'s result will be discarded, keeping the previous weights.');
                 }
             };
             trainingPopupEl = el;
@@ -4544,7 +4544,7 @@ document.getElementById('undo-move').onclick = function() {
             historyLabelEl.style.display = 'none';
 
             if (p.mode === 'hillclimb') {
-                scenarioLine = 'Hill Climb — champion-anchored';
+                scenarioLine = 'Hill Climb - champion-anchored';
                 phaseLine = p.phase === 'confirming'
                     ? 'Confirming across 2–5 player tables'
                     : `Round ${p.round}/${p.rounds}`;
@@ -4561,7 +4561,7 @@ document.getElementById('undo-move').onclick = function() {
                     matchupHtml = `${swatch(p.sideAHex)} Challenger ${p.challenger}/${p.totalChallengers} <span style="color:#666;">vs</span> ${swatch(p.sideBHex)} Champion`
                         + `<span style="color:#777;margin-left:auto;">game ${p.gameNum}/${p.gameTotal}</span>`;
                 } else if (p.challenger) {
-                    matchupHtml = `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion <span style="color:#777;">— starting…</span>`;
+                    matchupHtml = `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion <span style="color:#777;">- starting…</span>`;
                 }
                 summaryLine = p.info
                     ? `${p.info.promotions} promotion${p.info.promotions === 1 ? '' : 's'} so far · this round's best challenger: ${Math.round(p.info.bestWinRate * 100)}%`
@@ -4573,7 +4573,7 @@ document.getElementById('undo-move').onclick = function() {
                     historyLabelEl.style.display = 'block';
                     for (const h of p.roundHistory) {
                         const chip = document.createElement('span');
-                        chip.title = `Round ${h.round}: ${h.promoted ? 'Promoted' : 'Held'} — ${Math.round(h.winRate * 100)}% of ${h.decided} decided`;
+                        chip.title = `Round ${h.round}: ${h.promoted ? 'Promoted' : 'Held'} - ${Math.round(h.winRate * 100)}% of ${h.decided} decided`;
                         chip.style.cssText = 'display:inline-block;width:12px;height:12px;border-radius:2px;'
                             + (h.promoted ? 'background:#d9b08c;border:1px solid #d9b08c;' : 'background:#242438;border:1px solid #444;');
                         historyEl.appendChild(chip);
@@ -4587,7 +4587,7 @@ document.getElementById('undo-move').onclick = function() {
                 }
             } else {
                 const playersLabel = p.nPlayers === 'all' ? 'all sizes (2–5)' : `${p.nPlayers || 2} players`;
-                scenarioLine = `Training — ${playersLabel}, population ${p.popSize || '?'}`;
+                scenarioLine = `Training - ${playersLabel}, population ${p.popSize || '?'}`;
                 phaseLine = p.phase === 'confirming'
                     ? (p.nPlayers === 'all'
                         ? 'Confirming: champion vs. baseline at every size'
@@ -4711,7 +4711,7 @@ document.getElementById('undo-move').onclick = function() {
                         };
                         placeAnywhereBtn.textContent = 'Place Anywhere: ON';
                         placeAnywhereBtn.style.color = '#6ef';
-                        updateStatus('Place anywhere: ON — stones may be placed on any empty tile');
+                        updateStatus('Place anywhere: ON - stones may be placed on any empty tile');
                     }
                 });
                 panel.appendChild(placeAnywhereBtn);
@@ -4754,10 +4754,10 @@ document.getElementById('undo-move').onclick = function() {
                     brainBtn.textContent = BRAIN_UI[next].label;
                     brainBtn.style.color = BRAIN_UI[next].color;
                     updateStatus(
-                        next === 'dumb'  ? 'Bot brain: DUMB — one-step greedy scoring'
-                      : next === 'smart' ? 'Bot brain: SMART — 3-ply lookahead on every action'
-                      : next === 'hybrid' ? 'Bot brain: HYBRID — lookahead for casts/stone placements, greedy movement'
-                      : 'Bot brain: MCTS — multi-turn search through opponent turns (slower)');
+                        next === 'dumb'  ? 'Bot brain: DUMB - one-step greedy scoring'
+                      : next === 'smart' ? 'Bot brain: SMART - 3-ply lookahead on every action'
+                      : next === 'hybrid' ? 'Bot brain: HYBRID - lookahead for casts/stone placements, greedy movement'
+                      : 'Bot brain: MCTS - multi-turn search through opponent turns (slower)');
                 });
                 brainBtn.textContent = BRAIN_UI[currentBrain()].label;
                 brainBtn.style.color = BRAIN_UI[currentBrain()].color;
@@ -4784,7 +4784,7 @@ document.getElementById('undo-move').onclick = function() {
                         await window.BotArena.spectate(n);
                     } catch (err) {
                         console.error('Bot match failed:', err);
-                        updateStatus('Bot match failed — see console');
+                        updateStatus('Bot match failed - see console');
                     }
                 }
 
@@ -4807,7 +4807,7 @@ document.getElementById('undo-move').onclick = function() {
                         });
                     } catch (err) {
                         console.error('Evolve run failed:', err);
-                        updateStatus('Evolve run failed — see console');
+                        updateStatus('Evolve run failed - see console');
                     }
                 }
 
@@ -4827,7 +4827,7 @@ document.getElementById('undo-move').onclick = function() {
                 });
                 const stopBtn = document.createElement('button');
                 stopBtn.textContent = '⏹';
-                stopBtn.title = 'Stop the running bot session (match or evolve — action log still downloads for a match)';
+                stopBtn.title = 'Stop the running bot session (match or evolve - action log still downloads for a match)';
                 stopBtn.style.cssText = 'padding:4px 9px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:5px;cursor:pointer;font-size:13px;';
                 stopBtn.onclick = () => {
                     if (window.BotArena?.isRunning()) { window.BotArena.stop(); updateStatus('Stopping bot session…'); }
@@ -4910,7 +4910,7 @@ document.getElementById('undo-move').onclick = function() {
                         ? `gen ${p.gen}/${p.generations} · fitness ${p.fitness.map(f => f.toFixed(1)).join(', ')}`
                         : `gen ${p.gen}/${p.generations}`;
                     progressText.textContent =
-                        `${p.phase === 'confirming' ? 'Confirming result' : 'Training'} — ${genLine}\n` +
+                        `${p.phase === 'confirming' ? 'Confirming result' : 'Training'} - ${genLine}\n` +
                         `games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · elapsed ${fmtTime(elapsedS)}` +
                         (etaS != null ? ` · ETA ~${fmtTime(etaS)}` : '');
                 }
@@ -4932,30 +4932,30 @@ document.getElementById('undo-move').onclick = function() {
                     const preset = TRAIN_PRESETS[key];
                     const btn = makeBtn(preset.label, async () => {
                         if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
-                        if (window.BotArena.isEvolving()) { updateStatus('Already training — use ⏹ to stop it'); return; }
+                        if (window.BotArena.isEvolving()) { updateStatus('Already training - use ⏹ to stop it'); return; }
                         if (!await stopAnyRunningBotJob()) return;
                         quickBtn.disabled = true;
                         thoroughBtn.disabled = true;
-                        btn.textContent = `${preset.label} — starting…`;
+                        btn.textContent = `${preset.label} - starting…`;
                         try {
                             const { improved, record } = await runWeightTraining(preset, (p) => {
                                 renderProgress(p);
                                 btn.textContent = p.phase === 'confirming'
-                                    ? `${preset.label} — confirming…`
-                                    : `${preset.label} — gen ${p.gen}/${preset.generations}`;
+                                    ? `${preset.label} - confirming…`
+                                    : `${preset.label} - gen ${p.gen}/${preset.generations}`;
                             });
                             hideProgress();
                             updateStatus(improved
-                                ? `Training complete — champion beat the starting weights ${record} in the confirmation ` +
-                                  `match. New weights applied live and saved. (Board shows the last game — start a new ` +
+                                ? `Training complete - champion beat the starting weights ${record} in the confirmation ` +
+                                  `match. New weights applied live and saved. (Board shows the last game - start a new ` +
                                   `game to keep playing.)`
                                 : `Training finished but did not beat the starting weights (${record}) in the ` +
-                                  `confirmation match — kept the previous weights. (Board shows the last game — start ` +
+                                  `confirmation match - kept the previous weights. (Board shows the last game - start ` +
                                   `a new game to keep playing.)`);
                         } catch (err) {
                             console.error('Weight training failed:', err);
                             hideProgress();
-                            updateStatus('Weight training failed — see console');
+                            updateStatus('Weight training failed - see console');
                         } finally {
                             quickBtn.disabled = false;
                             thoroughBtn.disabled = false;
@@ -5558,13 +5558,13 @@ document.getElementById('undo-move').onclick = function() {
                 modal.appendChild(body);
 
                 const desc = document.createElement('div');
-                desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match at the end. A small progress popup stays visible in the corner even after you close this panel — use it to check in or end the run early.';
+                desc.textContent = 'Trains the bots you play against. New weights are only kept if they beat the current ones in a confirmation match at the end. A small progress popup stays visible in the corner even after you close this panel - use it to check in or end the run early.';
                 desc.style.cssText = 'font-size:11px;color:#999;';
                 body.appendChild(desc);
 
                 if (state._public) {
                     const publicBanner = document.createElement('div');
-                    publicBanner.textContent = 'Training the community bot — the shared brain behind the five elemental bots. Every finished run pays gold scaled to how many games it ran (roughly 8–40). If the result beats the current champion across 2–5 player tables it\'s submitted for everyone and pays 25 / 40 / 60 more by how decisively it won. Nothing changes if it doesn\'t beat the champion.';
+                    publicBanner.textContent = 'Training the community bot - the shared brain behind the five elemental bots. Every finished run pays gold scaled to how many games it ran (roughly 8–40). If the result beats the current champion across 2–5 player tables it\'s submitted for everyone and pays 25 / 40 / 60 more by how decisively it won. Nothing changes if it doesn\'t beat the champion.';
                     publicBanner.style.cssText = 'font-size:11px;color:#c9a6ff;background:#221a33;border:1px solid #5a3f8a;border-radius:5px;padding:6px 10px;';
                     body.appendChild(publicBanner);
                 }
@@ -5631,8 +5631,8 @@ document.getElementById('undo-move').onclick = function() {
                 // shared champion — no Method choice in public mode.
                 if (!state._public) {
                     makeChoiceRow('Method:', [
-                        { value: 'evolve', text: 'Evolve (GA)', title: 'Population-based genetic algorithm — a pool of weight-tables competes and breeds each generation.' },
-                        { value: 'hillclimb', text: 'Hill Climb', title: 'Champion-anchored climber — mutant challengers must beat the CURRENT ONLINE CHAMPION by a real margin to be promoted. 2 players only. The more reliable trainer.' },
+                        { value: 'evolve', text: 'Evolve (GA)', title: 'Population-based genetic algorithm - a pool of weight-tables competes and breeds each generation.' },
+                        { value: 'hillclimb', text: 'Hill Climb', title: 'Champion-anchored climber - mutant challengers must beat the CURRENT ONLINE CHAMPION by a real margin to be promoted. 2 players only. The more reliable trainer.' },
                     ], () => state.method, (v) => { state.method = v; if (v === 'hillclimb') state.n = 2; playersRow.repaint(); });
                 }
 
@@ -5645,13 +5645,13 @@ document.getElementById('undo-move').onclick = function() {
                             { value: 'all', text: 'All', title: 'Generalist: train across arenas of every size (2–5 players) and confirm the champion across every size too. Best for real lobbies, which can be 2–5 players.' },
                         ]),
                         () => state.n, (v) => { state.n = v; },
-                        'How many bots play each training game. "All" trains across mixed 2–5-player arenas and confirms the champion at every size. The POPULATION (the pool of competing weight-tables) is a separate number — see the roster below — this only controls how many are sampled into any one game. Fixed at 2 for Hill Climb, which has no population/nPlayers concept.',
+                        'How many bots play each training game. "All" trains across mixed 2–5-player arenas and confirms the champion at every size. The POPULATION (the pool of competing weight-tables) is a separate number - see the roster below - this only controls how many are sampled into any one game. Fixed at 2 for Hill Climb, which has no population/nPlayers concept.',
                         () => state.method === 'hillclimb');
                 }
 
                 makeChoiceRow('Speed:', [
-                    { value: true, text: 'Watchable', title: 'Normal pacing — watch the board play out' },
-                    { value: false, text: 'Extreme', title: 'Muted, minimal delay — much faster, nothing to watch (a true no-UI "headless" mode isn\'t possible in the browser tab the live game runs in)' },
+                    { value: true, text: 'Watchable', title: 'Normal pacing - watch the board play out' },
+                    { value: false, text: 'Extreme', title: 'Muted, minimal delay - much faster, nothing to watch (a true no-UI "headless" mode isn\'t possible in the browser tab the live game runs in)' },
                 ], () => state.watchable, (v) => { state.watchable = v; });
 
                 // For Evolve this is evolve()'s generation count; for Hill
@@ -5660,16 +5660,16 @@ document.getElementById('undo-move').onclick = function() {
                 // proportional-not-literal-game-count caveat applies).
                 if (state._public) {
                     makeChoiceRow('Depth:', [
-                        { value: 1, text: 'Quick', title: 'A short climb — usually under ~15 minutes. Often finds no improvement; run it again or go deeper.' },
-                        { value: 5, text: 'Standard', title: 'A medium climb — roughly 30–60 minutes. Better odds of a real improvement.' },
-                        { value: 20, text: 'Deep', title: 'A long climb — a couple of hours. Best odds; leave the tab open and watch the corner popup.' },
+                        { value: 1, text: 'Quick', title: 'A short climb - usually under ~15 minutes. Often finds no improvement; run it again or go deeper.' },
+                        { value: 5, text: 'Standard', title: 'A medium climb - roughly 30–60 minutes. Better odds of a real improvement.' },
+                        { value: 20, text: 'Deep', title: 'A long climb - a couple of hours. Best odds; leave the tab open and watch the corner popup.' },
                     ], () => state.generations, (v) => { state.generations = v; },
                         'How hard to search for a better bot. It plays training games in your browser tab against the current champion, then a final test across 2–5 player tables. Deeper = better odds of beating it, but longer. You can Stop any time from the corner popup; a partial run never makes the bot worse.');
                 } else {
                     makeChoiceRow('Repeat:',
                         [1, 5, 10, 20, 50].map(n => ({ value: n, text: String(n) })),
                         () => state.generations, (v) => { state.generations = v; },
-                        'Evolve: number of GENERATIONS, not total games — each generation plays many games on its own. Hill Climb: number of climbing ROUNDS — each round plays 6 challengers × 30 games vs the champion. Either way this is proportionally, not literally, that many games.');
+                        'Evolve: number of GENERATIONS, not total games - each generation plays many games on its own. Hill Climb: number of climbing ROUNDS - each round plays 6 challengers × 30 games vs the champion. Either way this is proportionally, not literally, that many games.');
                 }
 
                 // Noisy anchor: train against a gaussian-perturbed copy of the
@@ -5682,7 +5682,7 @@ document.getElementById('undo-move').onclick = function() {
                     { value: false, text: 'Exact', title: 'Train against the anchor weights exactly as they are.' },
                     { value: true, text: 'Noisy', title: 'Train against a slightly perturbed copy of the anchor each session (more robust, less overfit); the final confirmation match is still played against the TRUE anchor, so a win still means a real improvement.' },
                 ], () => state.noisyAnchor, (v) => { state.noisyAnchor = v; },
-                    'Noisy trains against a randomly perturbed version of the opponent so the result generalizes to a range of opponents instead of overfitting one exact champion. The confirmation match at the end always uses the true, unperturbed anchor — so "improved" still means genuinely better.');
+                    'Noisy trains against a randomly perturbed version of the opponent so the result generalizes to a range of opponents instead of overfitting one exact champion. The confirmation match at the end always uses the true, unperturbed anchor - so "improved" still means genuinely better.');
 
                 const progressText = document.createElement('div');
                 progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
@@ -5698,13 +5698,13 @@ document.getElementById('undo-move').onclick = function() {
                         genLine = p.phase === 'confirming' ? 'confirming across 2–5 player tables' : `round ${p.round}/${p.rounds}`;
                         if (p.gameNum) {
                             genLine += p.phase === 'confirming'
-                                ? ` — game ${p.gameNum}/${p.gameTotal}`
-                                : ` — challenger ${p.challenger}/${p.totalChallengers} (${p.sideAColor}) vs. champion (${p.sideBColor}), game ${p.gameNum}/${p.gameTotal}`;
+                                ? ` - game ${p.gameNum}/${p.gameTotal}`
+                                : ` - challenger ${p.challenger}/${p.totalChallengers} (${p.sideAColor}) vs. champion (${p.sideBColor}), game ${p.gameNum}/${p.gameTotal}`;
                         }
                     } else {
                         genLine = p.phase === 'confirming' ? 'Confirming result' : `gen ${p.gen}/${p.generations}`;
                     }
-                    progressText.textContent = `${genLine} — games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtTime(elapsedS)}`;
+                    progressText.textContent = `${genLine} - games ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtTime(elapsedS)}`;
                     // Also update the persistent corner popup — see its own
                     // comment for why it's a separate, outer-scope function
                     // rather than just this progressText element.
@@ -5763,7 +5763,7 @@ document.getElementById('undo-move').onclick = function() {
                 const genHeader = document.createElement('div');
                 genHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#ccc;';
                 genHeader.textContent = 'Generations';
-                genHeader.appendChild(infoIcon('One line per generation completed so far in the current run: which #id came out on top and its fitness. Fitness is win(±1) plus small bonuses for win-progress and avoiding stalls — not a plain score, so small differences are normal.'));
+                genHeader.appendChild(infoIcon('One line per generation completed so far in the current run: which #id came out on top and its fitness. Fitness is win(±1) plus small bonuses for win-progress and avoiding stalls - not a plain score, so small differences are normal.'));
                 genCol.appendChild(genHeader);
 
                 const genLogEl = document.createElement('div');
@@ -5802,7 +5802,7 @@ document.getElementById('undo-move').onclick = function() {
                     rosterList.innerHTML = '';
                     if (!currentRoster.length) {
                         const empty = document.createElement('div');
-                        empty.textContent = 'No run in progress — start training or breeding to see the population here.';
+                        empty.textContent = 'No run in progress - start training or breeding to see the population here.';
                         empty.style.cssText = 'font-size:11px;color:#777;font-style:italic;';
                         rosterList.appendChild(empty);
                         return;
@@ -5853,7 +5853,7 @@ document.getElementById('undo-move').onclick = function() {
                     genLogEl.innerHTML = '';
                     for (const g of genLog) {
                         const line = document.createElement('div');
-                        line.textContent = `gen ${g.gen}/${g.total} — best: #${g.bestId} (${g.bestFitness.toFixed(1)})`;
+                        line.textContent = `gen ${g.gen}/${g.total} - best: #${g.bestId} (${g.bestFitness.toFixed(1)})`;
                         genLogEl.appendChild(line);
                     }
                 }
@@ -5927,7 +5927,7 @@ document.getElementById('undo-move').onclick = function() {
                 body.appendChild(startBtnSep);
 
                 startBtn.onclick = async () => {
-                    if (window.BotArena.isRunning()) { updateStatus('A bot job is already running — use Stop first'); return; }
+                    if (window.BotArena.isRunning()) { updateStatus('A bot job is already running - use Stop first'); return; }
                     if (!await stopAnyRunningBotJob()) return;
                     startBtnRef.disabled = true;
                     startBtn.disabled = true;
@@ -5967,15 +5967,15 @@ document.getElementById('undo-move').onclick = function() {
                             const bonusTail = attemptGold ? ` (+${attemptGold} for the games run)` : '';
                             let msg;
                             if (record === 'stopped') {
-                                msg = 'Training stopped — the result was discarded, the champion is unchanged.';
+                                msg = 'Training stopped - the result was discarded, the champion is unchanged.';
                             } else if (improved && rewarded) {
-                                msg = `Your bot beat the champion — ${tier} win, ${record} across 2–5 player tables. Submitted for everyone. +${totalGold} gold${attemptGold ? ` (${tierGold} win + ${attemptGold} for the games run)` : ''}.`;
+                                msg = `Your bot beat the champion - ${tier} win, ${record} across 2–5 player tables. Submitted for everyone. +${totalGold} gold${attemptGold ? ` (${tierGold} win + ${attemptGold} for the games run)` : ''}.`;
                             } else if (improved && submitFailed) {
-                                msg = `Your bot beat the champion ${record}, but the submission failed — champion unchanged, no win reward.${bonusTail}`;
+                                msg = `Your bot beat the champion ${record}, but the submission failed - champion unchanged, no win reward.${bonusTail}`;
                             } else if (improved) {
-                                msg = `Your bot beat the champion ${record} — new weights applied locally. Log in to submit it for everyone and earn gold.`;
+                                msg = `Your bot beat the champion ${record} - new weights applied locally. Log in to submit it for everyone and earn gold.`;
                             } else {
-                                msg = `Training done — didn't beat the champion by enough (${record}), so nothing changed.${attemptGold ? ` +${attemptGold} gold for the games run — thanks for helping. Try again or go deeper.` : ' Try again or go deeper.'}`;
+                                msg = `Training done - didn't beat the champion by enough (${record}), so nothing changed.${attemptGold ? ` +${attemptGold} gold for the games run - thanks for helping. Try again or go deeper.` : ' Try again or go deeper.'}`;
                             }
                             updateStatus(msg);
                             // Main page has no #status HUD — the toast is the
@@ -5989,14 +5989,14 @@ document.getElementById('undo-move').onclick = function() {
                             });
                             progressText.style.display = 'none';
                             updateStatus(improved
-                                ? `Training complete — champion beat the starting weights ${record} in the confirmation match. New weights applied and saved.`
-                                : `Training finished but did not beat the starting weights (${record}) — kept the previous weights.`);
+                                ? `Training complete - champion beat the starting weights ${record} in the confirmation match. New weights applied and saved.`
+                                : `Training finished but did not beat the starting weights (${record}) - kept the previous weights.`);
                         }
                     } catch (err) {
                         console.error('Bot training failed:', err);
                         progressText.style.display = 'none';
-                        updateStatus(`Bot training failed — ${err.message || 'see console'}`);
-                        window.gami?.notify(`Bot training couldn't run — ${err.message || 'see console'}`, 0, 'gold');
+                        updateStatus(`Bot training failed - ${err.message || 'see console'}`);
+                        window.gami?.notify(`Bot training couldn't run - ${err.message || 'see console'}`, 0, 'gold');
                     } finally {
                         startBtnRef.disabled = false;
                         startBtn.disabled = false;
@@ -6283,7 +6283,7 @@ document.getElementById('undo-move').onclick = function() {
                 }
                 function addSelect(labelText, prop, options) {
                     const sel2 = styleInput(document.createElement('select'));
-                    ['—'].concat(options).forEach((o, i) => {
+                    ['-'].concat(options).forEach((o, i) => {
                         const op = document.createElement('option');
                         op.value = i === 0 ? '' : o; op.textContent = o;
                         sel2.appendChild(op);
@@ -6346,7 +6346,7 @@ document.getElementById('undo-move').onclick = function() {
 
                 // ── CSS box (source of truth + copy/paste surface) ──────────
                 const cssLbl = document.createElement('div');
-                cssLbl.textContent = 'CSS — reflects the controls; edit or copy/paste between elements';
+                cssLbl.textContent = 'CSS - reflects the controls; edit or copy/paste between elements';
                 Object.assign(cssLbl.style, { fontSize: '11px', color: '#999', marginTop: '4px' });
                 panelEl.appendChild(cssLbl);
                 panelEl.appendChild(cssBox);
@@ -6666,9 +6666,9 @@ document.getElementById('undo-move').onclick = function() {
                 document.body.appendChild(overlay);
 
                 function fmtDate(s) {
-                    if (!s) return '—';
+                    if (!s) return '-';
                     const d = new Date(s);
-                    return isNaN(d) ? '—' : d.toLocaleDateString();
+                    return isNaN(d) ? '-' : d.toLocaleDateString();
                 }
 
                 async function load() {
@@ -6720,7 +6720,7 @@ document.getElementById('undo-move').onclick = function() {
                             background: '#3a1f28', color: '#f2b8c0'
                         });
                         if (u.is_admin) {
-                            del.textContent = '—';
+                            del.textContent = '-';
                             del.disabled = true;
                             del.title = 'The admin account cannot be deleted here';
                             Object.assign(del.style, { opacity: '0.4', cursor: 'default', borderColor: '#555', color: '#888', background: '#222' });
@@ -6820,9 +6820,9 @@ document.getElementById('undo-move').onclick = function() {
                 document.body.appendChild(overlay);
 
                 function fmtDate(s) {
-                    if (!s) return '—';
+                    if (!s) return '-';
                     const d = new Date(s);
-                    return isNaN(d) ? '—' : d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+                    return isNaN(d) ? '-' : d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
                 }
 
                 function downloadJSON(obj, filename) {
@@ -6922,7 +6922,7 @@ document.getElementById('undo-move').onclick = function() {
                 if (existing) { existing.remove(); return; }
 
                 if (typeof window.getBoardRotation !== 'function' || typeof window.setBoardRotation !== 'function') {
-                    updateStatus('Board rotation tool unavailable — start a game first');
+                    updateStatus('Board rotation tool unavailable - start a game first');
                     return;
                 }
 
@@ -7036,7 +7036,7 @@ document.getElementById('undo-move').onclick = function() {
                 if (existing) { existing.remove(); return; }
 
                 if (typeof window.getBoardTilt !== 'function' || typeof window.setBoardTilt !== 'function') {
-                    updateStatus('Board angle tool unavailable — start a game first');
+                    updateStatus('Board angle tool unavailable - start a game first');
                     return;
                 }
 
@@ -7250,7 +7250,7 @@ document.getElementById('undo-move').onclick = function() {
                     window.location.reload();
                 }));
                 menu.appendChild(makeItem('Edit UI: Ctrl+Click an element', () => {
-                    updateStatus('Ctrl+Click any element to edit its text & CSS — copy/paste the CSS box to reuse a style');
+                    updateStatus('Ctrl+Click any element to edit its text & CSS - copy/paste the CSS box to reuse a style');
                 }));
                 menu.appendChild(makeItem('Universal Font Switcher', () => {
                     if (window._uiEditor) window._uiEditor.openFontSwitcher();

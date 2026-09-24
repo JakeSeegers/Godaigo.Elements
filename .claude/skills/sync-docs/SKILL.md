@@ -42,9 +42,9 @@ git diff --name-only         # unstaged changes
 | Any bug fixed | Remove from `CLAUDE.md` Known Active Bugs |
 
 ### Step 2b: Release notes
-If any player-facing file changed (`index.html`, `js/`, `css/`, `sounds/`, `assets/`, etc.),
-add a player-facing note to `changelog.json` (CLAUDE.md HOUSE RULES #2). Simple English,
-no em dashes, no file names.
+If players will notice the change, update `changelog.json` (CLAUDE.md HOUSE RULES #2).
+One entry per day, max 5 lines. If today's entry exists, rewrite it as a summary of the
+whole day instead of adding a new one. Simple English, no em dashes, no file names.
 
 ### Step 3 — Update planning/current.md
 Always update these fields at end of session:

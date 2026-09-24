@@ -162,7 +162,7 @@ class ResponseWindowSystem {
 
                 // Skip scrolls locked out by the one-per-turn limit
                 if (responseLimitReached && scrollDef?.oncePerTurn) {
-                    console.log(`  ↳ ${scrollName}: skipped — a response scroll was already cast this turn`);
+                    console.log(`  ↳ ${scrollName}: skipped - a response scroll was already cast this turn`);
                     continue;
                 }
 
@@ -202,7 +202,7 @@ class ResponseWindowSystem {
                     const isResponse = scrollDef?.isResponse === true;
                     // Skip scrolls locked out by the one-per-turn limit
                     if (responseLimitReached && scrollDef?.oncePerTurn) {
-                        console.log(`  ↳ ${scrollName} (hand): skipped — a response scroll was already cast this turn`);
+                        console.log(`  ↳ ${scrollName} (hand): skipped - a response scroll was already cast this turn`);
                         continue;
                     }
                     if (isCounter || isResponse) {
@@ -220,7 +220,7 @@ class ResponseWindowSystem {
                             fromHand: true,
                             cost
                         });
-                        console.log(`  ↳ ${scrollName} (hand): valid response — will move to active on use`);
+                        console.log(`  ↳ ${scrollName} (hand): valid response - will move to active on use`);
                     }
                 }
             }
@@ -483,7 +483,7 @@ class ResponseWindowSystem {
         // copy of this modal on top of the picker, making it look like the
         // response window "reset" with no way back to the picker.
         if (this.sacrificialPyrePicking) {
-            console.log('Skipping response modal rebuild — Sacrificial Pyre picker is open');
+            console.log('Skipping response modal rebuild - Sacrificial Pyre picker is open');
             return;
         }
 
@@ -598,7 +598,7 @@ class ResponseWindowSystem {
 
                 const handNote = document.createElement('p');
                 handNote.style.cssText = 'font-size:12px; color:#bdc3c7; margin:0 0 12px 0;';
-                handNote.textContent = 'You have an open Active Area slot — you may move one of these to your Active Area and respond with it.';
+                handNote.textContent = 'You have an open Active Area slot - you may move one of these to your Active Area and respond with it.';
                 handSection.appendChild(handNote);
 
                 sortByRank(handScrolls).forEach(si => handSection.appendChild(this.createScrollCard(si)));
@@ -722,7 +722,7 @@ class ResponseWindowSystem {
         // Private note — only this player sees it; no scroll cards are shown
         const note = document.createElement('p');
         note.style.cssText = 'text-align:center; color:#7f8c8d; font-style:italic; margin: 10px 0 20px 0; font-size:14px;';
-        note.textContent = 'You have no response scrolls — pass when ready.';
+        note.textContent = 'You have no response scrolls - pass when ready.';
         modal.appendChild(note);
 
         // Pass button — wired to the same playerPasses path as the real window
@@ -886,7 +886,7 @@ class ResponseWindowSystem {
      */
     playerResponds(scrollInfo, responderIndexOverride) {
         if (this._resolving) {
-            console.warn(`playerResponds: ignored — resolution already in progress (player ${responderIndexOverride ?? this.localResponderIndex()}, scroll ${scrollInfo?.name})`);
+            console.warn(`playerResponds: ignored - resolution already in progress (player ${responderIndexOverride ?? this.localResponderIndex()}, scroll ${scrollInfo?.name})`);
             return;
         }
         const myIndex = responderIndexOverride ?? this.localResponderIndex();
@@ -952,7 +952,7 @@ class ResponseWindowSystem {
         const isCasterClient = this.isArbitratorClient();
         if (isCasterClient) {
             // Wait for all other eligible players before arbitrating
-            console.log(`  Response submitted (caster client) — waiting for all players`);
+            console.log(`  Response submitted (caster client) - waiting for all players`);
             this.checkAllPlayersResponded();
         } else if (isLocalHuman) {
             // Non-caster: sent our response, wait for caster to arbitrate and broadcast result
@@ -1068,7 +1068,7 @@ class ResponseWindowSystem {
             });
         }
         if (typeof checkWinCondition === 'function' && checkWinCondition(myIndex, { announce: true })) {
-            console.log(`🏆 Win condition met for player ${myIndex} (Sacrificial Pyre response — fire)`);
+            console.log(`🏆 Win condition met for player ${myIndex} (Sacrificial Pyre response - fire)`);
         }
         if (typeof updateStatus === 'function') {
             // withStatusActor: this response can only be initiated by a local human
@@ -1125,7 +1125,7 @@ class ResponseWindowSystem {
 
         const isCasterClient = this.isArbitratorClient();
         if (isCasterClient) {
-            console.log(`  Sacrificial Pyre response submitted (caster client) — waiting for all players`);
+            console.log(`  Sacrificial Pyre response submitted (caster client) - waiting for all players`);
             this.checkAllPlayersResponded();
         } else if (isLocalHuman) {
             console.log(`  Sacrificial Pyre response sent, waiting for caster to resolve`);
@@ -1138,7 +1138,7 @@ class ResponseWindowSystem {
      */
     playerPasses(playerIndex) {
         if (this._resolving) {
-            console.warn(`playerPasses: ignored — resolution already in progress (player ${playerIndex})`);
+            console.warn(`playerPasses: ignored - resolution already in progress (player ${playerIndex})`);
             return;
         }
         this.respondingPlayers.add(playerIndex);
@@ -1394,7 +1394,7 @@ class ResponseWindowSystem {
                     syncPlayerState();
                 }
                 if (typeof updateStatus === 'function') {
-                    updateStatus(`Paid ${cost} AP — Psychic negated! Your scroll resolves.`);
+                    updateStatus(`Paid ${cost} AP - Psychic negated! Your scroll resolves.`);
                 }
             }
             onDecision(paid);
@@ -1416,7 +1416,7 @@ class ResponseWindowSystem {
         });
 
         const payBtn = document.createElement('button');
-        payBtn.textContent = `Pay ${cost} AP — Negate Psychic`;
+        payBtn.textContent = `Pay ${cost} AP - Negate Psychic`;
         Object.assign(payBtn.style, {
             padding: '12px 24px',
             fontSize: '15px',
@@ -1431,7 +1431,7 @@ class ResponseWindowSystem {
         buttonRow.appendChild(payBtn);
 
         const declineBtn = document.createElement('button');
-        declineBtn.textContent = 'Decline — let it be stolen';
+        declineBtn.textContent = 'Decline - let it be stolen';
         Object.assign(declineBtn.style, {
             padding: '12px 24px',
             fontSize: '15px',
@@ -1460,7 +1460,7 @@ class ResponseWindowSystem {
         // the window where the Psychic ransom prompt is open (resolution started
         // but not finished). Reset when a new response window opens.
         if (this._resolving) {
-            console.warn('resolveResponseStack: resolution already in progress — ignoring duplicate trigger');
+            console.warn('resolveResponseStack: resolution already in progress - ignoring duplicate trigger');
             return;
         }
         this._resolving = true;
@@ -1732,7 +1732,7 @@ class ResponseWindowSystem {
                 const isCasterClient = !(typeof isMultiplayer !== 'undefined' && isMultiplayer) || myIndex === this.currentCaster;
                 if (isCasterClient) {
                     // Caster: all remaining players are treated as passes — force resolve
-                    console.log('⏰ Response timeout on caster client — force resolving');
+                    console.log('⏰ Response timeout on caster client - force resolving');
                     this.resolveResponseStack();
                 } else {
                     // Non-caster: auto-pass
@@ -2017,7 +2017,7 @@ class ResponseWindowSystem {
 
         // Late arrival after resolution started — nothing left to count
         if (this._resolving) {
-            console.warn(`Late pass from player ${playerIndex} ignored — resolution already in progress`);
+            console.warn(`Late pass from player ${playerIndex} ignored - resolution already in progress`);
             return;
         }
         this.respondingPlayers.add(playerIndex);
@@ -2043,7 +2043,7 @@ class ResponseWindowSystem {
         // Late arrival: resolution already started (e.g. timeout force-resolve
         // crossed with this broadcast) — do not mutate the stack mid-resolution
         if (this._resolving) {
-            console.warn(`Late response from player ${playerIndex} ignored — resolution already in progress`);
+            console.warn(`Late response from player ${playerIndex} ignored - resolution already in progress`);
             return;
         }
 
@@ -2082,7 +2082,7 @@ class ResponseWindowSystem {
         const isCasterClient = !(typeof isMultiplayer !== 'undefined' && isMultiplayer) || myIndex === this.currentCaster;
         if (isCasterClient) {
             // Wait for all other eligible players before resolving
-            console.log(`  Response from player ${playerIndex} received (caster client) — checking all submitted`);
+            console.log(`  Response from player ${playerIndex} received (caster client) - checking all submitted`);
             this.checkAllPlayersResponded();
         } else {
             console.log(`  Response received, waiting for caster to resolve`);

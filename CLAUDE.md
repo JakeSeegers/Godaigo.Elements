@@ -12,13 +12,17 @@ These apply to all work on this repo. `tools/claude-hooks/` enforces rules 1 and
 1. **No em dashes, ever.** Not in code, comments, docs, commit messages, PR text, or
    game text. Use a comma, colon, period, parentheses, or " - " instead. Older text
    still has some; when you edit a line that has one, fix it.
-2. **Every player-facing change gets a release note** in `changelog.json` (shown by the
-   lobby "Change Log" button, `js/changelog-ui.js`). Newest entry first. Add to today's
-   entry if it exists, else add a new entry at the top: `{ id, date, title, changes[] }`
-   with `id` = date (add `-2` etc. for a second release the same day). Write for
-   players: simple English, short lines, what changed and how it affects them. No
-   file names or code terms. Skip it only for changes a player cannot notice (pure
-   refactor, dev-only tools, docs); say so to the user when you skip it.
+2. **Release notes: one short summary per day** in `changelog.json` (shown by the lobby
+   "Change Log" button, `js/changelog-ui.js`). Players read this, so keep it small.
+   - **At most one entry per day.** `id` and `date` = today (`YYYY-MM-DD`). Newest first.
+   - **Same day, more changes:** rewrite today's entry so it sums up the whole day. Merge,
+     reword, or drop lines. Never add a second entry for the same day.
+   - **At most 5 lines per entry.** Only list what players will notice (new features, rule
+     or balance changes, visible fixes). Put small fixes into one "Small fixes and polish"
+     line. Leave out refactors, dev tools, bot training internals, and docs.
+   - Entry shape: `{ id, date, title, changes[] }`. Title = a few words for the day.
+   - Simple English, short lines, how it affects the player. No file names or code terms.
+   - When you skip a note because players cannot notice the change, tell the user.
 3. **Start from `planning/current.md`** and drill down through the INDEX.md files before
    reading source (see below).
 4. **Keep docs in sync** after changes: follow the `/sync-docs` skill
@@ -31,8 +35,10 @@ These apply to all work on this repo. `tools/claude-hooks/` enforces rules 1 and
     `.git/claude-session-base` and prints a short rules reminder into context.
   - **Stop** `tools/claude-hooks/stop-check.js`: before Claude finishes, checks this
     session's own commits plus uncommitted work for (1) em dashes in added lines that are
-    still in the file and (2) game files changed without a `changelog.json` change. If
-    either fails, Claude is told to fix it. It blocks once per stop, so it cannot loop.
+    still in the file, (2) game files changed without a `changelog.json` change (a
+    reminder: Claude either updates today's summary or tells the user why not), and
+    (3) `changelog.json` shape: valid JSON, one entry per date, newest first, at most 5
+    lines per entry. If any fails, Claude is told to fix it. It blocks once per stop, so it cannot loop.
     Skips work that came in through a merge.
 
 ---

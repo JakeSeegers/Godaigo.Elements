@@ -110,7 +110,7 @@
                 <span class="cos-title">Name Colours</span>
                 <button class="cos-close" onclick="window.cosmeticsSystem.closePanel()">✕</button>
             </div>
-            <div class="cos-gold-bar"><span id="cos-gold-amt">—</span>g</div>
+            <div class="cos-gold-bar"><span id="cos-gold-amt">-</span>g</div>
             <div class="cos-body" id="cos-body"></div>
         `;
         document.body.appendChild(panelEl);
@@ -122,7 +122,7 @@
         const gold     = window.gami?.profile?.gold || 0;
 
         const goldEl = document.getElementById('cos-gold-amt');
-        if (goldEl) goldEl.textContent = window.gami?.profile?.gold ?? '—';
+        if (goldEl) goldEl.textContent = window.gami?.profile?.gold ?? '-';
 
         const body = document.getElementById('cos-body');
         if (!body) return;

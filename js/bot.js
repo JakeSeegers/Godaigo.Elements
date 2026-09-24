@@ -485,7 +485,7 @@
         if (!postSelf) return;
         if (!expected.some(e => postSelf.activated.includes(e))) {
             mem(idx).noCreditScrolls.add(scrollName);
-            log(`Cast ${scrollName} granted no win credit (effect cancelled?) — blacklisting for this game`);
+            log(`Cast ${scrollName} granted no win credit (effect cancelled?) - blacklisting for this game`);
         }
     }
 
@@ -1274,7 +1274,7 @@
                 const fails = (m.cellFailCount.get(plan._lastTargetKey) || 0) + 1;
                 m.cellFailCount.set(plan._lastTargetKey, fails);
                 if (fails >= CELL_FAIL_LIMIT) {
-                    log(`Cell ${plan._lastTargetKey} failed to hold a stone ${fails}x — blacklisting and abandoning plan`);
+                    log(`Cell ${plan._lastTargetKey} failed to hold a stone ${fails}x - blacklisting and abandoning plan`);
                     m.cursedCells.add(plan._lastTargetKey);
                     m.plan = null;
                     return null;
@@ -1909,7 +1909,7 @@
     function botAct() {
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
             typeof myPlayerIndex !== 'undefined' && activePlayerIndex !== myPlayerIndex) {
-            log('Not this client\'s turn — refusing to act (multiplayer guard)');
+            log('Not this client\'s turn - refusing to act (multiplayer guard)');
             return null;
         }
 
@@ -1964,7 +1964,7 @@
                 if (planAction.type === 'move') recordVisited(idx, planAction.x, planAction.y);
                 return planAction;
             }
-            log(`Plan action failed (${r.reason}) — falling back to scoring`);
+            log(`Plan action failed (${r.reason}) - falling back to scoring`);
             m.plan = null;
         }
 
@@ -2032,7 +2032,7 @@
                 } else {
                     const r = window.BotState.applyAction({ type: 'endTurn' });
                     if (r.ok) {
-                        log('Turn-repeat circuit breaker: only movement was legal — ending turn');
+                        log('Turn-repeat circuit breaker: only movement was legal - ending turn');
                         return { type: 'endTurn' };
                     }
                 }
@@ -2107,7 +2107,7 @@
         if (choice.action.type === 'endTurn' && choice.score < 20 &&
             snap.turn.ap >= 3 && m.recentPositions.length) {
             m.recentPositions.length = 0;
-            log('Anti-freeze: endTurn chosen with AP to spare — clearing move memory and re-deciding');
+            log('Anti-freeze: endTurn chosen with AP to spare - clearing move memory and re-deciding');
             const redo = (WEIGHTS.mctsEnabled && window.BotSim) ? mctsPick()
                 : ((WEIGHTS.searchDepth | 0) > 0 && window.BotSim) ? searchPick() : null;
             const rankedRedo = redo ? null : rankActions();
@@ -2247,7 +2247,7 @@
             }
             return; // quiet — safe to act again
         }
-        log('waitForQuiescence timed out — proceeding anyway');
+        log('waitForQuiescence timed out - proceeding anyway');
     }
 
     // ----------------------------------------------------------------
@@ -2290,7 +2290,7 @@
                 try {
                     if (window.BotSim && window.BotState &&
                         window.BotSim.winner(window.BotState.snapshot()) === startingPlayer) {
-                        log('Win condition met — halting the turn so the pawn stays on its shrine');
+                        log('Win condition met - halting the turn so the pawn stays on its shrine');
                         break;
                     }
                 } catch (e) { /* snapshot/winner is never fatal to the turn loop */ }
@@ -2324,7 +2324,7 @@
                         !placedStones.some(s => Math.hypot(s.x - a.x, s.y - a.y) < 5))
                     .sort((a, b) => a.cost - b.cost)[0];
                 if (esc) {
-                    log(`Autopilot ended on a stone — stepping off to (${esc.x.toFixed(0)},${esc.y.toFixed(0)}) so the turn can end`);
+                    log(`Autopilot ended on a stone - stepping off to (${esc.x.toFixed(0)},${esc.y.toFixed(0)}) so the turn can end`);
                     const r = window.BotState.applyAction(esc);
                     if (r.ok) recordVisited(startingPlayer, esc.x, esc.y);
                 }
@@ -2345,7 +2345,7 @@
             const key = turnMoves.join('|');
             if (key && key === m.lastTurnMoveKey) {
                 m.turnRepeatStreak++;
-                log(`Turn repeated the exact same ${turnMoves.length}-move sequence as last turn (streak ${m.turnRepeatStreak}) — next turn skips movement`);
+                log(`Turn repeated the exact same ${turnMoves.length}-move sequence as last turn (streak ${m.turnRepeatStreak}) - next turn skips movement`);
             } else {
                 m.turnRepeatStreak = 0;
             }
@@ -2373,14 +2373,14 @@
         const survived = placedThisTurn.filter(p =>
             placedStones.some(s => s.type === p.type && Math.hypot(s.x - p.x, s.y - p.y) < 5)).length;
         if (placedThisTurn.length && survived < placedThisTurn.length) {
-            log(`WARNING: ${placedThisTurn.length - survived}/${placedThisTurn.length} pattern stone(s) placed this turn vanished before turn end — not counting them as progress`);
+            log(`WARNING: ${placedThisTurn.length - survived}/${placedThisTurn.length} pattern stone(s) placed this turn vanished before turn end - not counting them as progress`);
         }
         const productive = castThisTurn || survived > 0;
         if (productive) m.unproductiveStreak = 0;
         else {
             m.unproductiveStreak++;
             if (m.unproductiveStreak === UNPRODUCTIVE_LIMIT) {
-                log(`${m.unproductiveStreak} turns with no lasting cast/placeStone — trying fixation targets from now on`);
+                log(`${m.unproductiveStreak} turns with no lasting cast/placeStone - trying fixation targets from now on`);
             }
         }
         log('Turn autopilot finished');
@@ -2402,8 +2402,8 @@
         if (!document.getElementById('game-layout')?.classList.contains('active')) return;
 
         e.preventDefault();
-        if (key === 'R') { log('Shift+R — one bot step'); botAct(); }
-        else             { log('Shift+B — bot plays out the turn'); botTurn(); }
+        if (key === 'R') { log('Shift+R - one bot step'); botAct(); }
+        else             { log('Shift+B - bot plays out the turn'); botTurn(); }
     });
 
     // ----------------------------------------------------------------
@@ -2435,5 +2435,5 @@
         DEFAULT_WEIGHTS,
     };
 
-    log('Loaded — Shift+R = one bot step, Shift+B = full bot turn');
+    log('Loaded - Shift+R = one bot step, Shift+B = full bot turn');
 })();

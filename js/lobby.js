@@ -286,7 +286,7 @@
 
         async function createRoom(isPrivate) {
             const username = lobbyUsername;
-            if (!username) { alert('Not signed in — please sign in first'); return; }
+            if (!username) { alert('Not signed in - please sign in first'); return; }
 
             // Read custom room name; fall back to "<username>'s Game" if left blank
             const roomNameRaw = document.getElementById('room-name-input')?.value.trim();
@@ -328,7 +328,7 @@
                 { p_is_private: isPrivate, p_host_name: roomName });
             if (error || !data?.length) {
                 console.error('❌ create_game_room RPC failed:', error);
-                setBrowserStatus('Error creating room: ' + (error?.message || 'no data returned — see Supabase SQL Editor'));
+                setBrowserStatus('Error creating room: ' + (error?.message || 'no data returned - see Supabase SQL Editor'));
                 return;
             }
             const { room_id, join_code } = data[0];
@@ -357,10 +357,10 @@
                 .select('id,status,is_private,join_code,host_name')
                 .eq('join_code', code)
                 .single();
-            if (!room) { setBrowserStatus('Room not found — check the code and try again'); return; }
+            if (!room) { setBrowserStatus('Room not found - check the code and try again'); return; }
             if (room.status !== 'waiting') { setBrowserStatus('That game has already started'); return; }
             const username = lobbyUsername;
-            if (!username) { alert('Not signed in — please sign in first'); return; }
+            if (!username) { alert('Not signed in - please sign in first'); return; }
             const ok = await joinRoomAsPlayer(room.id, username);
             if (!ok) return;
             showWaitingRoom(room.id, room.join_code, room.is_private, room.host_name);
@@ -370,7 +370,7 @@
 
         async function joinPublicGame(gameId) {
             const username = lobbyUsername;
-            if (!username) { alert('Not signed in — please sign in first'); return; }
+            if (!username) { alert('Not signed in - please sign in first'); return; }
             const { data: room } = await supabase
                 .from('game_room')
                 .select('id,status,is_private,join_code,host_name')
@@ -677,7 +677,7 @@
             const username = lobbyUsername;
 
             if (!username) {
-                alert('Not signed in — please sign in first');
+                alert('Not signed in - please sign in first');
                 return;
             }
 
@@ -975,14 +975,14 @@
                 if (!_gameOverXpAwarded) {
                     _gameOverXpAwarded = true;
                     const isWinner = isGenuineLocalWinner(winnerPlayerIndex);
-                    console.log(`[XP] Attempting to award XP — isWinner=${isWinner}, userId=${window.gami?.userId}, totalPlayers=${totalPlayers}`);
+                    console.log(`[XP] Attempting to award XP - isWinner=${isWinner}, userId=${window.gami?.userId}, totalPlayers=${totalPlayers}`);
                     if (window.gami?.userId) {
                         await window.gami.onGameComplete(isWinner, totalPlayers);
                     } else {
-                        console.warn('[XP] gami.userId not set — XP skipped. gami object:', window.gami);
+                        console.warn('[XP] gami.userId not set - XP skipped. gami object:', window.gami);
                     }
                 } else {
-                    console.log('[XP] handleGameOver called again — XP already awarded this session, skipping.');
+                    console.log('[XP] handleGameOver called again - XP already awarded this session, skipping.');
                 }
 
                 // Positional ladder: the winner — human OR bot — takes the
@@ -1012,7 +1012,7 @@
                             if (args.p_winner_user || args.p_winner_bot) {
                                 const { data: newRank, error: ladderErr } = await supabase.rpc('ladder_game_result', args);
                                 if (ladderErr) console.warn('[ladder] game result not applied:', ladderErr.message);
-                                else console.log(`[ladder] game result applied — winner now #${newRank}`);
+                                else console.log(`[ladder] game result applied - winner now #${newRank}`);
                             }
                         }
                     } catch (e) { console.warn('[ladder] game result failed (continuing):', e); }
@@ -1109,7 +1109,7 @@
             const isWinner = isGenuineLocalWinner(winnerPlayerIndex);
             const n = Math.max(2, totalPlayers || 2);
             const xpAmt = isWinner ? 75 + (n - 1) * 25 : 20 + (n - 1) * 10;
-            xpLine.textContent = isWinner ? `+${xpAmt} XP  —  VICTORY` : `+${xpAmt} XP  —  GAME COMPLETE`;
+            xpLine.textContent = isWinner ? `+${xpAmt} XP  -  VICTORY` : `+${xpAmt} XP  -  GAME COMPLETE`;
             box.appendChild(xpLine);
 
             // (The personal-bot "capture a bot" picker was removed with the
@@ -1140,7 +1140,7 @@
                                 console.warn('⚠️ remove_players failed, retrying once:', removeErr);
                                 ({ error: removeErr } = await supabase.rpc('remove_players', { p_player_ids: ids }));
                             }
-                            if (removeErr) console.error('❌ Post-game player cleanup failed twice — stale rows may remain:', removeErr);
+                            if (removeErr) console.error('❌ Post-game player cleanup failed twice - stale rows may remain:', removeErr);
                         }
                         await supabase.from('game_room').update({ status: 'waiting', current_turn_index: 0 }).eq('id', roomId);
                     }
@@ -1438,7 +1438,7 @@
                     .eq('id', currentGameId)
                     .single();
                 if (room?.status === 'playing') {
-                    console.log('🔄 Fallback poll: detected game already started — joining now');
+                    console.log('🔄 Fallback poll: detected game already started - joining now');
                     handleGameStart();
                 }
             }, 2000);
@@ -1694,7 +1694,7 @@
                         elementalBase = champRes?.data?.[0]?.weights || null;
                     } catch (e) { elementalBase = null; }
                     if (!elementalBase) {
-                        console.warn('[elemental] champion fetch failed at game start — using local WEIGHTS');
+                        console.warn('[elemental] champion fetch failed at game start - using local WEIGHTS');
                         elementalBase = window.BotSystem?.WEIGHTS || window.BotSystem?.DEFAULT_WEIGHTS || {};
                     }
                     try { await window.BotElements.resolveIds(); } catch (e) {}
@@ -1837,11 +1837,11 @@
         async function handleGameStart() {
             // Guard against duplicate calls (host's direct call + Realtime subscription racing)
             if (document.getElementById('game-layout').classList.contains('active')) {
-                console.log('🔁 handleGameStart: game already active — skipping duplicate call');
+                console.log('🔁 handleGameStart: game already active - skipping duplicate call');
                 return;
             }
             if (_gameStartInFlight) {
-                console.log('🔁 handleGameStart: start already in flight — skipping duplicate call');
+                console.log('🔁 handleGameStart: start already in flight - skipping duplicate call');
                 return;
             }
             _gameStartInFlight = true;
@@ -2044,7 +2044,7 @@
                         return ref < staleThreshold;
                     });
                     for (const p of stalePlayers) {
-                        console.log(`⚠️ Disconnect: ${p.username} (last_seen=${p.last_seen}) — removing`);
+                        console.log(`⚠️ Disconnect: ${p.username} (last_seen=${p.last_seen}) - removing`);
                         await supabase.rpc('remove_player', { p_player_id: p.id });
                     }
                 } catch (e) { /* ignore network errors */ }
@@ -2076,7 +2076,7 @@
         // (catches missed real-time events while tab was in background)
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && myPlayerId) {
-                console.log('🔄 Tab visible — refreshing player list');
+                console.log('🔄 Tab visible - refreshing player list');
                 updatePlayerList();
             }
         });
@@ -2703,7 +2703,7 @@
                             });
                             wasInteractive = !!(result?.requiresSelection);
                             if (wasInteractive && !isCaster) {
-                                console.log(`🪞 Interactive scroll on non-caster client — advancing queue immediately`);
+                                console.log(`🪞 Interactive scroll on non-caster client - advancing queue immediately`);
                                 wasInteractive = false;
                             }
                         }
@@ -2793,7 +2793,7 @@
                             // should have returned early (due to psychicRemoteClient flag) without
                             // opening any UI. Treat as non-interactive so the queue advances immediately.
                             if (wasInteractive && !isCaster) {
-                                console.log(`🔮 Interactive scroll on non-caster client — advancing queue immediately (state synced via syncPlayerState)`);
+                                console.log(`🔮 Interactive scroll on non-caster client - advancing queue immediately (state synced via syncPlayerState)`);
                                 wasInteractive = false;
                             }
                         }
@@ -3200,7 +3200,7 @@
                 console.log('📄 Received cascade-forfeit:', payload);
                 const { playerIndex } = payload;
                 const playerName = getPlayerColorName(playerIndex);
-                updateStatus(`⏰ ${playerName} ran out of time with an unresolved scroll cascade — they forfeit!`);
+                updateStatus(`⏰ ${playerName} ran out of time with an unresolved scroll cascade - they forfeit!`);
             });
 
             gameChannel.on('broadcast', { event: 'response-resolved' }, ({ payload }) => {
@@ -3641,7 +3641,7 @@
                     if (hostScroll !== localScroll) {
                         // Don't restore a scroll that's already been drawn into play locally
                         if (hostScroll && inLocalPlay.has(hostScroll)) {
-                            console.log(`[common-area-sync] Skipping restore of ${hostScroll} in ${element} — already in local play`);
+                            console.log(`[common-area-sync] Skipping restore of ${hostScroll} in ${element} - already in local play`);
                             return;
                         }
                         console.warn(`⚠️ COMMON AREA DESYNC CORRECTED: ${element} slot was "${localScroll}", host says "${hostScroll}"`);
@@ -3762,9 +3762,9 @@
                     const kickedPlayerName = typeof kickedPlayerIndex !== 'undefined'
                         ? getPlayerColorName(kickedPlayerIndex)
                         : 'A player';
-                    updateStatus(`⏰ ${kickedPlayerName} timed out during tile placement — returning to lobby`);
+                    updateStatus(`⏰ ${kickedPlayerName} timed out during tile placement - returning to lobby`);
                 } else {
-                    updateStatus('🔄 Game reset — returning to lobby');
+                    updateStatus('🔄 Game reset - returning to lobby');
                 }
 
                 // Reset to lobby (for non-kicked players)
@@ -3843,12 +3843,12 @@
                     // (gameChannel set to null or reassigned elsewhere) for free.
                     if (!isMultiplayer || gameChannel !== thisChannel) return;
                     if (_gameChannelReconnectAttempts >= 5) {
-                        updateStatus('⚠️ Lost connection to the game and couldn\'t reconnect. Your view may be out of sync — try refreshing.');
+                        updateStatus('⚠️ Lost connection to the game and couldn\'t reconnect. Your view may be out of sync - try refreshing.');
                         return;
                     }
                     const delay = Math.min(30000, 2000 * Math.pow(2, _gameChannelReconnectAttempts));
                     _gameChannelReconnectAttempts++;
-                    updateStatus(`⚠️ Connection to game dropped — reconnecting (attempt ${_gameChannelReconnectAttempts})…`);
+                    updateStatus(`⚠️ Connection to game dropped - reconnecting (attempt ${_gameChannelReconnectAttempts})…`);
                     setTimeout(() => {
                         if (!isMultiplayer || gameChannel !== thisChannel) return;
                         setupGameBroadcast(true);
@@ -3880,7 +3880,7 @@
                         .eq('game_id', currentGameId);
                     if (!remaining) return;
                     if (remaining.length === 1 && remaining[0].id === myPlayerId) {
-                        console.log('📊 Poll: I am the last player remaining — triggering win.');
+                        console.log('📊 Poll: I am the last player remaining - triggering win.');
                         stopLastManStandingPoll();
                         if (myPlayerIndex !== null && myPlayerIndex !== undefined) {
                             await handleGameOver(myPlayerIndex, 'last_standing');

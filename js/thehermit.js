@@ -373,12 +373,12 @@
         });
 
         const title = document.createElement('div');
-        title.textContent = '🏹 TheHermit — Layout Editor';
+        title.textContent = '🏹 TheHermit - Layout Editor';
         Object.assign(title.style, { color: '#e8dcc8', fontSize: '13px', fontWeight: 'bold' });
         panel.appendChild(title);
 
         const hint = document.createElement('div');
-        hint.textContent = 'Drag any dashed-outline button/indicator or spacer to move it — within a bar or between them. Each spacer shows −/+/× controls above it. Saved automatically.';
+        hint.textContent = 'Drag any dashed-outline button/indicator or spacer to move it - within a bar or between them. Each spacer shows −/+/× controls above it. Saved automatically.';
         Object.assign(hint.style, { color: '#aaa', fontSize: '11px', lineHeight: '1.4' });
         panel.appendChild(hint);
 

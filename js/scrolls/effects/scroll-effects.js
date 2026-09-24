@@ -298,7 +298,7 @@ const ScrollEffects = {
         this._chainDepth++;
         try {
             if (this._chainDepth > this.MAX_EFFECT_CHAIN_DEPTH) {
-                console.error(`Effect chain too deep (${this._chainDepth}) while executing ${scrollName} — aborting to prevent a loop`);
+                console.error(`Effect chain too deep (${this._chainDepth}) while executing ${scrollName} - aborting to prevent a loop`);
                 return { success: false, reason: 'Effect chain too deep' };
             }
             return effect.execute(casterIndex, context, this);
@@ -926,7 +926,7 @@ const ScrollEffects = {
                     ? system.spellSystem.playerScrolls?.[casterIndex]
                     : null;
                 if (!playerScrolls || playerScrolls.hand.size === 0) {
-                    console.log(`🔥 Sacrificial Pyre: no scrolls in hand — cancelling`);
+                    console.log(`🔥 Sacrificial Pyre: no scrolls in hand - cancelling`);
                     if (typeof updateStatus === 'function') updateStatus('No scrolls in hand to sacrifice!');
                     // cancelled: true prevents win-condition tracking in applyScrollEffects
                     return { success: false, requiresSelection: false, cancelled: true, message: 'No scrolls to sacrifice!' };
@@ -1399,7 +1399,7 @@ const ScrollEffects = {
 
         VOID_SCROLL_1: {
             name: 'Psychic',
-            description: "Counter the previous scroll, then play it during your turn — unless its caster pays 2 AP to negate Psychic. Move Psychic to the common area.",
+            description: "Counter the previous scroll, then play it during your turn - unless its caster pays 2 AP to negate Psychic. Move Psychic to the common area.",
             isCounter: true,
             priority: 1,
 
@@ -2281,7 +2281,7 @@ const ScrollEffects = {
             const room = capacity - currentCount;
 
             const btn = document.createElement('button');
-            btn.textContent = `${info.symbol} ${element.charAt(0).toUpperCase() + element.slice(1)} — rank ${info.rank} (${currentCount}/${capacity})`;
+            btn.textContent = `${info.symbol} ${element.charAt(0).toUpperCase() + element.slice(1)} - rank ${info.rank} (${currentCount}/${capacity})`;
             Object.assign(btn.style, {
                 display: 'block',
                 width: '100%',
@@ -4911,7 +4911,7 @@ const ScrollEffects = {
                 // Re-validate fresh — board state may have shifted (a stone
                 // placed, a player moved) since the indicator was drawn.
                 if (!this.isValidTakeFlightDestination(targetPlayerIndex, pos.x, pos.y)) {
-                    updateStatus('Take Flight: that hex is no longer valid — board changed.');
+                    updateStatus('Take Flight: that hex is no longer valid - board changed.');
                     tf.indicators = this._showTakeFlightIndicators(targetPlayerIndex); // redraw against current state
                     return;
                 }

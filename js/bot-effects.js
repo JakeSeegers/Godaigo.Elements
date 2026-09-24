@@ -919,5 +919,5 @@
     }
 
     window.BotEffects = { driveSelection, rankedElements, driveTransmute, decideResponse };
-    log('Loaded — window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder, Control the Current, Excavate, Take Flight, Telekinesis, Transmute, response scrolls)');
+    log('Loaded - window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder, Control the Current, Excavate, Take Flight, Telekinesis, Transmute, response scrolls)');
 })();

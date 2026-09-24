@@ -112,7 +112,7 @@ window.gami = (function () {
             }
 
             _profile = profile;
-            _log('init complete — level', profile.current_level, 'xp', profile.total_xp);
+            _log('init complete - level', profile.current_level, 'xp', profile.total_xp);
         },
 
         /**
@@ -179,9 +179,9 @@ window.gami = (function () {
          *   Win:  75 + (n-1)*25   →  2p=100, 3p=125, 4p=150, 5p=175
          */
         async onGameComplete(isWinner, numPlayers) {
-            _log(`onGameComplete called — userId=${_userId}, isWinner=${isWinner}, numPlayers=${numPlayers}`);
+            _log(`onGameComplete called - userId=${_userId}, isWinner=${isWinner}, numPlayers=${numPlayers}`);
             if (!_userId) { console.warn('[gami] onGameComplete: no userId, XP skipped'); return; }
-            if (!isWinner) { _log('no XP awarded — only winners earn XP'); return; }
+            if (!isWinner) { _log('no XP awarded - only winners earn XP'); return; }
             const n   = Math.max(2, numPlayers || 2);
             const xp  = 75 + (n - 1) * 25;
 
@@ -193,7 +193,7 @@ window.gami = (function () {
                     p_xp_points:   xp,
                     p_description: isWinner
                         ? `Game win (${n} players)`
-                        : `Game complete — ${n} players`
+                        : `Game complete - ${n} players`
                 });
                 if (xpErr) { console.error('[gami] update_user_xp RPC error:', xpErr); return; }
                 _log('update_user_xp success, result:', xpData);
@@ -217,7 +217,7 @@ window.gami = (function () {
 
                 const msg = `Victory! +${xp} XP`;
                 api.notify(msg, xp, 'xp');
-                _log('game complete —', msg);
+                _log('game complete -', msg);
             } catch (err) {
                 console.error('[gami] onGameComplete error:', err);
             }

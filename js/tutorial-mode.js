@@ -596,7 +596,7 @@ const TutorialMode = (function () {
                     It only works until you end your turn.
                 </div>
                 <div style="margin-top:8px; color:#bbb; font-size:17px;">
-                    Try clicking it — it's safe even with nothing to undo.
+                    Try clicking it - it's safe even with nothing to undo.
                 </div>`,
             action: 'read',
             nextLabel: 'Continue',
@@ -721,7 +721,7 @@ const TutorialMode = (function () {
         if (typeof sg === 'function') {
             try { sg(1); } catch(e) { console.error('TutorialMode: startGame() threw:', e); }
         } else {
-            console.error('TutorialMode: startGame() not found — cannot launch tutorial.');
+            console.error('TutorialMode: startGame() not found - cannot launch tutorial.');
         }
         // Give the game a moment to finish rendering before showing step 0
         setTimeout(setupBoard, 400);
@@ -1216,7 +1216,7 @@ const TutorialMode = (function () {
         let stepToShow = step;
         if (step.id === 'how-to-win') {
             const loc = getAvalancheLocation();
-            console.log('[Tutorial] how-to-win entry — Avalanche location:', loc);
+            console.log('[Tutorial] how-to-win entry - Avalanche location:', loc);
             if (loc === 'common') {
                 const notice = `<div style="margin-bottom:12px;padding:8px 10px;background:rgba(148,88,244,0.15);border-left:3px solid #9458f4;border-radius:4px;font-size:17px;">Normally we'd show you how to move <strong>Avalanche</strong> from your Hand to your <strong>Active Area</strong>, but you moved it to the <strong>Common Area</strong>, where anyone can play it unless it gets replaced by a scroll of the same type.</div>`;
                 stepToShow = { ...step, content: notice + step.content };

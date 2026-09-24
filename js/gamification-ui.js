@@ -228,7 +228,7 @@ function _renderEmojis(content) {
     let html = '<div class="gami-section-title">My Emojis</div>';
 
     if (owned.length === 0) {
-        html += `<div style="color:var(--pp-ink-soft);font-style:italic;padding:8px 0 16px;">No emojis yet — buy some below!</div>`;
+        html += `<div style="color:var(--pp-ink-soft);font-style:italic;padding:8px 0 16px;">No emojis yet - buy some below!</div>`;
     } else {
         html += `<div class="gami-emoji-grid">`;
         for (const item of owned) {
@@ -267,7 +267,7 @@ function _renderEmojis(content) {
                     </div>`;
             } else {
                 html += `
-                    <div class="gami-shop-item" title="${_esc(item.name)} — ${item.cost}g">
+                    <div class="gami-shop-item" title="${_esc(item.name)} - ${item.cost}g">
                         <button class="${cls}" onclick="_gami_emojisBuy('${item.id}')">${_esc(item.display)}</button>
                         <div class="gami-shop-name">${_esc(item.name)}</div>
                         <button class="gami-shop-buy-btn" style="border-color:${tier.color};color:${tier.color};"
@@ -311,7 +311,7 @@ async function _renderBadges(content) {
 // runHillClimbTraining() in js/game-ui.js.
 function _gami_openTrainBot() {
     if (!window.gami?.userId) { window.gami?.notify('Log in to train the community bot.', 0, 'gold'); return; }
-    if (typeof isMultiplayer !== 'undefined' && isMultiplayer) { window.gami?.notify('Leave your online game first — training runs locally.', 0, 'gold'); return; }
+    if (typeof isMultiplayer !== 'undefined' && isMultiplayer) { window.gami?.notify('Leave your online game first - training runs locally.', 0, 'gold'); return; }
     // bot-arena.js is lazy-loaded (js/asset-preloader.js § Lazy scripts).
     if (!window.BotArena && window.LazyScripts) {
         window.LazyScripts.load('bot-arena').then(_gami_openTrainBot,
@@ -319,7 +319,7 @@ function _gami_openTrainBot() {
         return;
     }
     if (!window.BotArena) { window.gami?.notify('Bot training is not available right now.', 0, 'gold'); return; }
-    if (window.BotArena.isRunning()) { window.gami?.notify('A bot job is already running — stop it first.', 0, 'gold'); return; }
+    if (window.BotArena.isRunning()) { window.gami?.notify('A bot job is already running - stop it first.', 0, 'gold'); return; }
     if (typeof window._openBotTrainingPanel !== 'function') { window.gami?.notify('Bot training is not available right now.', 0, 'gold'); return; }
     window._botTrainingPublic = true;
     document.getElementById('gami-panel')?.remove();
@@ -473,7 +473,7 @@ async function _gami_showBotPetals(botId) {
         .select('id, nickname, weights, wins, losses, draws, is_active, owner')
         .eq('id', botId).limit(1);
     const bot = data?.[0];
-    if (!bot) { window.gami?.notify('Could not find that bot — try refreshing.', 0, 'gold'); return; }
+    if (!bot) { window.gami?.notify('Could not find that bot - try refreshing.', 0, 'gold'); return; }
     document.getElementById('gami-petals-overlay')?.remove();
 
     // For an elemental bot (system-owned) the stored weights are only a
@@ -632,7 +632,7 @@ function _renderSettingsView(content) {
         <div class="gami-settings-row">
             <div class="gami-settings-label">
                 <div class="gami-settings-name">Adaptive Music</div>
-                <div class="gami-settings-desc">In-game Joytone soundtrack (grows as tiles flip) — only affects you</div>
+                <div class="gami-settings-desc">In-game Joytone soundtrack (grows as tiles flip) - only affects you</div>
             </div>
             <button class="gami-toggle ${joytoneMuted ? 'off' : 'on'}"
                     onclick="_gami_toggleJoytoneMute(this)">${joytoneMuted ? 'OFF' : 'ON'}</button>

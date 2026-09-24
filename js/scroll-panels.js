@@ -640,7 +640,7 @@ const ScrollPanelSystem = (() => {
                 const castBtn = document.createElement('button');
                 castBtn.className = 'fsp-card-btn fsp-card-btn-cast' + (patternMatches ? ' fsp-cast-ready' : ' fsp-cast-dim');
                 castBtn.textContent = patternMatches ? 'Activate ✦' : 'Activate';
-                castBtn.title = patternMatches ? 'Pattern matches — ready to activate!' : 'Place stones in the required pattern first';
+                castBtn.title = patternMatches ? 'Pattern matches - ready to activate!' : 'Place stones in the required pattern first';
                 castBtn.addEventListener('click', e => {
                     e.stopPropagation();
                     // Activate THIS scroll specifically — not castSpell(), which scans every
@@ -658,7 +658,7 @@ const ScrollPanelSystem = (() => {
                 const castBtn = document.createElement('button');
                 castBtn.className = 'fsp-card-btn fsp-card-btn-cast' + (patternMatches ? ' fsp-cast-ready' : ' fsp-cast-dim');
                 castBtn.textContent = patternMatches ? 'Activate ✦' : 'Activate';
-                castBtn.title = patternMatches ? 'Pattern matches — ready to activate!' : 'Place stones in the required pattern first';
+                castBtn.title = patternMatches ? 'Pattern matches - ready to activate!' : 'Place stones in the required pattern first';
                 castBtn.addEventListener('click', e => {
                     e.stopPropagation();
                     // Activate THIS scroll specifically — not castSpell(), which scans every

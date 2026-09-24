@@ -43,7 +43,7 @@
         bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;' +
             'padding:6px 12px;background:#16161d;border-bottom:1px solid #2a2a35;' +
             'font:600 12px system-ui,sans-serif;color:#9fa8da';
-        bar.innerHTML = '<span>🎹 Joytone — adaptive music (Shift+J+T to close)</span>';
+        bar.innerHTML = '<span>🎹 Joytone - adaptive music (Shift+J+T to close)</span>';
         const closeBtn = document.createElement('button');
         closeBtn.textContent = '✕';
         closeBtn.style.cssText = 'background:none;border:1px solid #444;border-radius:5px;' +
@@ -179,7 +179,7 @@
         try {
             const genKey = await a.addTileTheme(shrineType, `${gameId}:${tileId}`);
             if (genKey) console.log(`🎵 Joytone: tile ${tileId} (${shrineType}) added "${genKey}" to the playlist`);
-            else console.log(`🎵 Joytone: tile ${tileId} (${shrineType}) — all variations already in the playlist`);
+            else console.log(`🎵 Joytone: tile ${tileId} (${shrineType}) - all variations already in the playlist`);
         } catch (e) {
             console.warn('Joytone addTileTheme failed:', e);
         }

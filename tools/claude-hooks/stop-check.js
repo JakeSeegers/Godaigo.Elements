@@ -2,7 +2,8 @@
 // Stop hook (see .claude/settings.json). Checks the house rules against
 // everything this session changed (since the commit session-start.js saved):
 //   1. no em dashes in added lines
-//   2. game files changed => changelog.json changed too
+//   2. game files changed => reminder to update today's changelog summary
+//   3. changelog.json shape: one entry per date, newest first, max 5 lines
 // On a problem it returns {"decision":"block"} so Claude keeps working and
 // fixes it. It blocks only once per stop (stop_hook_active), so it can never
 // loop forever.
@@ -14,6 +15,7 @@ const EM_DASH = '\u2014';
 // Files a player can see or feel. Docs, planning, tools and hooks are not.
 const GAME_PATH = /^(index\.html|js\/|css\/|sounds\/|assets\/|images\/|video\/|LoreIntroClips\/|joytone\/|sql\/)/;
 const CHANGELOG = 'changelog.json';
+const MAX_LINES = 5; // per daily entry, see CLAUDE.md HOUSE RULES #2
 
 function git(cmd) {
     return execSync('git ' + cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
@@ -86,15 +88,41 @@ if (hits.length) {
     );
 }
 
-// 2. Changelog entry for player-facing changes
+// 2. Release-note reminder for game changes. Not every change needs a line
+// (small ones are grouped, internal ones skipped), so this blocks only once
+// and lets Claude either update today's summary or tell the user why not.
 const gameFiles = [...changed].filter(f => GAME_PATH.test(f));
 if (gameFiles.length && !changed.has(CHANGELOG)) {
     problems.push(
         `Game files changed this session (${gameFiles.slice(0, 8).join(', ')}${gameFiles.length > 8 ? ', ...' : ''}) ` +
-        `but ${CHANGELOG} did not. House rule: add a player-facing release note (simple English, no em dashes) ` +
-        `to today's entry, or a new entry at the top. If the change truly has no player-visible effect ` +
-        `(pure refactor, dev-only tool), say so to the user instead.`
+        `but ${CHANGELOG} did not. If players will notice this change, update TODAY's entry ` +
+        `(one entry per day, max ${MAX_LINES} lines, rewrite it as a summary of the day). ` +
+        `If players will not notice it, do not add a note; tell the user you skipped it and why.`
     );
+}
+
+// 3. changelog.json shape (only when this session touched it)
+if (changed.has(CHANGELOG)) {
+    try {
+        const data = JSON.parse(fs.readFileSync(CHANGELOG, 'utf8'));
+        const entries = Array.isArray(data.entries) ? data.entries : null;
+        if (!entries) throw new Error('"entries" must be an array');
+        const seen = new Set();
+        let prev = null;
+        entries.forEach((e, i) => {
+            const where = `entry ${i} (${e.date || 'no date'})`;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '')) problems.push(`${CHANGELOG}: ${where} needs date as YYYY-MM-DD.`);
+            if (e.id !== e.date) problems.push(`${CHANGELOG}: ${where} id must equal its date.`);
+            if (seen.has(e.date)) problems.push(`${CHANGELOG}: more than one entry for ${e.date}. Merge them into one summary.`);
+            seen.add(e.date);
+            if (prev && e.date > prev) problems.push(`${CHANGELOG}: entries must be newest first (${e.date} is after ${prev}).`);
+            prev = e.date;
+            if (!Array.isArray(e.changes) || !e.changes.length) problems.push(`${CHANGELOG}: ${where} needs a non-empty "changes" list.`);
+            else if (e.changes.length > MAX_LINES) problems.push(`${CHANGELOG}: ${where} has ${e.changes.length} lines (max ${MAX_LINES}). Merge or drop the small ones.`);
+        });
+    } catch (err) {
+        problems.push(`${CHANGELOG} is not valid: ${err.message}`);
+    }
 }
 
 if (problems.length) {

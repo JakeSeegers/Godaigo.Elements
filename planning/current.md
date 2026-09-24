@@ -124,6 +124,11 @@ reach/beat it from here.
   release note for every player-facing change), enforced by
   `.claude/settings.json` SessionStart + Stop hooks in `tools/claude-hooks/`.
   `/sync-docs` moved to `.claude/skills/sync-docs/SKILL.md` so it actually loads.
+  Follow-up: replaced every em dash inside JS string literals (234 strings, 23
+  files, found with an acorn AST scan so comments were untouched) and the room
+  code placeholder in index.html with " - ". joytone/ (hidden dev music tool) not
+  touched. Changelog rule tightened: one entry per day, max 5 lines, rewrite the
+  day's summary instead of adding; stop-check.js now validates changelog.json.
 - **CONNECTIVITY & PERFORMANCE, REAL PLAYTEST FINDING: currentTurnNumber
   never updated on receiving clients (turn-change/turn-sync handlers)** —
   `js/lobby.js`. Found from actual `godaigoTest.diag()` output during a real

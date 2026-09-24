@@ -569,7 +569,7 @@
             const effEl = shrine ? (wrEntry ? wrEntry.newElement : shrine.shrineType) : null;
             if (effEl && effEl !== 'catacomb') {
                 if (effEl === 'unknown') {
-                    simNotes(snap).notes.push('endTurn on an unknown-element shrine — collection not modelled');
+                    simNotes(snap).notes.push('endTurn on an unknown-element shrine - collection not modelled');
                 } else if (ELEMENTS.includes(effEl)) {
                     const el = effEl;
                     // Mine (CATACOMB_SCROLL_2): double this specific shrine
@@ -1028,7 +1028,7 @@
     function simEffectCallToAdventure(snap, p) {
         flipNearestEligibleTile(snap, p, 'Call to Adventure');
         buffs(snap).callToAdventure = true;
-        simNotes(snap).notes.push('Call to Adventure buff active — future-reveal stone grants not modelled (element unknowable)');
+        simNotes(snap).notes.push('Call to Adventure buff active - future-reveal stone grants not modelled (element unknowable)');
     }
 
     // Combust (CATACOMB_SCROLL_10): destroy EVERY stone on the non-player
@@ -1884,8 +1884,8 @@
             await window.BotSystem.waitForQuiescence();
             const before = window.BotState.snapshot();
             let legal = window.BotState.legalActions();
-            if (!legal.length) { log('validate: no legal actions — stopping'); break; }
-            if (legal[0].type === 'placeTile') { log('validate: placement phase — stopping'); break; }
+            if (!legal.length) { log('validate: no legal actions - stopping'); break; }
+            if (legal[0].type === 'placeTile') { log('validate: placement phase - stopping'); break; }
 
             // Random play never ends a turn on its own often enough; force it
             // occasionally so endTurn (collection + AP reset) gets coverage.
@@ -1963,5 +1963,5 @@
         stoneWouldSurvive,
         SIMULATED_SCROLLS, UNKNOWN_SCROLL,
     };
-    log('Loaded — window.BotSim ready (simulate / legalActions / isTerminal / validate)');
+    log('Loaded - window.BotSim ready (simulate / legalActions / isTerminal / validate)');
 })();

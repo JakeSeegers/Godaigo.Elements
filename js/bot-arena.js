@@ -485,7 +485,7 @@
                 if (campers.length >= STALL_MIN_BOTS) {
                     result.stalled = true;
                     result.stallers = campers;
-                    log(`match seed ${seed}: ${campers.length} bots each parked on an elemental tile for ${STALL_TURNS} straight turns — trap loop, aborting round on turn ${turn + 1}`);
+                    log(`match seed ${seed}: ${campers.length} bots each parked on an elemental tile for ${STALL_TURNS} straight turns - trap loop, aborting round on turn ${turn + 1}`);
                     break;
                 }
 
@@ -499,7 +499,7 @@
                         // Nobody cast — a joint failure, not one player's doing (unlike
                         // camping's per-tile streak), so every seat shares attribution.
                         result.stallers = Array.from({ length: nPlayers }, (_, i) => i);
-                        log(`match seed ${seed}: no scroll cast by anyone for ${Math.round(noCastTurnCap / nPlayers)} straight rounds (${noCastTurnCap} turns) — stalled, aborting round on turn ${turn + 1}`);
+                        log(`match seed ${seed}: no scroll cast by anyone for ${Math.round(noCastTurnCap / nPlayers)} straight rounds (${noCastTurnCap} turns) - stalled, aborting round on turn ${turn + 1}`);
                         break;
                     }
                 }
@@ -561,7 +561,7 @@
             if (!result.stalled || _stopRequested || _endEarlyRequested || attempt >= maxStallRestarts) break;
             log(`restarting stalled round (restart ${attempt + 1}/${maxStallRestarts}, next seed ${(baseSeed + (attempt + 1) * 1000003) >>> 0})`);
         }
-        if (result.stalled) log(`round still stalled after ${result.restarts} restart(s) — returning it as a draw`);
+        if (result.stalled) log(`round still stalled after ${result.restarts} restart(s) - returning it as a draw`);
         result.stallCounts = stallCounts;
         return result;
     }
@@ -1098,13 +1098,13 @@
                     sigma = sigma0; // found a step up — reset the search radius
                     try { localStorage.setItem('godaigo_bot_weights', JSON.stringify(champion)); } catch (e) {}
                     log(`round ${round + 1}: PROMOTED (${best.aWins}-${best.bWins}, ${(best.winRate * 100).toFixed(0)}% ` +
-                        `of ${best.decided} decided) — new champion. Total promotions: ${promotions}`);
+                        `of ${best.decided} decided) - new champion. Total promotions: ${promotions}`);
                     log('champion weights (paste into bot.js DEFAULT_WEIGHTS to make permanent):\n' + JSON.stringify(champion));
                 } else {
                     const prevSigma = sigma;
                     sigma = Math.min(sigmaCap, sigma * sigmaGrowth); // barren round — widen the search
                     log(`round ${round + 1}: no challenger cleared ${(promoteWinRate * 100).toFixed(0)}% ` +
-                        `(best ${best ? best.aWins + '-' + best.bWins : 'n/a'}) — champion holds; sigma ${prevSigma.toFixed(2)} → ${sigma.toFixed(2)}`);
+                        `(best ${best ? best.aWins + '-' + best.bWins : 'n/a'}) - champion holds; sigma ${prevSigma.toFixed(2)} → ${sigma.toFixed(2)}`);
                 }
 
                 const info = { round: round + 1, promoted,
@@ -1195,7 +1195,7 @@
 
         const label = result.winner !== null ? `🏆 Bot ${result.winner + 1} wins in ${result.turns} turns!`
                     : _stopRequested ? `⏹ Bot match stopped after ${result.turns} turns`
-                    : `🤝 Draw — turn cap (${result.turns}) reached`;
+                    : `🤝 Draw - turn cap (${result.turns}) reached`;
         log(label);
         if (typeof updateStatus === 'function') updateStatus(`${label} Downloading action log…`);
         try { window.ActionLog?.download?.(); } catch (e) { log('log download failed:', e); }
@@ -1278,7 +1278,7 @@
         }
         const improved = champFitness > baseFitness;
         const record = perSize.map(p => `${p.n}p ${p.champWins}-${p.baseWins}${p.draws ? 'd' + p.draws : ''}`).join(', ');
-        log(`confirmAcrossSizes: champion ${improved ? 'BEAT' : 'did not beat'} baseline — champF ${champFitness.toFixed(2)} vs baseF ${baseFitness.toFixed(2)} (${record})`);
+        log(`confirmAcrossSizes: champion ${improved ? 'BEAT' : 'did not beat'} baseline - champF ${champFitness.toFixed(2)} vs baseF ${baseFitness.toFixed(2)} (${record})`);
         return { improved, record, perSize, champFitness, baseFitness, champWins, baseWins, draws, aWins: champWins, bWins: baseWins };
     }
 
@@ -1306,5 +1306,5 @@
         applyWeights: setWeights, // apply an {…} weight table to the LIVE WEIGHTS object in place
         seatFitness, sideFitness, // exposed for direct scoring verification, same as bot.js's evaluator
     };
-    log('Loaded — window.BotArena ready (run / evolve / spectate)');
+    log('Loaded - window.BotArena ready (run / evolve / spectate)');
 })();
