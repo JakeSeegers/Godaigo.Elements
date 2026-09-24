@@ -127,6 +127,12 @@ reach/beat it from here.
   flagged games, (4) stats + a hermit "suspicious players" screen. Open questions
   for later phases: replay retention (30 days now), who may watch replays (hands
   are secret), whether to record games vs bots only (recorded now).
+  Phase 2 DONE same day (js/match-witness.js, sql/match-witness.sql, migrations
+  match_witness_reports + match_witness_claim): turn fingerprints -> desync_count,
+  game-over witness reports -> disputed flag, claim_game_win waits for a confirming
+  witness when other humans are present (pending claims paid by report_game_result).
+  Tested in rolled-back transactions: claim-then-witness, witness-then-claim,
+  disagreeing witness. Not yet seen in a real 2-human game.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the
