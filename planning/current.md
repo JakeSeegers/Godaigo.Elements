@@ -152,6 +152,13 @@ reach/beat it from here.
   JakeS1 responded with Reflect (WATER_SCROLL_1): likely a real response-scroll sync
   bug. Fingerprint now split into 4 x 8 hex parts (tiles|stones|pawns|activated) so
   the next mismatch shows which part differs. Investigate Reflect vs Quick Reflexes.
+  ROOT CAUSE FOUND + FIXED (same day): (1) Quick Reflexes selectScroll never signalled
+  completion: no onSelectionEffectComplete -> no 'scroll-effect' broadcast, so other
+  clients never marked its activated elements (void+wind); via Reflect/Psychic the
+  chain's onComplete was never called either. (2) A ReferenceError introduced in the
+  cascade-popup removal (scrollInfo moved into an if block, still used later) crashed
+  selectScroll before its 'quick-reflexes-search' broadcast and left selectionMode
+  set. Both fixed (finishQuickReflexes); browser-tested normal + Reflect paths.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

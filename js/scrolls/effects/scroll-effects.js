@@ -1758,7 +1758,9 @@ const ScrollEffects = {
                 system.enterQuickReflexesMode(casterIndex, {
                     scrollName: context?.scrollName || 'CATACOMB_SCROLL_9',
                     effectName: 'Quick Reflexes',
-                    spell: context?.spell
+                    spell: context?.spell,
+                    // Reflect/Psychic chains pass onComplete; see finishQuickReflexes
+                    onComplete: context?.onComplete
                 });
 
                 return {
@@ -2889,11 +2891,27 @@ const ScrollEffects = {
             });
         });
 
+        // Signal that Quick Reflexes is done, the same way the other
+        // selection scrolls do: a Reflect/Psychic chain gets its onComplete
+        // (so the chain moves on), a normal cast gets onSelectionEffectComplete,
+        // which broadcasts 'scroll-effect' with the activated elements. Quick
+        // Reflexes used to skip both, so other players never marked its
+        // elements as activated and their boards drifted out of sync
+        // (seen in match 4, turn 17).
+        const finishQuickReflexes = () => {
+            if (typeof completionPayload?.onComplete === 'function') {
+                completionPayload.onComplete();
+            } else if (completionPayload?.spell && sp?.onSelectionEffectComplete) {
+                sp.onSelectionEffectComplete(completionPayload.scrollName, completionPayload.effectName, completionPayload.spell);
+            }
+        };
+
         if (available.length === 0) {
             if (typeof updateStatus === 'function') {
                 updateStatus('Quick Reflexes: no level 1 scrolls available in any deck!');
             }
             self.selectionMode = null;
+            finishQuickReflexes();
             return;
         }
 
@@ -3063,11 +3081,13 @@ const ScrollEffects = {
             // Add scroll to hand. If this puts the hand over the limit, the
             // end-of-turn overflow banner makes the player cascade (same as a
             // normal shrine pickup, no separate cascade popup).
+            // scrollInfo is used again below (status line), so it must live
+            // at this level, not inside the over-limit check.
+            const scrollInfo = sp.patterns?.[scrollName];
             const scrolls = sp.getPlayerScrolls(false);
             scrolls.hand.add(scrollName);
             sp.updateScrollCount();
             if (scrolls.hand.size > sp.MAX_HAND_SIZE) {
-                const scrollInfo = sp.patterns?.[scrollName];
                 updateStatus(`Picked up "${scrollInfo?.name || scrollName}". Your hand is over the limit. Cascade a scroll before ending your turn!`);
             }
 
@@ -3097,6 +3117,7 @@ const ScrollEffects = {
             }
 
             self.selectionMode = null;
+            finishQuickReflexes();
         };
 
         // Register selection mode for cancellation support
