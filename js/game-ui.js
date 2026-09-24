@@ -4428,14 +4428,19 @@ document.getElementById('undo-move').onclick = function() {
             if (uid) {
                 try {
                     const runGold = Math.max(8, Math.min(40, Math.round(gamesDone / 4)));
-                    await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: runGold, p_description: `Bot training - completed a ${gamesDone}-game run` });
-                    attemptGold = runGold;
+                    // Server-capped (60 per claim, 300 per day); returns what it granted.
+                    const { data: granted, error } = await supabase.rpc('claim_training_reward', { p_amount: runGold, p_description: `Bot training - completed a ${gamesDone}-game run` });
+                    if (error) throw error;
+                    attemptGold = granted || 0;
                 } catch (e) { console.warn('run bonus failed (continuing):', e); }
             }
 
             if (rewarded && tierGold) {
                 try {
-                    await supabase.rpc('award_gold', { p_user_id: uid, p_gold_amount: tierGold, p_description: `Bot training - beat the champion (${tier})` });
+                    const { data: granted, error } = await supabase.rpc('claim_training_reward', { p_amount: tierGold, p_description: `Bot training - beat the champion (${tier})` });
+                    if (error) throw error;
+                    tierGold = granted || 0;
+                    if (!tierGold) rewarded = false; // daily training cap reached
                 } catch (e) { console.warn('tier gold failed (continuing):', e); rewarded = false; }
             }
 

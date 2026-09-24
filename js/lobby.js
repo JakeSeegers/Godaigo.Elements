@@ -1003,14 +1003,28 @@
                 console.log('🏆 Game Over! Winner:', winnerPlayerIndex, 'Type:', winType);
                 stopLastManStandingPoll();
 
-                // Award gamification XP FIRST — before showing the overlay — so the async RPC
+                // Mark the room finished with the winner's index FIRST. The
+                // server's claim_game_win() only pays XP for a finished room
+                // whose recorded winner is the caller's own seat.
+                const { error: finishErr } = await supabase
+                    .from('game_room')
+                    .update({
+                        status: 'finished',
+                        current_turn_index: winnerPlayerIndex
+                    })
+                    .eq('id', currentGameId);
+                if (finishErr) {
+                    console.error('Error updating game over state:', finishErr);
+                }
+
+                // Then award XP, before showing the overlay, so the async RPC
                 // completes before any page reload triggered by "Return to Lobby" can cancel it
                 if (!_gameOverXpAwarded) {
                     _gameOverXpAwarded = true;
                     const isWinner = isGenuineLocalWinner(winnerPlayerIndex);
                     console.log(`[XP] Attempting to award XP - isWinner=${isWinner}, userId=${window.gami?.userId}, totalPlayers=${totalPlayers}`);
                     if (window.gami?.userId) {
-                        await window.gami.onGameComplete(isWinner, totalPlayers);
+                        await window.gami.onGameComplete(isWinner, totalPlayers, currentGameId);
                     } else {
                         console.warn('[XP] gami.userId not set - XP skipped. gami object:', window.gami);
                     }
@@ -1064,18 +1078,6 @@
                 // Broadcast win type so other clients show the correct message
                 broadcastGameAction('game-over', { winnerIndex: winnerPlayerIndex, winType });
 
-                // Update game room status to 'finished' and store winner index
-                const { error } = await supabase
-                    .from('game_room')
-                    .update({
-                        status: 'finished',
-                        current_turn_index: winnerPlayerIndex
-                    })
-                    .eq('id', currentGameId);
-
-                if (error) {
-                    console.error('Error updating game over state:', error);
-                }
             } catch (error) {
                 console.error('Error handling game over:', error);
             }

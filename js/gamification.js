@@ -127,15 +127,14 @@ window.gami = (function () {
             const lastActive = _profile.stats?.last_active;
             if (lastActive === today) return; // Already collected today
 
-            const { error } = await supabase.rpc('award_gold', {
-                p_user_id:     _userId,
-                p_gold_amount: 20,
-                p_description: 'Daily login reward'
-            });
+            // The server decides: 20 gold once per (UTC) day, and it logs the
+            // daily_login activity for the "Dedicated" badge itself.
+            const { data: claim, error } = await supabase.rpc('claim_daily_login');
             if (error) { console.error('[gami] daily login gold error:', error); return; }
-
-            // Log a daily_login activity so the "Dedicated" badge can count it
-            _logActivity('daily_login', 0, 20, 'Daily login');
+            if (!claim?.awarded) {
+                _patchStats({ last_active: today });
+                return; // already claimed today (maybe on another device)
+            }
 
             // Update streak and last_active in stats
             const yesterday = new Date(Date.now() - 86_400_000).toDateString();
@@ -178,35 +177,21 @@ window.gami = (function () {
          *   Loss: 20 + (n-1)*10   →  2p=30, 3p=40, 4p=50, 5p=60
          *   Win:  75 + (n-1)*25   →  2p=100, 3p=125, 4p=150, 5p=175
          */
-        async onGameComplete(isWinner, numPlayers) {
-            _log(`onGameComplete called - userId=${_userId}, isWinner=${isWinner}, numPlayers=${numPlayers}`);
+        async onGameComplete(isWinner, numPlayers, roomId) {
+            _log(`onGameComplete called - userId=${_userId}, isWinner=${isWinner}, numPlayers=${numPlayers}, room=${roomId}`);
             if (!_userId) { console.warn('[gami] onGameComplete: no userId, XP skipped'); return; }
             if (!isWinner) { _log('no XP awarded - only winners earn XP'); return; }
-            const n   = Math.max(2, numPlayers || 2);
-            const xp  = 75 + (n - 1) * 25;
+            if (!roomId) { console.warn('[gami] onGameComplete: no room id, XP skipped'); return; }
 
-            _log(`awarding ${xp} XP (isWinner=${isWinner}, n=${n})`);
             try {
-                // Award XP
-                const { data: xpData, error: xpErr } = await supabase.rpc('update_user_xp', {
-                    p_user_id:     _userId,
-                    p_xp_points:   xp,
-                    p_description: isWinner
-                        ? `Game win (${n} players)`
-                        : `Game complete - ${n} players`
-                });
-                if (xpErr) { console.error('[gami] update_user_xp RPC error:', xpErr); return; }
-                _log('update_user_xp success, result:', xpData);
-
-                // Log game_complete (badge: First Steps, Veteran)
-                _logActivity('game_complete', xp, 0,
-                    `Completed game with ${n} players`, { num_players: n, won: isWinner });
-
-                // Log game_win (badge: First Victory, Champion, Master)
-                if (isWinner) {
-                    _logActivity('game_win', 0, 0,
-                        `Won game with ${n} players`, { num_players: n });
-                }
+                // The server checks the room is finished with our seat as the
+                // winner, decides the XP, and logs the game_complete / game_win
+                // activities (badges) itself. Once per game.
+                const { data: xpData, error: xpErr } = await supabase.rpc('claim_game_win', { p_room_id: roomId });
+                if (xpErr) { console.error('[gami] claim_game_win RPC error:', xpErr); return; }
+                if (!xpData?.success) { _log('no XP awarded:', xpData?.reason); return; }
+                _log('claim_game_win success, result:', xpData);
+                const xp = xpData.xp;
 
                 // Update stats
                 const stats = Object.assign({}, _profile?.stats || {});

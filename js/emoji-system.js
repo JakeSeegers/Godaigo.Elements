@@ -328,10 +328,9 @@
         if (!confirmed) return;
 
         try {
-            // Deduct gold atomically via the existing RPC
-            const { error } = await supabase.rpc('award_gold', {
-                p_user_id:    window.gami.userId,
-                p_gold_amount: -item.cost,
+            // Deduct gold on the server (fails if there isn't enough)
+            const { error } = await supabase.rpc('spend_gold', {
+                p_amount:      item.cost,
                 p_description: 'Emoji purchase: ' + item.name
             });
 

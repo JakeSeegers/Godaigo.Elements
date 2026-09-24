@@ -56,9 +56,8 @@
         const gold = window.gami?.profile?.gold || 0;
         if (gold < item.cost) return { ok: false, msg: `Need ${item.cost}g (you have ${gold}g)` };
 
-        const { error } = await supabase.rpc('award_gold', {
-            p_user_id:     userId,
-            p_gold_amount: -item.cost,
+        const { error } = await supabase.rpc('spend_gold', {
+            p_amount:      item.cost,
             p_description: `Name colour: ${item.name}`
         });
         if (error) return { ok: false, msg: 'Purchase failed' };
