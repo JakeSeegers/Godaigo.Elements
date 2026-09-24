@@ -133,6 +133,13 @@ reach/beat it from here.
   witness when other humans are present (pending claims paid by report_game_result).
   Tested in rolled-back transactions: claim-then-witness, witness-then-claim,
   disagreeing witness. Not yet seen in a real 2-human game.
+  Phase 3 step 1 DONE (sql/replay-access.sql, migration replay_access): owner's
+  rule = players watch their own games; any player of a game can "post publicly";
+  public games watchable by anyone signed in. Tested rolled back on match 2.
+  Step 2 next: replay engine = fake channel handed to setupGameBroadcast() (lobby.js,
+  56 handlers) + recorded moves dispatched in order. Open problem:
+  startMultiplayerGame() needs "my player" (spectator seat) and some handlers skip
+  "own" moves by myPlayerIndex.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the
