@@ -266,6 +266,11 @@
             // Update badge
             const badge = document.getElementById('room-type-badge');
             if (badge) badge.textContent = isPrivate ? 'PRIVATE' : 'PUBLIC';
+            // hostStartGame() disables Start on click and only re-enables it on
+            // failure. Leave Game returns here without a page reload, so without
+            // this the next room's Start button stayed grayed out.
+            const startBtn = document.getElementById('host-start-button');
+            if (startBtn) startBtn.disabled = false;
             stopBrowserRefresh();
         }
 

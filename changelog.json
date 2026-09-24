@@ -9,7 +9,7 @@
         "New Change Log button in the lobby. It shows what changed in each update.",
         "The lobby keeps itself up to date, so the refresh buttons are gone. The leaderboard reloads when you come back, and games whose players have left drop off the game list within about a minute.",
         "No more separate \"All Slots Full\" popup. If you pick up a scroll with a full hand, the Scroll Overflow banner asks you to cascade at the end of your turn.",
-        "Small fixes and polish to game text."
+        "Fixed the Start Game button staying grayed out when you host a new room after leaving a game. Plus small fixes to game text."
       ]
     }
   ]
