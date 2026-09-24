@@ -80,7 +80,7 @@ Order matters — later scripts depend on earlier ones.
 15. crt-overlay.js         ← CRT canvas effects (no game deps)
 16. gamification-ui.js     ← Profile modal UI (depends on gamification.js)
 17. lobby.js               ← Auth, room management, startGame() (depends on game-core)
-18. tutorial-mode.js       ← Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
+18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
 21. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
@@ -106,7 +106,7 @@ Order matters — later scripts depend on earlier ones.
                              follow bot.js (needs window.BotSystem.evaluateSnapshot).
 25. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
                              host's client impersonates the bot's index to drive its turns
-26. bot-arena.js           ← window.BotArena — self-play arena (bot-vs-bot local games, weight evolution).
+26. bot-arena.js           ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). window.BotArena — self-play arena (bot-vs-bot local games, weight evolution).
                              Shared playMatch() core for 2-5 players (calls ensureLocalMode() so a stale
                              isMultiplayer identity from an incomplete online-game leave never kills a local
                              match); run/evolve/spectate all support opts.visual (watch instead of muted-fast)
@@ -132,6 +132,10 @@ Order matters — later scripts depend on earlier ones.
                              chosen order to localStorage and exports it as JSON for hardcoding back in
 30. asset-preloader.js     ← window.AssetPreloader — background-loads in-game art + sounds after the intro;
                              shows a loading bar over the board if a match starts before it's done
+                             Also window.LazyScripts.load('tutorial'|'bot-arena'): loads #18/#26 on idle after
+                             the preload, or on demand from their entry points (Tutorial button, Train Bot,
+                             cheat/bot-training panels, bot-driver.js per-bot weights) — await it before
+                             touching window.TutorialMode / window.BotArena from any NEW entry point.
 ```
 
 ---

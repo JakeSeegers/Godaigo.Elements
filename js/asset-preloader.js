@@ -15,6 +15,7 @@
     //
     // Everything here is additive — if this file fails to load, or any
     // asset fails, the game behaves exactly as before (loads on use).
+    // Also home of window.LazyScripts (see § Lazy scripts below).
 
     const GATE_MAX_MS = 8000;     // never hold a match longer than this
     const GATE_SHOW_DELAY_MS = 150; // nearly-done loads finish without flashing the bar
@@ -181,11 +182,57 @@
         obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
     }
 
+    // ── Lazy scripts ─────────────────────────────────────────────────────
+    // Code most sessions never run (the tutorial, bot-arena training) is no
+    // longer a <script> tag in index.html. It loads once the page is idle
+    // after the intro + asset preload, so it's off the startup path but
+    // still normally in place a few seconds later (console use included).
+    // Every entry point that needs it earlier awaits load(name) first: the
+    // auth-screen Tutorial button (index.html), Train Bot
+    // (gamification-ui.js), the cheat / bot-training panels (game-ui.js),
+    // and per-bot weights in bot-driver.js.
+    const LAZY = {
+        'tutorial':  { src: 'js/tutorial-mode.js', global: 'TutorialMode' },
+        'bot-arena': { src: 'js/bot-arena.js',     global: 'BotArena' },
+    };
+
+    function load(name) {
+        const e = LAZY[name];
+        if (!e) return Promise.reject(new Error('LazyScripts: unknown script "' + name + '"'));
+        if (window[e.global]) return Promise.resolve(); // already loaded (e.g. an older cached index.html still has the tag)
+        if (!e.promise) {
+            e.promise = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = e.src;
+                s.charset = 'UTF-8';
+                s.onload = resolve;
+                s.onerror = () => {
+                    e.promise = null; // allow a retry
+                    reject(new Error('LazyScripts: failed to load ' + e.src));
+                };
+                document.body.appendChild(s);
+            });
+        }
+        return e.promise;
+    }
+
+    function loadAllWhenIdle() {
+        const go = () => Object.keys(LAZY).forEach(n => load(n).catch(err => console.warn(err.message)));
+        if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 });
+        else setTimeout(go, 1000);
+    }
+
     watchGameStart();
     startAfterIntro();
+    // After the intro and the art/sound preload, never competing with them.
+    (function whenPreloaded() {
+        if (allDone) allDone.then(loadAllWhenIdle);
+        else setTimeout(whenPreloaded, 500);
+    })();
 
     window.AssetPreloader = {
         start,
         isDone: () => started && assets.every(a => a.done),
     };
+    window.LazyScripts = { load };
 })();

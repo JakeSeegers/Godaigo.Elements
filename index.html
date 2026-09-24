@@ -95,7 +95,7 @@
             </button>
 
             <!-- Tutorial entry — no account required -->
-            <button class="auth-btn-tutorial" onclick="TutorialMode.start()">
+            <button class="auth-btn-tutorial" onclick="(window.LazyScripts ? LazyScripts.load('tutorial') : Promise.resolve()).then(function () { TutorialMode.start(); }).catch(function () { alert('Could not load the tutorial. Check your connection and try again.'); })">
                 ▶ Play Tutorial
             </button>
         </div>
@@ -679,7 +679,6 @@
     <script src="js/crt-overlay.js" charset="UTF-8"></script>
     <script src="js/gamification-ui.js" charset="UTF-8"></script>
     <script src="js/lobby.js" charset="UTF-8"></script>
-    <script src="js/tutorial-mode.js" charset="UTF-8"></script>
     <script src="js/emoji-system.js" charset="UTF-8"></script>
     <script src="js/cosmetics-system.js" charset="UTF-8"></script>
     <script src="js/bot-state.js" charset="UTF-8"></script>
@@ -688,7 +687,6 @@
     <script src="js/bot.js" charset="UTF-8"></script>
     <script src="js/bot-memory.js" charset="UTF-8"></script>
     <script src="js/bot-driver.js" charset="UTF-8"></script>
-    <script src="js/bot-arena.js" charset="UTF-8"></script>
     <script src="js/action-log.js" charset="UTF-8"></script>
     <script src="js/session-log-upload.js" charset="UTF-8"></script>
     <script src="js/bot-imitation.js" charset="UTF-8"></script>

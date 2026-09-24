@@ -4623,9 +4623,17 @@ document.getElementById('undo-move').onclick = function() {
             let clickCount = 0;
             let clickTimer = null;
 
-            function openCheatPanel() {
+            function openCheatPanel(lazyTried) {
                 const existing = document.getElementById('cheat-panel');
                 if (existing) { existing.remove(); return; }
+                // Its bot buttons need bot-arena.js, which is lazy-loaded
+                // (js/asset-preloader.js § Lazy scripts) — load it first.
+                // One try only: if it fails, open anyway (those buttons
+                // already report 'BotArena not loaded').
+                if (!window.BotArena && window.LazyScripts && lazyTried !== true) {
+                    window.LazyScripts.load('bot-arena').catch(() => {}).then(() => openCheatPanel(true));
+                    return;
+                }
 
                 const panel = document.createElement('div');
                 panel.id = 'cheat-panel';
@@ -5494,6 +5502,12 @@ document.getElementById('undo-move').onclick = function() {
             function openBotTrainingPanel() {
                 const existing = document.getElementById('bot-training-overlay');
                 if (existing) { existing.remove(); return; }
+                // bot-arena.js is lazy-loaded (js/asset-preloader.js § Lazy scripts).
+                if (!window.BotArena && window.LazyScripts) {
+                    window.LazyScripts.load('bot-arena').then(openBotTrainingPanel,
+                        () => updateStatus('BotArena not loaded'));
+                    return;
+                }
                 if (!window.BotArena) { updateStatus('BotArena not loaded'); return; }
 
                 // The auth-bar "Train Bot" button (gamification-ui.js's
