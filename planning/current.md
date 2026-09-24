@@ -159,6 +159,17 @@ reach/beat it from here.
   cascade-popup removal (scrollInfo moved into an if block, still used later) crashed
   selectScroll before its 'quick-reflexes-search' broadcast and left selectionMode
   set. Both fixed (finishQuickReflexes); browser-tested normal + Reflect paths.
+- **Match 5 (room 825, JakeS1 vs GuestLXNE3T, 12 min, guest won):** desync_count 22
+  was a FALSE alarm: the guest tab still ran the old match-witness.js (16-char
+  fingerprint) vs the new 32-char one. Also the host's witness report was dropped: the
+  winner hit "Return to Lobby" ~1 s after winning, which removes every player row, and
+  report_game_result ignored reporters with no row, so the win stayed 'pending'.
+  Fixed in `sql/match-witness-v2.sql` (applied): `_witness_seat()` falls back to the
+  matches.players snapshot; fingerprints of a different length are not compared.
+  match 5 desync_count reset to 0. win_type was null because the host got the room
+  'finished' update before the game-over broadcast: handleGameOver now broadcasts
+  game-over FIRST. The guest's 100 XP win in room 825 is still 'pending' (its
+  confirming report was lost before the fix).
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

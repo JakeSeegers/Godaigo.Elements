@@ -1003,6 +1003,12 @@
                 console.log('🏆 Game Over! Winner:', winnerPlayerIndex, 'Type:', winType);
                 stopLastManStandingPoll();
 
+                // Tell the other players first. The room update below reaches
+                // them too, but without the win type, and the host records
+                // whichever arrives first (match 5 was saved with no win type).
+                // Their witness check also starts sooner this way.
+                broadcastGameAction('game-over', { winnerIndex: winnerPlayerIndex, winType });
+
                 // Mark the room finished with the winner's index FIRST. The
                 // server's claim_game_win() only pays XP for a finished room
                 // whose recorded winner is the caller's own seat.
@@ -1077,9 +1083,6 @@
 
                 // Show win screen after XP is secured
                 showGameOverToAll(winnerPlayerIndex, winType);
-
-                // Broadcast win type so other clients show the correct message
-                broadcastGameAction('game-over', { winnerIndex: winnerPlayerIndex, winType });
 
             } catch (error) {
                 console.error('Error handling game over:', error);
