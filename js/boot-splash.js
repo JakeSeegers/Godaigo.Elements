@@ -259,6 +259,19 @@
             // decoded frame exists (and, being a later state, that metadata
             // — hence real canvas dimensions — is already set too).
             if (!canvas.width || video.readyState < video.HAVE_CURRENT_DATA) return;
+            // Size the canvas here, not only in a 'loadedmetadata' listener:
+            // this script loads at the very end of <body>, ~600 lines after
+            // the <video preload="auto">, so on a warm cache the metadata
+            // is often already loaded before the listener exists and the
+            // event is never seen. The canvas then stayed at its default
+            // 300x150 while drawVideoFrame() drew the 852x480 video 1:1 —
+            // only the video's top-left corner fit, scaled up, so the logo
+            // showed shifted down and to the right (until the sign-in
+            // overlay, which scales to canvas size, snapped in at the end).
+            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width  = video.videoWidth;
+                canvas.height = video.videoHeight;
+            }
             if (framesDrawn < SKIP_FIRST_N_FRAMES) { framesDrawn++; return; }
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawVideoFrame();
@@ -283,11 +296,6 @@
             }
             rafId = requestAnimationFrame(loop);
         }
-
-        video.addEventListener('loadedmetadata', () => {
-            canvas.width  = video.videoWidth;
-            canvas.height = video.videoHeight;
-        });
 
         let dismissed = false;
 
