@@ -56,7 +56,29 @@
     if (!splash || !video || !canvas || !prompt) { revealLogin(); return; }
 
     try {
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        // ── Pre-keyed alpha video ────────────────────────────────────────
+        // tools/key-splash-video.py runs the chroma key below once, offline,
+        // and bakes it into video/splash-intro-alpha.webm (VP9 with an alpha
+        // channel). Where that plays with its alpha — Chromium and Firefox —
+        // each frame is just drawn, no per-pixel JS at all. Safari, and every
+        // iOS browser (all WebKit), plays VP9 but drops the alpha, so they
+        // keep the original MP4 + the in-page key below. If a browser we
+        // expected to handle alpha doesn't (checked on the first frame,
+        // before anything is shown), it falls back the same way.
+        const ALPHA_SRC = 'video/splash-intro-alpha.webm';
+        const KEYED_SRC = video.getAttribute('src');
+        const ua = navigator.userAgent;
+        let useAlphaVideo =
+            ((/Chrome\/|Chromium\//.test(ua) && !/CriOS|EdgiOS|iPhone|iPad|iPod/.test(ua)) ||
+             (/Firefox\//.test(ua) && !/FxiOS/.test(ua))) &&
+            typeof video.canPlayType === 'function' &&
+            video.canPlayType('video/webm; codecs="vp9"') !== '';
+        if (useAlphaVideo) video.src = ALPHA_SRC;
+        let alphaChecked = false;
+
+        // willReadFrequently keeps the canvas on the CPU, which only the
+        // in-page key (getImageData every frame) wants.
+        const ctx = canvas.getContext('2d', useAlphaVideo ? undefined : { willReadFrequently: true });
 
         // ── Chroma key ──────────────────────────────────────────────────
         // Video background is #FCFFFC (near-white). Two-threshold feather —
@@ -315,9 +337,35 @@
                 canvas.classList.add('boot-splash-canvas-ready');
             }
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawVideoFrame();
-            keyAndShimmerFrame(t);
+            if (useAlphaVideo) {
+                // Same gentle pulse as keyAndShimmerFrame()'s +-10 on a
+                // 0-255 scale, as a GPU filter instead of per-pixel maths.
+                ctx.filter = 'brightness(' + (1 + Math.sin(t * SHIMMER_SPEED) * SHIMMER_AMPLITUDE / 220).toFixed(4) + ')';
+                ctx.drawImage(video, 0, 0);
+                ctx.filter = 'none';
+                if (!alphaChecked) {
+                    alphaChecked = true;
+                    // The baked video's trimmed margin is fully transparent;
+                    // if this corner isn't, the alpha channel was dropped.
+                    // Same JS task as the draw, so this frame never shows.
+                    if (ctx.getImageData(1, 1, 1, 1).data[3] !== 0) {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        fallBackToKeyedVideo();
+                        return;
+                    }
+                }
+            } else {
+                drawVideoFrame();
+                keyAndShimmerFrame(t);
+            }
             drawSignInOverlay();
+        }
+
+        function fallBackToKeyedVideo() {
+            console.warn('Boot splash: alpha video not supported here, using the in-page key');
+            useAlphaVideo = false;
+            video.src = KEYED_SRC;
+            video.play().then(() => { playStartedAt = performance.now(); }).catch(showPrompt);
         }
 
         // Keeps redrawing (and so keeps waving/shimmering) even once the

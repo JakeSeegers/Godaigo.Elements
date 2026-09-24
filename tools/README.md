@@ -1,3 +1,19 @@
+## Splash video: re-bake the transparent version
+
+`key-splash-video.py` bakes the boot splash's chroma key into
+`video/splash-intro-alpha.webm` (VP9 with an alpha channel), which Chrome,
+Edge and Firefox play without any per-pixel JavaScript. **Re-run it whenever
+`video/splash-intro.mp4` changes**, or those browsers keep showing the old
+animation (Safari/iOS use the MP4 directly and are unaffected):
+
+    pip install numpy          # once; also needs ffmpeg with libvpx-vp9
+    python3 tools/key-splash-video.py
+
+If you change the key settings in `js/boot-splash.js` (`KEY_*`, `INNER`,
+`OUTER`, `EDGE_DARKEN_MIN`, the trims), change them in the script too.
+
+---
+
 ## Multiplayer console diagnostics
 
 `console-diagnostics.js` is a paste-into-devtools-console tool for a real
