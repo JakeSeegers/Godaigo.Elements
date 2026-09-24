@@ -6,6 +6,9 @@
 ---
 
 ## Active Branch
+**Update 2026-09-24:** the live branch is now `fixes/all-consolidated` (confirmed by
+the owner). The notes below about `claude/missing-video-filename-sc1ajm` are history.
+
 `claude/missing-video-filename-sc1ajm` → remote: `JakeSeegers/Godaigo.Elements`
 — confirmed as the single canonical branch (2026-08-09): this is what GitHub
 Pages actually deploys (Settings → Pages), and it's a superset of every other

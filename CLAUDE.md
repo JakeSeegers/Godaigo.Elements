@@ -57,7 +57,7 @@ Start every session here. It contains the live task, branch, and files in flight
 | Stack | Vanilla JS, SVG board, Supabase (auth + realtime DB) |
 | Entry point | `index.html` — loads all scripts in order (see Script Load Order below) |
 | Dev server | `npx serve -p 3333` (see `.claude/launch.json`) |
-| Repo branch | `claude/missing-video-filename-sc1ajm` — the branch GitHub Pages actually deploys from (Settings → Pages); confirm with `git log -1` before trusting this, other branches carry unrelated parallel work |
+| Repo branch | `fixes/all-consolidated` is the live branch (GitHub Pages serves it; confirmed by the owner 2026-09-24). Push finished work there. `claude/missing-video-filename-sc1ajm` was the live branch before and is now old. `.github/workflows/deploy.yml` still names `4.10.progresscheck`; Pages is set in repo Settings, not by that file. |
 | Live URL | https://jakeseegers.github.io/Godaigo.Elements/ |
 
 ---
