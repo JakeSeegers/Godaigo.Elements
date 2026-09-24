@@ -502,9 +502,6 @@
         let browserRefreshInterval = null;
 
         async function refreshGameBrowser() {
-            const refreshBtn = document.getElementById('refresh-browser-btn');
-            if (refreshBtn) refreshBtn.textContent = '…';
-
             // Sweep stale players via server-side RPC (client DELETE is blocked by RLS)
             await supabase.rpc('cleanup_inactive_players');
 
@@ -515,8 +512,6 @@
                 .eq('is_private', false)
                 .order('created_at', { ascending: false });
 
-            if (refreshBtn) refreshBtn.textContent = 'Refresh';
-
             const list = document.getElementById('public-games-list');
             if (!list) return;
 
@@ -525,14 +520,20 @@
                 return;
             }
 
-            // Fetch player counts for each room in one query
+            // Fetch player counts and heartbeats for each room in one query
             const ids = rooms.map(r => r.id);
             const { data: players } = await supabase
                 .from('players')
-                .select('game_id')
+                .select('game_id,last_seen')
                 .in('game_id', ids);
             const counts = {};
-            (players || []).forEach(p => { counts[p.game_id] = (counts[p.game_id] || 0) + 1; });
+            const newestSeen = {};
+            (players || []).forEach(p => {
+                counts[p.game_id] = (counts[p.game_id] || 0) + 1;
+                if (p.last_seen && (!newestSeen[p.game_id] || p.last_seen > newestSeen[p.game_id])) {
+                    newestSeen[p.game_id] = p.last_seen;
+                }
+            });
 
             // Auto-delete ghost rooms via RPC (client DELETE blocked by RLS)
             supabase.rpc('cleanup_ghost_rooms').then(() => {
@@ -540,8 +541,23 @@
                 if (ghostCount) console.log('🗑️ Cleaned up', ghostCount, 'empty ghost room(s)');
             });
 
-            // Only show rooms that actually have players in them
-            const liveRooms = rooms.filter(r => (counts[r.id] || 0) > 0);
+            // Only show rooms that have players AND someone still checking in.
+            // Every client heartbeats every 15s (the host also heartbeats its
+            // bots), so a room whose newest last_seen is over 90s old was
+            // abandoned without a clean leave (tab crash, phone sleep). The
+            // server only deletes those players after 5 minutes, so without this
+            // a dead room stayed listed and joinable for up to 5 minutes.
+            // 90s = the same "active" window joinRoomAsPlayer uses, and leaves
+            // room for background-tab timer throttling (about 1 beat a minute).
+            const now = Date.now();
+            const isLive = r => {
+                if (!(counts[r.id] > 0)) return false;
+                const seen = newestSeen[r.id];
+                if (seen) return now - new Date(seen).getTime() < 90 * 1000;
+                // No heartbeat yet: only trust a room created in the last 30s
+                return now - new Date(r.created_at).getTime() < 30 * 1000;
+            };
+            const liveRooms = rooms.filter(isLive);
             if (!liveRooms.length) {
                 list.innerHTML = '<p style="color:#ccc;font-style:italic;text-align:center;padding:20px 0;margin:0;">No public games open. Host one!</p>';
                 return;

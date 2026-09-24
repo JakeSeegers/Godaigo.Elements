@@ -96,7 +96,7 @@
 #remove-bot-button     { color: var(--pp-rust); }
 
 /* Bigger stroked ink text on host-public-btn/create-private-btn/
-   join-code-btn/refresh-browser-btn, the public-games-list empty message,
+   join-code-btn, the public-games-list empty message,
    the Room Name label, and the auth-bar buttons' font-size are all owned
    by TheHermit's designer export in css/styles.css ("Lobby design — from
    TheHermit's designer export") — kept there, not duplicated here, since

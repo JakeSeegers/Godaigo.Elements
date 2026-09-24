@@ -4416,8 +4416,7 @@ label, .hud-ap-label, .hud-ap-value {
 
 #host-public-btn,
 #create-private-btn,
-#join-code-btn,
-#refresh-browser-btn {
+#join-code-btn {
     font-style: normal !important;
     font-weight: normal !important;
     -webkit-text-stroke: 2px var(--pp-parch-dk) !important;
