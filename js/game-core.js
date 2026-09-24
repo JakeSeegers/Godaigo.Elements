@@ -10,12 +10,12 @@
         const IMG_V = window.IMG_V;
 
         const STONE_TYPES = {
-            earth:    { color: '#69d83a', symbol: '▲', img: 'images/mountainsymbol.png' + IMG_V },
-            water:    { color: '#5894f4', symbol: '◯', img: 'images/watersymbol.png'    + IMG_V },
-            fire:     { color: '#ed1b43', symbol: '♦', img: 'images/firesymbol.png'     + IMG_V },
-            wind:     { color: '#ffce00', symbol: '≋', img: 'images/windsymbol.png'     + IMG_V },
-            void:     { color: '#9458f4', symbol: '✺', img: 'images/voidsymbol.png'     + IMG_V },
-            catacomb: { color: '#c8a870', symbol: '✦', img: 'images/Catacomb.png'       + IMG_V }
+            earth:    { color: '#69d83a', symbol: '▲', img: 'images/mountainsymbol.webp' + IMG_V },
+            water:    { color: '#5894f4', symbol: '◯', img: 'images/watersymbol.webp'    + IMG_V },
+            fire:     { color: '#ed1b43', symbol: '♦', img: 'images/firesymbol.webp'     + IMG_V },
+            wind:     { color: '#ffce00', symbol: '≋', img: 'images/windsymbol.webp'     + IMG_V },
+            void:     { color: '#9458f4', symbol: '✺', img: 'images/voidsymbol.webp'     + IMG_V },
+            catacomb: { color: '#c8a870', symbol: '✦', img: 'images/Catacomb.webp'       + IMG_V }
         };
 
         // Spell System for pattern-based stone generation
@@ -2043,7 +2043,7 @@
                 const elements = document.createElement('div');
                 elements.className = 'game-over-elements';
                 elements.innerHTML = ['earth','water','fire','wind','void'].map(el =>
-                    `<img src="images/${el === 'earth' ? 'mountainsymbol' : el === 'water' ? 'watersymbol' : el === 'fire' ? 'firesymbol' : el === 'wind' ? 'windsymbol' : 'voidsymbol'}.png" class="element-icon-sm" alt="${el}">`
+                    `<img src="images/${el === 'earth' ? 'mountainsymbol' : el === 'water' ? 'watersymbol' : el === 'fire' ? 'firesymbol' : el === 'wind' ? 'windsymbol' : 'voidsymbol'}.webp" class="element-icon-sm" alt="${el}">`
                 ).join(' ');
                 box.appendChild(elements);
 
@@ -4915,14 +4915,14 @@
         // Settings are stored in window.tileOverlaySettings and persist across reveals.
 
         window.tileOverlaySettings = window.tileOverlaySettings || {
-            earth:    { src: 'images/Tiles/pixelearth.png',    x: 0, y: 0,   rotation: 60,  scale: 1.05, opacity: 0.41, tintOpacity: 0.22 },
-            fire:     { src: 'images/Tiles/pixelfire.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
-            water:    { src: 'images/Tiles/pixelwater.png',    x: 0, y: 0,   rotation: 233, scale: 1.25, opacity: 0.49, tintOpacity: 0.22 },
-            wind:     { src: 'images/Tiles/pixelwind.png',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
-            void:     { src: 'images/Tiles/pixelvoid.png',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
-            catacomb: { src: 'images/Tiles/pixelcatacomb.png', x: 3, y: -1,  rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 1.0 },
+            earth:    { src: 'images/Tiles/pixelearth.webp',    x: 0, y: 0,   rotation: 60,  scale: 1.05, opacity: 0.41, tintOpacity: 0.22 },
+            fire:     { src: 'images/Tiles/pixelfire.webp',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
+            water:    { src: 'images/Tiles/pixelwater.webp',    x: 0, y: 0,   rotation: 233, scale: 1.25, opacity: 0.49, tintOpacity: 0.22 },
+            wind:     { src: 'images/Tiles/pixelwind.webp',     x: 0, y: 0,   rotation: 0,   scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
+            void:     { src: 'images/Tiles/pixelvoid.webp',     x: 0, y: 0,   rotation: 31,  scale: 1.2,  opacity: 0.6,  tintOpacity: 0.22 },
+            catacomb: { src: 'images/Tiles/pixelcatacomb.webp', x: 3, y: -1,  rotation: 0,   scale: 1,    opacity: 0.6,  tintOpacity: 1.0 },
             // Hidden (unrevealed) tile back — shown while a tile is face-down, before it is flipped.
-            unflipped: { src: 'images/Tiles/unflippedtile.png', x: 0, y: 3, rotation: 90, scale: 1.8, opacity: 0.41, tintOpacity: 0 },
+            unflipped: { src: 'images/Tiles/unflippedtile.webp', x: 0, y: 3, rotation: 90, scale: 1.8, opacity: 0.41, tintOpacity: 0 },
             // Player tiles — one entry per player color, each can carry its own unique image.
             player_purple: { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },
             player_yellow: { src: '', x: 0, y: 0, rotation: 0, scale: 1, opacity: 0.6, tintOpacity: 0 },

@@ -90,7 +90,12 @@
         play(soundName);
     }
 
-    window.SoundSystem = { play, playFootstep, onWinCondition };
+    // urls: every file above, for js/asset-preloader.js to warm the cache
+    // with before a match (play() makes a fresh Audio per call, so the
+    // first play of each sound otherwise waits on its download).
+    const urls = Object.values(SOUNDS).concat(FOOTSTEP_FILES.map(f => FOOTSTEP_DIR + f));
+
+    window.SoundSystem = { play, playFootstep, onWinCondition, urls };
 
     // ── Login screen music ────────────────────────────────────────────────────
     // Strategy: start the audio MUTED immediately (browsers allow muted autoplay

@@ -42,7 +42,7 @@ window.effectsSystem = (() => {
         loaded[effectId] = [];
         for (let i = 1; i <= cfg.frames; i++) {
             const img = new Image();
-            img.src = `images/effects/${cfg.srcId || effectId}/${String(i).padStart(4, '0')}.png`;
+            img.src = `images/effects/${cfg.srcId || effectId}/${String(i).padStart(4, '0')}.webp`;
             loaded[effectId].push(img);
         }
     }

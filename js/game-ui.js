@@ -882,7 +882,7 @@
                 header.className = 'opponent-header';
                 header.innerHTML = `
                     <span class="opponent-name" style="color: ${playerColor};">${playerName}${isSelf ? ' (you)' : ''}</span>
-                    <span class="opponent-ap">AP: ${ap.currentAP}${ap.voidAP > 0 ? ` +${ap.voidAP}<img src="images/voidsymbol.png${IMG_V}" class="element-icon-sm" alt="void" style="vertical-align:middle;">` : ''}</span>
+                    <span class="opponent-ap">AP: ${ap.currentAP}${ap.voidAP > 0 ? ` +${ap.voidAP}<img src="images/voidsymbol.webp${IMG_V}" class="element-icon-sm" alt="void" style="vertical-align:middle;">` : ''}</span>
                 `;
                 card.appendChild(header);
 
@@ -925,7 +925,7 @@
                         const element = spellSystem.getScrollElement(scrollName);
                         const elementIcon = document.createElement('img');
                         elementIcon.src = element === 'catacomb'
-                            ? 'images/Catacomb.png' + IMG_V
+                            ? 'images/Catacomb.webp' + IMG_V
                             : (STONE_TYPES[element]?.img || '');
                         elementIcon.className = 'element-icon-sm';
                         elementIcon.alt = element || 'unknown';

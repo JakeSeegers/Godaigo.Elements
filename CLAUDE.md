@@ -130,6 +130,8 @@ Order matters — later scripts depend on earlier ones.
 29. thehermit.js           ← window.TheHermit — dev tool, drag-to-reorder editor for the dock-bar/hud-bar
                              buttons and indicators (Shift+H, or the cheat-panel button); persists the
                              chosen order to localStorage and exports it as JSON for hardcoding back in
+30. asset-preloader.js     ← window.AssetPreloader — background-loads in-game art + sounds after the intro;
+                             shows a loading bar over the board if a match starts before it's done
 ```
 
 ---

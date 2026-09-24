@@ -152,11 +152,11 @@ const TutorialMode = (function () {
                 Your goal is to <strong>master all 5 elements</strong> by finding and activating one scroll of each type.
             </div>
             <div style="margin-top:14px; display:flex; justify-content:center; gap:18px; font-size:18px; flex-wrap:wrap; align-items:center; line-height:1.6;">
-                <span style="color:#69d83a;"><img src="images/mountainsymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Earth</span>
-                <span style="color:#5894f4;"><img src="images/watersymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Water</span>
-                <span style="color:#ed1b43;"><img src="images/firesymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Fire</span>
-                <span style="color:#ffce00;"><img src="images/windsymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Wind</span>
-                <span style="color:#9458f4;"><img src="images/voidsymbol.png" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Void</span>
+                <span style="color:#69d83a;"><img src="images/mountainsymbol.webp" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Earth</span>
+                <span style="color:#5894f4;"><img src="images/watersymbol.webp" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Water</span>
+                <span style="color:#ed1b43;"><img src="images/firesymbol.webp" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Fire</span>
+                <span style="color:#ffce00;"><img src="images/windsymbol.webp" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Wind</span>
+                <span style="color:#9458f4;"><img src="images/voidsymbol.webp" alt="" style="width:26px;height:26px;vertical-align:middle;margin-right:5px;">Void</span>
             </div>
             <div style="margin-top:10px; color:#bbb; font-size:17px;">
                 Be the first player to activate all five and return to your player shrine to win. You'll escape the mystical island too!
