@@ -396,13 +396,21 @@
             // unless the row was created within the last 30 seconds (to avoid stomping a fresh join).
             const ninetySecondsAgo = new Date(Date.now() - 90 * 1000).toISOString();
             const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+            // user_id ties this seat to the auth account so game results can
+            // move the positional ladder (null for guests - they just don't
+            // anchor ladder movement).
+            const authUid = (await supabase.auth.getSession())?.data?.session?.user?.id || null;
             const { data: existing } = await supabase
                 .from('players')
-                .select('id, username, created_at, last_seen')
+                .select('id, username, user_id, created_at, last_seen')
                 .eq('game_id', gameId);
             const match = existing?.filter(p => p.username === username) || [];
             if (match.length) {
                 const stale = match.filter(p => {
+                    // Same signed-in account: this is our own old seat from a
+                    // reload or closed tab (its heartbeat can still look fresh
+                    // for up to 90s). Replace it instead of blocking the rejoin.
+                    if (authUid && p.user_id === authUid) return true;
                     // Active = last_seen is recent, OR row is brand-new (< 30s) with no last_seen yet
                     if (p.last_seen && p.last_seen > ninetySecondsAgo) return false; // active
                     if (!p.last_seen && p.created_at > thirtySecondsAgo) return false; // brand-new
@@ -418,10 +426,6 @@
                     return false;
                 }
             }
-            // user_id ties this seat to the auth account so game results can
-            // move the positional ladder (null for guests — they just don't
-            // anchor ladder movement).
-            const authUid = (await supabase.auth.getSession())?.data?.session?.user?.id || null;
             const { data, error } = await supabase
                 .from('players')
                 .insert([{ username, is_ready: false, game_id: gameId, user_id: authUid }])
@@ -529,12 +533,15 @@
             const ids = rooms.map(r => r.id);
             const { data: players } = await supabase
                 .from('players')
-                .select('game_id,last_seen')
+                .select('game_id,username,last_seen')
                 .in('game_id', ids);
             const counts = {};
-            const newestSeen = {};
+            const newestSeen = {}; // newest heartbeat from a HUMAN seat only
             (players || []).forEach(p => {
                 counts[p.game_id] = (counts[p.game_id] || 0) + 1;
+                // Bots are heartbeated by the host's client, so a bot's
+                // last_seen says nothing about whether any human is still here.
+                if (window.isBotUsername?.(p.username)) return;
                 if (p.last_seen && (!newestSeen[p.game_id] || p.last_seen > newestSeen[p.game_id])) {
                     newestSeen[p.game_id] = p.last_seen;
                 }
@@ -546,9 +553,9 @@
                 if (ghostCount) console.log('🗑️ Cleaned up', ghostCount, 'empty ghost room(s)');
             });
 
-            // Only show rooms that have players AND someone still checking in.
-            // Every client heartbeats every 15s (the host also heartbeats its
-            // bots), so a room whose newest last_seen is over 90s old was
+            // Only show rooms that have players AND a human still checking in.
+            // Every client heartbeats every 15s (bots don't count, see above),
+            // so a room whose newest human last_seen is over 90s old was
             // abandoned without a clean leave (tab crash, phone sleep). The
             // server only deletes those players after 5 minutes, so without this
             // a dead room stayed listed and joinable for up to 5 minutes.
@@ -2078,20 +2085,34 @@
             }
         }
 
-        // Clean up on page unload — call remove_player RPC (direct DELETE is blocked by RLS)
-        window.addEventListener('beforeunload', () => {
-            if (!myPlayerId) return;
-            fetch(`${SUPABASE_URL}/rest/v1/rpc/remove_player`, {
+        // Clean up on page unload (reload, tab close). Direct DELETE is blocked
+        // by RLS, so this goes through the same RPCs as the Leave buttons.
+        // A HOST leaving a WAITING room deletes the whole room, exactly like
+        // leaveRoom() does. Before, only the host's own seat was removed, so
+        // the room and its bots stayed listed (and the host was told "already
+        // in this room" on rejoin) until the server cleanup ran minutes later.
+        // In a game in progress only our own seat goes, so the other players
+        // keep playing. pagehide also covers mobile, where beforeunload often
+        // never fires; the flag stops the double call when both fire.
+        let _unloadCleanupSent = false;
+        function _cleanupOnUnload() {
+            if (_unloadCleanupSent || !myPlayerId) return;
+            _unloadCleanupSent = true;
+            const inGame = document.getElementById('game-layout')?.classList.contains('active');
+            const deleteRoom = isHost && currentGameId && !inGame;
+            fetch(`${SUPABASE_URL}/rest/v1/rpc/${deleteRoom ? 'delete_game_room' : 'remove_player'}`, {
                 method: 'POST',
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
                     'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ p_player_id: myPlayerId }),
+                body: JSON.stringify(deleteRoom ? { p_room_id: currentGameId } : { p_player_id: myPlayerId }),
                 keepalive: true
             });
-        });
+        }
+        window.addEventListener('beforeunload', _cleanupOnUnload);
+        window.addEventListener('pagehide', _cleanupOnUnload);
 
         // Auto-refresh player list when tab becomes visible again
         // (catches missed real-time events while tab was in background)
