@@ -199,6 +199,7 @@
         // transparent anyway), so nothing visible is lost.
         const SKIP_UNTIL_SECONDS = 0.1;
         let revealed = false;
+        canvas.style.visibility = 'hidden';
 
         // 3x3 median filter on just the alpha channel — unlike a box/mean
         // blur, a median only ever replaces a pixel that disagrees with
@@ -296,10 +297,18 @@
             drawVideoFrame();
             keyAndShimmerFrame(t);
             drawSignInOverlay();
-            // Canvas stays hidden (css/boot-splash.css) until a real frame
-            // is on it — a time-from-page-load hold can't know when a slow
-            // video actually starts.
-            if (!revealed) { revealed = true; canvas.classList.add('boot-splash-canvas-ready'); }
+            // Canvas stays hidden until a real frame is on it — the CSS
+            // fade-in is timed from page load and can't know when a slow
+            // video actually starts. Done here, inline, not with a CSS
+            // class: see the note in css/boot-splash.css.
+            // The class is only for a browser still holding the previous
+            // (briefly deployed) css/boot-splash.css, which kept the canvas
+            // at opacity 0 until it saw this class. Harmless otherwise.
+            if (!revealed) {
+                revealed = true;
+                canvas.style.visibility = '';
+                canvas.classList.add('boot-splash-canvas-ready');
+            }
         }
 
         // Keeps redrawing (and so keeps waving/shimmering) even once the
