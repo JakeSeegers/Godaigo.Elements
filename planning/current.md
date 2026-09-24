@@ -170,6 +170,13 @@ reach/beat it from here.
   'finished' update before the game-over broadcast: handleGameOver now broadcasts
   game-over FIRST. The guest's 100 XP win in room 825 is still 'pending' (its
   confirming report was lost before the fix).
+- **Auto update (js/version.js, 2026-09-24):** match 5's guest tab had been open since
+  20:36 (before the 20:41 deploy), so it ran old code. New js/version.js checks the server's
+  newest version on load / every 2 min / tab focus and reloads with fresh files when not in a
+  room or game (banner in a waiting room). HOUSE RULES #4: bump with tools/bump-version.js;
+  Stop hook checks it. Tested headless with a max-age=600 server: reload picked up new files,
+  typing blocks the reload, no loop. Next: splash + lore intro lag, and the loading screen
+  (owner says it is not fully working).
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

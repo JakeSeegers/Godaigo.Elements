@@ -25,7 +25,11 @@ These apply to all work on this repo. `tools/claude-hooks/` enforces rules 1 and
    - When you skip a note because players cannot notice the change, tell the user.
 3. **Start from `planning/current.md`** and drill down through the INDEX.md files before
    reading source (see below).
-4. **Keep docs in sync** after changes: follow the `/sync-docs` skill
+4. **Bump the game version** when you change files the browser loads (js/, css/, index.html,
+   assets, changelog.json): run `node tools/bump-version.js` and commit `js/version.js` with
+   the change. Open browsers see the new version and reload (see `js/version.js`). The Stop
+   hook checks this.
+5. **Keep docs in sync** after changes: follow the `/sync-docs` skill
    (`.claude/skills/sync-docs/SKILL.md`).
 
 ### How the rules are enforced
@@ -38,7 +42,7 @@ These apply to all work on this repo. `tools/claude-hooks/` enforces rules 1 and
     still in the file, (2) game files changed without a `changelog.json` change (a
     reminder: Claude either updates today's summary or tells the user why not), and
     (3) `changelog.json` shape: valid JSON, one entry per date, newest first, at most 5
-    lines per entry. If any fails, Claude is told to fix it. It blocks once per stop, so it cannot loop.
+    lines per entry, (4) client files changed without a `js/version.js` bump. If any fails, Claude is told to fix it. It blocks once per stop, so it cannot loop.
     Skips work that came in through a merge.
 
 ---
@@ -90,6 +94,11 @@ Order matters — later scripts depend on earlier ones.
 > index.html is the source of truth — verify with it before trusting this.
 
 ```
+0. version.js             ← window.GAME_VERSION + update check: asks the server for the newest js/version.js
+                             (no-store) on load, every 2 min and on tab focus. Newer and not in a room/game
+                             (and not typing): re-fetch every own file with cache:'reload', then reload
+                             (once per version). In a waiting room: banner with a Reload button. In a game,
+                             tutorial or replay: waits. Bump with tools/bump-version.js (HOUSE RULES #4).
 1. boot-splash.js          ← Studio/logo intro video (chroma-keyed canvas), plays once per page load. No game deps — loads first.
 2. scroll-definitions.js   ← SCROLL_DECKS, SCROLL_DEFINITIONS globals
 3. scroll-effects.js       ← ScrollEffects namespace (depends on scroll-definitions)

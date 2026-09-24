@@ -4,13 +4,13 @@
     {
       "id": "2026-09-24",
       "date": "2026-09-24",
-      "title": "Change Log, password recovery, cleaner lobby",
+      "title": "Change Log, password recovery, auto updates",
       "changes": [
         "New Change Log button in the lobby. It shows what changed in each update.",
         "You can now add a recovery email in Profile > Settings > Account. If you forget your password, use \"Forgot password?\" on the sign-in screen.",
         "The lobby keeps itself up to date, so the refresh buttons are gone. If a host reloads or closes the page, their room now closes right away instead of staying in the game list.",
         "No more separate \"All Slots Full\" popup. If you pick up a scroll with a full hand, the Scroll Overflow banner asks you to cascade at the end of your turn.",
-        "Fixes: Quick Reflexes now shows your pick to other players and no longer puts games out of sync. Also fixed the Start Game button after leaving a game, rejoining after a reload, and the bot training gold limit (300 a day). Small text fixes."
+        "The game now updates itself: when a new version is out, it reloads on its own in the lobby (never during a game). Fixes: Quick Reflexes no longer puts games out of sync, plus the Start Game button, rejoining after a reload, and the bot training gold limit."
       ]
     }
   ]

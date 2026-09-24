@@ -4,6 +4,8 @@
 //   1. no em dashes in added lines
 //   2. game files changed => reminder to update today's changelog summary
 //   3. changelog.json shape: one entry per date, newest first, max 5 lines
+//   4. game files changed => js/version.js GAME_VERSION bumped (so open
+//      browsers pick up the update, see js/version.js)
 // On a problem it returns {"decision":"block"} so Claude keeps working and
 // fixes it. It blocks only once per stop (stop_hook_active), so it can never
 // loop forever.
@@ -15,6 +17,9 @@ const EM_DASH = '\u2014';
 // Files a player can see or feel. Docs, planning, tools and hooks are not.
 const GAME_PATH = /^(index\.html|js\/|css\/|sounds\/|assets\/|images\/|video\/|LoreIntroClips\/|joytone\/|sql\/)/;
 const CHANGELOG = 'changelog.json';
+const VERSION_FILE = 'js/version.js';
+// Game files the browser downloads (sql/ runs on the server, not in the page).
+const CLIENT_PATH = /^(index\.html|js\/|css\/|sounds\/|assets\/|images\/|video\/|LoreIntroClips\/|joytone\/|changelog\.json)/;
 const MAX_LINES = 5; // per daily entry, see CLAUDE.md HOUSE RULES #2
 
 function git(cmd) {
@@ -123,6 +128,16 @@ if (changed.has(CHANGELOG)) {
     } catch (err) {
         problems.push(`${CHANGELOG} is not valid: ${err.message}`);
     }
+}
+
+// 4. Version bump for changed client files.
+const clientFiles = [...changed].filter(f => CLIENT_PATH.test(f) && f !== VERSION_FILE);
+if (clientFiles.length && !changed.has(VERSION_FILE)) {
+    problems.push(
+        `Client files changed this session (${clientFiles.slice(0, 8).join(', ')}${clientFiles.length > 8 ? ', ...' : ''}) ` +
+        `but ${VERSION_FILE} did not. Run "node tools/bump-version.js" and commit it with the change, ` +
+        `so players' open browsers pick up the update.`
+    );
 }
 
 if (problems.length) {

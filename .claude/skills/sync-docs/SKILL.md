@@ -46,6 +46,10 @@ If players will notice the change, update `changelog.json` (CLAUDE.md HOUSE RULE
 One entry per day, max 5 lines. If today's entry exists, rewrite it as a summary of the
 whole day instead of adding a new one. Simple English, no em dashes, no file names.
 
+### Step 2c: Game version
+If files the browser loads changed (js/, css/, index.html, assets, changelog.json), run
+`node tools/bump-version.js` and commit `js/version.js` with them (CLAUDE.md HOUSE RULES #4).
+
 ### Step 3 — Update planning/current.md
 Always update these fields at end of session:
 - `## Last Committed Work` — brief summary of what changed
