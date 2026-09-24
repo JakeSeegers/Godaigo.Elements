@@ -397,12 +397,12 @@
             // js/parallax.js puts behind the splash.
             { label: 'Splash animation', url: video.getAttribute('src'), kind: 'video' },
             { label: 'Title logo',       url: 'images/Final Logo Sign In.png' },
-            { label: 'Deep space',       url: BG + 'Truebackground.png' },
-            { label: 'Star field',       url: BG + 'secondlayermuchbiggerthantrue.png' },
-            { label: 'Nebula clouds',    url: BG + 'smallcloud.png' },
-            { label: 'Nebula clouds',    url: BG + 'smallcloud2.png' },
-            { label: 'Nebula clouds',    url: BG + 'smallcloud3.png' },
-            { label: 'Nebula clouds',    url: BG + 'smallcloud4.png' },
+            { label: 'Deep space',       url: BG + 'Truebackground.webp' },
+            { label: 'Star field',       url: BG + 'secondlayermuchbiggerthantrue.webp' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud.webp' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud2.webp' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud3.webp' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud4.webp' },
         ];
         const BAR_SEGMENTS = 24;
 
