@@ -48,8 +48,9 @@
         } catch (e) { return []; }
     }
 
-    // Only what every player can see, in a fixed order.
-    function publicState() {
+    // Only what every player can see, in a fixed order, as four parts:
+    // tiles, stones, pawns, activated elements.
+    function publicParts() {
         const r = v => Math.round(v);
         const tiles = (placedTiles || []).map(t =>
             `${r(t.x)},${r(t.y)},${t.flipped ? '?' : (t.element || '')},${t.isPlayerTile ? 'p' + t.playerIndex : ''}`
@@ -58,11 +59,17 @@
         const pawns = (playerPositions || []).map((p, i) => p ? `${i}:${r(p.x)},${r(p.y)}` : `${i}:-`);
         const scrolls = spellSystem?.playerScrolls || [];
         const activated = scrolls.map((_, i) => `${i}:${activatedOf(i).join('+')}`);
-        return tiles.join(';') + '|' + stones.join(';') + '|' + pawns.join(';') + '|' + activated.join(';');
+        return [tiles.join(';'), stones.join(';'), pawns.join(';'), activated.join(';')];
     }
 
+    function publicState() { return publicParts().join('|'); }
+
+    // 32 hex characters: 8 per part (tiles, stones, pawns, activated). The
+    // first real 2-player test (match 4) went out of sync after a Reflect /
+    // Quick Reflexes exchange; one combined hash couldn't say which part of
+    // the board differed. Split, a mismatch shows it directly.
     function fingerprint() {
-        try { return hash(publicState()); } catch (e) { return null; }
+        try { return publicParts().map(part => hash(part).slice(0, 8)).join(''); } catch (e) { return null; }
     }
 
     // ── Turn fingerprints ────────────────────────────────────────

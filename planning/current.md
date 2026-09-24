@@ -145,6 +145,13 @@ reach/beat it from here.
   a negative seat. Tested headless on match 2 moves 1-159 (placement, tile flips,
   pawns, stones, turns, Wind activation): 0 handler errors. Full-game run + live
   check by the owner still to do. Step 3 (My games / Public replays screens) next.
+- **Phase 2 live test (match 4, room 824, JakeS1 vs GuestLXNE3T, 24 min):** witness
+  flow worked end to end (both browsers confirmed, 100 XP paid the moment the
+  witness report landed). Fingerprints agreed turns 1-16, then disagreed on EVERY
+  turn 17-23 and at game over. Turn 16 = guest cast Quick Reflexes (CATACOMB_SCROLL_9),
+  JakeS1 responded with Reflect (WATER_SCROLL_1): likely a real response-scroll sync
+  bug. Fingerprint now split into 4 x 8 hex parts (tiles|stones|pawns|activated) so
+  the next mismatch shows which part differs. Investigate Reflect vs Quick Reflexes.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the
