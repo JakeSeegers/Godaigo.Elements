@@ -198,6 +198,8 @@
         // at 30fps; the clip's first frames are blank white (keyed fully
         // transparent anyway), so nothing visible is lost.
         const SKIP_UNTIL_SECONDS = 0.1;
+        const MAX_HOLD_MS = 1000;
+        let playStartedAt = Infinity; // set once play() resolves
         let revealed = false;
         canvas.style.visibility = 'hidden';
 
@@ -292,16 +294,19 @@
                 canvas.width  = video.videoWidth;
                 canvas.height = video.videoHeight;
             }
-            if (video.currentTime < SKIP_UNTIL_SECONDS && !video.ended) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawVideoFrame();
-            keyAndShimmerFrame(t);
-            drawSignInOverlay();
-            // Canvas stays hidden until a real frame is on it — the CSS
+            // Hard cap on the hold: if the video clock hasn't moved past
+            // SKIP_UNTIL_SECONDS within MAX_HOLD_MS of playback starting,
+            // draw anyway — the logo must never stay hidden (worst case is
+            // the old, pre-hold behaviour).
+            if (video.currentTime < SKIP_UNTIL_SECONDS && !video.ended
+                && performance.now() - playStartedAt < MAX_HOLD_MS) return;
+            // Canvas stays hidden until the hold above passes — the CSS
             // fade-in is timed from page load and can't know when a slow
-            // video actually starts. Done here, inline, not with a CSS
-            // class: see the note in css/boot-splash.css.
-            // The class is only for a browser still holding the previous
+            // video actually starts. Revealed before the frame is drawn,
+            // not after: same JS task, so nothing paints in between, and an
+            // error in the pixel work below can't leave it hidden. Done
+            // inline, not with a CSS class: see css/boot-splash.css. The
+            // class is only for a browser still holding the previous
             // (briefly deployed) css/boot-splash.css, which kept the canvas
             // at opacity 0 until it saw this class. Harmless otherwise.
             if (!revealed) {
@@ -309,6 +314,10 @@
                 canvas.style.visibility = '';
                 canvas.classList.add('boot-splash-canvas-ready');
             }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawVideoFrame();
+            keyAndShimmerFrame(t);
+            drawSignInOverlay();
         }
 
         // Keeps redrawing (and so keeps waving/shimmering) even once the
@@ -369,6 +378,7 @@
         document.addEventListener('click', dismiss);
 
         video.play().then(() => {
+            playStartedAt = performance.now();
             rafId = requestAnimationFrame(loop);
         }).catch(() => {
             // Even muted autoplay was blocked (rare) — skip straight to
