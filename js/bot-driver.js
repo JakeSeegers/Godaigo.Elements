@@ -119,6 +119,11 @@
         // untouched, and a multi-bot room's NEXT bot never inherits this
         // one's table.
         let savedWeights = null;
+        // applyWeights lives in bot-arena.js, which is lazy-loaded
+        // (js/asset-preloader.js § Lazy scripts) — make sure it's in.
+        if (row?.bot_weights && !window.BotArena && window.LazyScripts) {
+            try { await window.LazyScripts.load('bot-arena'); } catch (e) { console.warn(e.message); }
+        }
         if (row?.bot_weights && window.BotArena?.applyWeights) {
             savedWeights = { ...window.BotSystem.WEIGHTS };
             window.BotArena.applyWeights(row.bot_weights);

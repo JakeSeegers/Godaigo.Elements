@@ -1,8 +1,8 @@
 // ── Parallax Background ───────────────────────────────────────────────────
 // Injects a layered animated background into every .board-area element.
 // Layers (back to front):
-//   1. Truebackground.png   — static deep-space base
-//   2. secondlayer...png    — oversized, slow diagonal drift (space pan)
+//   1. Truebackground.webp   — static deep-space base
+//   2. secondlayer...webp   — oversized, slow diagonal drift (space pan)
 //   3. smallcloud 1–4       — organic floating movement, each unique path
 
 (function initParallax() {
@@ -19,7 +19,7 @@
         .parallax-base {
             position: absolute;
             inset: 0;
-            background: url('images/Background/background/Truebackground.png') center / cover no-repeat;
+            background: url('images/Background/background/Truebackground.webp') center / cover no-repeat;
         }
         .parallax-space {
             position: absolute;
@@ -76,25 +76,25 @@
     const BASE      = 'images/Background/background/';
     const CLOUDS = [
         {
-            src:    BASE + 'smallcloud.png',
+            src:    BASE + 'smallcloud.webp',
             style:  'width:38%;top:4%;left:-6%;opacity:0.38;',
             anim:   'cloud-a 58s ease-in-out infinite',
             delay:  '0s'
         },
         {
-            src:    BASE + 'smallcloud2.png',
+            src:    BASE + 'smallcloud2.webp',
             style:  'width:30%;top:55%;left:68%;opacity:0.32;',
             anim:   'cloud-b 74s ease-in-out infinite',
             delay:  '-20s'
         },
         {
-            src:    BASE + 'smallcloud3.png',
+            src:    BASE + 'smallcloud3.webp',
             style:  'width:42%;top:28%;left:52%;opacity:0.28;',
             anim:   'cloud-c 90s ease-in-out infinite',
             delay:  '-35s'
         },
         {
-            src:    BASE + 'smallcloud4.png',
+            src:    BASE + 'smallcloud4.webp',
             style:  'width:26%;top:72%;left:8%;opacity:0.36;',
             anim:   'cloud-d 48s ease-in-out infinite',
             delay:  '-12s'
@@ -119,7 +119,7 @@
         // Layer 2: slow-drifting space layer
         const space = document.createElement('img');
         space.className = 'parallax-space';
-        space.src = BASE + 'secondlayermuchbiggerthantrue.png';
+        space.src = BASE + 'secondlayermuchbiggerthantrue.webp';
         space.alt = '';
         space.style.animationDelay = '-40s'; // start mid-drift so it's already moving
         bg.appendChild(space);

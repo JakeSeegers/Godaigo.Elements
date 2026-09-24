@@ -1085,7 +1085,7 @@
                 const elements = document.createElement('div');
                 elements.className = 'game-over-elements';
                 elements.innerHTML = ['earth','water','fire','wind','void'].map(el =>
-                    `<img src="images/${el === 'earth' ? 'mountainsymbol' : el === 'water' ? 'watersymbol' : el === 'fire' ? 'firesymbol' : el === 'wind' ? 'windsymbol' : 'voidsymbol'}.png" class="element-icon-sm" alt="${el}">`
+                    `<img src="images/${el === 'earth' ? 'mountainsymbol' : el === 'water' ? 'watersymbol' : el === 'fire' ? 'firesymbol' : el === 'wind' ? 'windsymbol' : 'voidsymbol'}.webp" class="element-icon-sm" alt="${el}">`
                 ).join(' ');
                 box.appendChild(elements);
             }

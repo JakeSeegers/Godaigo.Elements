@@ -1,13 +1,15 @@
 @font-face {
     font-family: 'BoldBrush';
-    src: url('../assets/fonts/blowbrush.woff') format('woff'),
+    src: url('../assets/fonts/blowbrush.woff2') format('woff2'),
+         url('../assets/fonts/blowbrush.woff') format('woff'),
          url('../assets/fonts/blowbrush.otf') format('opentype');
     font-display: swap;
 }
 
 @font-face {
     font-family: 'Immortal';
-    src: url('../assets/fonts/immortal.ttf') format('truetype');
+    src: url('../assets/fonts/immortal.woff2') format('woff2'),
+         url('../assets/fonts/immortal.ttf') format('truetype');
     font-display: swap;
 }
 

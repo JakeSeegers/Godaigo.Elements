@@ -80,13 +80,13 @@
 
     const PARALLAX_BASE_URL = 'images/Background/background/';
     const PARALLAX_ASSETS = {
-        base:  PARALLAX_BASE_URL + 'Truebackground.png',
-        space: PARALLAX_BASE_URL + 'secondlayermuchbiggerthantrue.png',
+        base:  PARALLAX_BASE_URL + 'Truebackground.webp',
+        space: PARALLAX_BASE_URL + 'secondlayermuchbiggerthantrue.webp',
         clouds: [
-            PARALLAX_BASE_URL + 'smallcloud.png',
-            PARALLAX_BASE_URL + 'smallcloud2.png',
-            PARALLAX_BASE_URL + 'smallcloud3.png',
-            PARALLAX_BASE_URL + 'smallcloud4.png',
+            PARALLAX_BASE_URL + 'smallcloud.webp',
+            PARALLAX_BASE_URL + 'smallcloud2.webp',
+            PARALLAX_BASE_URL + 'smallcloud3.webp',
+            PARALLAX_BASE_URL + 'smallcloud4.webp',
         ]
     };
     // Natural size shared by every parallax layer image (confirmed via ffprobe).

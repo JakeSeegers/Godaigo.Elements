@@ -56,7 +56,29 @@
     if (!splash || !video || !canvas || !prompt) { revealLogin(); return; }
 
     try {
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        // ── Pre-keyed alpha video ────────────────────────────────────────
+        // tools/key-splash-video.py runs the chroma key below once, offline,
+        // and bakes it into video/splash-intro-alpha.webm (VP9 with an alpha
+        // channel). Where that plays with its alpha — Chromium and Firefox —
+        // each frame is just drawn, no per-pixel JS at all. Safari, and every
+        // iOS browser (all WebKit), plays VP9 but drops the alpha, so they
+        // keep the original MP4 + the in-page key below. If a browser we
+        // expected to handle alpha doesn't (checked on the first frame,
+        // before anything is shown), it falls back the same way.
+        const ALPHA_SRC = 'video/splash-intro-alpha.webm';
+        const KEYED_SRC = video.getAttribute('src');
+        const ua = navigator.userAgent;
+        let useAlphaVideo =
+            ((/Chrome\/|Chromium\//.test(ua) && !/CriOS|EdgiOS|iPhone|iPad|iPod/.test(ua)) ||
+             (/Firefox\//.test(ua) && !/FxiOS/.test(ua))) &&
+            typeof video.canPlayType === 'function' &&
+            video.canPlayType('video/webm; codecs="vp9"') !== '';
+        if (useAlphaVideo) video.src = ALPHA_SRC;
+        let alphaChecked = false;
+
+        // willReadFrequently keeps the canvas on the CPU, which only the
+        // in-page key (getImageData every frame) wants.
+        const ctx = canvas.getContext('2d', useAlphaVideo ? undefined : { willReadFrequently: true });
 
         // ── Chroma key ──────────────────────────────────────────────────
         // Video background is #FCFFFC (near-white). Two-threshold feather —
@@ -187,17 +209,21 @@
             ctx.drawImage(video, EDGE_TRIM_PX, TOP_TRIM_PX, sw, sh, EDGE_TRIM_PX, TOP_TRIM_PX, sw, sh);
         }
 
-        // This source clip's actual frame 0 is a stray dark lead-in frame
-        // baked into the file itself (confirmed with ffmpeg: frame 1
-        // averages to a dark rgb(121,111,122); every frame after it
-        // averages to a near-white rgb(255,250,255)) — not a browser-
-        // readiness thing. Skip drawing several frames up front, generous
-        // margin past the 1 confirmed-dark one — this is belt-and-suspenders
-        // with the CSS-side hard hold in css/boot-splash.css (independent,
-        // time-based rather than frame-count-based, so a bug in one doesn't
-        // sink both).
-        const SKIP_FIRST_N_FRAMES = 6;
-        let framesDrawn = 0;
+        // Don't draw anything until playback has really moved past the
+        // start. The browser's first decoded frame(s) can come out wrong
+        // (a purple flash on real H.264 playback in Chrome — the file
+        // itself is clean: every early frame decodes as near-white with
+        // ffmpeg, edit list honoured or not). Gate on the video's own
+        // clock, not on draw-loop ticks: the loop can tick many times
+        // while a slow-starting video still holds frame 0, so a tick
+        // count ran out before any real frame had played. 0.1s = 3 frames
+        // at 30fps; the clip's first frames are blank white (keyed fully
+        // transparent anyway), so nothing visible is lost.
+        const SKIP_UNTIL_SECONDS = 0.1;
+        const MAX_HOLD_MS = 1000;
+        let playStartedAt = Infinity; // set once play() resolves
+        let revealed = false;
+        canvas.style.visibility = 'hidden';
 
         // 3x3 median filter on just the alpha channel — unlike a box/mean
         // blur, a median only ever replaces a pixel that disagrees with
@@ -277,11 +303,69 @@
             // decoded frame exists (and, being a later state, that metadata
             // — hence real canvas dimensions — is already set too).
             if (!canvas.width || video.readyState < video.HAVE_CURRENT_DATA) return;
-            if (framesDrawn < SKIP_FIRST_N_FRAMES) { framesDrawn++; return; }
+            // Size the canvas here, not only in a 'loadedmetadata' listener:
+            // this script loads at the very end of <body>, ~600 lines after
+            // the <video preload="auto">, so on a warm cache the metadata
+            // is often already loaded before the listener exists and the
+            // event is never seen. The canvas then stayed at its default
+            // 300x150 while drawVideoFrame() drew the 852x480 video 1:1 —
+            // only the video's top-left corner fit, scaled up, so the logo
+            // showed shifted down and to the right (until the sign-in
+            // overlay, which scales to canvas size, snapped in at the end).
+            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width  = video.videoWidth;
+                canvas.height = video.videoHeight;
+            }
+            // Hard cap on the hold: if the video clock hasn't moved past
+            // SKIP_UNTIL_SECONDS within MAX_HOLD_MS of playback starting,
+            // draw anyway — the logo must never stay hidden (worst case is
+            // the old, pre-hold behaviour).
+            if (video.currentTime < SKIP_UNTIL_SECONDS && !video.ended
+                && performance.now() - playStartedAt < MAX_HOLD_MS) return;
+            // Canvas stays hidden until the hold above passes — the CSS
+            // fade-in is timed from page load and can't know when a slow
+            // video actually starts. Revealed before the frame is drawn,
+            // not after: same JS task, so nothing paints in between, and an
+            // error in the pixel work below can't leave it hidden. Done
+            // inline, not with a CSS class: see css/boot-splash.css. The
+            // class is only for a browser still holding the previous
+            // (briefly deployed) css/boot-splash.css, which kept the canvas
+            // at opacity 0 until it saw this class. Harmless otherwise.
+            if (!revealed) {
+                revealed = true;
+                canvas.style.visibility = '';
+                canvas.classList.add('boot-splash-canvas-ready');
+            }
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawVideoFrame();
-            keyAndShimmerFrame(t);
+            if (useAlphaVideo) {
+                // Same gentle pulse as keyAndShimmerFrame()'s +-10 on a
+                // 0-255 scale, as a GPU filter instead of per-pixel maths.
+                ctx.filter = 'brightness(' + (1 + Math.sin(t * SHIMMER_SPEED) * SHIMMER_AMPLITUDE / 220).toFixed(4) + ')';
+                ctx.drawImage(video, 0, 0);
+                ctx.filter = 'none';
+                if (!alphaChecked) {
+                    alphaChecked = true;
+                    // The baked video's trimmed margin is fully transparent;
+                    // if this corner isn't, the alpha channel was dropped.
+                    // Same JS task as the draw, so this frame never shows.
+                    if (ctx.getImageData(1, 1, 1, 1).data[3] !== 0) {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        fallBackToKeyedVideo();
+                        return;
+                    }
+                }
+            } else {
+                drawVideoFrame();
+                keyAndShimmerFrame(t);
+            }
             drawSignInOverlay();
+        }
+
+        function fallBackToKeyedVideo() {
+            console.warn('Boot splash: alpha video not supported here, using the in-page key');
+            useAlphaVideo = false;
+            video.src = KEYED_SRC;
+            video.play().then(() => { playStartedAt = performance.now(); }).catch(showPrompt);
         }
 
         // Keeps redrawing (and so keeps waving/shimmering) even once the
@@ -301,11 +385,6 @@
             }
             rafId = requestAnimationFrame(loop);
         }
-
-        video.addEventListener('loadedmetadata', () => {
-            canvas.width  = video.videoWidth;
-            canvas.height = video.videoHeight;
-        });
 
         let dismissed = false;
 
@@ -346,13 +425,158 @@
         document.addEventListener('keydown', dismiss);
         document.addEventListener('click', dismiss);
 
-        video.play().then(() => {
-            rafId = requestAnimationFrame(loop);
-        }).catch(() => {
-            // Even muted autoplay was blocked (rare) — skip straight to
-            // the prompt so there's still something for the player to act
-            // on.
-            showPrompt();
+        // ── Boot screen / preload ───────────────────────────────────────
+        // Nothing starts until the splash's own assets are local. On a
+        // first (uncached) visit the ~8MB of parallax background images
+        // download at the same time as the 226KB splash video and starve
+        // it, so the video started late and in pieces while the background
+        // popped in behind it — the source of the early-frame glitches,
+        // which faded after a few reloads once everything was cached.
+        // A black boot screen (segmented loading bar + "what's loading"
+        // line) covers all of that, then fades away and the video starts
+        // clean. Built and styled entirely inline here, not in
+        // css/boot-splash.css / index.html, so a browser that caches those
+        // files separately from this one can't pair mismatched versions.
+        const PRELOAD_MAX_MS = 12000; // start anyway after this, never hang
+        const BOOT_SHOW_DELAY_MS = 250; // warm-cache loads finish first and never show it
+        const BG = 'images/Background/background/';
+        const ASSETS = [
+            // label shown while loading, url. Images are the same files
+            // js/parallax.js puts behind the splash.
+            { label: 'Splash animation', url: video.getAttribute('src'), kind: 'video' },
+            { label: 'Title logo',       url: 'images/Final Logo Sign In.png' },
+            { label: 'Deep space',       url: BG + 'Truebackground.webp' },
+            { label: 'Star field',       url: BG + 'secondlayermuchbiggerthantrue.webp' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud.webp' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud2.webp' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud3.webp' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud4.webp' },
+        ];
+        const BAR_SEGMENTS = 24;
+
+        splash.style.transition = 'opacity 1.4s ease, background-color 0.5s ease';
+        splash.style.backgroundColor = '#000';
+
+        const boot = document.createElement('div');
+        boot.style.cssText =
+            'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);' +
+            'width:min(420px,80vw);display:flex;flex-direction:column;gap:12px;' +
+            "font-family:var(--font-pixel,'Press Start 2P',monospace);color:#e8e4d8;" +
+            'pointer-events:none;opacity:0;transition:opacity 0.3s ease;';
+        const bootTop = document.createElement('div');
+        bootTop.style.cssText = 'display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;';
+        const bootTitle = document.createElement('span');
+        bootTitle.textContent = 'LOADING';
+        const bootPct = document.createElement('span');
+        bootPct.textContent = '0%';
+        bootTop.append(bootTitle, bootPct);
+        const bar = document.createElement('div');
+        bar.style.cssText =
+            'display:flex;gap:3px;padding:4px;border:2px solid #e8e4d8;' +
+            'box-shadow:0 0 12px rgba(255,240,200,0.25);';
+        const segs = [];
+        for (let i = 0; i < BAR_SEGMENTS; i++) {
+            const seg = document.createElement('div');
+            seg.style.cssText = 'flex:1;height:14px;background:#222;transition:background 0.15s ease,box-shadow 0.15s ease;';
+            bar.appendChild(seg);
+            segs.push(seg);
+        }
+        const bootItem = document.createElement('div');
+        bootItem.style.cssText = 'font-size:9px;letter-spacing:1px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        bootItem.textContent = '…';
+        boot.append(bootTop, bar, bootItem);
+        splash.appendChild(boot);
+        const bootTimer = setTimeout(() => { boot.style.opacity = '1'; }, BOOT_SHOW_DELAY_MS);
+
+        // Each asset reports progress 0..1: the video by how much of it is
+        // buffered, images all-or-nothing. A blinking "next" segment keeps
+        // the bar visibly alive while a big file is still coming in.
+        let shownFrac = 0;
+        let blinkOn = false;
+        function renderBoot() {
+            const frac = ASSETS.reduce((sum, a) => sum + (a.done ? 1 : (a.progress || 0)), 0) / ASSETS.length;
+            shownFrac = Math.max(shownFrac, frac); // never step backwards
+            bootPct.textContent = Math.floor(shownFrac * 100) + '%';
+            const filled = Math.floor(shownFrac * BAR_SEGMENTS);
+            segs.forEach((seg, i) => {
+                const on = i < filled || (i === filled && blinkOn && shownFrac < 1);
+                seg.style.background = on ? '#f4e9c8' : '#222';
+                seg.style.boxShadow = on ? '0 0 6px rgba(255,240,200,0.6)' : 'none';
+            });
+            const current = ASSETS.find(a => !a.done);
+            bootItem.textContent = current ? current.label + '…' : 'Ready';
+        }
+        const blinkTimer = setInterval(() => { blinkOn = !blinkOn; renderBoot(); }, 300);
+
+        // Images load through a plain Image(), NOT fetch(): js/parallax.js
+        // requests these same URLs with <img> tags at the same time, and
+        // the browser shares an in-flight image load between the two but
+        // not with a fetch() — a fetch here downloaded all ~8MB twice.
+        function loadImage(a) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                // decode() too, so the first paint of it isn't a stall.
+                img.onload = () => (img.decode ? img.decode() : Promise.resolve()).then(resolve, resolve);
+                img.onerror = () => { console.warn('Boot splash: preload failed, continuing:', a.url); resolve(); };
+                img.src = a.url;
+            });
+        }
+
+        // Uses the <video> element's own download (preload="auto" in
+        // index.html) rather than fetching it a second time. Ready once
+        // it's fully buffered, or once the browser has decided it has
+        // enough and stopped downloading (NETWORK_IDLE) — never waits on
+        // a video that errored.
+        function loadVideo(a) {
+            return new Promise((resolve) => {
+                const EVENTS = ['progress', 'canplaythrough', 'loadeddata', 'error'];
+                function check() {
+                    if (video.error) return done();
+                    const b = video.buffered;
+                    const dur = video.duration;
+                    if (b.length && isFinite(dur) && dur > 0) {
+                        a.progress = Math.min(1, b.end(b.length - 1) / dur);
+                        renderBoot();
+                    }
+                    if (video.readyState < video.HAVE_ENOUGH_DATA) return;
+                    if (a.progress >= 0.99 || video.networkState === video.NETWORK_IDLE) done();
+                }
+                function done() {
+                    EVENTS.forEach(e => video.removeEventListener(e, check));
+                    clearInterval(poll);
+                    resolve();
+                }
+                EVENTS.forEach(e => video.addEventListener(e, check));
+                const poll = setInterval(check, 200); // events alone can be missed
+                check();
+            });
+        }
+
+        function loadAsset(a) {
+            return (a.kind === 'video' ? loadVideo(a) : loadImage(a)).then(() => {
+                a.done = true;
+                renderBoot();
+            });
+        }
+
+        const allReady = Promise.all(ASSETS.map(loadAsset));
+        const timedOut = new Promise((resolve) => setTimeout(resolve, PRELOAD_MAX_MS));
+
+        Promise.race([allReady, timedOut]).then(() => {
+            clearTimeout(bootTimer);
+            clearInterval(blinkTimer);
+            boot.remove();
+            if (dismissed) return; // skipped while still loading
+            splash.style.backgroundColor = 'transparent';
+            video.play().then(() => {
+                playStartedAt = performance.now();
+                rafId = requestAnimationFrame(loop);
+            }).catch(() => {
+                // Even muted autoplay was blocked (rare) — skip straight to
+                // the prompt so there's still something for the player to
+                // act on.
+                showPrompt();
+            });
         });
     } catch (e) {
         // Whatever went wrong, the login screen must not stay hidden.

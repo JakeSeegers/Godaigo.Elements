@@ -312,6 +312,12 @@ async function _renderBadges(content) {
 function _gami_openTrainBot() {
     if (!window.gami?.userId) { window.gami?.notify('Log in to train the community bot.', 0, 'gold'); return; }
     if (typeof isMultiplayer !== 'undefined' && isMultiplayer) { window.gami?.notify('Leave your online game first — training runs locally.', 0, 'gold'); return; }
+    // bot-arena.js is lazy-loaded (js/asset-preloader.js § Lazy scripts).
+    if (!window.BotArena && window.LazyScripts) {
+        window.LazyScripts.load('bot-arena').then(_gami_openTrainBot,
+            () => window.gami?.notify('Bot training is not available right now.', 0, 'gold'));
+        return;
+    }
     if (!window.BotArena) { window.gami?.notify('Bot training is not available right now.', 0, 'gold'); return; }
     if (window.BotArena.isRunning()) { window.gami?.notify('A bot job is already running — stop it first.', 0, 'gold'); return; }
     if (typeof window._openBotTrainingPanel !== 'function') { window.gami?.notify('Bot training is not available right now.', 0, 'gold'); return; }

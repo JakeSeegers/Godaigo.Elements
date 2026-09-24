@@ -93,11 +93,12 @@ body.boot-splash-active .site-logo {
     filter:
         drop-shadow(0 0 20px rgba(255, 250, 230, 0.4))
         drop-shadow(0 0 46px rgba(255, 240, 200, 0.22));
-    /* Hard, time-based hold — independent of js/boot-splash.js's
-       frame-count-based skip, deliberately, so a bug in one can't sink
-       both: stays fully invisible for 0.25s no matter what's being drawn
-       underneath, then fades in over 0.2s. By ~0.45s the JS-side frame
-       skip has long since moved past any bad early content. */
+    /* Time-based fade-in only. js/boot-splash.js separately keeps the
+       canvas visibility:hidden (inline style) until its first real frame
+       is drawn, so a slow-starting video can't flash a bad first frame.
+       That hold lives only in the JS on purpose: GitHub Pages caches the
+       CSS and JS separately, and a CSS-side hold waiting on a class the
+       (older, cached) JS never adds left the logo invisible for good. */
     opacity: 0;
     animation: boot-splash-canvas-fade-in 0.2s ease 0.25s forwards;
 }
