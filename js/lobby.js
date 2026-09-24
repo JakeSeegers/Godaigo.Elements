@@ -465,6 +465,26 @@
             const leavingRoomId = currentGameId; // capture before we null it out
             const leavingAsHost = isHost;
 
+            // Host: delete the room FIRST, while our seat still exists. The
+            // database only lets the room's host (oldest human seat) or the
+            // hermit delete a room, so this must run before resetToLobby() or
+            // remove_player below take our seat away. delete_game_room also
+            // removes every seat in the room, ours included.
+            // Must go through an RPC: game_room/players both have "no client
+            // delete" RLS policies, so a direct .from(...).delete() silently
+            // deletes 0 rows and returns no error.
+            let roomDeleted = false;
+            if (leavingAsHost && leavingRoomId) {
+                const { error: roomDeleteErr } = await supabase
+                    .rpc('delete_game_room', { p_room_id: leavingRoomId });
+                if (roomDeleteErr) {
+                    console.warn('⚠️ Could not delete game_room on host leave:', roomDeleteErr.message);
+                } else {
+                    roomDeleted = true;
+                    console.log('🗑️ Deleted game_room', leavingRoomId, '(host left)');
+                }
+            }
+
             // If we're mid-game, reset game state first before returning to lobby
             const gameContainer = document.querySelector('.game-container');
             const inGame = gameContainer && gameContainer.style.display !== 'none';
@@ -472,23 +492,8 @@
                 resetToLobby();
             }
 
-            if (myPlayerId) {
+            if (myPlayerId && !roomDeleted) {
                 await supabase.rpc('remove_player', { p_player_id: myPlayerId });
-            }
-
-            // If the host leaves, delete the game_room entirely so it disappears from
-            // other players' browser lists immediately rather than lingering as an empty room.
-            // Must go through an RPC — game_room/players both have "no client delete" RLS
-            // policies (qual: false), so a direct .from(...).delete() silently deletes 0
-            // rows and returns no error, leaving the room stuck forever.
-            if (leavingAsHost && leavingRoomId) {
-                const { error: roomDeleteErr } = await supabase
-                    .rpc('delete_game_room', { p_room_id: leavingRoomId });
-                if (roomDeleteErr) {
-                    console.warn('⚠️ Could not delete game_room on host leave:', roomDeleteErr.message);
-                } else {
-                    console.log('🗑️ Deleted game_room', leavingRoomId, '(host left waiting room)');
-                }
             }
 
             myPlayerId = null;
@@ -2095,6 +2100,15 @@
         // keep playing. pagehide also covers mobile, where beforeunload often
         // never fires; the flag stops the double call when both fire.
         let _unloadCleanupSent = false;
+        // The unload fetch can't await getSession(), so keep the signed-in
+        // user's access token cached here (refreshed on every auth change).
+        // delete_game_room only works for the room's host, so the request
+        // must carry the user's token, not just the anon key.
+        let _accessToken = null;
+        try {
+            supabase.auth.getSession().then(r => { _accessToken = r?.data?.session?.access_token || null; }).catch(() => {});
+            supabase.auth.onAuthStateChange((_event, session) => { _accessToken = session?.access_token || null; });
+        } catch (e) { /* no Supabase client (offline): unload falls back to the anon key */ }
         function _cleanupOnUnload() {
             if (_unloadCleanupSent || !myPlayerId) return;
             _unloadCleanupSent = true;
@@ -2104,7 +2118,7 @@
                 method: 'POST',
                 headers: {
                     'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Authorization': `Bearer ${_accessToken || SUPABASE_ANON_KEY}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(deleteRoom ? { p_room_id: currentGameId } : { p_player_id: myPlayerId }),
