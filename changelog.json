@@ -8,7 +8,7 @@
       "changes": [
         "New Replays button in the lobby: watch your finished online games, and post them publicly so everyone can watch.",
         "New Change Log button in the lobby. You can also add a recovery email in Profile > Settings > Account and use \"Forgot password?\" if you forget your password.",
-        "The lobby keeps itself up to date, so the refresh buttons are gone. A host who closes the page now closes their room right away.",
+        "The lobby keeps itself up to date, so the refresh buttons are gone. The leaderboard now shows each player's name colour. A host who closes the page now closes their room right away.",
         "The game now updates itself: when a new version is out, it reloads on its own in the lobby (never during a game).",
         "Fixes: Create and Quick Reflexes now show their activated element to other players (games no longer go out of sync). The \"All Slots Full\" popup is gone (the Scroll Overflow banner handles it). Small fixes and polish."
       ]

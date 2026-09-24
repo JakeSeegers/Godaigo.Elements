@@ -191,6 +191,12 @@ reach/beat it from here.
   completion repeats it (harmless). Tested: Create pick + cancel both broadcast void.
 - **Next:** automatic replay verification (server or hermit tool: replay each finished match,
   compare fingerprints, flag mismatches), then Phase 4 stats + hermit suspicious-player screen.
+- **Name colours on the server (2026-09-24, sql/cosmetics.sql):** owned/equipped name colours
+  were localStorage-only (invisible to others, fakeable). Now user_profiles.cosmetics_owned /
+  name_color via buy_cosmetic / equip_cosmetic; js/cosmetics-system.js reads gami.profile.
+  Leaderboard (gamification-ui _gami_fetchLadder/_gami_ladderRowsHTML) colours names. Only one
+  purchase (a Rainbow) was on record server-side and was carried over; colours bought before
+  that exist only in old localStorage and are not migrated (can be re-granted by hand).
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

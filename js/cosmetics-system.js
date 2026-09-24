@@ -18,24 +18,21 @@
     ];
 
     // ── Storage ───────────────────────────────────────────────
+    // Owned and equipped colours live on the server (user_profiles
+    // .cosmetics_owned / .name_color, sql/cosmetics.sql) so other players
+    // see them, e.g. on the leaderboard. They change only through the
+    // buy_cosmetic / equip_cosmetic RPCs. window.gami.profile holds the copy
+    // loaded at sign-in (select *), updated here after each change.
 
     function getUserId() { return window.gami?.userId || null; }
 
-    function storageKey() {
-        const uid = getUserId();
-        return uid ? `godaigo_cosmetics_${uid}` : null;
-    }
-
     function loadData() {
-        const key = storageKey();
-        if (!key) return { owned: [], equipped: {} };
-        try { return JSON.parse(localStorage.getItem(key) || '{"owned":[],"equipped":{}}'); }
-        catch { return { owned: [], equipped: {} }; }
-    }
-
-    function saveData(data) {
-        const key = storageKey();
-        if (key) localStorage.setItem(key, JSON.stringify(data));
+        const prof = window.gami?.profile;
+        if (!prof) return { owned: [], equipped: {} };
+        return {
+            owned: Array.isArray(prof.cosmetics_owned) ? prof.cosmetics_owned : [],
+            equipped: prof.name_color ? { namecolor: prof.name_color } : {},
+        };
     }
 
     function getEquipped(catKey) { return loadData().equipped[catKey] || null; }
@@ -46,34 +43,31 @@
     async function purchaseItem(id) {
         const item = NAME_COLORS.find(i => i.id === id);
         if (!item) return { ok: false, msg: 'Item not found' };
+        if (!getUserId() || !window.gami?.profile) return { ok: false, msg: 'Not logged in' };
 
         const data = loadData();
         if (data.owned.includes(id)) return { ok: false, msg: 'Already owned' };
 
-        const userId = getUserId();
-        if (!userId) return { ok: false, msg: 'Not logged in' };
-
-        const gold = window.gami?.profile?.gold || 0;
+        const gold = window.gami.profile.gold || 0;
         if (gold < item.cost) return { ok: false, msg: `Need ${item.cost}g (you have ${gold}g)` };
 
-        const { error } = await supabase.rpc('spend_gold', {
-            p_amount:      item.cost,
-            p_description: `Name colour: ${item.name}`
-        });
-        if (error) return { ok: false, msg: 'Purchase failed' };
-
-        if (window.gami?.profile) window.gami.profile.gold -= item.cost;
-        data.owned.push(id);
-        saveData(data);
+        const { data: newGold, error } = await supabase.rpc('buy_cosmetic', { p_id: id });
+        if (error) {
+            return { ok: false, msg: /enough gold/.test(error.message) ? 'Not enough gold' : 'Purchase failed' };
+        }
+        window.gami.profile.gold = typeof newGold === 'number' ? newGold : gold - item.cost;
+        window.gami.profile.cosmetics_owned = [...data.owned, id];
         return { ok: true };
     }
 
-    function equipItem(id) {
+    // Toggle: equipping the colour that is already on takes it off.
+    async function equipItem(id) {
         const data = loadData();
-        if (!data.owned.includes(id)) return;
-        data.equipped.namecolor = (data.equipped.namecolor === id) ? null : id;
-        if (!data.equipped.namecolor) delete data.equipped.namecolor;
-        saveData(data);
+        if (!data.owned.includes(id) || !window.gami?.profile) return;
+        const next = data.equipped.namecolor === id ? null : id;
+        const { error } = await supabase.rpc('equip_cosmetic', { p_id: next });
+        if (error) { window.gami?.notify?.('Could not change colour', 0, 'gold'); return; }
+        window.gami.profile.name_color = next;
     }
 
     // ── Name color helper ─────────────────────────────────────
@@ -185,8 +179,8 @@
             window.gami?.notify(result.ok ? 'Purchased!' : result.msg, 0, 'gold');
         },
 
-        handleEquip(id) {
-            equipItem(id);
+        async handleEquip(id) {
+            await equipItem(id);
             renderPanel();
         },
 

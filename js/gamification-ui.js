@@ -348,10 +348,10 @@ async function _gami_fetchLadder(limit) {
     const userIds = [...new Set(rows.filter(r => r.entity_type === 'player').map(r => r.user_id))];
     const botIds = rows.filter(r => r.entity_type === 'bot').map(r => r.bot_id);
     const [profRes, botRes] = await Promise.all([
-        userIds.length ? supabase.from('user_profiles').select('user_id, display_name').in('user_id', userIds) : Promise.resolve({ data: [] }),
+        userIds.length ? supabase.from('user_profiles').select('user_id, display_name, name_color').in('user_id', userIds) : Promise.resolve({ data: [] }),
         botIds.length ? supabase.from('deployed_bots').select('id, nickname, owner, is_active').in('id', botIds) : Promise.resolve({ data: [] }),
     ]);
-    const profs = new Map((profRes.data || []).map(p => [p.user_id, p.display_name]));
+    const profs = new Map((profRes.data || []).map(p => [p.user_id, p]));
     const bots = new Map((botRes.data || []).map(b => [b.id, b]));
     const ownerIds = [...new Set((botRes.data || []).map(b => b.owner).filter(Boolean))];
     let owners = new Map();
@@ -375,7 +375,9 @@ async function _gami_fetchLadder(limit) {
                 botId: b.id, active: b.is_active,
             };
         }
-        return { rank: r.rank, isBot: false, isMe: r.user_id === me, name: profs.get(r.user_id) || 'Unknown', active: true };
+        const prof = profs.get(r.user_id);
+        return { rank: r.rank, isBot: false, isMe: r.user_id === me, name: prof?.display_name || 'Unknown',
+                 nameColor: prof?.name_color || null, active: true };
     }).filter(Boolean);
 }
 
@@ -395,7 +397,7 @@ function _gami_ladderRowsHTML(rows, hideBots) {
         return `
         <div class="gami-lb-row ${r.isMe ? 'gami-lb-me' : ''}"${r.isBot ? ` style="cursor:pointer;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${r.botId})"` : ''}>
             <span class="gami-lb-rank">#${r.rank}</span>
-            <span class="gami-lb-name">${_esc(r.name)}${tag}</span>
+            <span class="gami-lb-name"><span style="${r.nameColor ? (window.cosmeticsSystem?.getNameColorStyle(r.nameColor) || '') : ''}">${_esc(r.name)}</span>${tag}</span>
         </div>`;
     }).join('');
 }
@@ -555,8 +557,8 @@ async function _gami_cosmeticsBuy(id) {
     gami_switchTab('cosmetics');
 }
 
-function _gami_cosmeticsEquip(id) {
-    window.cosmeticsSystem.handleEquip(id);
+async function _gami_cosmeticsEquip(id) {
+    await window.cosmeticsSystem.handleEquip(id);
     gami_switchTab('cosmetics');
 }
 
