@@ -16,6 +16,11 @@
     const MAX_BATCH = 100;
     const MAX_PAYLOAD_CHARS = 30000;
     const MAX_BUFFER = 2000; // safety cap if the server is unreachable for long
+    // Periodic "resend the whole state" messages. The first real game (match 2)
+    // showed these repeat unchanged most of the time (common-area-sync: 105
+    // sent, 4 different), so an exact repeat of the last one saved is skipped.
+    // Every change is still recorded, so replays lose nothing.
+    const DEDUPE_EVENTS = new Set(['turn-sync', 'common-area-sync', 'scroll-state-sync']);
 
     let matchId = null;
     let roomId = null;
@@ -24,6 +29,7 @@
     let flushing = false;
     let adopting = false;
     let finishing = false; // finish() can be called from several game-over paths
+    let lastSync = new Map(); // "event|sender" -> content of the last one saved
 
     function log(...a) { console.log('[match-rec]', ...a); }
 
@@ -44,6 +50,7 @@
         roomId = null;
         buffer = [];
         finishing = false;
+        lastSync = new Map();
     }
 
     // Host, right after the game starts.
@@ -98,6 +105,14 @@
             if (text.length > MAX_PAYLOAD_CHARS) return;
             clean = JSON.parse(text);
         } catch (e) { return; }
+        if (DEDUPE_EVENTS.has(event)) {
+            // Ignore the ordering/time stamps broadcastGameAction adds to scroll events
+            const { _seq, _timestamp, ...content } = clean || {};
+            const key = event + '|' + sender;
+            const text = JSON.stringify(content);
+            if (lastSync.get(key) === text) return;
+            lastSync.set(key, text);
+        }
         if (buffer.length >= MAX_BUFFER) buffer.shift();
         buffer.push({
             event: String(event),
