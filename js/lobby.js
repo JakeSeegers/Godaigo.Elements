@@ -1017,6 +1017,9 @@
                     console.error('Error updating game over state:', finishErr);
                 }
 
+                // Close the match recording (host only; no-op elsewhere).
+                window.MatchRecorder?.finish(winnerPlayerIndex, winType);
+
                 // Then award XP, before showing the overlay, so the async RPC
                 // completes before any page reload triggered by "Return to Lobby" can cancel it
                 if (!_gameOverXpAwarded) {
@@ -1270,6 +1273,7 @@
                         if (!wasHost && isHost) {
                             console.log('You are now the host.');
                             startDisconnectMonitor();
+                            window.MatchRecorder?.adopt();
                         }
                     }
                 }
@@ -1450,6 +1454,7 @@
                             // Game ended - show win screen to all players who didn't trigger it themselves
                             console.log('🏁 Game finished!');
                             const winnerIndex = payload.new.current_turn_index ?? 0;
+                            window.MatchRecorder?.finish(winnerIndex, null);
                             // Only show if we're not the winner (winner already saw it via handleGameOver)
                             if (winnerIndex !== myPlayerIndex) {
                                 showGameOverToAll(winnerIndex, 'scrolls');
@@ -2010,6 +2015,15 @@
 
                 // Initialize game with multiplayer players and shared deck seed
                 startMultiplayerGame(allPlayers, gameDeckSeed, scarceTiles);
+
+                // Host records the match (replays, cheat checks, stats).
+                if (isHost) {
+                    window.MatchRecorder?.start(gameDeckSeed, allPlayers, {
+                        scarce_tiles: scarceTiles,
+                        turn_time_ms: gameInactivityTimeout,
+                        kick_on_timeout: !!kickOnTurnTimeout,
+                    });
+                }
                 
             } catch (error) {
                 console.error('Error handling game start:', error);
@@ -2241,6 +2255,13 @@
                 config: {
                     broadcast: { self: false } // Don't receive our own broadcasts
                 }
+            });
+
+            // Match recording (host only): every message from the others.
+            gameChannel.on('broadcast', { event: '*' }, (msg) => {
+                const p = msg?.payload;
+                window.MatchRecorder?.record(msg?.event, p,
+                    typeof p?.playerIndex === 'number' ? p.playerIndex : null);
             });
 
             // Listen for tile flip events
@@ -3850,6 +3871,8 @@
 
             // Game over broadcast — carries win type so non-winner clients show the correct message
             gameChannel.on('broadcast', { event: 'game-over' }, ({ payload }) => {
+                // Someone else won: the host still has to close the recording.
+                window.MatchRecorder?.finish(payload.winnerIndex, payload.winType || 'scrolls');
                 showGameOverToAll(payload.winnerIndex, payload.winType || 'scrolls');
             });
 
@@ -4013,6 +4036,7 @@
 
             stopDisconnectMonitor();
             stopLastManStandingPoll();
+            window.MatchRecorder?.stop();
 
             // Clear the board
             if (typeof clearBoard === 'function') {
@@ -4077,6 +4101,10 @@
                 event: event,
                 payload: payload
             });
+            // Match recording (host only): our own and our bots' moves.
+            // self:false means we never hear these back, so record here.
+            window.MatchRecorder?.record(event, payload,
+                typeof myPlayerIndex === 'number' ? myPlayerIndex : null);
             if (sendResult && typeof sendResult.then === 'function' && window.ConnectionMonitor) {
                 sendResult.then(result => {
                     if (result === 'ok') window.ConnectionMonitor.reportSendSuccess();

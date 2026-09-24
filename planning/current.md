@@ -118,6 +118,15 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-24: Match recording (Phase 1 of 4).** Plan agreed with the owner:
+  (1) record every online game (done: js/match-recorder.js, sql/match-recording.sql),
+  (2) board fingerprints + witnesses so a win only pays out when other humans'
+  browsers agree (claim_game_win to be tightened), (3) replay viewer that feeds
+  recorded match_moves back into the normal gameChannel receive handlers (no
+  bot-sim dependency; owner: bot code is still in development), plus hermit review of
+  flagged games, (4) stats + a hermit "suspicious players" screen. Open questions
+  for later phases: replay retention (30 days now), who may watch replays (hands
+  are secret), whether to record games vs bots only (recorded now).
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

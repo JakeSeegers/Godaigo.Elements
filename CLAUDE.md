@@ -128,6 +128,12 @@ Order matters — later scripts depend on earlier ones.
                              (multiplayer-state.js sets window.__godaigoRecoveryLink before the client
                              consumes the hash).
 17. lobby.js               ← Auth, room management, startGame() (depends on game-core)
+17b. match-recorder.js     ← window.MatchRecorder: HOST-only recording of every online game's broadcast
+                             messages to Supabase (`matches` + `match_moves`, sql/match-recording.sql).
+                             Hooks in lobby.js: broadcastGameAction (own/bot sends; channel is self:false),
+                             a catch-all gameChannel.on('broadcast', {event:'*'}) (everyone else),
+                             handleGameStart (start), host re-election (adopt), game-over paths (finish),
+                             resetToLobby (stop). Foundation for replays, cheat checks, stats (phases 2-4).
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
@@ -224,6 +230,8 @@ Full list: see `js/INDEX.md § Window Globals`.
 |-------|-------------|---------|
 | `game_room` | lobby.js | Active game sessions |
 | `players` | lobby.js | Player slots in a session |
+| `matches` | match-recorder.js | One row per online game: players snapshot, deck seed, settings, winner, status (playing/finished/abandoned), move_count, `keep`. Written ONLY via RPCs `start_match` / `finish_match` (room host or hermit). No client SELECT yet. Finished matches older than 30 days are deleted unless `keep`. `game_room.match_id` points at the live one. |
+| `match_moves` | match-recorder.js | Every broadcast message of a match in order (`seq` assigned by the server), with event name, sender seat, payload. Written ONLY via `append_match_moves` (room host or hermit, batches of 200 max, 32 KB per payload). |
 | `user_profiles` | gamification.js | XP, gold, level, stats. Clients may only UPDATE `stats`, `updated_at`, `skip_intro`; gold/XP/level/badges change ONLY through server functions: `claim_daily_login()`, `claim_game_win(room)`, `claim_training_reward(amount)` (60/claim, 300/day), `spend_gold(amount)`. `award_gold` / `update_user_xp` / `award_badge` are server-internal (not client-callable). See `sql/secure-rewards.sql`. |
 | `user_activities` | gamification.js | Activity log for rewards. Clients may only insert `scroll_cast` / `element_activated` with no rewards; everything else is written by the server functions above. Inserts fire `check_badges_trigger` (badges). |
 | `game_rewards` | claim_game_win() | One XP claim per (room, player); also the 4-per-hour win-claim limit. Server only. |
