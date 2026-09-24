@@ -1090,6 +1090,10 @@
         function showGameOverToAll(winnerPlayerIndex, winType = 'scrolls') {
             console.log('Game over for winner index:', winnerPlayerIndex, 'Type:', winType);
 
+            // Witness report: this browser checks the winner against its own
+            // board and tells the server (js/match-witness.js). Once per game.
+            window.MatchWitness?.onGameOver(winnerPlayerIndex, winType);
+
             // Check if notification already exists
             const existingNotification = document.getElementById('game-over-notification');
             if (existingNotification) {

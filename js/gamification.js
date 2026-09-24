@@ -189,6 +189,24 @@ window.gami = (function () {
                 // activities (badges) itself. Once per game.
                 const { data: xpData, error: xpErr } = await supabase.rpc('claim_game_win', { p_room_id: roomId });
                 if (xpErr) { console.error('[gami] claim_game_win RPC error:', xpErr); return; }
+                if (xpData?.reason === 'awaiting_witness') {
+                    // Another player's game must confirm the win first; the
+                    // server pays it the moment they do, even if we leave.
+                    api.notify('Victory! Your XP arrives once the game is confirmed.', 0, 'xp');
+                    _log('win claim waiting for a witness');
+                    // In the background: handleGameOver awaits this function
+                    // before showing the win screen, so never block it.
+                    const before = _profile?.total_xp || 0;
+                    (async () => {
+                        for (const wait of [4000, 8000, 15000]) {
+                            await new Promise(r => setTimeout(r, wait));
+                            const fresh = await api.getProfile();
+                            const gained = (fresh?.total_xp || 0) - before;
+                            if (gained > 0) { api.notify(`Win confirmed! +${gained} XP`, gained, 'xp'); break; }
+                        }
+                    })().catch(() => {});
+                    return;
+                }
                 if (!xpData?.success) { _log('no XP awarded:', xpData?.reason); return; }
                 _log('claim_game_win success, result:', xpData);
                 const xp = xpData.xp;

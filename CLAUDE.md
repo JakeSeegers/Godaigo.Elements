@@ -134,6 +134,12 @@ Order matters — later scripts depend on earlier ones.
                              a catch-all gameChannel.on('broadcast', {event:'*'}) (everyone else),
                              handleGameStart (start), host re-election (adopt), game-over paths (finish),
                              resetToLobby (stop). Foundation for replays, cheat checks, stats (phases 2-4).
+17c. match-witness.js      ← window.MatchWitness: every human browser in an online game (1) hashes the PUBLIC
+                             board the instant currentTurnNumber changes (100 ms watcher) -> report_fingerprint,
+                             (2) at game over (hook in showGameOverToAll) checks the winner vs its own board
+                             (5 activated + isPlayerAtOwnShrine) -> report_game_result. claim_game_win needs a
+                             confirming report from another fresh human seat, else the claim waits as 'pending'
+                             and is paid when the report lands. sql/match-witness.sql.
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
@@ -234,7 +240,9 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `match_moves` | match-recorder.js | Every broadcast message of a match in order (`seq` assigned by the server), with event name, sender seat, payload. Written ONLY via `append_match_moves` (room host or hermit, batches of 200 max, 32 KB per payload). |
 | `user_profiles` | gamification.js | XP, gold, level, stats. Clients may only UPDATE `stats`, `updated_at`, `skip_intro`; gold/XP/level/badges change ONLY through server functions: `claim_daily_login()`, `claim_game_win(room)`, `claim_training_reward(amount)` (60/claim, 300/day), `spend_gold(amount)`. `award_gold` / `update_user_xp` / `award_badge` are server-internal (not client-callable). See `sql/secure-rewards.sql`. |
 | `user_activities` | gamification.js | Activity log for rewards. Clients may only insert `scroll_cast` / `element_activated` with no rewards; everything else is written by the server functions above. Inserts fire `check_badges_trigger` (badges). |
-| `game_rewards` | claim_game_win() | One XP claim per (room, player); also the 4-per-hour win-claim limit. Server only. |
+| `game_rewards` | claim_game_win() | One XP claim per (room, player), `status` paid/pending (pending = waiting for a witness); also the 4-per-hour win-claim limit. Server only. |
+| `match_reports` | match-witness.js | Game-over witness report per (room, reporter): winner seen, confirms, activated, at_shrine, fingerprint. A non-confirming witness sets `matches.disputed`. Written only via `report_game_result`. |
+| `match_fingerprints` | match-witness.js | Board fingerprint per (room, turn, reporter). A mismatch bumps `matches.desync_count`. Written only via `report_fingerprint`. 30-day cleanup. |
 | `badges` | gamification-ui.js | Badge ownership |
 | `account_recovery` | edge fn account-recovery | Optional recovery email per account (+ verified flag, confirm token hash). RLS on, NO client policies; client only uses RPCs `my_recovery_email()` / `remove_my_recovery_email()`. `sql/account-recovery.sql` |
 | `recovery_email_log` | edge fn account-recovery | One row per email sent, for rate limits (2/account/hour, 3/address/day, 90/day total). Server only. |
