@@ -7,7 +7,7 @@
       "title": "Change Log, tidier scroll overflow",
       "changes": [
         "New Change Log button in the lobby. It shows what changed in each update.",
-        "The leaderboard now reloads each time you come back to the lobby.",
+        "The leaderboard now updates by itself each time you come back to the lobby, so it no longer has a refresh button.",
         "No more separate \"All Slots Full\" popup. If you pick up a scroll with a full hand, the Scroll Overflow banner asks you to cascade at the end of your turn.",
         "Small fixes and polish to game text."
       ]
