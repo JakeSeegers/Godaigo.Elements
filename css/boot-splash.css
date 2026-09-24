@@ -88,16 +88,14 @@ body.boot-splash-active .site-logo {
     filter:
         drop-shadow(0 0 20px rgba(255, 250, 230, 0.4))
         drop-shadow(0 0 46px rgba(255, 240, 200, 0.22));
-    /* Hidden until js/boot-splash.js has drawn its first real frame (it
-       adds .boot-splash-canvas-ready), then fades in over 0.2s. Used to be
-       a fixed 0.25s hold from page load, which a slow-starting video
-       outlasted — the first (sometimes wrongly decoded, purple) frame then
-       drew onto an already-visible canvas. */
+    /* Time-based fade-in only. js/boot-splash.js separately keeps the
+       canvas visibility:hidden (inline style) until its first real frame
+       is drawn, so a slow-starting video can't flash a bad first frame.
+       That hold lives only in the JS on purpose: GitHub Pages caches the
+       CSS and JS separately, and a CSS-side hold waiting on a class the
+       (older, cached) JS never adds left the logo invisible for good. */
     opacity: 0;
-}
-
-#boot-splash-canvas.boot-splash-canvas-ready {
-    animation: boot-splash-canvas-fade-in 0.2s ease forwards;
+    animation: boot-splash-canvas-fade-in 0.2s ease 0.25s forwards;
 }
 
 @keyframes boot-splash-canvas-fade-in {
