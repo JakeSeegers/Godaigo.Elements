@@ -3062,13 +3062,13 @@ const ScrollEffects = {
 
             // Add scroll to hand. If this puts the hand over the limit, the
             // end-of-turn overflow banner makes the player cascade (same as a
-            // normal shrine pickup — no separate cascade popup).
+            // normal shrine pickup, no separate cascade popup).
             const scrolls = sp.getPlayerScrolls(false);
             scrolls.hand.add(scrollName);
             sp.updateScrollCount();
             if (scrolls.hand.size > sp.MAX_HAND_SIZE) {
                 const scrollInfo = sp.patterns?.[scrollName];
-                updateStatus(`Picked up "${scrollInfo?.name || scrollName}" — hand is over the limit. Cascade a scroll before ending your turn!`);
+                updateStatus(`Picked up "${scrollInfo?.name || scrollName}". Your hand is over the limit. Cascade a scroll before ending your turn!`);
             }
 
             // Draw 2 stones of the scroll's element type

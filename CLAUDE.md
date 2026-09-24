@@ -5,6 +5,38 @@
 
 ---
 
+## HOUSE RULES (read every session)
+These apply to all work on this repo. `tools/claude-hooks/` enforces rules 1 and 2
+(see "How the rules are enforced" below).
+
+1. **No em dashes, ever.** Not in code, comments, docs, commit messages, PR text, or
+   game text. Use a comma, colon, period, parentheses, or " - " instead. Older text
+   still has some; when you edit a line that has one, fix it.
+2. **Every player-facing change gets a release note** in `changelog.json` (shown by the
+   lobby "Change Log" button, `js/changelog-ui.js`). Newest entry first. Add to today's
+   entry if it exists, else add a new entry at the top: `{ id, date, title, changes[] }`
+   with `id` = date (add `-2` etc. for a second release the same day). Write for
+   players: simple English, short lines, what changed and how it affects them. No
+   file names or code terms. Skip it only for changes a player cannot notice (pure
+   refactor, dev-only tools, docs); say so to the user when you skip it.
+3. **Start from `planning/current.md`** and drill down through the INDEX.md files before
+   reading source (see below).
+4. **Keep docs in sync** after changes: follow the `/sync-docs` skill
+   (`.claude/skills/sync-docs/SKILL.md`).
+
+### How the rules are enforced
+- This file is loaded into every Claude session automatically.
+- `.claude/settings.json` runs two hooks:
+  - **SessionStart** `tools/claude-hooks/session-start.js`: saves the starting commit to
+    `.git/claude-session-base` and prints a short rules reminder into context.
+  - **Stop** `tools/claude-hooks/stop-check.js`: before Claude finishes, checks this
+    session's own commits plus uncommitted work for (1) em dashes in added lines that are
+    still in the file and (2) game files changed without a `changelog.json` change. If
+    either fails, Claude is told to fix it. It blocks once per stop, so it cannot loop.
+    Skips work that came in through a merge.
+
+---
+
 ## CURRENT ACTIVE WORK
 → **[planning/current.md](planning/current.md)**
 Start every session here. It contains the live task, branch, and files in flight.
@@ -79,6 +111,10 @@ Order matters — later scripts depend on earlier ones.
 14. gamification.js        ← window.gami — XP/gold/profiles (depends on Supabase)
 15. crt-overlay.js         ← CRT canvas effects (no game deps)
 16. gamification-ui.js     ← Profile modal UI (depends on gamification.js)
+16b. changelog-ui.js       ← window.Changelog: lobby "Change Log" button + release-notes modal.
+                             Reads /changelog.json (see HOUSE RULES #2). "New" dot on the button
+                             until the newest entry is opened (localStorage godaigo_changelog_seen).
+                             No game deps.
 17. lobby.js               ← Auth, room management, startGame() (depends on game-core)
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)

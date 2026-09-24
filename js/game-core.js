@@ -131,7 +131,7 @@
                 const cascade = this.pendingCascades[playerIndex];
                 if (!cascade) return false;
 
-                // The old "Hand Full! / All Slots Full!" cascade popup is gone —
+                // The old "Hand Full! / All Slots Full!" cascade popup is gone.
                 // overflow is handled only by the end-of-turn overflow banner
                 // (showEndTurnOverflowModal). Nothing sets a pending cascade now,
                 // so just drop any stale one.

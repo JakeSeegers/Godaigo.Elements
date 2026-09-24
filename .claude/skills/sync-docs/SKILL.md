@@ -1,3 +1,8 @@
+---
+name: sync-docs
+description: Sync the INDEX.md docs, planning/current.md and changelog.json after code changes. Use when the user types /sync-docs, asks to sync or update the docs, or at the end of a work session that changed game files.
+---
+
 # Skill: /sync-docs
 
 ## Trigger
@@ -36,6 +41,11 @@ git diff --name-only         # unstaged changes
 | Any new `window.*` global | Add to `js/INDEX.md` § Window Globals |
 | Any bug fixed | Remove from `CLAUDE.md` Known Active Bugs |
 
+### Step 2b: Release notes
+If any player-facing file changed (`index.html`, `js/`, `css/`, `sounds/`, `assets/`, etc.),
+add a player-facing note to `changelog.json` (CLAUDE.md HOUSE RULES #2). Simple English,
+no em dashes, no file names.
+
 ### Step 3 — Update planning/current.md
 Always update these fields at end of session:
 - `## Last Committed Work` — brief summary of what changed
@@ -53,7 +63,7 @@ For each changed file, re-read the "gotchas" section in its INDEX.md and confirm
 
 ### Step 5 — Commit the docs
 ```bash
-git add CLAUDE.md js/INDEX.md js/scrolls/INDEX.md css/INDEX.md docs/INDEX.md planning/current.md
+git add changelog.json CLAUDE.md js/INDEX.md js/scrolls/INDEX.md css/INDEX.md docs/INDEX.md planning/current.md
 git commit -m "docs: sync INDEX files after [brief description of what changed]"
 ```
 

@@ -240,6 +240,9 @@
             }
             refreshGameBrowser();
             startBrowserRefresh(); // auto-refresh every 5 seconds
+            // Reload the leaderboard each time the lobby is shown, so it is
+            // up to date after a game ends (not only at login).
+            window.loadMainLeaderboard?.();
         }
 
         function showWaitingRoom(gameId, joinCode, isPrivate, roomName) {

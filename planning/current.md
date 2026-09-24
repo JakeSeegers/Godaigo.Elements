@@ -115,6 +115,15 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
+  Removed the separate "Hand Full / All Slots Full" cascade popup
+  (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the
+  end-of-turn Scroll Overflow banner like shrine pickups. Leaderboard reloads in
+  `showGameBrowser()`. New lobby "Change Log" button (`js/changelog-ui.js`,
+  data in `changelog.json`). New HOUSE RULES section in CLAUDE.md (no em dashes;
+  release note for every player-facing change), enforced by
+  `.claude/settings.json` SessionStart + Stop hooks in `tools/claude-hooks/`.
+  `/sync-docs` moved to `.claude/skills/sync-docs/SKILL.md` so it actually loads.
 - **CONNECTIVITY & PERFORMANCE, REAL PLAYTEST FINDING: currentTurnNumber
   never updated on receiving clients (turn-change/turn-sync handlers)** —
   `js/lobby.js`. Found from actual `godaigoTest.diag()` output during a real

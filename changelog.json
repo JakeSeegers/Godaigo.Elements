@@ -1,0 +1,15 @@
+{
+  "_readme": "Player-facing release notes, newest first. Shown by the Change Log button in the lobby (js/changelog-ui.js). Rules: see HOUSE RULES in CLAUDE.md. Simple English, short lines, no em dashes. Add changes to today's entry if one exists, or add a new entry at the top.",
+  "entries": [
+    {
+      "id": "2026-09-24",
+      "date": "2026-09-24",
+      "title": "Lobby and scroll overflow updates",
+      "changes": [
+        "New: a Change Log button in the lobby shows what changed in each update.",
+        "The leaderboard now reloads each time you come back to the lobby.",
+        "Removed the separate \"All Slots Full\" cascade popup. When you pick up a scroll with a full hand (also from Unbidden Lamplight or Quick Reflexes), the Scroll Overflow banner asks you to cascade at the end of your turn."
+      ]
+    }
+  ]
+}

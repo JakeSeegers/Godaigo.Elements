@@ -277,3 +277,65 @@
 @media (prefers-reduced-motion: reduce) {
   .auth-btn-primary, .auth-btn-secondary, .auth-btn-tutorial { transition: none; }
 }
+
+/* ── Change Log button + modal (js/changelog-ui.js) ─────────────────────── */
+#changelog-btn { position: relative; }
+#changelog-btn.has-new::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--pp-rust);
+  box-shadow: 0 0 4px var(--pp-rust);
+}
+#changelog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.changelog-modal {
+  background: var(--pp-parch);
+  color: var(--pp-ink);
+  border: 2px solid var(--pp-maroon);
+  border-radius: 8px;
+  padding: 16px 20px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  font-size: 17px; /* body default is 32px (base.css), too big for a list */
+}
+.changelog-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: var(--pp-maroon);
+  text-align: center;
+  margin-bottom: 10px;
+}
+.changelog-body { overflow-y: auto; flex: 1; }
+.changelog-entry { margin-bottom: 14px; }
+.changelog-entry-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  border-bottom: 1px solid var(--pp-maroon);
+  padding-bottom: 3px;
+  margin-bottom: 6px;
+}
+.changelog-entry-title { font-weight: bold; font-size: 19px; }
+.changelog-entry-date { font-size: 12px; color: var(--pp-ink-soft); white-space: nowrap; }
+.changelog-entry ul { margin: 0; padding-left: 20px; }
+.changelog-entry li { margin-bottom: 4px; line-height: 1.35; }
+.changelog-empty { text-align: center; color: var(--pp-ink-soft); padding: 12px; }
+.changelog-close { align-self: center; margin-top: 10px; padding: 6px 18px; font-size: 17px; }
