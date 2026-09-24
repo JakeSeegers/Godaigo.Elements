@@ -224,8 +224,9 @@ Full list: see `js/INDEX.md § Window Globals`.
 |-------|-------------|---------|
 | `game_room` | lobby.js | Active game sessions |
 | `players` | lobby.js | Player slots in a session |
-| `user_profiles` | gamification.js | XP, gold, level, stats |
-| `user_activities` | gamification.js | Activity log for rewards |
+| `user_profiles` | gamification.js | XP, gold, level, stats. Clients may only UPDATE `stats`, `updated_at`, `skip_intro`; gold/XP/level/badges change ONLY through server functions: `claim_daily_login()`, `claim_game_win(room)`, `claim_training_reward(amount)` (60/claim, 300/day), `spend_gold(amount)`. `award_gold` / `update_user_xp` / `award_badge` are server-internal (not client-callable). See `sql/secure-rewards.sql`. |
+| `user_activities` | gamification.js | Activity log for rewards. Clients may only insert `scroll_cast` / `element_activated` with no rewards; everything else is written by the server functions above. Inserts fire `check_badges_trigger` (badges). |
+| `game_rewards` | claim_game_win() | One XP claim per (room, player); also the 4-per-hour win-claim limit. Server only. |
 | `badges` | gamification-ui.js | Badge ownership |
 | `account_recovery` | edge fn account-recovery | Optional recovery email per account (+ verified flag, confirm token hash). RLS on, NO client policies; client only uses RPCs `my_recovery_email()` / `remove_my_recovery_email()`. `sql/account-recovery.sql` |
 | `recovery_email_log` | edge fn account-recovery | One row per email sent, for rate limits (2/account/hour, 3/address/day, 90/day total). Server only. |
