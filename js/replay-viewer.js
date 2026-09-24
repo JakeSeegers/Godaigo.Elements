@@ -117,7 +117,10 @@
         const msg = { type: 'broadcast', event: move.event, payload: move.payload || {} };
         for (const h of state.handlers) {
             if (h.event !== move.event && h.event !== '*') continue;
-            try { h.cb(msg); } catch (e) { console.warn(`[replay] handler for ${move.event} failed:`, e); }
+            try { h.cb(msg); } catch (e) {
+                console.warn(`[replay] handler for ${move.event} failed:`, e);
+                state.errors.push(`${move.event}: ${e?.message || e}`);
+            }
         }
     }
 
@@ -142,10 +145,16 @@
     function pause() { if (!state) return; state.playing = false; clearTimeout(state.timer); updateControls(); }
 
     // ── Entry point ──────────────────────────────────────────────
-    async function open(matchId) {
+    // opts.check: used by the replay check (runCheck below): no controls, no
+    // autoplay, errors are thrown instead of shown.
+    async function open(matchId, opts = {}) {
         if (state) { console.warn('[replay] already running; reload to start another'); return; }
         const { data: match, error } = await supabase.rpc('get_match_replay', { p_match_id: matchId });
-        if (error || !match) { alert('Could not load this replay: ' + (error?.message || 'not found')); return; }
+        if (error || !match) {
+            if (opts.check) throw new Error('could not load: ' + (error?.message || 'not found'));
+            alert('Could not load this replay: ' + (error?.message || 'not found'));
+            return;
+        }
         const seats = (match.seats || []).slice().sort((a, b) => a.index - b.index);
         if (!seats.length) { alert('This replay has no players recorded.'); return; }
         log(`match ${match.id}: ${match.moves.length} moves, ${seats.length} seats`);
@@ -183,9 +192,147 @@
         ['end-turn', 'leave-game'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
         if (typeof updateStatus === 'function') updateStatus('Watching a replay');
 
-        state = { match, moves: match.moves || [], index: 0, playing: false, speed: 1, timer: null, handlers };
+        state = { match, moves: match.moves || [], index: 0, playing: false, speed: 1, timer: null, handlers, errors: [] };
+        if (opts.check) return;
         buildControls();
         setTimeout(play, 1500); // let the board finish its intro animation
+    }
+
+    // ── Replay check (hermit) ────────────────────────────────────
+    // Anti-cheat plan part 2: replay a finished match at full speed, take the
+    // same board fingerprint the players' browsers took at each turn change
+    // (MatchWitness.fingerprint), and look at the winner on the replayed
+    // board. Runs inside a hidden iframe (index.html?replaycheck=ID) so each
+    // match gets a fresh page; the result is posted to the parent window,
+    // which compares it with the reported fingerprints (checkMatch below).
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    async function runCheck(matchId) {
+        await open(matchId, { check: true });
+        if (!state) throw new Error('replay did not start');
+        await sleep(300);
+        const fps = {};
+        let last = currentTurnNumber;
+        while (step()) {
+            // Some handlers finish on a short timer; give them a moment, like
+            // the real game's 100 ms fingerprint watcher.
+            await sleep(25);
+            if (currentTurnNumber !== last) {
+                last = currentTurnNumber;
+                if (!(last in fps)) fps[last] = window.MatchWitness?.fingerprint() || null;
+            }
+        }
+        await sleep(1500);
+        const w = state.match.winner_index;
+        let activated = [], atShrine = null;
+        if (typeof w === 'number') {
+            try { activated = [...(spellSystem.playerScrolls?.[w]?.activated || [])].sort(); } catch (e) {}
+            try { atShrine = !!isPlayerAtOwnShrine(w); } catch (e) {}
+        }
+        return {
+            fps,
+            moves: state.moves.length,
+            errorCount: state.errors.length,
+            errors: state.errors.slice(0, 10),
+            final: { winner: w, winType: state.match.win_type, activated, atShrine },
+        };
+    }
+
+    // Parent side: run one match in a hidden iframe and wait for its result.
+    function runInFrame(matchId, timeoutMs = 180000) {
+        return new Promise((resolve) => {
+            const frame = document.createElement('iframe');
+            frame.style.cssText = 'position:fixed;left:-4000px;top:0;width:1400px;height:900px;border:0;';
+            frame.setAttribute('aria-hidden', 'true');
+            const done = (result) => {
+                clearTimeout(timer);
+                window.removeEventListener('message', onMsg);
+                frame.remove();
+                resolve(result);
+            };
+            const onMsg = (ev) => {
+                if (ev.origin !== location.origin || ev.source !== frame.contentWindow) return;
+                if (ev.data?.type === 'godaigo-replay-check' && ev.data.matchId === matchId) done(ev.data);
+            };
+            const timer = setTimeout(() => done({ error: 'timed out' }), timeoutMs);
+            window.addEventListener('message', onMsg);
+            // The folder URL, not index.html: some servers redirect index.html
+            // to the folder and drop the query string.
+            frame.src = new URL('.', location.href).pathname + '?replaycheck=' + encodeURIComponent(matchId);
+            document.body.appendChild(frame);
+        });
+    }
+
+    const PARTS = ['tiles', 'stones', 'pawns', 'activated'];
+
+    // Compare the replay with the reported fingerprints and store the result
+    // on the match (save_match_check). Turn 1 is skipped: players' browsers
+    // take it in the middle of the opening tile placement.
+    async function checkMatch(matchId) {
+        const run = await runInFrame(matchId);
+        let status, detail;
+        if (run.error || !run.result) {
+            status = 'error';
+            detail = { error: run.error || 'no result' };
+        } else {
+            const r = run.result;
+            const { data: reported } = await supabase.rpc('get_match_fingerprints', { p_match_id: matchId });
+            const mismatches = [];
+            let compared = 0, skippedFormat = 0;
+            for (const f of (reported || [])) {
+                if (!(f.turn > 1)) continue;
+                if (!f.fp || f.fp.length !== 32) { skippedFormat++; continue; }
+                const mine = r.fps[f.turn];
+                compared++;
+                if (mine === f.fp) continue;
+                mismatches.push({
+                    turn: f.turn, seat: f.seat,
+                    parts: mine ? PARTS.filter((_, i) => mine.slice(i * 8, i * 8 + 8) !== f.fp.slice(i * 8, i * 8 + 8)) : ['missing'],
+                });
+            }
+            // The recorded winner must have won on the replayed board too.
+            const fin = r.final || {};
+            const scrollWin = typeof fin.winner === 'number' && (!fin.winType || fin.winType === 'scrolls');
+            const winnerOk = !scrollWin || ((fin.activated || []).length >= 5 && fin.atShrine === true);
+            status = mismatches.length || !winnerOk ? 'mismatch'
+                   : compared ? 'ok'
+                   : 'no_data';
+            detail = {
+                compared, skippedFormat, mismatches: mismatches.slice(0, 30),
+                firstMismatchTurn: mismatches.length ? Math.min(...mismatches.map(m => m.turn)) : null,
+                winnerOk, final: fin, moves: r.moves, replayErrors: r.errorCount, errors: r.errors,
+            };
+        }
+        const { error } = await supabase.rpc('save_match_check', { p_match_id: matchId, p_status: status, p_detail: detail });
+        if (error) console.warn('[replay-check] save failed:', error.message);
+        log(`check ${matchId}: ${status}`, detail);
+        return { status, detail };
+    }
+
+    // Inside the iframe: index.html?replaycheck=ID runs the check and reports.
+    async function frameEntry() {
+        const id = +new URLSearchParams(location.search).get('replaycheck');
+        if (!id || window.parent === window) return;
+        const post = (payload) => window.parent.postMessage({ type: 'godaigo-replay-check', matchId: id, ...payload }, location.origin);
+        try {
+            ['boot-splash', 'lore-intro'].forEach(x => document.getElementById(x)?.remove());
+            document.querySelectorAll('video').forEach(v => { try { v.pause(); } catch (e) {} });
+            // Wait for sign-in and the lobby start-up, so nothing resets the
+            // game after the replay has started.
+            for (let i = 0; i < 60; i++) {
+                const { data } = await supabase.auth.getSession();
+                if (data?.session && window.gami?.userId) break;
+                await sleep(500);
+            }
+            await sleep(1500);
+            post({ result: await runCheck(id) });
+        } catch (e) {
+            post({ error: String(e?.message || e) });
+        }
+    }
+    if (new URLSearchParams(location.search).has('replaycheck')) {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', frameEntry);
+        else frameEntry();
     }
 
     // "Restart" reloads the page and reopens the same replay once it's ready.
@@ -249,12 +396,75 @@
             </div>`;
     }
 
+    // Hermit "Check" tab: replay verification status per match.
+    function checkSummary(m) {
+        const d = m.check_detail || {};
+        if (!m.check_status) return 'not checked';
+        if (m.check_status === 'ok') return `ok (${d.compared} turns match)`;
+        if (m.check_status === 'no_data') return `no fingerprints to compare${d.skippedFormat ? ` (${d.skippedFormat} old format)` : ''}${d.winnerOk === false ? ', winner NOT confirmed' : ''}`;
+        if (m.check_status === 'error') return 'error: ' + (d.error || 'unknown');
+        const parts = [...new Set((d.mismatches || []).flatMap(x => x.parts))].join(', ');
+        return [d.firstMismatchTurn ? `differs from turn ${d.firstMismatchTurn} (${parts})` : '',
+                d.winnerOk === false ? 'winner NOT confirmed on the replayed board' : ''].filter(Boolean).join('; ');
+    }
+
+    function checkRowHtml(m) {
+        const players = (m.players || []).slice().sort((a, b) => a.index - b.index)
+            .map(p => `${m.winner_index === p.index ? '👑 ' : ''}${esc(p.username)}`).join(' vs ');
+        const flags = [m.desync_count ? `${m.desync_count} desync reports` : '', m.disputed ? 'disputed' : ''].filter(Boolean).join(' · ');
+        return `
+            <div class="replay-row">
+                <div class="replay-row-main">
+                    <div class="replay-players">#${m.id} ${players}</div>
+                    <div class="replay-info">${esc([fmtWhen(m.started_at), fmtDuration(m.duration_s), flags].filter(Boolean).join(' · '))}</div>
+                    <div class="replay-check replay-check-${esc(m.check_status || 'none')}">${esc(checkSummary(m))}</div>
+                </div>
+                <div class="replay-row-actions">
+                    <button class="replay-watch" data-id="${m.id}">Watch</button>
+                    <button class="replay-run-check" data-id="${m.id}">Check</button>
+                </div>
+            </div>`;
+    }
+
+    let checkRows = [];
+    let checking = false;
+
+    async function runChecks(ids) {
+        if (checking) return;
+        checking = true;
+        const status = document.querySelector('#replay-browser .replay-check-progress');
+        try {
+            for (let i = 0; i < ids.length; i++) {
+                if (status) status.textContent = `Checking #${ids[i]} (${i + 1} of ${ids.length})...`;
+                await checkMatch(ids[i]);
+            }
+        } finally {
+            checking = false;
+            if (status) status.textContent = '';
+            if (browserTab === 'check') renderList();
+        }
+    }
+
     async function renderList() {
         const overlay = document.getElementById('replay-browser');
         if (!overlay) return;
         overlay.querySelectorAll('.replay-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === browserTab));
         const list = overlay.querySelector('.replay-list');
         list.innerHTML = '<div class="replay-empty">Loading...</div>';
+        if (browserTab === 'check') {
+            const { data, error } = await supabase.rpc('list_matches_for_check', { p_limit: 50 });
+            if (browserTab !== 'check') return;
+            if (error) { list.innerHTML = `<div class="replay-empty">Could not load: ${esc(error.message)}</div>`; return; }
+            checkRows = Array.isArray(data) ? data : [];
+            list.innerHTML = `
+                <div class="replay-check-bar">
+                    <button class="replay-check-all">Check all unchecked</button>
+                    <span class="replay-check-progress">${checking ? 'Checking...' : ''}</span>
+                </div>
+                <div class="replay-note">Replays each game in a hidden frame and compares its board, turn by turn, with the fingerprints the players' browsers reported. Also checks the winner on the replayed board.</div>
+                ${checkRows.map(checkRowHtml).join('') || '<div class="replay-empty">No finished games.</div>'}`;
+            return;
+        }
         const mine = browserTab === 'mine';
         const { data, error } = await supabase.rpc(mine ? 'list_my_matches' : 'list_public_matches', { p_limit: 30 });
         if (!document.getElementById('replay-browser') || (browserTab === 'mine') !== mine) return;
@@ -278,6 +488,7 @@
                 <div class="replay-tabs">
                     <button class="replay-tab" data-tab="mine">My games</button>
                     <button class="replay-tab" data-tab="public">Public</button>
+                    ${window.isHermit?.() ? '<button class="replay-tab" data-tab="check">Check</button>' : ''}
                 </div>
                 <div class="replay-list"></div>
                 <div class="replay-note">Games are kept for 30 days. Posted games are kept until you remove them. Posting shows the whole game, with every player's name, to everyone.</div>
@@ -285,12 +496,20 @@
             </div>`;
         overlay.addEventListener('click', async (ev) => {
             const t = ev.target;
-            if (t === overlay || t.classList.contains('replay-close')) { overlay.remove(); return; }
+            if (t === overlay || t.classList.contains('replay-close')) {
+                if (checking) return; // closing would drop the running check's frame results
+                overlay.remove(); return;
+            }
             if (t.classList.contains('replay-tab')) { browserTab = t.dataset.tab; renderList(); return; }
             if (t.classList.contains('replay-watch')) {
                 t.disabled = true; t.textContent = 'Loading...';
                 overlay.remove();
                 open(+t.dataset.id);
+                return;
+            }
+            if (t.classList.contains('replay-run-check')) { runChecks([+t.dataset.id]); return; }
+            if (t.classList.contains('replay-check-all')) {
+                runChecks(checkRows.filter(m => !m.check_status).map(m => m.id));
                 return;
             }
             if (t.classList.contains('replay-post')) {
@@ -306,5 +525,5 @@
         renderList();
     }
 
-    window.Replay = { open, openBrowser, play, pause, step, get state() { return state; } };
+    window.Replay = { open, openBrowser, checkMatch, runCheck, play, pause, step, get state() { return state; } };
 })();

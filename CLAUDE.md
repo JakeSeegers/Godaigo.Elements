@@ -156,8 +156,12 @@ Order matters — later scripts depend on earlier ones.
                              messages dispatched into setupGameBroadcast()'s own handlers, timed, with
                              play/pause/step/speed. Exit/Restart reload the page. Players: lobby "Replays"
                              button -> Replay.openBrowser(): "My games" (Watch, Post publicly / Remove from
-                             public) and "Public" (Watch). Verified: match 5 replay equals the real board
-                             fingerprints on turns 2-22.
+                             public) and "Public" (Watch). Hermit-only "Check" tab = replay verification:
+                             Replay.checkMatch(id) runs index.html?replaycheck=ID in a hidden iframe
+                             (runCheck: full-speed replay, fingerprint per turn change, winner's final
+                             board), compares with get_match_fingerprints (32-char, turn > 1), stores
+                             matches.check_status ok/mismatch/no_data/error + check_detail
+                             (save_match_check, sql/match-check.sql).
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
@@ -255,6 +259,7 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `game_room` | lobby.js | Active game sessions |
 | `players` | lobby.js | Player slots in a session |
 | `matches` | match-recorder.js | One row per online game: players snapshot, deck seed, settings, winner, status (playing/finished/abandoned), move_count, `keep`. Written ONLY via RPCs `start_match` / `finish_match` (room host or hermit). Read ONLY via RPCs (sql/replay-access.sql): `list_my_matches`, `list_public_matches`, `get_match_replay` (finished + (player of it OR `is_public` OR hermit)), `set_match_public` (players of it). Posting sets `keep`. Finished matches older than 30 days are deleted unless `keep`. `game_room.match_id` points at the live one. |
+| `matches` (check) | replay-viewer.js | `check_status` / `check_detail` / `checked_at`: replay verification result. Hermit-only RPCs `list_matches_for_check`, `get_match_fingerprints`, `save_match_check` (sql/match-check.sql). |
 | `match_moves` | match-recorder.js | Every broadcast message of a match in order (`seq` assigned by the server), with event name, sender seat, payload. Written ONLY via `append_match_moves` (room host or hermit, batches of 200 max, 32 KB per payload). |
 | `user_profiles` | gamification.js | XP, gold, level, stats. Clients may only UPDATE `stats`, `updated_at`, `skip_intro`; gold/XP/level/badges change ONLY through server functions: `claim_daily_login()`, `claim_game_win(room)`, `claim_training_reward(amount)` (60/claim, 300/day), `spend_gold(amount)`. Name colours: `cosmetics_owned` / `name_color` (public read, changed only by `buy_cosmetic(id)` / `equip_cosmetic(id or null)`, prices in `cosmetic_price()`, sql/cosmetics.sql; the leaderboard colours names from `name_color`). `award_gold` / `update_user_xp` / `award_badge` are server-internal (not client-callable). See `sql/secure-rewards.sql`. |
 | `user_activities` | gamification.js | Activity log for rewards. Clients may only insert `scroll_cast` / `element_activated` with no rewards; everything else is written by the server functions above. Inserts fire `check_badges_trigger` (badges). |

@@ -189,8 +189,16 @@ reach/beat it from here.
   call it on some or all paths. Fix in game-core applyScrollEffects: broadcast 'scroll-effect'
   at cast time for selection scrolls too (element is already activated locally there). Later
   completion repeats it (harmless). Tested: Create pick + cancel both broadcast void.
-- **Next:** automatic replay verification (server or hermit tool: replay each finished match,
-  compare fingerprints, flag mismatches), then Phase 4 stats + hermit suspicious-player screen.
+- **Replay verification DONE (2026-09-24, sql/match-check.sql):** hermit "Check" tab in the
+  Replays window. Replay.checkMatch(id) loads `./?replaycheck=ID` in a hidden iframe (folder
+  URL: `npx serve` redirects index.html and drops the query), runCheck() replays at full speed
+  (25 ms per message), fingerprints each turn change, reads the winner's final board, posts it
+  back; the parent compares with get_match_fingerprints (32-char only, turn > 1) and saves
+  matches.check_status/check_detail. Headless on match 5 (14 s): 21 turns match, winner NOT
+  confirmed (the Create bug); with one reported fingerprint changed: "differs from turn 12
+  (stones)". Not yet run on the live server data (needs the hermit's browser).
+- **Next:** Phase 4 stats + hermit suspicious-player screen (can use check_status,
+  desync_count, disputed, pending rewards).
 - **Name colours on the server (2026-09-24, sql/cosmetics.sql):** owned/equipped name colours
   were localStorage-only (invisible to others, fakeable). Now user_profiles.cosmetics_owned /
   name_color via buy_cosmetic / equip_cosmetic; js/cosmetics-system.js reads gami.profile.

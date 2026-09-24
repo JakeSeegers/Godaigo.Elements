@@ -489,3 +489,10 @@
   .replay-row { flex-direction: column; align-items: stretch; }
   .replay-row-actions { flex-direction: row; }
 }
+.replay-check { font-size: 13px; margin-top: 2px; }
+.replay-check-ok { color: #2e8b57; }
+.replay-check-mismatch, .replay-check-error { color: var(--pp-rust, #c0392b); font-weight: bold; }
+.replay-check-none, .replay-check-no_data { color: var(--pp-ink-soft); }
+.replay-check-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.replay-check-bar button { padding: 4px 10px; font-size: 14px; }
+.replay-check-progress { font-size: 13px; color: var(--pp-ink-soft); }
