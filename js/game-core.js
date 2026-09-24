@@ -131,13 +131,12 @@
                 const cascade = this.pendingCascades[playerIndex];
                 if (!cascade) return false;
 
-                this.showCascadePrompt(
-                    cascade.scrollName,
-                    cascade.scrollInfo,
-                    cascade.shrineType,
-                    cascade.canCascadeToActive
-                );
-                return true;
+                // The old "Hand Full! / All Slots Full!" cascade popup is gone —
+                // overflow is handled only by the end-of-turn overflow banner
+                // (showEndTurnOverflowModal). Nothing sets a pending cascade now,
+                // so just drop any stale one.
+                this.clearPendingCascade(playerIndex);
+                return false;
             }
 
             // Fisher-Yates shuffle algorithm
@@ -899,236 +898,6 @@
                 }
 
                 return scrollInfo;
-            }
-
-            // Show cascade prompt when hand is full
-            // canCascadeToActive: true = Active area has room, false = must go to Common Area
-            showCascadePrompt(newScrollName, newScrollInfo, shrineType, canCascadeToActive) {
-                // Store as pending cascade so it blocks actions and can be re-shown
-                const playerIdx = isMultiplayer ? myPlayerIndex : activePlayerIndex;
-                this.setPendingCascade(playerIdx, {
-                    scrollName: newScrollName,
-                    scrollInfo: newScrollInfo,
-                    shrineType: shrineType,
-                    canCascadeToActive: canCascadeToActive
-                });
-
-                // Create overlay backdrop (prevents clicking elsewhere)
-                const overlay = document.createElement('div');
-                overlay.id = 'cascade-overlay';
-                Object.assign(overlay.style, {
-                    position: 'fixed',
-                    top: '0', left: '0', right: '0', bottom: '0',
-                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                    zIndex: '1001'
-                });
-
-                const popup = document.createElement('div');
-                popup.id = 'cascade-popup';
-                Object.assign(popup.style, {
-                    position: 'fixed', left: '50%', top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    backgroundColor: '#2c3e50', padding: '20px',
-                    borderRadius: '10px', boxShadow: '0 0 20px rgba(0,0,0,0.5)',
-                    zIndex: '1002', minWidth: '400px', maxWidth: '600px',
-                    maxHeight: '80vh', overflowY: 'auto', color: 'white'
-                });
-
-                const title = document.createElement('h2');
-                title.textContent = canCascadeToActive
-                    ? 'Hand Full! Cascade a Scroll'
-                    : 'All Slots Full! Cascade to Common Area';
-                title.style.textAlign = 'center';
-                title.style.color = canCascadeToActive ? '#f39c12' : '#e74c3c';
-                title.style.marginTop = '0';
-                popup.appendChild(title);
-
-                const subtitle = document.createElement('p');
-                if (canCascadeToActive) {
-                    subtitle.innerHTML = `You found "<strong>${newScrollInfo.name}</strong>" but your hand is full (${this.MAX_HAND_SIZE}/${this.MAX_HAND_SIZE}).<br>Choose a scroll to cascade to your <strong>Active Area</strong> or <strong>Common Area</strong>:`;
-                } else {
-                    subtitle.innerHTML = `You found "<strong>${newScrollInfo.name}</strong>" but hand (${this.MAX_HAND_SIZE}/${this.MAX_HAND_SIZE}) and active (${this.MAX_ACTIVE_SIZE}/${this.MAX_ACTIVE_SIZE}) are full.<br>Choose a scroll to cascade to the <strong>Common Area</strong>:`;
-                }
-                subtitle.style.textAlign = 'center';
-                subtitle.style.color = '#bdc3c7';
-                popup.appendChild(subtitle);
-
-                const self = this;
-                const scrolls = this.getPlayerScrolls(false);
-
-                // Create a card for each scroll in hand + active (if applicable) + the new scroll
-                let allScrollOptions = [...scrolls.hand, newScrollName];
-                if (!canCascadeToActive) {
-                    // When both are full, also include active scrolls as cascade options
-                    allScrollOptions = [...scrolls.hand, ...scrolls.active, newScrollName];
-                }
-
-                allScrollOptions.forEach(scrollName => {
-                    const pattern = this.patterns[scrollName];
-                    const element = this.getScrollElement(scrollName);
-                    const isNew = scrollName === newScrollName;
-                    const isInActive = scrolls.active.has(scrollName);
-                    const elementColor = element === 'catacomb' ? '#9b59b6' : STONE_TYPES[element]?.color || '#666';
-
-                    const card = document.createElement('div');
-                    Object.assign(card.style, {
-                        backgroundColor: isNew ? '#1a3a1a' : (isInActive ? '#3a2a1a' : '#34495e'),
-                        border: isNew ? '2px solid #27ae60' : (isInActive ? '2px solid #f39c12' : '1px solid #555'),
-                        borderRadius: '8px',
-                        padding: '12px',
-                        marginBottom: '10px',
-                        color: 'white'
-                    });
-
-                    const header = document.createElement('div');
-                    header.style.display = 'flex';
-                    header.style.justifyContent = 'space-between';
-                    header.style.alignItems = 'center';
-                    header.style.marginBottom = '8px';
-
-                    const nameSpan = document.createElement('span');
-                    let prefix = '';
-                    if (isNew) prefix = 'NEW: ';
-                    else if (isInActive) prefix = '⚡ ACTIVE: ';
-                    nameSpan.textContent = prefix + (pattern ? pattern.name : scrollName);
-                    nameSpan.style.fontWeight = 'bold';
-                    nameSpan.style.color = elementColor;
-                    header.appendChild(nameSpan);
-                    card.appendChild(header);
-
-                    if (pattern) {
-                        const desc = document.createElement('div');
-                        desc.textContent = pattern.description;
-                        desc.style.fontSize = '12px';
-                        desc.style.color = '#95a5a6';
-                        desc.style.marginBottom = '10px';
-                        card.appendChild(desc);
-                    }
-
-                    // Button container
-                    const buttonRow = document.createElement('div');
-                    buttonRow.style.display = 'flex';
-                    buttonRow.style.gap = '10px';
-                    buttonRow.style.justifyContent = 'flex-end';
-
-                    // Cascade to Active button (only if active has room and scroll isn't already in active)
-                    if (canCascadeToActive && !isInActive) {
-                        const toActiveBtn = document.createElement('button');
-                        toActiveBtn.textContent = 'To Active';
-                        Object.assign(toActiveBtn.style, {
-                            backgroundColor: '#f39c12',
-                            color: 'white',
-                            border: 'none',
-                            padding: '8px 12px',
-                            borderRadius: '5px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold'
-                        });
-                        toActiveBtn.onmouseenter = () => toActiveBtn.style.backgroundColor = '#e67e22';
-                        toActiveBtn.onmouseleave = () => toActiveBtn.style.backgroundColor = '#f39c12';
-
-                        toActiveBtn.onclick = () => {
-                            if (scrollName === newScrollName) {
-                                // Cascade new scroll directly to active
-                                scrolls.active.add(newScrollName);
-
-                                if (isMultiplayer) {
-                                    broadcastGameAction('scroll-collected', {
-                                        playerIndex: activePlayerIndex,
-                                        scrollName: newScrollName,
-                                        shrineType: shrineType
-                                    });
-                                    broadcastGameAction('scroll-move', {
-                                        playerIndex: activePlayerIndex,
-                                        scrollName: newScrollName,
-                                        toLocation: 'active'
-                                    });
-                                }
-                                updateStatus(`Cascaded new scroll "${newScrollInfo.name}" to Active Area`);
-                            } else {
-                                // Cascade existing scroll to active, add new to hand
-                                scrolls.hand.delete(scrollName);
-                                scrolls.active.add(scrollName);
-                                scrolls.hand.add(newScrollName);
-
-                                if (isMultiplayer) {
-                                    broadcastGameAction('scroll-move', {
-                                        playerIndex: activePlayerIndex,
-                                        scrollName: scrollName,
-                                        toLocation: 'active'
-                                    });
-                                    broadcastGameAction('scroll-collected', {
-                                        playerIndex: activePlayerIndex,
-                                        scrollName: newScrollName,
-                                        shrineType: shrineType
-                                    });
-                                }
-                                updateStatus(`Cascaded "${self.patterns[scrollName]?.name || scrollName}" to Active, kept "${newScrollInfo.name}" in hand`);
-                            }
-
-                            self.updateScrollCount();
-                            self.clearPendingCascade(playerIdx);
-                            document.body.removeChild(overlay);
-                        };
-                        buttonRow.appendChild(toActiveBtn);
-                    }
-
-                    // Cascade to Common Area button
-                    const toCommonBtn = document.createElement('button');
-                    toCommonBtn.textContent = 'To Common';
-                    Object.assign(toCommonBtn.style, {
-                        backgroundColor: '#e74c3c',
-                        color: 'white',
-                        border: 'none',
-                        padding: '8px 12px',
-                        borderRadius: '5px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                    });
-                    toCommonBtn.onmouseenter = () => toCommonBtn.style.backgroundColor = '#c0392b';
-                    toCommonBtn.onmouseleave = () => toCommonBtn.style.backgroundColor = '#e74c3c';
-
-                    toCommonBtn.onclick = () => {
-                        if (scrollName === newScrollName) {
-                            // Cascade new scroll to common area
-                            self.discardToCommonArea(newScrollName);
-                            updateStatus(`Cascaded new scroll "${newScrollInfo.name}" to Common Area`);
-                        } else {
-                            // Cascade existing scroll to common, add new to hand
-                            if (isInActive) {
-                                scrolls.active.delete(scrollName);
-                            } else {
-                                scrolls.hand.delete(scrollName);
-                            }
-                            self.discardToCommonArea(scrollName);
-                            scrolls.hand.add(newScrollName);
-
-                            if (isMultiplayer) {
-                                broadcastGameAction('scroll-discard', {
-                                    playerIndex: activePlayerIndex,
-                                    scrollName: scrollName
-                                });
-                                broadcastGameAction('scroll-collected', {
-                                    playerIndex: activePlayerIndex,
-                                    scrollName: newScrollName,
-                                    shrineType: shrineType
-                                });
-                            }
-                            updateStatus(`Cascaded "${self.patterns[scrollName]?.name || scrollName}" to Common Area, kept "${newScrollInfo.name}"`);
-                        }
-
-                        self.updateScrollCount();
-                        self.clearPendingCascade(playerIdx);
-                        document.body.removeChild(overlay);
-                    };
-                    buttonRow.appendChild(toCommonBtn);
-
-                    card.appendChild(buttonRow);
-                    popup.appendChild(card);
-                });
-
-                overlay.appendChild(popup);
-                document.body.appendChild(overlay);
             }
 
             // End-of-turn overflow: hand or active over capacity.
@@ -1958,15 +1727,11 @@
                     // Clear the pending redirect
                     this.scrollEffects.pendingHandRedirect = null;
 
-                    // If hand is now over the limit, trigger cascade prompt so player resolves it
+                    // If hand is now over the limit, the end-of-turn overflow banner
+                    // makes the player resolve it (no separate cascade popup)
                     const lamplightScrolls = this.playerScrolls[lamplightCasterIndex];
                     if (lamplightScrolls.hand.size > this.MAX_HAND_SIZE) {
-                        const scrollInfo = this.getScrollInfo ? this.getScrollInfo(scrollName) : null;
-                        const canCascadeToActive = lamplightScrolls.active.size < this.MAX_ACTIVE_SIZE;
                         updateStatus(`Unbidden Lamplight sent "${scrollName}" to your hand — hand is over the limit. Cascade a scroll before ending your turn!`);
-                        if (lamplightCasterIndex === (isMultiplayer ? myPlayerIndex : activePlayerIndex)) {
-                            this.showCascadePrompt(scrollName, scrollInfo, null, canCascadeToActive);
-                        }
                     } else {
                         updateStatus('Unbidden Lamplight sent the scroll to your hand!');
                     }
