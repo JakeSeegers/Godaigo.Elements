@@ -377,14 +377,158 @@
         document.addEventListener('keydown', dismiss);
         document.addEventListener('click', dismiss);
 
-        video.play().then(() => {
-            playStartedAt = performance.now();
-            rafId = requestAnimationFrame(loop);
-        }).catch(() => {
-            // Even muted autoplay was blocked (rare) — skip straight to
-            // the prompt so there's still something for the player to act
-            // on.
-            showPrompt();
+        // ── Boot screen / preload ───────────────────────────────────────
+        // Nothing starts until the splash's own assets are local. On a
+        // first (uncached) visit the ~8MB of parallax background images
+        // download at the same time as the 226KB splash video and starve
+        // it, so the video started late and in pieces while the background
+        // popped in behind it — the source of the early-frame glitches,
+        // which faded after a few reloads once everything was cached.
+        // A black boot screen (segmented loading bar + "what's loading"
+        // line) covers all of that, then fades away and the video starts
+        // clean. Built and styled entirely inline here, not in
+        // css/boot-splash.css / index.html, so a browser that caches those
+        // files separately from this one can't pair mismatched versions.
+        const PRELOAD_MAX_MS = 12000; // start anyway after this, never hang
+        const BOOT_SHOW_DELAY_MS = 250; // warm-cache loads finish first and never show it
+        const BG = 'images/Background/background/';
+        const ASSETS = [
+            // label shown while loading, url. Images are the same files
+            // js/parallax.js puts behind the splash.
+            { label: 'Splash animation', url: video.getAttribute('src'), kind: 'video' },
+            { label: 'Title logo',       url: 'images/Final Logo Sign In.png' },
+            { label: 'Deep space',       url: BG + 'Truebackground.png' },
+            { label: 'Star field',       url: BG + 'secondlayermuchbiggerthantrue.png' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud.png' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud2.png' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud3.png' },
+            { label: 'Nebula clouds',    url: BG + 'smallcloud4.png' },
+        ];
+        const BAR_SEGMENTS = 24;
+
+        splash.style.transition = 'opacity 1.4s ease, background-color 0.5s ease';
+        splash.style.backgroundColor = '#000';
+
+        const boot = document.createElement('div');
+        boot.style.cssText =
+            'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);' +
+            'width:min(420px,80vw);display:flex;flex-direction:column;gap:12px;' +
+            "font-family:var(--font-pixel,'Press Start 2P',monospace);color:#e8e4d8;" +
+            'pointer-events:none;opacity:0;transition:opacity 0.3s ease;';
+        const bootTop = document.createElement('div');
+        bootTop.style.cssText = 'display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;';
+        const bootTitle = document.createElement('span');
+        bootTitle.textContent = 'LOADING';
+        const bootPct = document.createElement('span');
+        bootPct.textContent = '0%';
+        bootTop.append(bootTitle, bootPct);
+        const bar = document.createElement('div');
+        bar.style.cssText =
+            'display:flex;gap:3px;padding:4px;border:2px solid #e8e4d8;' +
+            'box-shadow:0 0 12px rgba(255,240,200,0.25);';
+        const segs = [];
+        for (let i = 0; i < BAR_SEGMENTS; i++) {
+            const seg = document.createElement('div');
+            seg.style.cssText = 'flex:1;height:14px;background:#222;transition:background 0.15s ease,box-shadow 0.15s ease;';
+            bar.appendChild(seg);
+            segs.push(seg);
+        }
+        const bootItem = document.createElement('div');
+        bootItem.style.cssText = 'font-size:9px;letter-spacing:1px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        bootItem.textContent = '…';
+        boot.append(bootTop, bar, bootItem);
+        splash.appendChild(boot);
+        const bootTimer = setTimeout(() => { boot.style.opacity = '1'; }, BOOT_SHOW_DELAY_MS);
+
+        // Each asset reports progress 0..1: the video by how much of it is
+        // buffered, images all-or-nothing. A blinking "next" segment keeps
+        // the bar visibly alive while a big file is still coming in.
+        let shownFrac = 0;
+        let blinkOn = false;
+        function renderBoot() {
+            const frac = ASSETS.reduce((sum, a) => sum + (a.done ? 1 : (a.progress || 0)), 0) / ASSETS.length;
+            shownFrac = Math.max(shownFrac, frac); // never step backwards
+            bootPct.textContent = Math.floor(shownFrac * 100) + '%';
+            const filled = Math.floor(shownFrac * BAR_SEGMENTS);
+            segs.forEach((seg, i) => {
+                const on = i < filled || (i === filled && blinkOn && shownFrac < 1);
+                seg.style.background = on ? '#f4e9c8' : '#222';
+                seg.style.boxShadow = on ? '0 0 6px rgba(255,240,200,0.6)' : 'none';
+            });
+            const current = ASSETS.find(a => !a.done);
+            bootItem.textContent = current ? current.label + '…' : 'Ready';
+        }
+        const blinkTimer = setInterval(() => { blinkOn = !blinkOn; renderBoot(); }, 300);
+
+        // Images load through a plain Image(), NOT fetch(): js/parallax.js
+        // requests these same URLs with <img> tags at the same time, and
+        // the browser shares an in-flight image load between the two but
+        // not with a fetch() — a fetch here downloaded all ~8MB twice.
+        function loadImage(a) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                // decode() too, so the first paint of it isn't a stall.
+                img.onload = () => (img.decode ? img.decode() : Promise.resolve()).then(resolve, resolve);
+                img.onerror = () => { console.warn('Boot splash: preload failed, continuing:', a.url); resolve(); };
+                img.src = a.url;
+            });
+        }
+
+        // Uses the <video> element's own download (preload="auto" in
+        // index.html) rather than fetching it a second time. Ready once
+        // it's fully buffered, or once the browser has decided it has
+        // enough and stopped downloading (NETWORK_IDLE) — never waits on
+        // a video that errored.
+        function loadVideo(a) {
+            return new Promise((resolve) => {
+                const EVENTS = ['progress', 'canplaythrough', 'loadeddata', 'error'];
+                function check() {
+                    if (video.error) return done();
+                    const b = video.buffered;
+                    const dur = video.duration;
+                    if (b.length && isFinite(dur) && dur > 0) {
+                        a.progress = Math.min(1, b.end(b.length - 1) / dur);
+                        renderBoot();
+                    }
+                    if (video.readyState < video.HAVE_ENOUGH_DATA) return;
+                    if (a.progress >= 0.99 || video.networkState === video.NETWORK_IDLE) done();
+                }
+                function done() {
+                    EVENTS.forEach(e => video.removeEventListener(e, check));
+                    clearInterval(poll);
+                    resolve();
+                }
+                EVENTS.forEach(e => video.addEventListener(e, check));
+                const poll = setInterval(check, 200); // events alone can be missed
+                check();
+            });
+        }
+
+        function loadAsset(a) {
+            return (a.kind === 'video' ? loadVideo(a) : loadImage(a)).then(() => {
+                a.done = true;
+                renderBoot();
+            });
+        }
+
+        const allReady = Promise.all(ASSETS.map(loadAsset));
+        const timedOut = new Promise((resolve) => setTimeout(resolve, PRELOAD_MAX_MS));
+
+        Promise.race([allReady, timedOut]).then(() => {
+            clearTimeout(bootTimer);
+            clearInterval(blinkTimer);
+            boot.remove();
+            if (dismissed) return; // skipped while still loading
+            splash.style.backgroundColor = 'transparent';
+            video.play().then(() => {
+                playStartedAt = performance.now();
+                rafId = requestAnimationFrame(loop);
+            }).catch(() => {
+                // Even muted autoplay was blocked (rare) — skip straight to
+                // the prompt so there's still something for the player to
+                // act on.
+                showPrompt();
+            });
         });
     } catch (e) {
         // Whatever went wrong, the login screen must not stay hidden.
