@@ -140,6 +140,13 @@ Order matters — later scripts depend on earlier ones.
                              (5 activated + isPlayerAtOwnShrine) -> report_game_result. claim_game_win needs a
                              confirming report from another fresh human seat, else the claim waits as 'pending'
                              and is paid when the report lands. sql/match-witness.sql.
+17d. replay-viewer.js      ← window.Replay: plays a finished match back (Phase 3). get_match_replay -> Supabase
+                             switched "offline" (fake channel, empty from()/rpc()) -> startMultiplayerGame()
+                             from recorded seats + deck seed -> myPlayerIndex = -1 (spectator; game-core
+                             getPlayerScrolls shows the ACTIVE player's hand for a negative seat) -> recorded
+                             messages dispatched into setupGameBroadcast()'s own handlers, timed, with
+                             play/pause/step/speed. Exit/Restart reload the page. Prototype: console
+                             Replay.open(matchId); player screens not built yet.
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)

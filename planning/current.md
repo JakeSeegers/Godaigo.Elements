@@ -140,6 +140,11 @@ reach/beat it from here.
   56 handlers) + recorded moves dispatched in order. Open problem:
   startMultiplayerGame() needs "my player" (spectator seat) and some handlers skip
   "own" moves by myPlayerIndex.
+  Step 2 prototype DONE (js/replay-viewer.js): solved by starting from seat 0 then
+  switching myPlayerIndex to -1; getPlayerScrolls falls back to the active player for
+  a negative seat. Tested headless on match 2 moves 1-159 (placement, tile flips,
+  pawns, stones, turns, Wind activation): 0 handler errors. Full-game run + live
+  check by the owner still to do. Step 3 (My games / Public replays screens) next.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

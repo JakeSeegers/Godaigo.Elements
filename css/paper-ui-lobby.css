@@ -403,3 +403,29 @@
 .acct-btn:disabled { opacity: 0.6; cursor: default; }
 .acct-btn-secondary { opacity: 0.8; }
 .acct-settings .acct-current { margin: 6px 0; }
+
+/* ── Replay controls (js/replay-viewer.js) ───────────────────────────────── */
+#replay-controls {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 10002;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  background: var(--pp-parch, #1a1a2e);
+  color: var(--pp-ink, #eee);
+  border: 2px solid var(--pp-maroon, #9b59b6);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  font-size: 15px;
+}
+#replay-controls button,
+#replay-controls select { padding: 4px 10px; font-size: 15px; cursor: pointer; }
+#replay-controls .replay-title { font-weight: bold; color: var(--pp-maroon, #9b59b6); }
+#replay-controls .replay-progress { min-width: 120px; color: var(--pp-ink-soft, #bbb); }

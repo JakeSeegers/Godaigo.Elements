@@ -247,7 +247,9 @@
                     && window.BotDriver.driverRealIndex() != null)
                     ? window.BotDriver.driverRealIndex()
                     : myPlayerIndex;
-                const displayIndex = (forDisplay && isMultiplayer && realIndex !== null) ? realIndex : activePlayerIndex;
+                // A replay spectator has no seat (myPlayerIndex < 0, see
+                // js/replay-viewer.js): show whoever's turn it is instead.
+                const displayIndex = (forDisplay && isMultiplayer && realIndex !== null && realIndex >= 0) ? realIndex : activePlayerIndex;
 
                 this.ensurePlayerScrollsStructure(displayIndex);
                 return this.playerScrolls[displayIndex];
