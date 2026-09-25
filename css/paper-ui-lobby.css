@@ -496,3 +496,12 @@
 .replay-check-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .replay-check-bar button { padding: 4px 10px; font-size: 14px; }
 .replay-check-progress { font-size: 13px; color: var(--pp-ink-soft); }
+.replay-score {
+  display: inline-block; min-width: 22px; text-align: center; border-radius: 4px;
+  padding: 0 5px; margin-right: 6px; font-size: 13px; background: rgba(128, 128, 128, 0.25);
+}
+.replay-score.some { background: #b8860b; color: #fff; }
+.replay-score.high { background: var(--pp-rust, #c0392b); color: #fff; }
+.replay-flags { margin: 3px 0 0; padding-left: 18px; font-size: 13px; color: var(--pp-rust, #c0392b); }
+.replay-player-matches { margin-left: 18px; }
+.replay-player-days { font-size: 13px; padding: 2px 4px; }

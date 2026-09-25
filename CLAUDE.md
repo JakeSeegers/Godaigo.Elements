@@ -165,6 +165,10 @@ Order matters — later scripts depend on earlier ones.
                              board), compares with get_match_fingerprints (32-char, turn > 1), stores
                              matches.check_status ok/mismatch/no_data/error + check_detail
                              (save_match_check, sql/match-check.sql).
+                             Hermit-only "Players" tab (Phase 4): hermit_player_overview(days) = one row per
+                             human with games/wins/fast wins/last-standing/disputed/replay-unconfirmed wins/
+                             pending/desync games/top-opponent share + a warning score and flag texts;
+                             "Games" -> hermit_player_matches(user) rows with Watch/Check (sql/hermit-players.sql).
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js). Server-backed (sql/cosmetics.sql).

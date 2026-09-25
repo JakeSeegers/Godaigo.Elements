@@ -430,6 +430,52 @@
             </div>`;
     }
 
+    // Hermit "Players" tab (Phase 4): one row per player from
+    // hermit_player_overview (sql/hermit-players.sql), most suspicious first.
+    // "Games" opens that player's games with Watch / Check.
+    let playerDays = 30;
+
+    function playerRowHtml(pl) {
+        const nameStyle = pl.name_color ? (window.cosmeticsSystem?.getNameColorStyle(pl.name_color) || '') : '';
+        const rate = pl.games ? Math.round(100 * pl.wins / pl.games) : 0;
+        const stats = [`${pl.games} games`, `${pl.wins} wins (${rate}%)`,
+            pl.fastest_win_s ? `fastest win ${fmtDuration(pl.fastest_win_s)}` : '',
+            pl.last_standing_wins ? `${pl.last_standing_wins} last-standing` : '',
+            pl.abandoned ? `${pl.abandoned} unfinished` : '',
+            pl.top_opponent && pl.top_opponent_wins ? `most wins vs ${pl.top_opponent} (${pl.top_opponent_wins})` : '',
+            `${pl.checked_games}/${pl.games} checked`].filter(Boolean).join(' · ');
+        const flags = (pl.flags || []).map(f => `<li>${esc(f)}</li>`).join('');
+        return `
+            <div class="replay-player-block" data-user="${esc(pl.user_id)}">
+                <div class="replay-row">
+                    <div class="replay-row-main">
+                        <div class="replay-players"><span class="replay-score${pl.score >= 4 ? ' high' : pl.score > 0 ? ' some' : ''}">${pl.score}</span>
+                            <span style="${nameStyle}">${esc(pl.name)}</span></div>
+                        <div class="replay-info">${esc(stats)}</div>
+                        ${flags ? `<ul class="replay-flags">${flags}</ul>` : ''}
+                    </div>
+                    <div class="replay-row-actions">
+                        <button class="replay-player-games" data-user="${esc(pl.user_id)}">Games</button>
+                    </div>
+                </div>
+                <div class="replay-player-matches"></div>
+            </div>`;
+    }
+
+    async function togglePlayerGames(userId, btn) {
+        const block = btn.closest('.replay-player-block');
+        const box = block?.querySelector('.replay-player-matches');
+        if (!box) return;
+        if (box.innerHTML) { box.innerHTML = ''; btn.textContent = 'Games'; return; }
+        box.innerHTML = '<div class="replay-empty">Loading...</div>';
+        const { data, error } = await supabase.rpc('hermit_player_matches', { p_user: userId, p_limit: 30 });
+        if (error) { box.innerHTML = `<div class="replay-empty">Could not load: ${esc(error.message)}</div>`; return; }
+        const rows = Array.isArray(data) ? data : [];
+        checkRows = rows.concat(checkRows.filter(r => !rows.some(x => x.id === r.id)));
+        box.innerHTML = rows.map(checkRowHtml).join('') || '<div class="replay-empty">No games.</div>';
+        btn.textContent = 'Hide games';
+    }
+
     let checkRows = [];
     let checking = false;
 
@@ -455,6 +501,23 @@
         overlay.querySelectorAll('.replay-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === browserTab));
         const list = overlay.querySelector('.replay-list');
         list.innerHTML = '<div class="replay-empty">Loading...</div>';
+        if (browserTab === 'players') {
+            const { data, error } = await supabase.rpc('hermit_player_overview', { p_days: playerDays });
+            if (browserTab !== 'players') return;
+            if (error) { list.innerHTML = `<div class="replay-empty">Could not load: ${esc(error.message)}</div>`; return; }
+            const rows = Array.isArray(data) ? data : [];
+            list.innerHTML = `
+                <div class="replay-check-bar">
+                    <label>Last <select class="replay-player-days">
+                        ${[7, 30, 90].map(d => `<option value="${d}"${d === playerDays ? ' selected' : ''}>${d} days</option>`).join('')}
+                    </select></label>
+                </div>
+                <div class="replay-note">Built only from server records of online games. The number is a warning score: replay-unconfirmed and disputed wins count most, then very fast wins, most wins against one player, waiting wins and out-of-sync games. A score is a reason to watch the games, not proof.</div>
+                ${rows.map(playerRowHtml).join('') || '<div class="replay-empty">No online games in this period.</div>'}`;
+            const sel = list.querySelector('.replay-player-days');
+            if (sel) sel.onchange = () => { playerDays = +sel.value || 30; renderList(); };
+            return;
+        }
         if (browserTab === 'check') {
             const { data, error } = await supabase.rpc('list_matches_for_check', { p_limit: 50 });
             if (browserTab !== 'check') return;
@@ -492,7 +555,7 @@
                 <div class="replay-tabs">
                     <button class="replay-tab" data-tab="mine">My games</button>
                     <button class="replay-tab" data-tab="public">Public</button>
-                    ${window.isHermit?.() ? '<button class="replay-tab" data-tab="check">Check</button>' : ''}
+                    ${window.isHermit?.() ? '<button class="replay-tab" data-tab="check">Check</button><button class="replay-tab" data-tab="players">Players</button>' : ''}
                 </div>
                 <div class="replay-list"></div>
                 <div class="replay-note">Games are kept for 30 days. Posted games are kept until you remove them. Posting shows the whole game, with every player's name, to everyone.</div>
@@ -512,6 +575,7 @@
                 return;
             }
             if (t.classList.contains('replay-run-check')) { runChecks([+t.dataset.id]); return; }
+            if (t.classList.contains('replay-player-games')) { togglePlayerGames(t.dataset.user, t); return; }
             if (t.classList.contains('replay-check-all')) {
                 runChecks(checkRows.filter(m => !m.check_status).map(m => m.id));
                 return;

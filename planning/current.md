@@ -229,6 +229,15 @@ reach/beat it from here.
   other fresh human in the room, no non-confirming report -> pay), called after the game and at
   sign-in; report_fingerprint no longer counts turn 1; match-witness.js skips late/hidden
   snapshots. Tested retry on room 827 (rolled back).
+- **Phase 4 part 1 DONE (2026-09-25): hermit "Players" tab** in the Replays window.
+  sql/hermit-players.sql: hermit_player_overview(days) aggregates matches + game_rewards per
+  human seat: games, wins, abandoned, fast scroll wins (< 4 min), last-standing wins, disputed
+  wins, replay-unconfirmed wins (check_detail.winnerOk = false), mismatch games, desync games,
+  checked games, pending rewards, top human opponent share. Score = unconfirmed*4 + disputed*4
+  + fast*2 + pending + other mismatches + 3 if >= 60% of >= 5 wins vs one player + 1 if any
+  desync. hermit_player_matches(user) feeds the per-player game list (Watch / Check).
+  Tested on live data as hermit (rolled-back DO block) and headless UI with sample data.
+- **Next:** player stats in Profile (Phase 4 part 2), then automatic replay checks.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the
