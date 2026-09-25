@@ -103,8 +103,12 @@
             return;
         }
         el.innerHTML = '<div class="gami-settings-desc">Loading...</div>';
-        const { data, error } = await supabase.rpc('my_recovery_email');
+        const [{ data, error }, nlRes] = await Promise.all([
+            supabase.rpc('my_recovery_email'),
+            supabase.rpc('my_mailing_list'),
+        ]);
         const row = !error && data && data[0];
+        const newsletter = nlRes?.data === true;
 
         let statusHtml;
         if (!row) statusHtml = 'No recovery email yet. Without one, a forgotten password cannot be reset.';
@@ -124,7 +128,22 @@
                         ${row ? '<button class="acct-btn acct-btn-secondary" id="acct-email-remove">Remove</button>' : ''}
                     </div>
                 </div>
+            </div>
+            <div class="gami-settings-row acct-settings">
+                <div class="gami-settings-label">
+                    <div class="gami-settings-name">News Emails</div>
+                    <label class="auth-check">
+                        <input type="checkbox" id="acct-newsletter"${newsletter ? ' checked' : ''}>
+                        <span class="gami-settings-desc">Send me news about Godaigo, written by the developer. At most one email a month.${row && row.verified ? '' : ' Needs a confirmed email above.'}</span>
+                    </label>
+                </div>
             </div>`;
+        const nl = el.querySelector('#acct-newsletter');
+        if (nl) nl.onchange = async () => {
+            nl.disabled = true;
+            await supabase.rpc('set_mailing_list', { p_opt_in: nl.checked });
+            nl.disabled = false;
+        };
 
         const status = el.querySelector('#acct-email-status');
         el.querySelector('#acct-email-save').onclick = async (ev) => {
@@ -215,5 +234,13 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onReady);
     else onReady();
 
-    window.AccountRecovery = { openForgot, renderSettings };
+    // Right after registering: send the confirmation link for the email
+    // typed into the register form, and tell the player to check their inbox.
+    async function setEmailAfterRegister(email) {
+        const res = await call('set_email', { email, redirect: gameUrl() });
+        if (res.ok) message('Check your email', 'We sent a link to confirm your email. Click it to finish (check spam too). You can change this later in Profile > Settings.');
+        else message('Email not saved', errorText(res.error) + ' You can add it later in Profile > Settings.');
+    }
+
+    window.AccountRecovery = { openForgot, renderSettings, setEmailAfterRegister };
 })();

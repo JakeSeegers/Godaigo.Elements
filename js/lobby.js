@@ -25,8 +25,28 @@
         }
 
         async function authRegister() {
+            // First press shows the optional email + newsletter fields; the
+            // second press ("Create Account") registers.
+            const extras = document.getElementById('auth-register-extras');
+            const regBtn = document.getElementById('auth-register-btn');
+            if (extras && extras.style.display === 'none') {
+                extras.style.display = '';
+                if (regBtn) regBtn.textContent = 'Create Account';
+                document.getElementById('auth-email')?.focus();
+                return;
+            }
             const username = document.getElementById('auth-username').value.trim();
             const password = document.getElementById('auth-password').value;
+            const recoveryEmail = (document.getElementById('auth-email')?.value || '').trim();
+            const newsletter = !!document.getElementById('auth-newsletter')?.checked;
+            if (recoveryEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmail)) {
+                showAuthError('That email does not look right. Fix it, or leave it empty.');
+                return;
+            }
+            if (newsletter && !recoveryEmail) {
+                showAuthError('Add your email to get the news emails, or untick the box.');
+                return;
+            }
             if (!username) { showAuthError('Please enter a username.'); return; }
             if (password.length < 6) { showAuthError('Password must be at least 6 characters.'); return; }
             if (!/^[a-zA-Z0-9_\-\.]+$/.test(username)) {
@@ -50,6 +70,11 @@
             }
             if (data.session) {
                 onAuthSuccess(data.user);
+                // Optional extras from the register form (js/account-recovery.js):
+                // the recovery email gets a confirmation link; the newsletter
+                // only sends to confirmed addresses (sql/mailing-list.sql).
+                if (recoveryEmail) window.AccountRecovery?.setEmailAfterRegister(recoveryEmail);
+                if (newsletter) supabase.rpc('set_mailing_list', { p_opt_in: true }).then(() => {}, () => {});
             } else {
                 // Email confirmation is still enabled in Supabase dashboard
                 showAuthError('Registration failed: email confirmation is required. Please disable it in your Supabase Authentication settings.');

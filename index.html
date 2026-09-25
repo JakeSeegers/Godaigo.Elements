@@ -81,6 +81,15 @@
         <div class="auth-fields">
             <input type="text" id="auth-username" placeholder="Username" class="auth-input">
             <input type="password" id="auth-password" placeholder="Password" class="auth-input">
+            <!-- Shown when "Register" is pressed (js/lobby.js authRegister). Optional. -->
+            <div id="auth-register-extras" class="auth-register-extras" style="display:none;">
+                <input type="email" id="auth-email" placeholder="Email (optional)" class="auth-input" maxlength="254" autocomplete="email">
+                <div class="auth-extra-note">Only used to reset your password if you forget it. Other players never see it.</div>
+                <label class="auth-check">
+                    <input type="checkbox" id="auth-newsletter">
+                    <span>Send me news about Godaigo, written by the developer. At most one email a month. You can stop anytime.</span>
+                </label>
+            </div>
             <div class="auth-buttons">
                 <button id="auth-login-btn" onclick="authLogin()" class="auth-btn-primary">Log In</button>
                 <button id="auth-register-btn" onclick="authRegister()" class="auth-btn-secondary">Register</button>

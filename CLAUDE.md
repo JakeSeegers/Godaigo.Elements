@@ -130,7 +130,9 @@ Order matters — later scripts depend on earlier ones.
                              Reads /changelog.json (see HOUSE RULES #2). "New" dot on the button
                              until the newest entry is opened (localStorage godaigo_changelog_seen).
                              No game deps.
-16c. account-recovery.js   ← window.AccountRecovery: optional recovery email (Profile > Settings > Account)
+16c. account-recovery.js   ← window.AccountRecovery: optional recovery email (Profile > Settings > Account, and the
+                             register form: authRegister() shows #auth-register-extras, then setEmailAfterRegister())
+                             + News Emails opt-in checkbox (sql/mailing-list.sql)
                              and sign-in "Forgot password?". Talks to the account-recovery edge function
                              (supabase/functions/account-recovery, sends via Resend, 2 emails/account/hour).
                              Handles ?recovery_verify=TOKEN and the #type=recovery reset link on load
@@ -284,6 +286,7 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `match_fingerprints` | match-witness.js | Board fingerprint per (room, turn, reporter). A mismatch bumps `matches.desync_count`. Written only via `report_fingerprint`. 30-day cleanup. |
 | `badges` | gamification-ui.js | Badge ownership |
 | `account_recovery` | edge fn account-recovery | Optional recovery email per account (+ verified flag, confirm token hash). RLS on, NO client policies; client only uses RPCs `my_recovery_email()` / `remove_my_recovery_email()`. `sql/account-recovery.sql` |
+| `mailing_list` | lobby.js register form, account-recovery.js settings | Opt-in for human-written news emails (max once a month, sent by hand). RLS on, no client policies: `set_mailing_list(bool)`, `my_mailing_list()`, hermit-only `hermit_mailing_list()` (opted in AND confirmed recovery email; address from `account_recovery`). sql/mailing-list.sql |
 | `recovery_email_log` | edge fn account-recovery | One row per email sent, for rate limits (2/account/hour, 3/address/day, 90/day total). Server only. |
 | `bot_champion_weights` | bot.js, game-ui.js | THE single shared bot brain — append-only submission log; `win_rate` generated column ranks them. Best one auto-applied on load (bot.js); the auth-bar "Train Bot" button (hillclimb) submits + pays 25 gold on a confirmed win (game-ui.js `runHillClimbTraining`). |
 | `deployed_bots` | bot-elements.js, lobby.js, gamification-ui.js | Now holds exactly FIVE system-owned rows (`owner IS NULL`) = the elemental bots (`sql/elemental-bots-seed.sql`). Nicknames = Terran Sentinel / Tidewarden / Emberkin / Galewalker / The Void Knight. Client READ-only (public SELECT); ids resolved by nickname at runtime. `ladder.bot_id` FKs here. **Dormant / unused now:** `captured_bots`, `void_knight`, `user_profiles.capture_stones` — the personal Bot Tycoon economy (Shop/Stable/capture) was removed. |

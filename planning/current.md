@@ -250,6 +250,12 @@ reach/beat it from here.
 - **Known gap noted:** game_rewards is keyed (room_id, user_id) and rooms are reused, so a
   second win by the same player in the same room gets "already_claimed". Consider keying on
   match_id.
+- **Register extras (2026-09-25):** first press of Register shows optional email + news-email
+  checkbox (#auth-register-extras); second press ("Create Account") signs up, then
+  AccountRecovery.setEmailAfterRegister(email) (confirmation link) and set_mailing_list(true).
+  Settings > Account has a News Emails checkbox. Mailing list = sql/mailing-list.sql; export via
+  hermit_mailing_list() (opted in + confirmed email). TODO before the first send: an unsubscribe
+  link in each email (legal requirement in most places).
 - **Next (discussed, not started):** protections 3-6 (repeat-opponent limit, smaller bot-only
   rewards, hermit "reverse win", report button); player stats; automatic replay checks.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
