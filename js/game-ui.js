@@ -881,7 +881,7 @@
                 const header = document.createElement('div');
                 header.className = 'opponent-header';
                 header.innerHTML = `
-                    <span class="opponent-name" style="color: ${playerColor};">${playerName}${isSelf ? ' (you)' : ''}</span>
+                    <span class="opponent-name" style="color: ${playerColor};">${window.cosmeticsSystem?.seatNameHtml ? window.cosmeticsSystem.seatNameHtml(i) : playerName}${isSelf ? ' (you)' : ''}</span>
                     <span class="opponent-ap">AP: ${ap.currentAP}${ap.voidAP > 0 ? ` +${ap.voidAP}<img src="images/voidsymbol.webp${IMG_V}" class="element-icon-sm" alt="void" style="vertical-align:middle;">` : ''}</span>
                 `;
                 card.appendChild(header);

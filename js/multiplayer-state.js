@@ -443,7 +443,9 @@ function updateTurnDisplay() {
     const hudPlayerDot  = document.getElementById('hud-player-dot');
     const hudPlayer     = hudPlayerName?.closest('.hud-player');
     if (hudPlayerName) {
-        hudPlayerName.textContent = myTurn ? 'Your Turn' : `${activeColorName}'s Turn`;
+        if (myTurn) hudPlayerName.textContent = 'Your Turn';
+        else if (window.cosmeticsSystem?.seatNameHtml) hudPlayerName.innerHTML = `${window.cosmeticsSystem.seatNameHtml(activePlayerIndex)}'s Turn`;
+        else hudPlayerName.textContent = `${activeColorName}'s Turn`;
     }
     if (hudPlayer) {
         hudPlayer.classList.toggle('your-turn', myTurn);

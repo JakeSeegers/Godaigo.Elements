@@ -116,6 +116,48 @@
         return `color:${item.value};`;
     }
 
+    // ── Other players' name colours ──────────────────────────
+    // name_color is public on user_profiles, so a room loads every human
+    // seat's colour once (loadNameColors) and the waiting room, opponent
+    // panel, turn display and Game Log colour usernames with it. Bots have
+    // no user_id and stay plain. Your own colour always comes from your
+    // live profile, so equipping shows at once.
+    const nameColorCache = new Map(); // user_id -> name_color id (or null)
+
+    async function loadNameColors(userIds) {
+        const ids = [...new Set((userIds || []).filter(Boolean))].filter(id => !nameColorCache.has(id));
+        if (!ids.length) return false;
+        try {
+            const { data, error } = await supabase.from('user_profiles').select('user_id, name_color').in('user_id', ids);
+            if (error) return false;
+            ids.forEach(id => nameColorCache.set(id, null));
+            (data || []).forEach(r => nameColorCache.set(r.user_id, r.name_color || null));
+            return (data || []).some(r => r.name_color);
+        } catch (e) { return false; }
+    }
+
+    function styleForUser(userId) {
+        if (!userId) return '';
+        const id = userId === getUserId() ? (window.gami?.profile?.name_color || null) : nameColorCache.get(userId);
+        return id ? getNameColorStyle(id) : '';
+    }
+
+    function escHtml(v) {
+        return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // "Username (Colour)" for a seat as HTML, with the username in that
+    // player's name colour. Same text as getPlayerColorName().
+    function seatNameHtml(playerIndex) {
+        const text = typeof getPlayerColorName === 'function' ? getPlayerColorName(playerIndex) : `Player ${playerIndex + 1}`;
+        let row = null;
+        try { row = (typeof allPlayersData !== 'undefined' ? allPlayersData : []).find(p => p.player_index === playerIndex); } catch (e) {}
+        const style = styleForUser(row?.user_id);
+        const m = String(text).match(/^(.*) (\([^()]*\))$/);
+        if (!style || !m) return escHtml(text);
+        return `<span style="${style}">${escHtml(m[1])}</span> ${escHtml(m[2])}`;
+    }
+
     // ── Panel UI ──────────────────────────────────────────────
 
     let panelEl = null;
@@ -215,6 +257,9 @@
         getEquippedAll,
         getEquipped,
         getNameColorStyle,
+        loadNameColors,
+        styleForUser,
+        seatNameHtml,
         getItems() { return NAME_COLORS; },
         getData:    loadData,
     };

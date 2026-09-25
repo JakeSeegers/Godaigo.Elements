@@ -87,7 +87,8 @@
         return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
     function playerSpan(playerIndex) {
-        return `<span style="color:${playerColorHex(playerIndex)}">${esc(playerName(playerIndex))}</span>`;
+        const inner = window.cosmeticsSystem?.seatNameHtml ? window.cosmeticsSystem.seatNameHtml(playerIndex) : esc(playerName(playerIndex));
+        return `<span style="color:${playerColorHex(playerIndex)}">${inner}</span>`;
     }
     function aOrAn(word) {
         return /^[aeiou]/i.test(word || '') ? 'an' : 'a';

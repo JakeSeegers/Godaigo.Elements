@@ -164,7 +164,9 @@ Order matters — later scripts depend on earlier ones.
                              (save_match_check, sql/match-check.sql).
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
-20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js)
+20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js). Server-backed (sql/cosmetics.sql).
+                             loadNameColors/styleForUser/seatNameHtml colour every player's name in the waiting
+                             room, opponent panel, HUD turn display, Game Log and leaderboard.
 21. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
 22. bot-sim.js             ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
 23. bot-effects.js         ← window.BotEffects — Stage 2.5 scroll-effect usage: driveSelection() (tile-flip,

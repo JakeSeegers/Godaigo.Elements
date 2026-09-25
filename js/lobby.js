@@ -1519,18 +1519,20 @@
                     const meLabel = isMe ? ' <span class="pp-player-you">(You)</span>' : '';
                     // Oldest non-bot player is the host (bots can never be host — no client to drive it)
                     const hostLabel = hostRow && p.id === hostRow.id ? ' <span class="pp-player-host">Host</span>' : '';
-                    // Apply local player's equipped name colour; other players keep default
-                    const nameStyle = isMe
-                        ? (window.cosmeticsSystem?.getNameColorStyle() || '')
-                        : '';
+                    // Everyone's equipped name colour (bots have no user_id: plain)
+                    const nameStyle = window.cosmeticsSystem?.styleForUser(p.user_id) || '';
 
                     return `
                         <div class="pp-player-row${isMe ? ' is-me' : ''}">
-                            <span style="${nameStyle}">${typeof displayUsername === 'function' ? displayUsername(p.username) : p.username}${hostLabel}${meLabel}</span>
+                            <span><span style="${nameStyle}">${typeof displayUsername === 'function' ? displayUsername(p.username) : p.username}</span>${hostLabel}${meLabel}</span>
                             <span class="${readyClass}" style="font-size: 20px;">${readyIcon}</span>
                         </div>
                     `;
                 }).join('');
+
+                // Load the other players' name colours; draw again once they arrive.
+                window.cosmeticsSystem?.loadNameColors(players.map(p => p.user_id))
+                    .then(changed => { if (changed) updatePlayerList(); });
 
                 // Update room player count in the info bar
                 const playerCountEl = document.getElementById('room-player-count');
@@ -4158,6 +4160,11 @@
 
             // Store player data globally for color name lookups
             allPlayersData = allPlayers;
+            // Players' name colours (opponent panel, turn display, Game Log)
+            window.cosmeticsSystem?.loadNameColors(allPlayers.map(p => p.user_id)).then(() => {
+                if (typeof updateOpponentPanel === 'function') updateOpponentPanel();
+                if (typeof updateTurnDisplay === 'function') updateTurnDisplay();
+            });
 
             const numPlayers = allPlayers.length;
             console.log(`🎮 Starting multiplayer game with ${numPlayers} players`);

@@ -4,9 +4,9 @@
     {
       "id": "2026-09-25",
       "date": "2026-09-25",
-      "title": "Name colour fix",
+      "title": "Name colours everywhere",
       "changes": [
-        "Your equipped name colour now shows on the leaderboard. If it does not, open Profile and equip it once more."
+        "Name colours now show for everyone: on the leaderboard, in the waiting room, in the player panels, on the turn display and in the Game Log. If yours does not show, open Profile and equip it once more."
       ]
     },
     {
