@@ -77,35 +77,36 @@
 
     <!-- Auth Screen (shown before lobby) -->
     <div id="auth-screen" class="auth-screen">
-        <h2 class="auth-title">Sign In</h2>
+        <h2 class="auth-title" id="auth-title">Sign In</h2>
         <div class="auth-fields">
             <input type="text" id="auth-username" placeholder="Username" class="auth-input">
             <input type="password" id="auth-password" placeholder="Password" class="auth-input">
-            <!-- Shown when "Register" is pressed (js/lobby.js authRegister). Optional. -->
-            <div id="auth-register-extras" class="auth-register-extras" style="display:none;">
+            <!-- Create Account screen only (js/lobby.js setAuthMode('register')). Optional. -->
+            <div id="auth-register-extras" class="auth-register-extras auth-register-only">
                 <input type="email" id="auth-email" placeholder="Email (optional)" class="auth-input" maxlength="254" autocomplete="email">
-                <div class="auth-extra-note">Only used to reset your password if you forget it. Other players never see it.</div>
+                <div class="auth-extra-note">Only for password resets. Never shown to others.</div>
                 <label class="auth-check">
                     <input type="checkbox" id="auth-newsletter">
-                    <span>Send me news about Godaigo, written by the developer. At most one email a month. You can stop anytime.</span>
+                    <span>Email me news about the game (at most once a month)</span>
                 </label>
             </div>
             <div class="auth-buttons">
-                <button id="auth-login-btn" onclick="authLogin()" class="auth-btn-primary">Log In</button>
+                <button id="auth-login-btn" onclick="authLogin()" class="auth-btn-primary auth-login-only">Log In</button>
                 <button id="auth-register-btn" onclick="authRegister()" class="auth-btn-secondary">Register</button>
             </div>
-            <button type="button" class="auth-forgot-link" onclick="window.AccountRecovery?.openForgot()">Forgot password?</button>
+            <button type="button" class="auth-forgot-link auth-login-only" onclick="window.AccountRecovery?.openForgot()">Forgot password?</button>
+            <button type="button" class="auth-forgot-link auth-register-only" onclick="setAuthMode('login')">Back to sign in</button>
             <div id="auth-error" class="auth-error" style="display:none;"></div>
             <div id="auth-loading" class="auth-loading" style="display:none;">Signing in...</div>
 
             <!-- Guest entry — creates a real (throwaway) account behind the
                  scenes, so it can join actual multiplayer games, unlike Tutorial. -->
-            <button id="auth-guest-btn" class="auth-btn-guest" onclick="authGuestLogin()">
+            <button id="auth-guest-btn" class="auth-btn-guest auth-login-only" onclick="authGuestLogin()">
                 Continue as Guest
             </button>
 
             <!-- Tutorial entry — no account required -->
-            <button class="auth-btn-tutorial" onclick="(window.LazyScripts ? LazyScripts.load('tutorial') : Promise.resolve()).then(function () { TutorialMode.start(); }).catch(function () { alert('Could not load the tutorial. Check your connection and try again.'); })">
+            <button class="auth-btn-tutorial auth-login-only" onclick="(window.LazyScripts ? LazyScripts.load('tutorial') : Promise.resolve()).then(function () { TutorialMode.start(); }).catch(function () { alert('Could not load the tutorial. Check your connection and try again.'); })">
                 ▶ Play Tutorial
             </button>
         </div>

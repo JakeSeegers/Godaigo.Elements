@@ -24,15 +24,28 @@
             onAuthSuccess(data.user);
         }
 
-        async function authRegister() {
-            // First press shows the optional email + newsletter fields; the
-            // second press ("Create Account") registers.
-            const extras = document.getElementById('auth-register-extras');
+        // Sign In screen <-> Create Account screen. The Create Account screen
+        // adds the optional email + news-email box and hides Log In, Forgot
+        // password, Guest and Tutorial (.auth-login-only / .auth-register-only,
+        // css/paper-ui-lobby.css).
+        function setAuthMode(mode) {
+            const screen = document.getElementById('auth-screen');
+            const register = mode === 'register';
+            screen?.classList.toggle('mode-register', register);
+            const title = document.getElementById('auth-title');
+            if (title) title.textContent = register ? 'Create Account' : 'Sign In';
             const regBtn = document.getElementById('auth-register-btn');
-            if (extras && extras.style.display === 'none') {
-                extras.style.display = '';
-                if (regBtn) regBtn.textContent = 'Create Account';
-                document.getElementById('auth-email')?.focus();
+            if (regBtn) regBtn.textContent = register ? 'Create Account' : 'Register';
+            const err = document.getElementById('auth-error');
+            if (err) err.style.display = 'none';
+            document.getElementById('auth-username')?.focus();
+        }
+        window.setAuthMode = setAuthMode;
+
+        async function authRegister() {
+            // On the Sign In screen, "Register" opens the Create Account screen.
+            if (!document.getElementById('auth-screen')?.classList.contains('mode-register')) {
+                setAuthMode('register');
                 return;
             }
             const username = document.getElementById('auth-username').value.trim();

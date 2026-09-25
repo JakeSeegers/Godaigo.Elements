@@ -131,7 +131,8 @@ Order matters — later scripts depend on earlier ones.
                              until the newest entry is opened (localStorage godaigo_changelog_seen).
                              No game deps.
 16c. account-recovery.js   ← window.AccountRecovery: optional recovery email (Profile > Settings > Account, and the
-                             register form: authRegister() shows #auth-register-extras, then setEmailAfterRegister())
+                             Create Account screen: lobby.js setAuthMode('register'|'login') toggles #auth-screen.mode-register,
+                             .auth-register-only / .auth-login-only; then setEmailAfterRegister())
                              + News Emails opt-in checkbox (sql/mailing-list.sql)
                              and sign-in "Forgot password?". Talks to the account-recovery edge function
                              (supabase/functions/account-recovery, sends via Resend, 2 emails/account/hour).

@@ -250,8 +250,9 @@ reach/beat it from here.
 - **Known gap noted:** game_rewards is keyed (room_id, user_id) and rooms are reused, so a
   second win by the same player in the same room gets "already_claimed". Consider keying on
   match_id.
-- **Register extras (2026-09-25):** first press of Register shows optional email + news-email
-  checkbox (#auth-register-extras); second press ("Create Account") signs up, then
+- **Register extras (2026-09-25):** Register opens a separate Create Account screen
+  (setAuthMode('register'): title, optional email + news-email checkbox, Create Account, "Back
+  to sign in"; Log In / Forgot / Guest / Tutorial hidden). Create Account signs up, then
   AccountRecovery.setEmailAfterRegister(email) (confirmation link) and set_mailing_list(true).
   Settings > Account has a News Emails checkbox. Mailing list = sql/mailing-list.sql; export via
   hermit_mailing_list() (opted in + confirmed email). TODO before the first send: an unsubscribe
