@@ -82,6 +82,8 @@
                                  // movement outright (canPlayerMoveToHex)
         placeSelfBlockPenalty: -40, // earth on the bot's OWN objective path — don't
                                  // wall yourself in while building or blocking
+        placeShrineDeny:     40, // × opponents heading for a shrine centre this stone covers
+                                 // (they can't collect there until it's broken)
         placeWindPath:       12, // wind on the bot's OWN objective path — moving
                                  // over wind is free (cost 0), so a corridor stone
                                  // dropped ahead pays back AP on every traversal;
@@ -569,6 +571,7 @@
         // source, room in their pool — all public), or their home tile once
         // all 5 are activated (mirrors opponentProgress()'s model).
         const oppPathCount = new Map();
+        const oppShrineTargets = new Map(); // shrine centre hexKey -> opponents heading there
         for (const opp of snap.players) {
             if (!opp || opp.index === ai) continue;
             let target = null;
@@ -588,6 +591,10 @@
                 target = best ? best.t : null;
             }
             if (!target) continue;
+            if (!target.isPlayerTile) {
+                const tk = hexKey(target.x, target.y);
+                oppShrineTargets.set(tk, (oppShrineTargets.get(tk) || 0) + 1);
+            }
             const path = pathToOrNear(opp.x, opp.y, target.x, target.y);
             if (!path) continue;
             const seenHexes = new Set();
@@ -670,7 +677,65 @@
             }
         }
 
-        return { oppPathCount, ownPathHexes, threatStones };
+        return { oppPathCount, ownPathHexes, threatStones, oppShrineTargets };
+    }
+
+    // ----------------------------------------------------------------
+    // Ranged placement targets. While a range buff is live (Avalanche: any
+    // stone anywhere; Seed the Skies: water/wind anywhere; Mason's Savvy:
+    // earth within 5 hexes) the tactical uses of a stone reach the whole
+    // board, not just the hexes next to the pawn. Returns candidate hexes
+    // with the stone types that make sense there; bot-state.js and bot-sim.js
+    // filter them by range, validity and the stones actually held, and
+    // tacticalPlaceBonus()/unblockBonus() score them like any placement.
+    //   opponent path hexes      earth (wall), water (slow)
+    //   own route hexes          wind (free movement)
+    //   next to a threat stone   fire (burn a pattern an opponent could cast)
+    //   next to an earth/water   fire, void (clear the way)
+    //   shrine centre an opponent is heading to   earth, water, wind, fire (deny)
+    // Cached for the current board (pawn position + stones).
+    // ----------------------------------------------------------------
+    let _rangedCache = { key: null, list: null };
+    function rangedTargets(snap) {
+        const self = me(snap);
+        if (!self) return [];
+        const key = `${snap.turn.activePlayerIndex}|${self.x},${self.y}|` + snap.stones.map(s => s.type[0] + Math.round(s.x) + ',' + Math.round(s.y)).join(';');
+        if (_rangedCache.key === key) return _rangedCache.list;
+        const tac = tacticalContext(snap);
+        const out = new Map();
+        const add = (x, y, types) => {
+            const k = hexKey(x, y);
+            const e = out.get(k) || { x, y, types: new Set() };
+            types.forEach(t => e.types.add(t));
+            out.set(k, e);
+        };
+        const fromKey = k => { const [x, y] = k.split(',').map(Number); return { x, y }; };
+        if (tac) {
+            [...tac.oppPathCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+                .forEach(([k]) => { const h = fromKey(k); add(h.x, h.y, ['earth', 'water']); });
+            [...tac.ownPathHexes].slice(0, 8).forEach(k => { const h = fromKey(k); add(h.x, h.y, ['wind']); });
+            for (const k of tac.oppShrineTargets.keys()) { const h = fromKey(k); add(h.x, h.y, ['earth', 'water', 'wind', 'fire']); }
+            const around = (x, y, types) => {
+                for (const h of window.BotSim.grid(snap)) {
+                    const d = Math.hypot(h.x - x, h.y - y);
+                    if (d > 5 && d < 40) add(h.x, h.y, types);
+                }
+            };
+            for (const k of tac.threatStones) { const h = fromKey(k); around(h.x, h.y, ['fire']); }
+            // Walls on the bot's own route: stones on or next to it.
+            for (const st of snap.stones) {
+                if (st.type !== 'earth' && st.type !== 'water') continue;
+                const near = [...tac.ownPathHexes].some(k => { const h = fromKey(k); return Math.hypot(h.x - st.x, h.y - st.y) < 40; });
+                if (near) around(st.x, st.y, ['fire', 'void']);
+            }
+        }
+        const list = [...out.values()]
+            .filter(e => !snap.stones.some(s => Math.hypot(s.x - e.x, s.y - e.y) < 5))
+            .filter(e => !snap.players.some(p => p && Math.hypot(p.x - e.x, p.y - e.y) < 5))
+            .map(e => ({ x: e.x, y: e.y, types: [...e.types] }))
+            .slice(0, 30);
+        _rangedCache = { key, list };
+        return list;
     }
 
     // Tactical value of a placeStone — pattern-dictated OR tactical
@@ -681,6 +746,19 @@
         if (!tac || a.type !== 'placeStone') return 0;
         let b = 0;
         const k = hexKey(a.x, a.y);
+        // A stone on a shrine centre stops anyone collecting there (resting
+        // on a stone is banned): worth it on a shrine an opponent is heading
+        // for, costly on one the bot wants itself.
+        if (a.stoneType !== 'void' && tac.oppShrineTargets?.has(k)) {
+            b += WEIGHTS.placeShrineDeny * tac.oppShrineTargets.get(k);
+            if (collectibleShrines(snap).some(t => Math.hypot(t.x - a.x, t.y - a.y) < 5)) b += WEIGHTS.placeSelfBlockPenalty;
+        }
+        if (a.stoneType === 'water') {
+            // Water slows (cost 2) rather than walls: half the earth value.
+            const slowed = tac.oppPathCount.get(k) || 0;
+            if (slowed) b += 0.5 * WEIGHTS.placeEarthBlock * slowed;
+            if (tac.ownPathHexes.has(k)) b += 0.5 * WEIGHTS.placeSelfBlockPenalty;
+        }
         if (a.stoneType === 'earth') {
             const blocked = tac.oppPathCount.get(k) || 0;
             if (blocked) b += WEIGHTS.placeEarthBlock * blocked;
@@ -2354,8 +2432,16 @@
             case 'placeStone': {
                 if (a.scroll) return `${cap(a.stoneType)} stone for ${scrollName(a.scroll)} (${Math.round((a.progress || 0) * 100)}%)`;
                 const opens = ctx?.unblock && unblockBonus(a, snap, ctx.unblock) > 0;
-                if (a.stoneType === 'fire') return opens ? 'Fire: burn a blocking stone' : 'Fire: burn nearby stones';
-                if (a.stoneType === 'void') return opens ? 'Void: open an earth wall' : 'Void stone';
+                const far = a.ranged ? ' (far away, range buff)' : '';
+                const k = hexKey(a.x, a.y);
+                if (a.stoneType !== 'void' && ctx?.tac?.oppShrineTargets?.has(k)) return `${cap(a.stoneType)}: block a shrine an opponent is heading for${far}`;
+                if (a.stoneType === 'fire' && ctx?.tac && [...ctx.tac.threatStones].some(t => { const [x, y] = t.split(',').map(Number); return Math.hypot(x - a.x, y - a.y) < 40; }))
+                    return `Fire: burn an opponent's ready pattern${far}`;
+                if (a.stoneType === 'earth' && ctx?.tac?.oppPathCount?.get(k)) return `Earth: wall an opponent's path${far}`;
+                if (a.stoneType === 'water' && ctx?.tac?.oppPathCount?.get(k)) return `Water: slow an opponent's path${far}`;
+                if (a.stoneType === 'wind' && ctx?.tac?.ownPathHexes?.has(k)) return `Wind: pave own route${far}`;
+                if (a.stoneType === 'fire') return opens ? `Fire: burn a blocking stone${far}` : 'Fire: burn nearby stones';
+                if (a.stoneType === 'void') return opens ? `Void: open an earth wall${far}` : 'Void stone';
                 if (a.stoneType === 'earth') return 'Earth: wall off a path';
                 if (a.stoneType === 'wind') return 'Wind: pave own path';
                 return `${cap(a.stoneType)} stone`;
@@ -3054,6 +3140,7 @@
         scrollNeed,           // per-element 0..1: needs a scroll of this element (bot-effects.js choices)
         handValue,            // value of a player's held scrolls + per-element cover
         scrollPickScore,      // value of gaining one scroll now (bot-effects.js picks)
+        rangedTargets,        // board-wide placement targets while a range buff is live
         resetMemory,          // wipe plan/history/blacklists (arena: call per game)
         castsApplied: () => _castsApplied, // monotonic cast counter — arena's no-cast stall cap reads deltas
         speedScale: 1,        // scales all between-action delays (arena sets ~0.1)

@@ -1667,6 +1667,10 @@
 
             // Called by scroll effects when a selection-based effect (e.g. Shifting Sands) is completed
             onSelectionEffectComplete(scrollName, effectName, spell) {
+                // Some cast paths (an effect run by another scroll) pass no
+                // spell object; look it up by name instead of crashing.
+                spell = spell || this.patterns?.[scrollName] || window.SCROLL_DEFINITIONS?.[scrollName];
+                if (!spell) return;
                 // Update element symbols on player tile
                 if (typeof updatePlayerElementSymbols === 'function') {
                     updatePlayerElementSymbols(activePlayerIndex);

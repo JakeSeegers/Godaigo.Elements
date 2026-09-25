@@ -2054,6 +2054,33 @@
             }
         }
 
+        // Ranged tactical placements while a range buff is live (same
+        // targets as the real move list: bot.js rangedTargets()), so the
+        // search can plan "cast Avalanche, then burn / wall / pave far away".
+        const rb = snap.turn.buffs || {};
+        const rangedOk = t => rb.globalPlacement || (rb.waterWindGlobalPlacement && (t === 'water' || t === 'wind')) ||
+            (t === 'earth' && rb.earthRange);
+        if (!pawnOnStone && window.BotSystem?.rangedTargets && ELEMENTS.some(t => rangedOk(t) && (p.pool[t] || 0) > 0)) {
+            for (const target of window.BotSystem.rangedTargets(snap)) {
+                const h = g.find(gh => dist(gh.x, gh.y, target.x, target.y) < HEX_NEAR);
+                if (!h || stoneAt(snap, h.x, h.y)) continue;
+                if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) continue;
+                if (h.tileIds.some(id => {
+                    const t = snap.tiles.find(tt => tt.id === id);
+                    return t && !t.revealed && !t.isPlayerTile;
+                })) continue;
+                if (h.tileIds.some(id => snap.tiles.find(tt => tt.id === id)?.isPlayerTile)) continue;
+                for (const type of target.types) {
+                    if (!rangedOk(type) || (p.pool[type] || 0) <= 0) continue;
+                    if (type === 'earth' && !rb.globalPlacement && hexDistance(p.x, p.y, h.x, h.y, TILE) > rb.earthRange) continue;
+                    const key = `${h.x.toFixed(1)},${h.y.toFixed(1)},${type}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    actions.push({ type: 'placeStone', x: h.x, y: h.y, stoneType: type, scroll: null, progress: 0, tactical: true, ranged: true });
+                }
+            }
+        }
+
         // Breath of Power (WIND_SCROLL_3): move a stone adjacent to the pawn
         // onto a DIFFERENT, currently-empty hex within the same placement
         // range placeStone uses (honors Avalanche/Seed the Skies too, same

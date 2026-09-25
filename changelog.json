@@ -6,7 +6,7 @@
       "date": "2026-09-25",
       "title": "Quick Play, pawn decorations, new name styles",
       "changes": [
-        "New Quick Play button in the lobby: start a game against 2 to 4 bots right away. Bots now clear stones that block their way and pick scrolls they actually need, so they get stuck less.",
+        "New Quick Play button in the lobby: start a game against 2 to 4 bots right away. Bots now clear stones that block their way, pick scrolls they actually need and use Avalanche across the whole board. Fixed a rare freeze after Take Flight.",
         "New pawn decorations in the shop: rims (Gold, Silver, Rune Ring), bases (Lotus Leaf, Stone Plinth) and trails that follow your pawn when it moves (Ink, Embers, Water Drops, Leaves, Void Sparks). Your pawn colour always stays visible.",
         "13 new name styles (elements, metals and animated ones), and name colours now show for everyone: leaderboard, waiting room, player panels, turn display and Game Log.",
         "Fairer wins: the ladder now only moves after a checked, finished game. A win after everyone else quits needs at least 6 turns. Winning as the last player standing now gives your XP (it could get stuck).",

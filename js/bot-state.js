@@ -480,6 +480,36 @@
                     });
                 }
             }
+
+            // ── ranged tactical placeStone: while a range buff is live
+            // (Avalanche any type, Seed the Skies water/wind, Mason's Savvy
+            // earth within 5), the same tactical uses reach the whole board.
+            // Targets come from bot.js rangedTargets() (opponent paths, own
+            // route, threat stones, walls, shrines opponents head for);
+            // isInPlacementRange() is the real range check for each type.
+            const tb = activeTurnBuffs(activePlayerIndex) || {};
+            const rangedOk = t => tb.globalPlacement || (tb.waterWindGlobalPlacement && (t === 'water' || t === 'wind')) ||
+                (t === 'earth' && tb.earthRange);
+            if (window.BotSystem?.rangedTargets && ['earth', 'water', 'fire', 'wind', 'void'].some(t => rangedOk(t) && (pool[t] || 0) > 0)) {
+                for (const target of window.BotSystem.rangedTargets(snapshot())) {
+                    const h = grid.find(g => Math.hypot(g.x - target.x, g.y - target.y) < HEX_NEAR);
+                    if (!h) continue;
+                    if (placedStones.some(s => Math.hypot(s.x - h.x, s.y - h.y) < HEX_NEAR)) continue;
+                    if (playerPositions.some(p => p && Math.hypot(p.x - h.x, p.y - h.y) < HEX_NEAR)) continue;
+                    if (typeof isPositionOnFlippedTile === 'function' && isPositionOnFlippedTile(h.x, h.y, grid)) continue;
+                    for (const stoneType of target.types) {
+                        if (!rangedOk(stoneType) || (pool[stoneType] || 0) <= 0) continue;
+                        const key = `${h.x.toFixed(1)},${h.y.toFixed(1)},${stoneType}`;
+                        if (seen.has(key)) continue;
+                        if (typeof isInPlacementRange === 'function' && !isInPlacementRange(h.x, h.y, stoneType)) continue;
+                        seen.add(key);
+                        actions.push({
+                            type: 'placeStone', x: h.x, y: h.y, stoneType,
+                            scroll: null, progress: 0, tactical: true, ranged: true,
+                        });
+                    }
+                }
+            }
         }
 
         // ── move: each affordable adjacent hex ──

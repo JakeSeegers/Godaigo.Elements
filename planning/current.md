@@ -118,6 +118,19 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-25: Range buffs reach the whole board (owner: "Avalanche has many purposes, not
+  just casting").** bot.js `rangedTargets()` lists tactical targets across the board while
+  Avalanche / Seed the Skies / Mason's Savvy is live (opponent paths: earth/water; own
+  route: wind; next to threat stones: fire; next to walls on the route: fire/void; the
+  shrine centre an opponent is heading for: any). Real and sim move lists offer them within
+  each buff's range (`ranged: true`). New `placeShrineDeny` (40 x opponents heading there,
+  self-block penalty if the bot wants that shrine); water on an opponent path counts half
+  an earth wall. Live check: 13 ranged placements up to 393px away, far earth wall placed.
+  Also fixed a real game crash: `onSelectionEffectComplete()` read `spell.element` when a
+  cast path passed no spell (Take Flight run by another effect) -> now looked up by name.
+  Arena vs previous commit: 2p 11 -> 11 wins, 9 -> 9 stalls; 3p 10 -> 10, 1 -> 1; ranged
+  placements 65 (2p) / 36 (3p), mostly earth walls; elements per player down (3.83 / 3.64
+  vs 4.00 / 3.89) since every seat walls the others. placeEarthBlock is trainable.
 - **2026-09-25: Combo plan Phase 2 done (third batch).** Choices as moves for Create
   ({element}), Arson ({target, element}), Plunder ({target, scroll}), Take Flight ({x, y}),
   Shifting Sands ({a, b}) and Telekinesis ({tileId, x, y}); Mason's Savvy's 5-hex earth
