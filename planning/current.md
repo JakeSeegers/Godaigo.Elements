@@ -2561,6 +2561,42 @@ exist in code but are untested end-to-end. Docs system fully in place.
 ## NEXT SESSION TASK LIST (priority order)
 
 ### 0. Bot track (see docs/bot-roadmap.md)
+
+**PLAN AGREED WITH OWNER 2026-09-25: bots that use scroll combos.** Goal: bots find
+combos (Wandering River on a face-down tile + Heavy Stomp, Burning Motivation +
+Avalanche, multi-turn setups) by search and by learning from recorded games, not by
+hand-written rules. Owner: no manual combo recording.
+- **Phase 1 (small): the look-ahead sees scroll value.** Shared "scroll need" per
+  element (not activated, source not empty, no buildable scroll held; buildability
+  = pattern stones vs pool). evaluateSnapshot values hand scrolls by it instead of
+  the flat evalScrollHeld. Search always keeps a few setup casts (buff-setting
+  scrolls) in the beam and goes deeper on turns with a castable scroll. Arena A/B.
+- **Phase 2 (big, one scroll at a time): choices become moves.** A cast carries its
+  choices (e.g. {cast WATER_SCROLL_4, tileId, element}); BotState and BotSim
+  legalActions list sensible choices; bot-effects drivers carry out the chosen
+  ones (current heuristics stay as fallback). Sim: River on a hidden tile gives an
+  element-known scroll on reveal; buffs unlock placements (Avalanche, Seed the
+  Skies, Mason's Savvy; Burning Motivation stones-for-AP). validate() per scroll.
+  First batch: Wandering River, Heavy Stomp, Scholar's Insight, Inspiring Draught,
+  Quick Reflexes, Avalanche + Burning Motivation.
+- **Phase 3: replay miner.** Check that recorded moves carry each scroll's choices.
+  Store each human's ladder rank at match start in matches.players. Replay finished
+  games at full speed in the background (reuse replay-viewer runInFrame), score
+  each player after every move with evaluateSnapshot, find big jumps, look back a
+  few turns for that player's casts + choices = candidate combo. Weight = gain x
+  rank trust (floor for low ranks) x experience (games played); bots excluded.
+  Shared table; a combo is promoted only after it repeats and pays on average.
+  First output: hermit tab listing found combos (also a balance tool).
+- **Phase 4: bots follow mined combos.** Match a combo's start conditions, keep
+  "step N of this plan" across turns (like the build plan), look-ahead checks each
+  step against the real board and drops the plan if it does not fit. Arena A/B.
+- **Phase 5: widen learn-from-player (bot-imitation.js).** Today it learns only from
+  endTurn and discardScroll. Add casts and moves first, then stone placements and
+  breaks, then scroll choices (after Phase 2). Small nudges, arena regression
+  check. If opened beyond the hermit, weight nudges by ladder rank.
+- Open questions: where the miner runs (hermit browser batch or headless tool),
+  whether arena games should be recorded too.
+
 1. ~~Stage 3a — self-play arena~~ **DONE** (`js/bot-arena.js`). First
    measurements: HYBRID search beat greedy **12-3-5** over 20 games →
    hybrid is now the default bot brain (searchDepth 3 + searchHybrid 1).
