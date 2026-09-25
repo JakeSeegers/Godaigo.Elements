@@ -8,13 +8,52 @@
 (function () {
     'use strict';
 
+    // Gradient text: the name is painted with a background clipped to the
+    // letters. anim = optional CSS animation (keyframes in css/styles.css).
+    function gradText(stops, anim, size) {
+        return [
+            `background:linear-gradient(90deg,${stops})`,
+            `background-size:${size || '100%'} 100%`,
+            '-webkit-background-clip:text',
+            'background-clip:text',
+            '-webkit-text-fill-color:transparent',
+            anim ? `animation:${anim}` : '',
+        ].filter(Boolean).join(';') + ';';
+    }
+
+    // Every name style. `group` is the shop heading. Prices must match
+    // cosmetic_price() in sql/cosmetics.sql. `value` is kept for the solid
+    // colours (older code read it).
     const NAME_COLORS = [
-        { id: 'name_gold',    name: 'Gold',         cost: 50,  value: '#FFD700' },
-        { id: 'name_crimson', name: 'Crimson',       cost: 50,  value: '#ff3355' },
-        { id: 'name_blue',    name: 'Electric Blue', cost: 50,  value: '#00aaff' },
-        { id: 'name_emerald', name: 'Emerald',       cost: 50,  value: '#00ee88' },
-        { id: 'name_purple',  name: 'Royal Purple',  cost: 75,  value: '#cc44ff' },
-        { id: 'name_rainbow', name: 'Rainbow',       cost: 200, value: 'rainbow' },
+        { id: 'name_gold',     group: 'Colours',  name: 'Gold',          cost: 50,  value: '#FFD700', style: 'color:#FFD700;' },
+        { id: 'name_crimson',  group: 'Colours',  name: 'Crimson',       cost: 50,  value: '#ff3355', style: 'color:#ff3355;' },
+        { id: 'name_blue',     group: 'Colours',  name: 'Electric Blue', cost: 50,  value: '#00aaff', style: 'color:#00aaff;' },
+        { id: 'name_emerald',  group: 'Colours',  name: 'Emerald',       cost: 50,  value: '#00ee88', style: 'color:#00ee88;' },
+        { id: 'name_purple',   group: 'Colours',  name: 'Royal Purple',  cost: 75,  value: '#cc44ff', style: 'color:#cc44ff;' },
+        { id: 'name_rainbow',  group: 'Colours',  name: 'Rainbow',       cost: 200, value: 'rainbow',
+          style: gradText('#f00,#f70,#ff0,#0f0,#00f,#80f,#f00', 'nameRainbow 3s linear infinite', '200%') },
+
+        { id: 'name_el_earth', group: 'Elements', name: 'Earth',         cost: 100, style: gradText('#4e7a2e,#69d83a,#a08c62') },
+        { id: 'name_el_water', group: 'Elements', name: 'Water',         cost: 100, style: gradText('#2f6fd8,#5894f4,#cfe8ff') },
+        { id: 'name_el_fire',  group: 'Elements', name: 'Fire',          cost: 100, style: gradText('#c8102e,#ed1b43,#ffb347') },
+        { id: 'name_el_wind',  group: 'Elements', name: 'Wind',          cost: 100, style: gradText('#e0b800,#ffce00,#fffbe0') },
+        { id: 'name_el_void',  group: 'Elements', name: 'Void',          cost: 100, style: gradText('#6a34c0,#b98cff,#6a34c0') },
+
+        { id: 'name_silver',   group: 'Metals',   name: 'Silver',        cost: 75,  style: gradText('#9aa3ad,#f4f7fa,#9aa3ad') },
+        { id: 'name_bronze',   group: 'Metals',   name: 'Bronze',        cost: 75,  style: gradText('#8a5424,#e0a868,#8a5424') },
+        { id: 'name_obsidian', group: 'Metals',   name: 'Obsidian',      cost: 100,
+          style: gradText('#6a6a84 0%,#6a6a84 40%,#e6e6f5 50%,#6a6a84 60%,#6a6a84 100%', 'nameShine 4s linear infinite', '250%') },
+
+        { id: 'name_shimmer',  group: 'Animated', name: 'Gold Shimmer',  cost: 150,
+          style: gradText('#d4a017 0%,#d4a017 40%,#fff6c8 50%,#d4a017 60%,#d4a017 100%', 'nameShine 3s linear infinite', '250%') },
+        { id: 'name_ember',    group: 'Animated', name: 'Ember',         cost: 175,
+          style: 'color:#ff7a1a;animation:nameEmber 1.6s ease-in-out infinite;' },
+        { id: 'name_tide',     group: 'Animated', name: 'Tide',          cost: 175,
+          style: gradText('#1e4fa8,#5894f4,#6fe0e0,#cfe8ff,#5894f4,#1e4fa8', 'nameTide 4s ease-in-out infinite alternate', '300%') },
+        { id: 'name_voidpulse',group: 'Animated', name: 'Void Pulse',    cost: 175,
+          style: 'color:#b98cff;animation:nameVoidPulse 3s ease-in-out infinite;' },
+        { id: 'name_glitch',   group: 'Animated', name: 'CRT Glitch',    cost: 250,
+          style: 'color:#e8f7ff;display:inline-block;animation:nameGlitch 4s steps(1,end) infinite;' },
     ];
 
     // ── Storage ───────────────────────────────────────────────
@@ -102,19 +141,9 @@
     function getNameColorStyle(equippedId) {
         const nc   = equippedId || getEquipped('namecolor');
         const item = NAME_COLORS.find(i => i.id === nc);
-        if (!item) return '';
-        if (item.value === 'rainbow') {
-            return [
-                'background:linear-gradient(90deg,#f00,#f70,#ff0,#0f0,#00f,#80f,#f00)',
-                'background-size:200%',
-                '-webkit-background-clip:text',
-                '-webkit-text-fill-color:transparent',
-                'background-clip:text',
-                'animation:nameRainbow 3s linear infinite',
-            ].join(';') + ';';
-        }
-        return `color:${item.value};`;
+        return item ? item.style : '';
     }
+
 
     // ── Other players' name colours ──────────────────────────
     // name_color is public on user_profiles, so a room loads every human
@@ -189,14 +218,14 @@
         const body = document.getElementById('cos-body');
         if (!body) return;
 
-        body.innerHTML = NAME_COLORS.map(item => {
+        body.innerHTML = NAME_COLORS.map((item, n) => {
+            const heading = (n === 0 || NAME_COLORS[n - 1].group !== item.group)
+                ? `<div class="cos-group">${item.group}</div>` : '';
             const owned      = data.owned.includes(item.id);
             const isEquipped = equipped === item.id;
             const canAfford  = gold >= item.cost;
 
-            const previewStyle = item.value === 'rainbow'
-                ? 'background:linear-gradient(90deg,#f00,#f70,#ff0,#0f0,#00f,#80f);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;background-size:200%;animation:nameRainbow 3s linear infinite;'
-                : `color:${item.value};`;
+            const previewStyle = item.style;
 
             let actionHTML;
             if (owned) {
@@ -211,7 +240,7 @@
                 </button>`;
             }
 
-            return `
+            return heading + `
                 <div class="cos-item ${isEquipped ? 'cos-item-equipped' : ''}">
                     <div class="cos-preview">
                         <span style="${previewStyle}font-weight:bold;font-size:15px;line-height:36px;">Aa</span>

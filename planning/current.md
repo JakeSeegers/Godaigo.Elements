@@ -212,6 +212,10 @@ reach/beat it from here.
   cosmeticsSystem.loadNameColors(userIds) caches user_profiles.name_color per room (lobby
   updatePlayerList + startMultiplayerGame), styleForUser(uid), seatNameHtml(i) = escaped
   "Username (Colour)" with the username coloured. Bots (no user_id) stay plain.
+  2026-09-25: 13 more styles (NAME_COLORS now carries group + full inline `style`; keyframes
+  nameShine/nameTide/nameEmber/nameVoidPulse/nameGlitch in css/styles.css, off under
+  prefers-reduced-motion). Prices: elements 100, Silver/Bronze 75, Obsidian 100, Shimmer 150,
+  Ember/Tide/Void Pulse 175, CRT Glitch 250 (cosmetic_price, migration cosmetics_more_styles).
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

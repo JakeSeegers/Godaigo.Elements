@@ -174,18 +174,18 @@ function _renderCosmetics(content) {
 
     content.innerHTML = `
         <div class="gami-cos-header">
-            <span style="color:var(--pp-ink);font-size:15px;font-weight:bold;">Name Colours</span>
+            <span style="color:var(--pp-ink);font-size:15px;font-weight:bold;">Name Styles</span>
             <span style="color:var(--pp-gold);font-size:14px;">${gold}g</span>
         </div>
         <div class="gami-cos-list">
-            ${items.map(item => {
+            ${items.map((item, n) => {
                 const isOwned    = owned.includes(item.id);
                 const isEquipped = equipped === item.id;
                 const canAfford  = gold >= item.cost;
 
-                const previewStyle = item.value === 'rainbow'
-                    ? 'background:linear-gradient(90deg,#f00,#f70,#ff0,#0f0,#00f,#80f);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:nameRainbow 3s linear infinite;font-weight:bold;font-size:18px;'
-                    : `color:${item.value};font-weight:bold;font-size:18px;`;
+                const previewStyle = item.style + 'font-weight:bold;font-size:18px;';
+                const heading = (n === 0 || items[n - 1].group !== item.group)
+                    ? `<div class="gami-cos-group">${item.group}</div>` : '';
 
                 let actionHTML;
                 if (isOwned) {
@@ -200,7 +200,7 @@ function _renderCosmetics(content) {
                     </button>`;
                 }
 
-                return `
+                return heading + `
                     <div class="gami-cos-item${isEquipped ? ' active' : ''}">
                         <div class="gami-cos-preview"><span style="${previewStyle}">Aa</span></div>
                         <div class="gami-cos-name">${item.name}</div>

@@ -3321,6 +3321,43 @@ svg {
     0%   { background-position: 0%   50%; }
     100% { background-position: 200% 50%; }
 }
+/* More name styles (js/cosmetics-system.js NAME_COLORS) */
+@keyframes nameShine {
+    0%   { background-position: 100% 50%; }
+    100% { background-position: -150% 50%; }
+}
+@keyframes nameTide {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+}
+@keyframes nameEmber {
+    0%, 100% { color: #ff6a00; text-shadow: 0 0 3px #ff3d00; }
+    25%      { color: #ffb347; text-shadow: 0 0 8px #ff7a00; }
+    50%      { color: #ff5a1f; text-shadow: 0 0 2px #c41e00; }
+    75%      { color: #ffd27a; text-shadow: 0 0 6px #ff8c1a; }
+}
+@keyframes nameVoidPulse {
+    0%, 100% { opacity: 1;    text-shadow: 0 0 6px #9458f4; }
+    50%      { opacity: 0.45; text-shadow: 0 0 1px #9458f4; }
+}
+@keyframes nameGlitch {
+    0%   { transform: none;             text-shadow: none; }
+    90%  { transform: translateX(1px);  text-shadow: -2px 0 #ff2a6d, 2px 0 #05d9e8; }
+    93%  { transform: translateX(-1px); text-shadow: 2px 0 #ff2a6d, -2px 0 #05d9e8; }
+    96%  { transform: none;             text-shadow: -1px 0 #ff2a6d, 1px 0 #05d9e8; }
+    98%  { transform: none;             text-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    [style*="nameShine"], [style*="nameTide"], [style*="nameEmber"],
+    [style*="nameVoidPulse"], [style*="nameGlitch"], [style*="nameRainbow"] { animation: none !important; }
+}
+.cos-group, .gami-cos-group {
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    margin: 10px 0 2px;
+}
 
 /* ── Lobby font overrides (beat inline styles) ──────────────────── */
 #multiplayer-lobby,

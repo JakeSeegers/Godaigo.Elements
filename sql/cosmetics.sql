@@ -28,6 +28,20 @@ as $$
     when 'name_emerald' then 50
     when 'name_purple'  then 75
     when 'name_rainbow' then 200
+    -- 2026-09-25 (migration cosmetics_more_styles): elements, metals, animated
+    when 'name_el_earth' then 100
+    when 'name_el_water' then 100
+    when 'name_el_fire'  then 100
+    when 'name_el_wind'  then 100
+    when 'name_el_void'  then 100
+    when 'name_silver'   then 75
+    when 'name_bronze'   then 75
+    when 'name_obsidian' then 100
+    when 'name_shimmer'  then 150
+    when 'name_ember'    then 175
+    when 'name_tide'     then 175
+    when 'name_voidpulse' then 175
+    when 'name_glitch'   then 250
   end;
 $$;
 
