@@ -261,6 +261,12 @@ reach/beat it from here.
   (private), addBotPlayer() x 2-4 (random), hostStartGame(). Normal online path, so the game is
   recorded; XP needs the usual 3-minute room age and 6 recorded turns (bot-only, no witness).
   Headless: signed-out path safe; full flow needs a live test.
+- **Room name moved to the waiting room (2026-09-25):** lobby no longer has #room-name-input;
+  rooms start as "<user>'s Game"; the host renames in the waiting room (#room-name-edit, saved
+  on Enter/blur via rename_room RPC, host-only, 30 chars, sql/rename-room.sql); other players get
+  the new name from the game_room subscription (payload.new.host_name). Quick Play now sits at
+  the top of the lobby's left column. Note: game_room UPDATE is open to any signed-in user (RLS
+  "auth can update"); claim_game_win relies on witnesses for that reason. Worth locking down.
 - **Next (discussed, not started):** protections 3-6 (repeat-opponent limit, smaller bot-only
   rewards, hermit "reverse win", report button); player stats; automatic replay checks.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**

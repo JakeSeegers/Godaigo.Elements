@@ -269,13 +269,6 @@
             const waitingPanel = document.getElementById('waiting-room-panel');
             if (browserPanel) browserPanel.style.display = 'block';
             if (waitingPanel) waitingPanel.style.display = 'none';
-            // Unlock + clear room-name-input so the player can choose a fresh name next time
-            const roomNameInput = document.getElementById('room-name-input');
-            if (roomNameInput) {
-                roomNameInput.disabled = false;
-                roomNameInput.style.opacity = '';
-                roomNameInput.value = '';
-            }
             refreshGameBrowser();
             startBrowserRefresh(); // auto-refresh every 5 seconds
             // Reload the leaderboard each time the lobby is shown, so it is
@@ -290,9 +283,30 @@
             const waitingPanel = document.getElementById('waiting-room-panel');
             if (browserPanel) browserPanel.style.display = 'none';
             if (waitingPanel) waitingPanel.style.display = 'block';
-            // Display the room name (static — set once at creation)
+            // Room name: the host can rename it here (rename_room RPC,
+            // sql/rename-room.sql); everyone else sees it as text, kept up to
+            // date by the room subscription.
             const roomNameValue = document.getElementById('room-name-value');
             if (roomNameValue) roomNameValue.textContent = roomName || 'Game Room';
+            const roomNameEdit = document.getElementById('room-name-edit');
+            if (roomNameEdit && roomNameValue) {
+                roomNameEdit.value = roomName || 'Game Room';
+                roomNameEdit.style.display = isHost ? '' : 'none';
+                roomNameValue.style.display = isHost ? 'none' : '';
+                const save = async () => {
+                    const name = roomNameEdit.value.trim();
+                    if (!name || name === roomNameValue.textContent || !currentGameId) {
+                        roomNameEdit.value = roomNameValue.textContent;
+                        return;
+                    }
+                    const { data, error } = await supabase.rpc('rename_room', { p_room_id: currentGameId, p_name: name });
+                    if (error) { roomNameEdit.value = roomNameValue.textContent; updateStatus('Could not rename the room.'); return; }
+                    roomNameValue.textContent = data || name;
+                    roomNameEdit.value = data || name;
+                };
+                roomNameEdit.onblur = save;
+                roomNameEdit.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); roomNameEdit.blur(); } };
+            }
             // Show/hide room code section
             const codeDisplay = document.getElementById('room-code-display');
             if (isPrivate && joinCode) {
@@ -355,9 +369,8 @@
             const username = lobbyUsername;
             if (!username) { alert('Not signed in - please sign in first'); return; }
 
-            // Read custom room name; fall back to "<username>'s Game" if left blank
-            const roomNameRaw = document.getElementById('room-name-input')?.value.trim();
-            const roomName = roomNameRaw || (username + "'s Game");
+            // Default name; the host can rename the room in the waiting room.
+            const roomName = (username + "'s Game").slice(0, 30);
 
             // --- Auto-clean stale player entries for this username ---
             const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
@@ -399,13 +412,6 @@
                 return;
             }
             const { room_id, join_code } = data[0];
-
-            // Lock the room-name input — can't rename mid-game; unlocked again on leaveRoom()
-            const roomNameInput = document.getElementById('room-name-input');
-            if (roomNameInput) {
-                roomNameInput.disabled = true;
-                roomNameInput.style.opacity = '0.5';
-            }
 
             const ok = await joinRoomAsPlayer(room_id, username);
             if (!ok) return;
@@ -1489,6 +1495,13 @@
                         // this — see hostTrackedRoomStatus's declaration for why.
                         if (payload.new && payload.new.status) {
                             hostTrackedRoomStatus = payload.new.status;
+                        }
+                        // The host renamed the room (rename_room): show it to everyone.
+                        if (payload.new && payload.new.host_name) {
+                            const rn = document.getElementById('room-name-value');
+                            const re = document.getElementById('room-name-edit');
+                            if (rn) rn.textContent = payload.new.host_name;
+                            if (re && document.activeElement !== re) re.value = payload.new.host_name;
                         }
                         if (payload.new && payload.new.status === 'playing') {
                             handleGameStart();
