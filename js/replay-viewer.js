@@ -159,6 +159,10 @@
         if (!seats.length) { alert('This replay has no players recorded.'); return; }
         log(`match ${match.id}: ${match.moves.length} moves, ${seats.length} seats`);
 
+        // Name colours and pawn decorations of the recorded players: load them
+        // while the server is still reachable (the replay goes offline next).
+        try { await window.cosmeticsSystem?.loadNameColors(seats.map(x => x.user_id)); } catch (e) {}
+
         const handlers = [];
         goOffline(handlers);
 
