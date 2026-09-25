@@ -15,7 +15,8 @@
 //      treats every recorded move as "someone else's" and applies it.
 //   5. Dispatch the moves in order, timed like the real game (long pauses
 //      are shortened), with play / pause / speed / step controls.
-// Leaving the replay reloads the page, which restores everything.
+// Restart rewinds in place (startBoard); leaving the replay reloads the page,
+// which restores everything, and skips the intro on that reload.
 //
 // Players open it from the lobby "Replays" button (openBrowser below): their
 // own games, and games other players posted publicly.
@@ -92,12 +93,8 @@
         bar.querySelector('[data-act=play]').onclick = () => (state.playing ? pause() : play());
         bar.querySelector('[data-act=step]').onclick = () => { pause(); step(); };
         bar.querySelector('[data-act=speed]').onchange = (e) => { state.speed = +e.target.value || 1; };
-        bar.querySelector('[data-act=restart]').onclick = () => {
-            const id = state.match.id;
-            try { sessionStorage.setItem('godaigo_replay_autostart', String(id)); } catch (e) {}
-            location.reload();
-        };
-        bar.querySelector('[data-act=exit]').onclick = () => location.reload();
+        bar.querySelector('[data-act=restart]').onclick = () => restart();
+        bar.querySelector('[data-act=exit]').onclick = () => exitReplay();
         updateControls();
     }
 
@@ -142,7 +139,7 @@
     }
 
     function play() { if (!state) return; state.playing = true; updateControls(); scheduleNext(); }
-    function pause() { if (!state) return; state.playing = false; clearTimeout(state.timer); updateControls(); }
+    function pause() { if (!state) return; state.playing = false; clearTimeout(state.timer); clearTimeout(state.startTimer); updateControls(); }
 
     // ── Entry point ──────────────────────────────────────────────
     // opts.check: used by the replay check (runCheck below): no controls, no
@@ -166,6 +163,27 @@
         const handlers = [];
         goOffline(handlers);
 
+        document.getElementById('lobby-wrapper').style.display = 'none';
+        document.getElementById('multiplayer-lobby')?.style && (document.getElementById('multiplayer-lobby').style.display = 'none');
+        document.getElementById('game-layout').classList.add('active');
+        if (typeof updateDeckIndicatorVisibility === 'function') updateDeckIndicatorVisibility();
+        if (typeof initializeNewUI === 'function') initializeNewUI();
+        // The game start asks about sharing game logs; a replay must not.
+        window.promptLogConsentIfNeeded = () => {};
+
+        startBoard(match, seats, handlers);
+        state = { match, seats, moves: match.moves || [], index: 0, playing: false, speed: 1, timer: null, handlers, errors: [] };
+        if (opts.check) return;
+        buildControls();
+        state.startTimer = setTimeout(play, 1500); // let the board finish its intro animation
+    }
+
+    // Set up the recorded game's starting board (also used by Restart, so a
+    // restart rewinds in place instead of reloading the page).
+    function startBoard(match, seats, handlers) {
+        // setupGameBroadcast() registers its handlers again on the new fake
+        // channel; drop the old ones so no message is applied twice.
+        handlers.length = 0;
         // Start the game the normal way, seen from the first seat...
         const allPlayers = seats.map(s => ({
             id: 'replay-seat-' + s.index,
@@ -179,14 +197,8 @@
         currentGameId = 'replay-' + match.id;
         myPlayerId = allPlayers[0].id;
         myPlayerIndex = allPlayers[0].player_index;
-
-        document.getElementById('lobby-wrapper').style.display = 'none';
-        document.getElementById('multiplayer-lobby')?.style && (document.getElementById('multiplayer-lobby').style.display = 'none');
-        document.getElementById('game-layout').classList.add('active');
-        if (typeof updateDeckIndicatorVisibility === 'function') updateDeckIndicatorVisibility();
-        if (typeof initializeNewUI === 'function') initializeNewUI();
-        // The game start asks about sharing game logs; a replay must not.
-        window.promptLogConsentIfNeeded = () => {};
+        document.getElementById('game-over-notification')?.remove();
+        try { currentTurnNumber = 0; } catch (e) {}
         startMultiplayerGame(allPlayers, match.deck_seed, match.settings?.scarce_tiles !== false);
 
         // ...then become a pure spectator: no seat, nothing to drag.
@@ -195,11 +207,23 @@
         if (tray) tray.innerHTML = '';
         ['end-turn', 'leave-game'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
         if (typeof updateStatus === 'function') updateStatus('Watching a replay');
+    }
 
-        state = { match, moves: match.moves || [], index: 0, playing: false, speed: 1, timer: null, handlers, errors: [] };
-        if (opts.check) return;
-        buildControls();
-        setTimeout(play, 1500); // let the board finish its intro animation
+    function restart() {
+        if (!state) return;
+        pause();
+        startBoard(state.match, state.seats, state.handlers);
+        state.index = 0;
+        state.errors = [];
+        updateControls();
+        state.startTimer = setTimeout(play, 1500);
+    }
+
+    // Leaving a replay reloads the page (the replay switched Supabase offline).
+    // Skip the studio logo and lore intro on that one reload (boot-splash.js).
+    function exitReplay() {
+        try { sessionStorage.setItem('godaigo_skip_intro_once', '1'); } catch (e) {}
+        location.reload();
     }
 
     // ── Replay check (hermit) ────────────────────────────────────
@@ -339,20 +363,6 @@
         else frameEntry();
     }
 
-    // "Restart" reloads the page and reopens the same replay once it's ready.
-    function autostart() {
-        let id = null;
-        try { id = sessionStorage.getItem('godaigo_replay_autostart'); sessionStorage.removeItem('godaigo_replay_autostart'); } catch (e) {}
-        if (!id) return;
-        const wait = setInterval(async () => {
-            const { data } = await supabase.auth.getSession();
-            if (!data?.session) return;
-            clearInterval(wait);
-            open(+id);
-        }, 1000);
-    }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autostart);
-    else autostart();
 
     // ── Replay browser (lobby "Replays" button) ─────────────────
     // Two lists: my finished games (with Watch + Post publicly / Remove from

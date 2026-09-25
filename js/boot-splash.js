@@ -53,6 +53,21 @@
     const video  = document.getElementById('boot-splash-video');
     const canvas = document.getElementById('boot-splash-canvas');
     const prompt = document.getElementById('boot-splash-prompt');
+
+    // One reload without the intro: set by js/replay-viewer.js when leaving a
+    // replay (the page must reload, but the player is only going back to the
+    // lobby). Skips the logo and the lore sequence.
+    let skipOnce = false;
+    try {
+        skipOnce = sessionStorage.getItem('godaigo_skip_intro_once') === '1';
+        if (skipOnce) sessionStorage.removeItem('godaigo_skip_intro_once');
+    } catch (e) {}
+    if (skipOnce) {
+        splash?.remove();
+        document.body.classList.remove('boot-splash-active');
+        return;
+    }
+
     if (!splash || !video || !canvas || !prompt) { revealLogin(); return; }
 
     try {

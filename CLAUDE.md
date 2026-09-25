@@ -160,7 +160,9 @@ Order matters — later scripts depend on earlier ones.
                              from recorded seats + deck seed -> myPlayerIndex = -1 (spectator; game-core
                              getPlayerScrolls shows the ACTIVE player's hand for a negative seat) -> recorded
                              messages dispatched into setupGameBroadcast()'s own handlers, timed, with
-                             play/pause/step/speed. Exit/Restart reload the page. Players: lobby "Replays"
+                             play/pause/step/speed. Restart rewinds in place (startBoard: clears handlers, turn 0,
+                             startMultiplayerGame again); Exit reloads with sessionStorage godaigo_skip_intro_once,
+                             which boot-splash.js honours once (no logo / lore intro). Players: lobby "Replays"
                              button -> Replay.openBrowser(): "My games" (Watch, Post publicly / Remove from
                              public) and "Public" (Watch). Hermit-only "Check" tab = replay verification:
                              Replay.checkMatch(id) runs index.html?replaycheck=ID in a hidden iframe
