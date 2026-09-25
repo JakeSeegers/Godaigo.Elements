@@ -7238,6 +7238,14 @@ document.getElementById('undo-move').onclick = function() {
                     imitationItem.textContent = imitationLabel();
                 });
                 menu.appendChild(imitationItem);
+                const mindLabel = () =>
+                    `Bot Mind (Shift+M): ${(window.BotMind && window.BotMind.isEnabled()) ? 'ON' : 'OFF'}`;
+                const mindItem = makeItem(mindLabel(), () => {
+                    if (!window.BotMind) return;
+                    window.BotMind.setEnabled(!window.BotMind.isEnabled());
+                    mindItem.textContent = mindLabel();
+                });
+                menu.appendChild(mindItem);
                 menu.appendChild(makeItem('Manage Profiles', openProfileAdmin));
                 menu.appendChild(makeItem('Game Logs', openGameLogsPanel));
                 menu.appendChild(makeItem('Board Rotation', openBoardRotationPanel));

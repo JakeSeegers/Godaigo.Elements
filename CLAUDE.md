@@ -207,6 +207,12 @@ Order matters — later scripts depend on earlier ones.
                              SELECT, authenticated insert with created_by = auth.uid()) — local
                              (localStorage godaigo_bot_episodes) is only the fallback/offline cache. Must
                              follow bot.js (needs window.BotSystem.evaluateSnapshot).
+24c. bot-mind.js           ← window.BotMind: hermit-only "Bot Mind" viewer (hermit menu or Shift+M). bot.js botAct()
+                             builds one record per decision only while BotMind.wants() (beginThought/finishThought:
+                             mode quick/lookahead/playout/plan/unstuck, chosen action + reason, top 6 options with
+                             scores + reasons, goal path, build plan cells, searchPick's planned line). Draws
+                             .bot-mind-layer in #viewport (ghost plan stones, goal path, look-ahead line, break/place
+                             mark) and #bot-mind-panel. Off during muted arena training.
 25. bot-driver.js          ← window.BotDriver — host-only multiplayer bot player ("🤖 Add Bot" lobby button);
                              host's client impersonates the bot's index to drive its turns
 26. bot-arena.js           ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). window.BotArena — self-play arena (bot-vs-bot local games, weight evolution).

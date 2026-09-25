@@ -10,7 +10,7 @@
 |------|---------------|
 | `variables.css` | **Design tokens** — all CSS custom properties. Edit here to retheme. |
 | `base.css` | Global reset, body/html defaults, font-face declarations |
-| `styles.css` | **Main stylesheet** — game layout, HUD, panels, modals, tutorial system, auth screen, gamification UI, scroll deck, stone cards, CRT overlay, emoji system, responsive rules |
+| `styles.css` | **Main stylesheet**: game layout, HUD, panels, modals, tutorial system, auth screen, gamification UI, scroll deck, stone cards, CRT overlay, emoji system, Bot Mind viewer (#bot-mind-panel, .bot-mind-layer), responsive rules |
 | `layout.css` | Lobby wrapper layout, game layout grid (3-col), panel collapse transitions |
 | `board.css` | SVG board elements: hex tile fills/strokes, stone circles, player pawn markers, shrine markers, snap indicators |
 | `components.css` | Buttons, inputs, modals, dropdowns, cards, status text, common UI primitives |

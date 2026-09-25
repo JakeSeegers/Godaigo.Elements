@@ -1721,7 +1721,9 @@
         // same way revisitPenalty already is.
         const tac = legal.some(a => a.type === 'placeStone') ? tacticalContext(snap0) : null;
 
-        function value(snap, d) {
+        // `pv` (optional array) receives the best line found below this node,
+        // so the Bot Mind viewer can show what the search expects to play.
+        function value(snap, d, pv) {
             // Leaf: depth exhausted, game over, or the turn passed (endTurn)
             if (d <= 0 || snap.turn.activePlayerIndex !== meIdx || sim.isTerminal(snap)) {
                 return evaluateSnapshot(snap, meIdx);
@@ -1734,8 +1736,12 @@
                 .slice(0, breadth);
             let best = -Infinity;
             for (const c of children) {
-                const v = value(c.s1, d - 1);
-                if (v > best) best = v;
+                const line = pv ? [] : null;
+                const v = value(c.s1, d - 1, line);
+                if (v > best) {
+                    best = v;
+                    if (pv) { pv.length = 0; pv.push(c.a, ...line); }
+                }
             }
             return best;
         }
@@ -1749,7 +1755,8 @@
             .slice(0, Math.max(breadth, 8)); // keep the root a little wider
         let best = null;
         for (const c of rootChildren) {
-            let v = value(c.s1, depth - 1);
+            const line = [];
+            let v = value(c.s1, depth - 1, line);
             if (c.a.type === 'move') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
             if (c.a.type === 'teleport') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.teleportRevisitPenalty);
             if (c.a.type === 'breakStone' || c.a.type === 'placeStone') v += unblockBonus(c.a, snap0, uctx);
@@ -1759,7 +1766,7 @@
                 // see — keep the same idle-drop bias greedy scoring has.
                 if (!c.a.scroll) v += WEIGHTS.placeTacticalBase;
             }
-            if (!best || v > best.score) best = { action: c.a, score: v };
+            if (!best || v > best.score) best = { action: c.a, score: v, line: [c.a, ...line] };
         }
         _fieldCtx = null; // valid only for this decision
         return best;
@@ -2096,15 +2103,190 @@
         // placement is actually on the table this decision.
         ctx.tac = legal.some(a => a.type === 'placeStone') ? tacticalContext(snap) : null;
 
-        return legal
+        const out = legal
             .map(a => scoreWithOptionalTrace(a, ctx))
             .sort((x, y) => y.score - x.score);
+        if (opts && opts.withCtx) out.ctx = ctx; // Bot Mind viewer: goals/paths
+        return out;
     }
 
     // ----------------------------------------------------------------
     // One bot step: pick argmax, apply it. Returns the applied action or null.
     // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
+    // Bot Mind: plain-language reasons for the viewer (js/bot-mind.js).
+    // Read-only: nothing here changes what the bot decides.
+    // ----------------------------------------------------------------
+    const cap = w => w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
+    const scrollName = id => window.SCROLL_DEFINITIONS?.[id]?.name || id || '';
+    const pathCost = path => path ? path.reduce((c, p) => c + p.cost, 0) : 0;
+    const firstHop = (path, a) => !!(path && path.length && Math.hypot(path[0].x - a.x, path[0].y - a.y) < 5);
+
+    function explainAction(a, snap, ctx) {
+        const self = me(snap);
+        switch (a.type) {
+            case 'placeTile': return 'Place home tile';
+            case 'cast': {
+                const el = scrollElement(a.scroll);
+                const n = scrollName(a.scroll);
+                if (el && ELEMENTS.includes(el)) {
+                    if (self?.activated.includes(el)) return `Cast ${n} (already has ${el})`;
+                    if ((snap.sourcePool[el] || 0) <= 0) return `Cast ${n} (no ${el} stones left to earn)`;
+                    return `Cast ${n}: activates ${el}`;
+                }
+                return `Cast ${n}`;
+            }
+            case 'placeStone': {
+                if (a.scroll) return `${cap(a.stoneType)} stone for ${scrollName(a.scroll)} (${Math.round((a.progress || 0) * 100)}%)`;
+                const opens = ctx?.unblock && unblockBonus(a, snap, ctx.unblock) > 0;
+                if (a.stoneType === 'fire') return opens ? 'Fire: burn a blocking stone' : 'Fire: burn nearby stones';
+                if (a.stoneType === 'void') return opens ? 'Void: open an earth wall' : 'Void stone';
+                if (a.stoneType === 'earth') return 'Earth: wall off a path';
+                if (a.stoneType === 'wind') return 'Wind: pave own path';
+                return `${cap(a.stoneType)} stone`;
+            }
+            case 'breakStone': {
+                const opens = ctx?.unblock && unblockBonus(a, snap, ctx.unblock) > 0;
+                return `Break ${a.stoneType} (${a.cost} AP)${opens ? ': opens the way' : ''}`;
+            }
+            case 'move': {
+                if (ctx) {
+                    if (firstHop(ctx.homePath, a)) return `Toward home to win (${pathCost(ctx.homePath)} AP)`;
+                    if (firstHop(ctx.fixationPath, a)) return `Toward a new build site (${pathCost(ctx.fixationPath)} AP)`;
+                    for (const t of ctx.shrines || []) {
+                        const path = ctx.paths?.get(t.id);
+                        if (firstHop(path, a)) return `Toward ${t.shrineType} shrine (${pathCost(path)} AP)`;
+                    }
+                    if (ctx.hiddenTiles?.some(t => Math.hypot(t.x - a.x, t.y - a.y) < 70)) return 'Step onto a hidden tile (reveals it)';
+                    if (firstHop(ctx.explorePath, a)) return `Toward a hidden tile (${pathCost(ctx.explorePath)} AP)`;
+                }
+                return `Step (${a.cost} AP)`;
+            }
+            case 'teleport': return `Teleport to ${a.shrineType} shrine`;
+            case 'moveStone': return `Move a ${a.stoneType} stone`;
+            case 'discardScroll': return `Discard ${scrollName(a.scroll)}`;
+            case 'endTurn': {
+                const on = ctx?.onShrine;
+                return on ? `End turn: collect ${on.shrineType} stones` : 'End turn';
+            }
+        }
+        return a.type;
+    }
+
+    // Where is the bot trying to go? Same values the move scoring uses.
+    function currentGoal(snap, ctx, fixation) {
+        const self = me(snap);
+        if (!self || !ctx) return null;
+        const mk = (kind, label, path, x, y) => ({ kind, label, x, y, cost: pathCost(path),
+            path: [{ x: self.x, y: self.y }, ...(path || []).map(p => ({ x: p.x, y: p.y }))] });
+        if (ctx.homePath) {
+            const h = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === snap.turn.activePlayerIndex);
+            return mk('home', 'Home tile (all 5 activated)', ctx.homePath, h?.x, h?.y);
+        }
+        if (fixation && ctx.fixationPath) return mk('fixation', `New build site for ${scrollName(fixation.scroll)}`, ctx.fixationPath, fixation.x, fixation.y);
+        if (ctx.onShrine) return { kind: 'shrine', label: `Standing on ${ctx.onShrine.shrineType} shrine`, x: ctx.onShrine.x, y: ctx.onShrine.y, cost: 0, path: [] };
+        let best = null;
+        for (const t of ctx.shrines || []) {
+            const path = ctx.paths?.get(t.id);
+            if (!path || !path.length) continue;
+            const v = WEIGHTS.moveShrineValue * shrineValue(snap, t.shrineType) / (1 + pathCost(path));
+            if (!best || v > best.v) best = { v, g: mk('shrine', `${cap(t.shrineType)} shrine`, path, t.x, t.y) };
+        }
+        if (ctx.explorePath && ctx.explorePath.length) {
+            const v = WEIGHTS.moveExplorePath / (1 + pathCost(ctx.explorePath));
+            const last = ctx.explorePath[ctx.explorePath.length - 1];
+            if (!best || v > best.v) best = { v, g: mk('explore', 'Hidden tile (new scroll)', ctx.explorePath, last.x, last.y) };
+        }
+        return best ? best.g : null;
+    }
+
+    function beginThought(snap) {
+        const ranked = rankActions(null, { withCtx: true });
+        const ctx = ranked.ctx || null;
+        const idx = snap.turn.activePlayerIndex;
+        return {
+            playerIndex: idx,
+            turnAp: snap.turn.ap,
+            snap, ctx,
+            mode: null, line: null, fixation: null,
+            options: ranked.slice(0, 6).map(r => ({ action: r.action, score: r.score, reason: explainAction(r.action, snap, ctx) })),
+        };
+    }
+
+    function finishThought(th, act) {
+        const m = mem(th.playerIndex);
+        let goal = currentGoal(th.snap, th.ctx, th.fixation);
+        // Unstuck mode ranks with a fixation target; rebuild its path for the drawing.
+        if (th.fixation && (!goal || goal.kind !== 'fixation')) {
+            const self = me(th.snap);
+            const path = self && window.BotState.findPath(self.x, self.y, th.fixation.x, th.fixation.y);
+            if (path && path.length) goal = { kind: 'fixation', label: `New build site for ${scrollName(th.fixation.scroll)}`,
+                x: th.fixation.x, y: th.fixation.y, cost: pathCost(path),
+                path: [{ x: self.x, y: self.y }, ...path.map(p => ({ x: p.x, y: p.y }))] };
+        }
+        const self = me(th.snap);
+        // The goal shown should be where the bot is actually walking: when the
+        // chosen step is the first hop of a known path, that path wins.
+        if (act && act.type === 'move' && th.ctx && self) {
+            const ctx = th.ctx;
+            const pick = (kind, label, path, x, y) => ({ kind, label, x, y, cost: pathCost(path),
+                path: [{ x: self.x, y: self.y }, ...path.map(p => ({ x: p.x, y: p.y }))] });
+            let g = null;
+            if (firstHop(ctx.homePath, act)) {
+                const h = th.snap.tiles.find(t => t.isPlayerTile && t.playerIndex === th.playerIndex);
+                g = pick('home', 'Home tile (all 5 activated)', ctx.homePath, h?.x, h?.y);
+            }
+            for (const t of ctx.shrines || []) {
+                const path = ctx.paths?.get(t.id);
+                if (!g && firstHop(path, act)) g = pick('shrine', `${cap(t.shrineType)} shrine`, path, t.x, t.y);
+            }
+            if (!g && firstHop(ctx.explorePath, act)) {
+                const last = ctx.explorePath[ctx.explorePath.length - 1];
+                g = pick('explore', 'Hidden tile (new scroll)', ctx.explorePath, last.x, last.y);
+            }
+            if (!g && th.mode === 'plan' && m.plan) {
+                const cx = m.plan.cells.reduce((a, c) => a + c.x, 0) / m.plan.cells.length;
+                const cy = m.plan.cells.reduce((a, c) => a + c.y, 0) / m.plan.cells.length;
+                g = { kind: 'plan', label: `Build site for ${scrollName(m.plan.scroll)}`, x: cx, y: cy, cost: 0,
+                    path: [{ x: self.x, y: self.y }, { x: act.x, y: act.y }] };
+            }
+            if (g) goal = g;
+        }
+        return {
+            playerIndex: th.playerIndex,
+            at: Date.now(),
+            mode: th.mode || (act ? 'quick' : 'none'),
+            ap: th.turnAp,
+            from: self ? { x: self.x, y: self.y } : null,
+            chosen: act ? { action: act, reason: explainAction(act, th.snap, th.ctx) } : null,
+            options: th.options,
+            goal,
+            plan: m.plan ? { scroll: m.plan.scroll, name: scrollName(m.plan.scroll),
+                cells: m.plan.cells.map(c => ({ x: c.x, y: c.y, type: c.type })) } : null,
+            line: th.line ? th.line.map(a => ({ action: a, reason: explainAction(a, th.snap, null) })) : null,
+            stuck: { unproductive: m.unproductiveStreak, repeat: m.turnRepeatStreak },
+            searchDepth: WEIGHTS.searchDepth | 0,
+        };
+    }
+
+    // Bot Mind viewer (js/bot-mind.js): one record per decision. Only built
+    // while the viewer is open, so normal and arena play pay nothing.
+    let _th = null;
     function botAct() {
+        _th = null;
+        const snapBefore = (window.BotMind && window.BotMind.wants()) ? window.BotState.snapshot() : null;
+        if (snapBefore) {
+            try { _th = beginThought(snapBefore); } catch (e) { _th = null; }
+        }
+        const act = botActCore();
+        if (_th) {
+            try { window.BotMind.record(finishThought(_th, act)); } catch (e) { log('Bot Mind record failed', e); }
+        }
+        _th = null;
+        return act;
+    }
+
+    function botActCore() {
         if (typeof isMultiplayer !== 'undefined' && isMultiplayer &&
             typeof myPlayerIndex !== 'undefined' && activePlayerIndex !== myPlayerIndex) {
             log('Not this client\'s turn - refusing to act (multiplayer guard)');
@@ -2125,6 +2307,7 @@
                 const ranked = rankActions(); // legalActions() returns discards only right now
                 if (ranked.length) {
                     const { action } = ranked[0];
+                    if (_th) _th.mode = 'overflow';
                     log(`Resolving scroll overflow: discard ${action.scroll} (from ${action.from})`);
                     const r = window.BotState.applyAction(action);
                     if (r.ok) return action;
@@ -2152,6 +2335,7 @@
                         : planAction.type === 'endTurn' ? 'end turn to collect shrine stones'
                         : `move to (${planAction.x.toFixed(0)},${planAction.y.toFixed(0)})`;
             log(`Plan action: ${label}`);
+            if (_th) _th.mode = 'plan';
             const r = window.BotState.applyAction(planAction);
             if (r.ok) {
                 if (planAction.type === 'cast') {
@@ -2218,6 +2402,7 @@
                 const ranked = rankActions(fixationTarget);
                 if (ranked.length) {
                     choice = ranked[0];
+                    if (_th) { _th.mode = 'unstuck'; _th.fixation = fixationTarget; }
                     log(`${stuckByRepeat ? `Turn-repeat circuit breaker (streak ${m.turnRepeatStreak})` : `Unproductive streak (${m.unproductiveStreak})`}: ` +
                         `fixating on ${fixationTarget.scroll} near (${fixationTarget.x.toFixed(0)},${fixationTarget.y.toFixed(0)})`);
                 }
@@ -2226,6 +2411,7 @@
                 const ranked = rankActions().filter(r => r.action.type !== 'move');
                 if (ranked.length) {
                     choice = ranked[0];
+                    if (_th) _th.mode = 'unstuck';
                     log(`Turn-repeat circuit breaker (streak ${m.turnRepeatStreak}): skipping movement, picked ${choice.action.type}`);
                 } else {
                     const r = window.BotState.applyAction({ type: 'endTurn' });
@@ -2245,6 +2431,7 @@
         if (!choice && WEIGHTS.mctsEnabled && window.BotSim) {
             choice = mctsPick();
             if (choice) {
+                if (_th) _th.mode = 'playout';
                 log(`MCTS (${choice.samples} samples, ${choice.votes}/${choice.samples} votes) picked ${choice.action.type}`);
                 signalBrainMode(snap.turn.activePlayerIndex, 'mcts');
             }
@@ -2282,6 +2469,7 @@
             if (useSearch) {
                 choice = searchPick();
                 if (choice) {
+                    if (_th) { _th.mode = 'lookahead'; _th.line = choice.line || null; }
                     log(`Search (depth ${WEIGHTS.searchDepth | 0}${WEIGHTS.searchHybrid ? ', hybrid' : ''}) picked ${choice.action.type}`);
                     signalBrainMode(snap.turn.activePlayerIndex, 'search');
                 }
@@ -2291,6 +2479,7 @@
             const ranked = rankActions();
             if (!ranked.length) { log('No legal actions found'); return null; }
             choice = ranked[0];
+            if (_th) _th.mode = 'quick';
         }
 
         // Anti-freeze: choosing endTurn with most of the turn's AP unspent

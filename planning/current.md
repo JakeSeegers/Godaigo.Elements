@@ -118,6 +118,13 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-25: Bot Mind viewer (js/bot-mind.js, hermit only).** Owner asked to see the
+  bots' plans and choices. Hermit menu "Bot Mind" or Shift+M. Per decision: how it decided
+  (quick / look-ahead / play-out / following plan / getting unstuck), what it is doing and
+  why, its goal (path drawn on the board), its build plan (ghost stones), the look-ahead's
+  planned line ("Sees ahead", numbered stops on the board), stuck counters, top 6 options
+  with scores. Built only while the viewer is on. Tested headless in a visual 3-bot game.
+  Next: show mined combos and scroll choices here once Phases 2-4 exist.
 - **2026-09-25: Bots clear blocking stones.** Owner report: bot games stall because
   bots can't tell when to break a stone to reach a shrine. Before: breakStone scored a
   flat `breakStoneBase - cost` (earth = -2), and search could not plan a break at all.
