@@ -305,6 +305,9 @@
                                   // know: an element-known draw (Wandering River tile) is worth
                                   // evalScrollCredit x this if that element is needed; a fully
                                   // unknown draw is the average over the five elements
+        evalHandOverflow:   40,   // per scroll over the hand limit (2): it will have to be
+                                  // discarded, so drawing into a full hand is not free value
+                                  // (without this, bots re-cast Scholar's Insight every turn)
         castChoiceNeed:     20,   // greedy tie-break between a scroll's choices (River / Stomp):
                                   // x scroll need of the element the choice would draw
         evalAp:              2,   // per remaining AP (own turn only)
@@ -724,6 +727,9 @@
     function choiceDrawElement(a, snap) {
         const c = a.choice;
         if (!c) return null;
+        // Scholar's Insight / Inspiring Draught: the chosen deck's element.
+        if (a.scroll === 'VOID_SCROLL_4' || a.scroll === 'WATER_SCROLL_3') return c.element || null;
+        if (c.tileId == null) return null;
         const t = snap.tiles.find(x => Number(x.id) === Number(c.tileId));
         if (!t || t.revealed) return null;
         if (a.scroll === 'WATER_SCROLL_4') return c.element || null;
@@ -1736,6 +1742,8 @@
             }
             value += unknownAny * avg / ELEMENTS.length;
         }
+        const over = p.hand.length - (window.spellSystem?.MAX_HAND_SIZE ?? 2);
+        if (over > 0) value -= over * WEIGHTS.evalHandOverflow;
         return { value, cover };
     }
 
@@ -2306,6 +2314,11 @@
             case 'cast': {
                 const el = scrollElement(a.scroll);
                 const n = scrollName(a.scroll);
+                if (a.choice && a.choice.tileId == null) {
+                    const e = a.choice.element;
+                    if (a.scroll === 'CATACOMB_SCROLL_9') return `Cast ${n}: take the ${e} level-1 scroll and 2 ${e} stones`;
+                    return `Cast ${n}: draw from the ${e} deck`;
+                }
                 if (a.choice) {
                     const t = snap.tiles.find(x => Number(x.id) === Number(a.choice.tileId));
                     const hidden = t && !t.revealed;
@@ -2657,8 +2670,14 @@
                 //      exact wandering this gate exists to prevent. Reuse the
                 //      same hasWinCredit() the filter/scorer already use so the
                 //      trigger and the search agree on what counts.
+                // Also while a placement buff is live (Burning Motivation pays
+                // AP per stone, Avalanche lifts the range): which stones to
+                // spend is a real multi-step choice only search can weigh.
+                const b = snap.turn.buffs || {};
                 useSearch = legal.some(a => a.type === 'cast' ||
-                    (a.type === 'placeStone' && a.scroll && hasWinCredit(snap, a.scroll)));
+                    (a.type === 'placeStone' && a.scroll && hasWinCredit(snap, a.scroll))) ||
+                    ((b.burningMotivationStacks || 0) > 0 && legal.some(a => a.type === 'placeStone')) ||
+                    (!!b.globalPlacement && legal.some(a => a.type === 'placeStone'));
             }
             if (useSearch) {
                 choice = searchPick();

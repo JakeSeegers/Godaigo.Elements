@@ -166,6 +166,12 @@
     let pendingChoice = null;
     let pendingRiverElement = null;
     function setPendingChoice(c) { pendingChoice = c || null; pendingRiverElement = null; }
+    // Put the chosen element first in a ranked list (default order after it,
+    // so an unavailable deck still falls back sensibly).
+    function withChoice(scroll, ranked) {
+        const c = takeChoice(scroll);
+        return (c && c.element) ? [c.element, ...ranked.filter(e => e !== c.element)] : ranked;
+    }
     function takeChoice(scroll) {
         if (!pendingChoice || pendingChoice.scroll !== scroll) return null;
         const c = pendingChoice;
@@ -184,7 +190,7 @@
     function driveTileFlip(se, sm) {
         const tiles = sm.eligibleTiles || [];
         if (!tiles.length) return false;
-        const chosen = takeChoice('EARTH_SCROLL_4');
+        const chosen = takeChoice('EARTH_SCROLL_4') || takeChoice('CATACOMB_SCROLL_3');
         const chosenTile = chosen && tiles.find(t => Number(t.id) === Number(chosen.tileId));
         if (chosenTile) { sm.handleTileClick(chosenTile); return true; }
         const me = self(snap());
@@ -408,7 +414,7 @@
         if (!modal) return false;
         const heading = modal.querySelector('h3')?.textContent || '';
         if (heading.includes('Choose a Deck')) {
-            return !!clickBestElement(modal, rankedScrollElements());
+            return !!clickBestElement(modal, withChoice('VOID_SCROLL_4', rankedScrollElements()));
         }
         // Deck browser: cards are <div>s whose first child is the scroll name.
         // Take the scroll that best covers an element the bot still needs,
@@ -511,7 +517,7 @@
     //      modal and moves on, same as any other multi-step flow here.
     // ----------------------------------------------------------------
     function driveInspiringDraughtDeck(modal) {
-        const ranked = rankedScrollElements();
+        const ranked = withChoice('WATER_SCROLL_3', rankedScrollElements());
         for (const el of ranked) {
             const label = el.charAt(0).toUpperCase() + el.slice(1);
             const btn = [...modal.querySelectorAll('button')].find(b => !b.disabled && b.textContent.startsWith(label));
@@ -569,7 +575,7 @@
     function driveQuickReflexes() {
         const modal = document.getElementById('quick-reflexes-modal');
         if (!modal) return false;
-        return !!clickBestElement(modal, rankedElements());
+        return !!clickBestElement(modal, withChoice('CATACOMB_SCROLL_9', rankedElements()));
     }
 
     // ----------------------------------------------------------------

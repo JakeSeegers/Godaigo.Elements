@@ -731,9 +731,11 @@
     // modelled: level-1 scrolls are response-only and never enumerated as a
     // legal PROACTIVE cast (see legalActions()'s `def.level === 1` skip), so
     // the buff has no consumer anywhere in this simulator to matter to.
-    function simEffectQuickReflexes(snap, p) {
+    function simEffectQuickReflexes(snap, p, choice) {
         if (!snap.level1Available) return; // older/real snapshot missing this field — no info, bail like an empty search
-        const el = effectRankedElements(snap, p).find(e => snap.level1Available[e]);
+        const picked = choiceElement(choice);
+        const el = (picked && snap.level1Available[picked]) ? picked
+            : effectRankedElements(snap, p).find(e => snap.level1Available[e]);
         if (!el) return; // real flow shows "no level 1 scrolls available" and bails
         const scrollName = `${el.toUpperCase()}_SCROLL_1`;
         if (p.hand) { p.hand.push(scrollName); p.handCount++; }
@@ -967,9 +969,12 @@
     // turns out to be isn't knowable either (deck contents/order aren't in
     // the snapshot) — drawn as UNKNOWN_SCROLL, same convention as every
     // other "we know a draw happens, not which card" case in this file.
-    function simEffectScholarsInsight(snap) {
-        drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+    function simEffectScholarsInsight(snap, choice) {
+        // With a chosen deck the drawn scroll's element is known (the
+        // driver then takes the best card of that deck).
+        drawScrollOnReveal(snap, snap.turn.activePlayerIndex, choiceElement(choice));
     }
+    const choiceElement = c => (c && ELEMENTS.includes(c.element)) ? c.element : null;
 
     // Inspiring Draught (WATER_SCROLL_3): draws 2 from the most-needed
     // element's deck, puts 1 back — net effect is always "keep exactly 1"
@@ -978,8 +983,8 @@
     // The put-back choice (response-only first, else lowest-level) only
     // affects the DECK, which isn't in the snapshot, so it has no visible
     // consequence here.
-    function simEffectInspiringDraught(snap) {
-        drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+    function simEffectInspiringDraught(snap, choice) {
+        drawScrollOnReveal(snap, snap.turn.activePlayerIndex, choiceElement(choice));
     }
 
     // Mason's Savvy (EARTH_SCROLL_3): draw up to 5 earth (source/room
@@ -1043,8 +1048,8 @@
     // an evaluator could eventually credit "this turn's reveals are worth
     // more" once someone builds a value model that doesn't need to know
     // the element to do it.
-    function simEffectCallToAdventure(snap, p) {
-        flipNearestEligibleTile(snap, p, 'Call to Adventure');
+    function simEffectCallToAdventure(snap, p, choice) {
+        flipNearestEligibleTile(snap, p, 'Call to Adventure', choice?.tileId);
         buffs(snap).callToAdventure = true;
         simNotes(snap).notes.push('Call to Adventure buff active - future-reveal stone grants not modelled (element unknowable)');
     }
@@ -1491,17 +1496,17 @@
         } else if (scrollName === 'EARTH_SCROLL_2') {
             simEffectShiftingSands(snap);
         } else if (scrollName === 'VOID_SCROLL_4') {
-            simEffectScholarsInsight(snap);
+            simEffectScholarsInsight(snap, choice);
         } else if (scrollName === 'WATER_SCROLL_3') {
-            simEffectInspiringDraught(snap);
+            simEffectInspiringDraught(snap, choice);
         } else if (scrollName === 'CATACOMB_SCROLL_3') {
-            simEffectCallToAdventure(snap, p);
+            simEffectCallToAdventure(snap, p, choice);
         } else if (scrollName === 'CATACOMB_SCROLL_8') {
             simEffectPlunder(snap, p, scrollName);
         } else if (scrollName === 'WIND_SCROLL_4') {
             simEffectTakeFlight(snap, p);
         } else if (scrollName === 'CATACOMB_SCROLL_9') {
-            simEffectQuickReflexes(snap, p);
+            simEffectQuickReflexes(snap, p, choice);
         } else if (scrollName === 'WATER_SCROLL_5') {
             simEffectControlTheCurrent(snap, p);
         } else if (scrollName === 'WIND_SCROLL_3') {
@@ -1637,8 +1642,12 @@
     //       scroll of (revealing it this turn draws that element's scroll);
     //     - the revealed shrine tile the pawn stands on, as an element it
     //       needs stones of (ending the turn there collects those).
-    //   EARTH_SCROLL_4 Heavy Stomp: {tileId}, a face-down eligible tile,
-    //     River-changed tiles first, then nearest.
+    //   EARTH_SCROLL_4 Heavy Stomp, CATACOMB_SCROLL_3 Call to Adventure:
+    //     {tileId}, a face-down eligible tile, River-changed tiles first.
+    //   VOID_SCROLL_4 Scholar's Insight, WATER_SCROLL_3 Inspiring Draught:
+    //     {element}, the deck to draw from (top 3 by scroll need).
+    //   CATACOMB_SCROLL_9 Quick Reflexes: {element}, whose level-1 scroll
+    //     (and 2 stones) to take (top 3 by stone need, still in the deck).
     // ----------------------------------------------------------------
     function castChoices(snap, name) {
         const p = activePlayer(snap);
@@ -1658,7 +1667,20 @@
             }
             return out;
         }
-        if (name === 'EARTH_SCROLL_4') {
+        if (name === 'VOID_SCROLL_4' || name === 'WATER_SCROLL_3') {
+            // Scholar's Insight / Inspiring Draught: which deck to draw from.
+            const need = window.BotSystem?.scrollNeed?.(snap, snap.turn.activePlayerIndex);
+            if (!need) return [];
+            return ELEMENTS.filter(e => need[e] > 0).sort((a, b) => need[b] - need[a])
+                .slice(0, 3).map(element => ({ element }));
+        }
+        if (name === 'CATACOMB_SCROLL_9') {
+            // Quick Reflexes: which element's level-1 scroll (+2 of its stones).
+            if (!snap.level1Available) return [];
+            return effectRankedElements(snap, p).filter(e => snap.level1Available[e])
+                .slice(0, 3).map(element => ({ element }));
+        }
+        if (name === 'EARTH_SCROLL_4' || name === 'CATACOMB_SCROLL_3') {
             const river = new Set((snap.crossTurnBuffs?.wanderingRiver || []).map(e => Number(e.tileId)));
             return snap.tiles
                 .filter(t => !t.isPlayerTile && !t.revealed && tileStoneCount(snap, t) === 0 && !tileHasPawns(snap, t))
@@ -1838,6 +1860,32 @@
                         scroll: null, progress: 0, tactical: true,
                     });
                 }
+            }
+        }
+
+        // Burning Motivation (FIRE_SCROLL_2): every placed stone pays +2 AP
+        // per stack, so a spare stone is worth placing just for the AP.
+        // One adjacent hex per held type (where it survives) keeps the tree
+        // small; the evaluator weighs the stone against the AP.
+        if (!pawnOnStone && (snap.turn.buffs?.burningMotivationStacks || 0) > 0) {
+            for (const type of ELEMENTS) {
+                if ((p.pool[type] || 0) <= 0) continue;
+                const h = g.find(h => {
+                    const d = dist(h.x, h.y, p.x, p.y);
+                    if (d <= HEX_NEAR || d >= HEX_STEP) return false;
+                    if (stoneAt(snap, h.x, h.y)) return false;
+                    if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) return false;
+                    if (h.tileIds.some(id => {
+                        const t = snap.tiles.find(tt => tt.id === id);
+                        return t && !t.revealed && !t.isPlayerTile;
+                    })) return false;
+                    return stoneWouldSurvive(snap, h.x, h.y, type);
+                });
+                if (!h) continue;
+                const key = `${h.x.toFixed(1)},${h.y.toFixed(1)},${type}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                actions.push({ type: 'placeStone', x: h.x, y: h.y, stoneType: type, scroll: null, progress: 0, tactical: true });
             }
         }
 

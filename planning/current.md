@@ -118,6 +118,20 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-25: Combo plan Phase 2, second batch.** Choices as moves for Scholar's Insight
+  and Inspiring Draught ({element} deck, top 3 by scroll need, sim draws
+  '?unknown:<element>?'), Quick Reflexes ({element}, top 3 by stone need) and Call to
+  Adventure ({tileId}, same list as Heavy Stomp). Burning Motivation: real and sim move
+  lists offer spare-stone placements of every held type (sim: one hex per type), and hybrid
+  search now runs while Burning Motivation or Avalanche is live. New `evalHandOverflow` (40
+  per scroll over the hand limit): without it bots re-cast Scholar's Insight into a full
+  hand every turn (3p: 7 wins vs 9, discards 137 -> 194). Live headless check: each choice
+  was carried out exactly (Scholar's fire deck -> fire scroll, Draught wind -> wind scroll,
+  Quick Reflexes water -> WATER_SCROLL_1, Call to Adventure flipped the chosen tile,
+  Burning Motivation spare wind stone +2 AP as simulated). Arena vs previous commit:
+  2p 11 -> 11 wins, 9 -> 8 stalls; 3p 9 -> 9 wins, 3 -> 3 stalls (neutral).
+  Still to do in Phase 2: Avalanche placements anchored away from the pawn, other
+  choice scrolls (Create, Arson, Plunder, Take Flight, Telekinesis, Shifting Sands).
 - **2026-09-25: Combo plan Phase 2, first batch: Wandering River + Heavy Stomp.** Their
   choices are real moves now: `BotSim.castChoices()` lists them (River {tileId, element},
   Stomp {tileId}), BotState and BotSim legalActions emit one cast per choice, the sim

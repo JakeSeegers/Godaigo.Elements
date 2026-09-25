@@ -239,7 +239,8 @@
     // Legal action enumeration for the ACTIVE player.
     // Canonical forms — the only vocabulary bot strategy may use:
     //   {type:'placeTile', x, y, distToCentroid}                    // placement phase only
-    //   {type:'cast', scroll, choice?}  // choice: {tileId, element} River / {tileId} Stomp (BotSim.castChoices)
+    //   {type:'cast', scroll, choice?}  // choice: {tileId, element} River / {tileId} Stomp, Call to Adventure /
+    //                                   // {element} Scholar's Insight, Inspiring Draught, Quick Reflexes (BotSim.castChoices)
     //   {type:'placeStone', x, y, stoneType, scroll, progress}
     //   {type:'move', x, y, cost}
     //   {type:'breakStone', stoneId, x, y, stoneType, cost}
@@ -266,7 +267,8 @@
     // constant, not logic worth threading through as a dependency).
     const STONE_BREAK_COST = { void: 1, wind: 2, fire: 3, water: 4, earth: 5 };
     // Scrolls whose cast carries a choice ({type:'cast', scroll, choice}).
-    const CHOICE_SCROLLS = new Set(['WATER_SCROLL_4', 'EARTH_SCROLL_4']);
+    const CHOICE_SCROLLS = new Set(['WATER_SCROLL_4', 'EARTH_SCROLL_4', 'CATACOMB_SCROLL_3',
+        'VOID_SCROLL_4', 'WATER_SCROLL_3', 'CATACOMB_SCROLL_9']);
 
     // Free hexes adjacent to the existing placed-tile cluster, on the LARGE
     // player-tile hex grid (TILE_SIZE * 4) — distinct from hexGrid()'s small
@@ -444,12 +446,16 @@
             // lookahead can plan "clear, then walk" but not walls or paving.
             // Void joins them only next to an earth/water stone: voiding an
             // earth wall makes it walkable (bot.js unblockBonus scores that).
-            for (const stoneType of ['earth', 'wind', 'fire', 'void']) {
+            // While Burning Motivation is active every placed stone pays AP,
+            // so every held type (water too) is offered anywhere adjacent.
+            const burning = (activeTurnBuffs(activePlayerIndex)?.burningMotivationStacks || 0) > 0;
+            const tacticalTypes = burning ? ['earth', 'wind', 'fire', 'void', 'water'] : ['earth', 'wind', 'fire', 'void'];
+            for (const stoneType of tacticalTypes) {
                 if ((pool[stoneType] || 0) <= 0) continue;
                 for (const h of grid) {
                     const d = Math.hypot(h.x - player.x, h.y - player.y);
                     if (d <= HEX_NEAR || d >= HEX_STEP) continue;
-                    if (stoneType === 'void' && !placedStones.some(s =>
+                    if (stoneType === 'void' && !burning && !placedStones.some(s =>
                         (s.type === 'earth' || s.type === 'water') &&
                         Math.hypot(s.x - h.x, s.y - h.y) > HEX_NEAR &&
                         Math.hypot(s.x - h.x, s.y - h.y) < 50)) continue;

@@ -5479,7 +5479,7 @@ document.getElementById('undo-move').onclick = function() {
             // a 50-number table reads as "these are about movement" instead
             // of one long undifferentiated list.
             const WEIGHT_CATEGORIES = [
-                { name: 'Activating', keys: ['castBase', 'castUnactivated', 'castDeadElement', 'castAlreadyWon', 'castNoCredit', 'castLevel'] },
+                { name: 'Activating', keys: ['castBase', 'castUnactivated', 'castDeadElement', 'castAlreadyWon', 'castNoCredit', 'castLevel', 'castChoiceNeed'] },
                 { name: 'Stone placement', keys: ['placeBase', 'placeProgress', 'placeUnactivated', 'placeNoCredit', 'placeDoomed', 'planDeficitPenalty'] },
                 { name: 'Movement', keys: ['moveBase', 'moveShrineValue', 'moveApPenalty', 'moveExplore', 'moveExploreGradient', 'moveExplorePath', 'moveRevisitPenalty', 'moveFixation'] },
                 { name: 'Breaking a stone', keys: ['breakStoneBase', 'breakStoneApPenalty', 'breakUnblock'] },
@@ -5491,7 +5491,7 @@ document.getElementById('undo-move').onclick = function() {
                 { name: 'Placement phase', keys: ['placeTileBase', 'placeTileCentroidPenalty'] },
                 { name: 'Shrine valuation', keys: ['shrineNeed', 'shrineUnactivated', 'shrineDeadSource'] },
                 { name: 'Lookahead search (set by Bot Brain, not trained)', keys: ['searchDepth', 'searchBreadth', 'searchHybrid', 'searchKeepCasts', 'searchCastExtraDepth'] },
-                { name: 'State evaluation (used only when search is active)', keys: ['evalWin', 'evalActivated', 'evalStoneNeeded', 'evalStone', 'evalScrollHeld', 'evalScrollCredit', 'evalScrollNoCredit', 'evalScrollResponse', 'evalAp', 'evalUnsimCast', 'evalHiddenDist', 'evalHomeDist', 'evalUnreachableSteps'] },
+                { name: 'State evaluation (used only when search is active)', keys: ['evalWin', 'evalActivated', 'evalStoneNeeded', 'evalStone', 'evalScrollHeld', 'evalScrollCredit', 'evalScrollNoCredit', 'evalScrollResponse', 'evalScrollUnknownEase', 'evalHandOverflow', 'evalAp', 'evalUnsimCast', 'evalHiddenDist', 'evalHomeDist', 'evalUnreachableSteps'] },
                 { name: 'Opponent awareness', keys: ['evalOpponentThreat', 'evalCommonThreat'] },
             ];
 
