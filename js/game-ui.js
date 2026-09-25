@@ -5482,7 +5482,8 @@ document.getElementById('undo-move').onclick = function() {
                 { name: 'Activating', keys: ['castBase', 'castUnactivated', 'castDeadElement', 'castAlreadyWon', 'castNoCredit', 'castLevel'] },
                 { name: 'Stone placement', keys: ['placeBase', 'placeProgress', 'placeUnactivated', 'placeNoCredit', 'placeDoomed', 'planDeficitPenalty'] },
                 { name: 'Movement', keys: ['moveBase', 'moveShrineValue', 'moveApPenalty', 'moveExplore', 'moveExploreGradient', 'moveExplorePath', 'moveRevisitPenalty', 'moveFixation'] },
-                { name: 'Breaking a stone', keys: ['breakStoneBase', 'breakStoneApPenalty'] },
+                { name: 'Breaking a stone', keys: ['breakStoneBase', 'breakStoneApPenalty', 'breakUnblock'] },
+                { name: 'Clearing a path with fire or void', keys: ['placeUnblock', 'placeFireOwnPlanLoss'] },
                 { name: 'Returning home', keys: ['moveReturnHome'] },
                 { name: 'Ending the turn', keys: ['endTurnBase', 'endTurnOnShrine', 'endTurnLowAp'] },
                 { name: 'Discarding', keys: ['discardBase', 'discardActivated', 'discardDeadElement', 'discardLevel', 'discardVoluntary', 'discardResponseOnly'] },
@@ -5490,7 +5491,7 @@ document.getElementById('undo-move').onclick = function() {
                 { name: 'Placement phase', keys: ['placeTileBase', 'placeTileCentroidPenalty'] },
                 { name: 'Shrine valuation', keys: ['shrineNeed', 'shrineUnactivated', 'shrineDeadSource'] },
                 { name: 'Lookahead search (set by Bot Brain, not trained)', keys: ['searchDepth', 'searchBreadth', 'searchHybrid'] },
-                { name: 'State evaluation (used only when search is active)', keys: ['evalWin', 'evalActivated', 'evalStoneNeeded', 'evalStone', 'evalScrollHeld', 'evalAp', 'evalUnsimCast', 'evalHiddenDist', 'evalHomeDist'] },
+                { name: 'State evaluation (used only when search is active)', keys: ['evalWin', 'evalActivated', 'evalStoneNeeded', 'evalStone', 'evalScrollHeld', 'evalAp', 'evalUnsimCast', 'evalHiddenDist', 'evalHomeDist', 'evalUnreachableSteps'] },
                 { name: 'Opponent awareness', keys: ['evalOpponentThreat', 'evalCommonThreat'] },
             ];
 

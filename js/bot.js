@@ -170,6 +170,12 @@
         // on endTurn every turn.
         breakStoneBase:      3,
         breakStoneApPenalty: -1,  // × AP cost — cheap breaks (void, wind) preferred over earth
+        breakUnblock:        1.0, // × gain in best-goal value (shrine / hidden tile / home,
+                                  // move-score scale) when the break opens or shortens the
+                                  // way there; the break's AP counts as path cost (unblockBonus)
+        placeUnblock:        1.0, // same, for a fire that burns a blocking stone or a void
+                                  // that makes an earth wall walkable (no AP, costs the stone)
+        placeFireOwnPlanLoss: -60, // × build-plan stones that fire would burn too
 
         // Breath of Power's moveStone action (free, repeatable) — a small,
         // rarely-decisive nudge (mostly useful for clearing a hex the pawn
@@ -290,6 +296,8 @@
                                   // forward model honestly doesn't know (≈ castBase)
         evalHiddenDist:  -0.08,   // × px to nearest hidden tile (exploration shaping)
         evalHomeDist:     -0.6,   // × px to own shrine once all 5 elements are activated
+        evalUnreachableSteps: 12, // search leaves: an unreachable home / hidden tile counts as
+                                  // this many extra steps (35px each) past the straight line
         evalVoidHeld:        8,   // per void stone in pool, ON TOP of evalStoneNeeded/
                                   // evalStone above — void pool stones grant standing
                                   // AP (voidAP = pool.void each turn, game-core.js),
@@ -750,6 +758,7 @@
                 }
                 if (a.stoneType === 'void') s += WEIGHTS.placeVoidSpendPenalty;
                 s += tacticalPlaceBonus(a, snap, ctx.tac);
+                s += unblockBonus(a, snap, ctx.unblock);
                 return s;
             }
 
@@ -826,7 +835,8 @@
             }
 
             case 'breakStone': {
-                return WEIGHTS.breakStoneBase + WEIGHTS.breakStoneApPenalty * a.cost;
+                return WEIGHTS.breakStoneBase + WEIGHTS.breakStoneApPenalty * a.cost
+                     + unblockBonus(a, snap, ctx.unblock);
             }
 
             case 'moveStone': {
@@ -1359,35 +1369,197 @@
     // separate, optional step).
     // ----------------------------------------------------------------
 
-    // Explore field: cost-to-nearest-hidden-tile for every hex, computed once
-    // per search decision (multi-source Dijkstra over the SIM grid). Leaf
-    // evaluation uses it instead of euclidean distance — euclidean freezes
-    // the search in cul-de-sacs exactly like it froze the greedy scorer.
-    let _exploreField = null; // { dist: Map<hexKey, cost> } | null
-    function buildExploreField(snap) {
+    // ----------------------------------------------------------------
+    // Path fields (shared by greedy unblock scoring and search leaves).
+    // All run over the SIM grid with BotSim.canMoveTo, so they work on
+    // hypothetical boards ("what if this stone were gone?") too.
+    // ----------------------------------------------------------------
+
+    // Neighbour lists for the sim grid. The grid only depends on the tiles
+    // (and which are still face down), so it is cached by a tile signature
+    // and shared by every hypothetical board of the same turn.
+    const _adjCache = new Map(); // tileSig -> { grid, byKey, adj }
+    function gridInfo(snap) {
+        const sig = snap.tiles.map(t => `${t.id}@${Math.round(t.x)},${Math.round(t.y)}${t.revealed ? 'r' : 'h'}`).join('|');
+        let info = _adjCache.get(sig);
+        if (info) return info;
         const grid = window.BotSim.grid(snap);
-        const hiddenIds = new Set(snap.tiles.filter(t => !t.revealed && !t.isPlayerTile).map(t => t.id));
-        if (!hiddenIds.size) return null;
+        const byKey = new Map(grid.map(h => [h.key, h]));
+        const buckets = new Map();
+        const bk = (x, y) => `${Math.floor(x / 40)},${Math.floor(y / 40)}`;
+        for (const h of grid) {
+            const k = bk(h.x, h.y);
+            if (!buckets.has(k)) buckets.set(k, []);
+            buckets.get(k).push(h);
+        }
+        const adj = new Map();
+        for (const h of grid) {
+            const list = [];
+            const cx = Math.floor(h.x / 40), cy = Math.floor(h.y / 40);
+            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+                for (const nb of buckets.get(`${cx + dx},${cy + dy}`) || []) {
+                    const d = Math.hypot(nb.x - h.x, nb.y - h.y);
+                    if (d > 5 && d < 40) list.push(nb);
+                }
+            }
+            adj.set(h.key, list);
+        }
+        info = { grid, byKey, adj };
+        if (_adjCache.size > 20) _adjCache.clear();
+        _adjCache.set(sig, info);
+        return info;
+    }
+    const gridKey = (x, y) => `${Math.round(x)},${Math.round(y)}`;
+
+    // Dijkstra from a set of source hexes. `minStep` > 0 makes free (wind)
+    // steps still count a little, which keeps a field pointing somewhere.
+    // Edge cost = canMoveTo() of the hex being entered.
+    function pathField(snap, sourceKeys, minStep) {
+        const { byKey, adj } = gridInfo(snap);
         const dist = new Map();
         const frontier = [];
-        for (const h of grid) {
-            if (h.tileIds.some(id => hiddenIds.has(id))) { dist.set(h.key, 0); frontier.push(h); }
+        for (const k of sourceKeys) {
+            if (!byKey.has(k) || dist.has(k)) continue;
+            dist.set(k, 0);
+            frontier.push(k);
         }
         while (frontier.length) {
             let bi = 0;
             for (let i = 1; i < frontier.length; i++)
-                if (dist.get(frontier[i].key) < dist.get(frontier[bi].key)) bi = i;
-            const cur = frontier.splice(bi, 1)[0];
-            for (const nb of grid) {
-                const d = Math.hypot(nb.x - cur.x, nb.y - cur.y);
-                if (d <= 5 || d >= 40) continue;
+                if (dist.get(frontier[i]) < dist.get(frontier[bi])) bi = i;
+            const curKey = frontier[bi];
+            frontier[bi] = frontier[frontier.length - 1];
+            frontier.pop();
+            const base = dist.get(curKey);
+            for (const nb of adj.get(curKey) || []) {
                 const mv = window.BotSim.canMoveTo(snap, nb.x, nb.y);
                 if (!mv.canMove) continue;
-                const nd = dist.get(cur.key) + Math.max(0.5, mv.cost); // 0-cost wind still advances the field
-                if (nd < (dist.get(nb.key) ?? Infinity)) { dist.set(nb.key, nd); frontier.push(nb); }
+                const nd = base + Math.max(minStep, mv.cost);
+                if (nd < (dist.get(nb.key) ?? Infinity)) {
+                    if (!dist.has(nb.key)) frontier.push(nb.key);
+                    dist.set(nb.key, nd);
+                }
             }
         }
-        return { dist };
+        return dist;
+    }
+
+    // Explore field: cost-to-nearest-hidden-tile for every hex (multi-source
+    // Dijkstra). Leaf evaluation uses it instead of euclidean distance,
+    // which freezes the search in cul-de-sacs exactly like it froze the
+    // greedy scorer.
+    function buildExploreField(snap) {
+        const hiddenIds = new Set(snap.tiles.filter(t => !t.revealed && !t.isPlayerTile).map(t => t.id));
+        if (!hiddenIds.size) return null;
+        const { grid } = gridInfo(snap);
+        const sources = grid.filter(h => h.tileIds.some(id => hiddenIds.has(id))).map(h => h.key);
+        return { dist: pathField(snap, sources, 0.5) }; // 0-cost wind still advances the field
+    }
+
+    // Home field: cost to the player's own shrine centre (only needed once
+    // all 5 elements are activated).
+    function buildHomeField(snap, forIndex) {
+        const home = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === forIndex);
+        if (!home) return null;
+        return { dist: pathField(snap, [gridKey(home.x, home.y)], 0.5) };
+    }
+
+    // Which stone hexes can nobody walk through right now? Fields only change
+    // shape when this set changes (a break, a void next to earth, a burn, a
+    // new earth wall), so it is the cache key for search-leaf fields.
+    function blockedSig(snap) {
+        const out = [];
+        for (const s of snap.stones) {
+            if (!window.BotSim.canMoveTo(snap, s.x, s.y).canMove) out.push(gridKey(s.x, s.y));
+        }
+        return out.sort().join(';');
+    }
+
+    // Search-time field cache: set by searchPick() for one decision.
+    // { cache: Map<'explore'|'home:i' + sig, field|null> }
+    let _fieldCtx = null;
+    function leafField(snap, kind, forIndex) {
+        if (!_fieldCtx) return undefined;
+        const key = `${kind}:${forIndex}:${blockedSig(snap)}`;
+        if (_fieldCtx.cache.has(key)) return _fieldCtx.cache.get(key);
+        const f = kind === 'home' ? buildHomeField(snap, forIndex) : buildExploreField(snap);
+        _fieldCtx.cache.set(key, f);
+        return f;
+    }
+
+    // ----------------------------------------------------------------
+    // Unblock bonus: breaking a stone, burning it with a fire placement or
+    // voiding an earth wall is worth what it opens up. Compares the bot's
+    // best goal (collectible shrine, hidden tile, or home once all 5 are
+    // activated) before and after, on the same scale as the move scores
+    // (moveShrineValue, moveExplorePath, moveReturnHome ÷ (1 + path cost)).
+    // Before this, a break scored a flat breakStoneBase - cost, so an
+    // earth wall between the bot and its last shrine was never cleared and
+    // the game stalled.
+    // ----------------------------------------------------------------
+    function goalValue(snap, extraCost) {
+        const self = me(snap);
+        if (!self) return 0;
+        const costs = pathField(snap, [gridKey(self.x, self.y)], 0);
+        const val = (key, w) => {
+            const c = costs.get(key);
+            return c === undefined ? 0 : w / (1 + c + extraCost);
+        };
+        let best = 0;
+        if (ELEMENTS.every(el => self.activated.includes(el))) {
+            const home = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === snap.turn.activePlayerIndex);
+            if (home) best = Math.max(best, val(gridKey(home.x, home.y), WEIGHTS.moveReturnHome));
+            return best;
+        }
+        for (const t of collectibleShrines(snap)) {
+            best = Math.max(best, val(gridKey(t.x, t.y), WEIGHTS.moveShrineValue * shrineValue(snap, t.shrineType)));
+        }
+        const hiddenIds = new Set(snap.tiles.filter(t => !t.revealed && !t.isPlayerTile).map(t => t.id));
+        if (hiddenIds.size) {
+            let minC = Infinity;
+            for (const h of gridInfo(snap).grid) {
+                if (!h.tileIds.some(id => hiddenIds.has(id))) continue;
+                const c = costs.get(h.key);
+                if (c !== undefined && c < minC) minC = c;
+            }
+            if (minC < Infinity) best = Math.max(best, WEIGHTS.moveExplorePath / (1 + minC + extraCost));
+        }
+        return best;
+    }
+
+    // Per-decision cache for the "before" value.
+    function makeUnblockCtx(snap) { return { snap, before: null }; }
+
+    function unblockBonus(a, snap, uctx) {
+        if (!uctx || !window.BotSim) return 0;
+        const isBreak = a.type === 'breakStone';
+        const isClearPlace = a.type === 'placeStone' && (a.stoneType === 'fire' || a.stoneType === 'void');
+        if (!isBreak && !isClearPlace) return 0;
+        const after = window.BotSim.simulate(snap, a);
+        // Nothing changed about who can walk where: no bonus, no Dijkstra.
+        const sigBefore = uctx.sigBefore ?? (uctx.sigBefore = blockedSig(snap));
+        const removed = after.stones.length < snap.stones.length + (isBreak ? 0 : 1);
+        if (!removed && blockedSig(after) === sigBefore) return 0;
+        if (uctx.before === null) uctx.before = goalValue(snap, 0);
+        // A break's AP is spent before the first step: count it as path cost.
+        const gain = goalValue(after, isBreak ? (a.cost || 0) : 0) - uctx.before;
+        // Negative too: breaking the void that holds an earth wall open (or
+        // burning our own wind road) makes the way worse, and without the
+        // penalty the bot looped "place void, break void" for the flat
+        // breakStoneBase.
+        let b = (isBreak ? WEIGHTS.breakUnblock : WEIGHTS.placeUnblock) * gain;
+        // A fire burns every adjacent non-void, non-fire stone, ours too:
+        // charge for stones the current build plan is standing on.
+        if (a.type === 'placeStone' && a.stoneType === 'fire') {
+            const plan = mem(snap.turn.activePlayerIndex).plan;
+            if (plan) {
+                const lost = plan.cells.filter(c =>
+                    snap.stones.some(s => s.type === c.type && Math.hypot(s.x - c.x, s.y - c.y) < 5) &&
+                    !after.stones.some(s => s.type === c.type && Math.hypot(s.x - c.x, s.y - c.y) < 5)).length;
+                b += WEIGHTS.placeFireOwnPlanLoss * lost;
+            }
+        }
+        return b;
     }
 
     // How close is `oppIndex` to winning, in the SAME currency evaluateSnapshot()
@@ -1459,18 +1631,36 @@
             if (c.grantedNew) v += WEIGHTS.evalUnsimCast;
         }
 
+        // Home / explore distance. Inside a search decision these use real
+        // path costs (leafField, recomputed when a break or a void changes
+        // which stones block), ~35px per step so the weights keep their
+        // euclidean scale. An unreachable goal costs evalUnreachableSteps
+        // extra steps, so the search can SEE that clearing a wall helps.
+        const STEP_PX = 35;
+        const unreachablePx = WEIGHTS.evalUnreachableSteps * STEP_PX;
+        const pk = `${Math.round(p.x)},${Math.round(p.y)}`;
         const allActivated = ELEMENTS.every(el => p.activated.includes(el));
         if (allActivated) {
             const home = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === forIndex);
-            if (home) v += WEIGHTS.evalHomeDist * Math.hypot(home.x - p.x, home.y - p.y);
+            if (home) {
+                let d = Math.hypot(home.x - p.x, home.y - p.y);
+                const field = leafField(snap, 'home', forIndex);
+                if (field) {
+                    const c = field.dist.get(pk);
+                    d = c !== undefined ? c * STEP_PX : d + unreachablePx;
+                }
+                v += WEIGHTS.evalHomeDist * d;
+            }
         } else {
             const hidden = snap.tiles.filter(t => !t.revealed && !t.isPlayerTile);
             if (hidden.length) {
-                // Prefer real path cost (explore field) over euclidean; ~35px/step
-                // keeps the same weight scale as the euclidean fallback
                 let d = null;
-                const fieldCost = _exploreField?.dist.get(`${Math.round(p.x)},${Math.round(p.y)}`);
-                if (fieldCost !== undefined) d = fieldCost * 35;
+                const field = leafField(snap, 'explore', forIndex);
+                if (field) {
+                    const c = field.dist.get(pk);
+                    if (c !== undefined) d = c * STEP_PX;
+                    else d = Math.min(...hidden.map(t => Math.hypot(t.x - p.x, t.y - p.y))) + unreachablePx;
+                }
                 if (d === null) d = Math.min(...hidden.map(t => Math.hypot(t.x - p.x, t.y - p.y)));
                 v += WEIGHTS.evalHiddenDist * d;
             }
@@ -1523,7 +1713,8 @@
 
         const depth = Math.max(1, WEIGHTS.searchDepth | 0);
         const breadth = Math.max(2, WEIGHTS.searchBreadth | 0);
-        _exploreField = buildExploreField(snap0); // path-aware leaf evaluation
+        _fieldCtx = { cache: new Map() }; // path-aware leaf evaluation (leafField)
+        const uctx = makeUnblockCtx(snap0);
         // Stage 4 terrain-control sets — root-only by design (see
         // tacticalContext): evaluateSnapshot() never sees them, so leaves
         // stay cheap; the bonus is folded into the root scores below the
@@ -1561,6 +1752,7 @@
             let v = value(c.s1, depth - 1);
             if (c.a.type === 'move') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
             if (c.a.type === 'teleport') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.teleportRevisitPenalty);
+            if (c.a.type === 'breakStone' || c.a.type === 'placeStone') v += unblockBonus(c.a, snap0, uctx);
             if (c.a.type === 'placeStone') {
                 v += tacticalPlaceBonus(c.a, snap0, tac);
                 // Tactical placements have no pattern value the eval could
@@ -1569,7 +1761,7 @@
             }
             if (!best || v > best.score) best = { action: c.a, score: v };
         }
-        _exploreField = null; // valid only for this decision's root snapshot
+        _fieldCtx = null; // valid only for this decision
         return best;
     }
 
@@ -1863,6 +2055,7 @@
             paths: new Map(),
             recentPositions: mem(snap.turn.activePlayerIndex).recentPositions,
             homePath: null,
+            unblock: makeUnblockCtx(snap),
         };
         for (const t of ctx.shrines) {
             ctx.paths.set(t.id, window.BotState.findPath(self.x, self.y, t.x, t.y));

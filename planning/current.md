@@ -118,6 +118,24 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-25: Bots clear blocking stones.** Owner report: bot games stall because
+  bots can't tell when to break a stone to reach a shrine. Before: breakStone scored a
+  flat `breakStoneBase - cost` (earth = -2), and search could not plan a break at all.
+  Now (js/bot.js, js/bot-sim.js, js/bot-state.js):
+  (a) `unblockBonus()`: breakStone and fire/void placements score the change in the
+  bot's best goal value (collectible shrine / hidden tile / home when all 5 are
+  activated; move-score scale) on the hypothetical board (`BotSim.simulate`), path
+  costs by `pathField()` Dijkstra; a break's AP counts as path cost; negative when it
+  closes the way. Fire that burns own plan stones pays `placeFireOwnPlanLoss`.
+  bot-state.js now also offers tactical void placements next to earth/water.
+  (b) bot-sim.js simulates `breakStone` and generates it plus stone-clearing fire/void
+  placements, and search leaves use real path costs (`leafField`, cached by the set
+  of impassable stones) with `evalUnreachableSteps` for an unreachable home/hidden tile.
+  Arena test (tools: headless playMatch, default weights, 2 players, seeds 1-20,
+  maxStallRestarts 0): wins 5 -> 8, stalls 14 -> 12, elements per player 3.35 -> 3.73.
+  Still open: many games still stall (no-cast detector); bots sometimes flip a void
+  between two spots as their goal changes (void opens earth but slows wind).
+  New weights are untrained (hillclimb can tune them).
 - **2026-09-24: Match recording (Phase 1 of 4).** Plan agreed with the owner:
   (1) record every online game (done: js/match-recorder.js, sql/match-recording.sql),
   (2) board fingerprints + witnesses so a win only pays out when other humans'

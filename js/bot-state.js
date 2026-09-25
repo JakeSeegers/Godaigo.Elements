@@ -248,10 +248,8 @@
     //   {type:'teleport', x, y, shrineType}   // catacomb/Freedom shrine hop, free (0 AP)
     // NOT yet enumerated (Stage 2+): scroll-effect sub-choices (those go
     // through BotEffects, a separate driver — see bot-effects.js).
-    // breakStone is also not yet mirrored in bot-sim.js's OWN legalActions(),
-    // so hybrid-brain search cannot PLAN a sequence around it beyond the
-    // immediate root choice — only the greedy scoreAction() path fully
-    // considers it. teleport is in the same position: bot-sim.js's
+    // breakStone is mirrored in bot-sim.js (simulate + legalActions), so
+    // search can plan "break, then walk". teleport is not: bot-sim.js's
     // simulate() knows how to APPLY one (so search correctly values
     // teleporting as the immediate/root decision, since the root's own
     // candidate list always comes from THIS function, not the pure
@@ -433,14 +431,20 @@
             // scroll:null + tactical:true mark them — bot.js scores these
             // purely on tactical value (placeTacticalBase is slightly
             // negative, so absent a live tactical term they are never
-            // taken). NOT mirrored in bot-sim.js's own legalActions(), so
-            // lookahead can't PLAN multi-step tactical sequences — same
-            // accepted root-only gap as breakStone/teleport.
-            for (const stoneType of ['earth', 'wind', 'fire']) {
+            // taken). bot-sim.js's own legalActions() mirrors only the
+            // stone-clearing ones (fire/void next to earth or water), so
+            // lookahead can plan "clear, then walk" but not walls or paving.
+            // Void joins them only next to an earth/water stone: voiding an
+            // earth wall makes it walkable (bot.js unblockBonus scores that).
+            for (const stoneType of ['earth', 'wind', 'fire', 'void']) {
                 if ((pool[stoneType] || 0) <= 0) continue;
                 for (const h of grid) {
                     const d = Math.hypot(h.x - player.x, h.y - player.y);
                     if (d <= HEX_NEAR || d >= HEX_STEP) continue;
+                    if (stoneType === 'void' && !placedStones.some(s =>
+                        (s.type === 'earth' || s.type === 'water') &&
+                        Math.hypot(s.x - h.x, s.y - h.y) > HEX_NEAR &&
+                        Math.hypot(s.x - h.x, s.y - h.y) < 50)) continue;
                     const key = `${h.x.toFixed(1)},${h.y.toFixed(1)},${stoneType}`;
                     if (seen.has(key)) continue;
                     if (placedStones.some(s => Math.hypot(s.x - h.x, s.y - h.y) < HEX_NEAR)) continue;

@@ -1588,6 +1588,25 @@
         }
     }
 
+    // Break an adjacent stone (mirror of attemptBreakStone() in game-core.js):
+    // costs AP by rank, the stone goes back to the SOURCE pool. The pawn must
+    // be at rest (not standing on a stone). Not modelled: the full-board
+    // recheckAllStoneInteractions() pass after the removal (breaking a void
+    // can leave a fire unguarded; the real game re-checks those neighbours).
+    const STONE_BREAK_COST = { void: 1, wind: 2, fire: 3, water: 4, earth: 5 };
+    function simBreakStone(snap, a) {
+        const p = activePlayer(snap);
+        if (!p || stoneAt(snap, p.x, p.y)) return;
+        const stone = stoneAt(snap, a.x, a.y);
+        if (!stone) return;
+        const d = dist(stone.x, stone.y, p.x, p.y);
+        if (d <= HEX_NEAR || d >= HEX_STEP) return;
+        const cost = STONE_BREAK_COST[stone.type];
+        if (cost == null || snap.turn.ap < cost) return;
+        snap.turn.ap -= cost;
+        destroyStone(snap, stone);
+    }
+
     function simulate(snap, action) {
         const next = clone(snap);
         switch (action?.type) {
@@ -1597,6 +1616,7 @@
             case 'placeStone':    simPlaceStone(next, action); break;
             case 'cast':          simCast(next, action); break;
             case 'moveStone':     simMoveStone(next, action); break;
+            case 'breakStone':    simBreakStone(next, action); break;
             case 'discardScroll': simDiscard(next, action); break;
             default:
                 simNotes(next).notes.push(`unsupported action type: ${action?.type}`);
@@ -1710,6 +1730,47 @@
                     actions.push({
                         type: 'placeStone', x: c.x, y: c.y, stoneType: c.type,
                         scroll: name, progress: (placed + 1) / cells.length,
+                    });
+                }
+            }
+        }
+
+        // Stone clearing, so the lookahead can plan "open the way, then walk"
+        // (bot-state.js enumerates the same options for the real root):
+        //   * breakStone: any adjacent stone the AP covers.
+        //   * tactical fire: an adjacent empty hex where the fire would burn
+        //     at least one adjacent earth/water stone (no void next to it).
+        //   * tactical void: an adjacent empty hex next to an earth or water
+        //     stone (a voided earth becomes walkable, a voided water costs 1).
+        // Kept to these narrow cases so the tree stays small.
+        if (!pawnOnStone) {
+            for (const s of neighborStones(snap, p.x, p.y)) {
+                if (dist(s.x, s.y, p.x, p.y) >= HEX_STEP) continue;
+                const cost = STONE_BREAK_COST[s.type];
+                if (cost == null || cost > ap) continue;
+                actions.push({ type: 'breakStone', x: s.x, y: s.y, stoneType: s.type, cost });
+            }
+            for (const h of g) {
+                const d = dist(h.x, h.y, p.x, p.y);
+                if (d <= HEX_NEAR || d >= HEX_STEP) continue;
+                if (stoneAt(snap, h.x, h.y)) continue;
+                if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) continue;
+                if (h.tileIds.some(id => {
+                    const t = snap.tiles.find(tt => tt.id === id);
+                    return t && !t.revealed && !t.isPlayerTile;
+                })) continue;
+                const nbs = neighborStones(snap, h.x, h.y);
+                const blockers = nbs.filter(s => s.type === 'earth' || s.type === 'water');
+                if (!blockers.length) continue;
+                for (const type of ['fire', 'void']) {
+                    if ((p.pool[type] || 0) <= 0) continue;
+                    if (type === 'fire' && nbs.some(s => s.type === 'void')) continue; // guarded: burns nothing
+                    const key = `${h.x.toFixed(1)},${h.y.toFixed(1)},${type}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    actions.push({
+                        type: 'placeStone', x: h.x, y: h.y, stoneType: type,
+                        scroll: null, progress: 0, tactical: true,
                     });
                 }
             }
