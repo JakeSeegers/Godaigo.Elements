@@ -4,11 +4,11 @@
     {
       "id": "2026-09-25",
       "date": "2026-09-25",
-      "title": "New name styles and pawn decorations",
+      "title": "Quick Play, pawn decorations, new name styles",
       "changes": [
+        "New Quick Play button in the lobby: start a game against 2 to 4 bots right away.",
         "New pawn decorations in the shop: rims (Gold, Silver, Rune Ring), bases (Lotus Leaf, Stone Plinth) and trails that follow your pawn when it moves (Ink, Embers, Water Drops, Leaves, Void Sparks). Your pawn colour always stays visible.",
-        "13 new name styles in the shop: the five elements, Silver, Bronze and Obsidian, and animated styles (Gold Shimmer, Ember, Tide, Void Pulse, CRT Glitch).",
-        "Name colours now show for everyone: on the leaderboard, in the waiting room, in the player panels, on the turn display and in the Game Log. If yours does not show, open Profile and equip it once more.",
+        "13 new name styles (elements, metals and animated ones), and name colours now show for everyone: leaderboard, waiting room, player panels, turn display and Game Log.",
         "Fairer wins: the ladder now only moves after a checked, finished game. A win after everyone else quits needs at least 6 turns. Winning as the last player standing now gives your XP (it could get stuck).",
         "When you register you can now add an email for password recovery, and choose to get news emails from the developer (at most once a month). You can change both in Profile > Settings."
       ]

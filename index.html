@@ -153,6 +153,11 @@
                                style="padding: 10px; font-size: 15px; width: 100%; box-sizing: border-box;">
                     </div>
 
+                    <!-- Quick Play: private room + 2-4 bots, starts at once (js/lobby.js quickPlay) -->
+                    <button id="quick-play-btn" class="quick-play-btn" onclick="quickPlay()">
+                        Quick Play <span class="quick-play-sub">vs 2-4 bots, starts now</span>
+                    </button>
+
                     <!-- Host / create buttons -->
                     <div id="room-action-buttons" style="display: flex; gap: 10px; margin-bottom: 12px;">
                         <button id="host-public-btn" onclick="hostPublicGame()" style="flex:1; padding: 10px;">

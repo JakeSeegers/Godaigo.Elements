@@ -327,6 +327,30 @@
         async function hostPublicGame()    { await createRoom(false); }
         async function createPrivateRoom() { await createRoom(true);  }
 
+        // Quick Play: a private room with 2-4 bots that starts right away.
+        // Uses the normal online path (createRoom -> addBotPlayer ->
+        // hostStartGame), so the game is recorded and XP / ladder rules apply
+        // as in any game with bots.
+        async function quickPlay() {
+            const btn = document.getElementById('quick-play-btn');
+            if (btn?.disabled) return;
+            if (btn) btn.disabled = true;
+            try {
+                await createRoom(true);
+                if (!isHost || !currentGameId) return; // createRoom showed why
+                setBrowserStatus('Adding bots…');
+                const bots = 2 + Math.floor(Math.random() * 3); // 2, 3 or 4
+                for (let i = 0; i < bots; i++) await addBotPlayer();
+                await hostStartGame();
+            } catch (e) {
+                console.error('Quick Play failed:', e);
+                alert('Quick Play could not start: ' + (e?.message || e));
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+        window.quickPlay = quickPlay;
+
         async function createRoom(isPrivate) {
             const username = lobbyUsername;
             if (!username) { alert('Not signed in - please sign in first'); return; }

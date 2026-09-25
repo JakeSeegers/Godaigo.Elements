@@ -257,6 +257,10 @@ reach/beat it from here.
   Settings > Account has a News Emails checkbox. Mailing list = sql/mailing-list.sql; export via
   hermit_mailing_list() (opted in + confirmed email). TODO before the first send: an unsubscribe
   link in each email (legal requirement in most places).
+- **Quick Play (2026-09-25):** lobby button #quick-play-btn -> lobby.js quickPlay(): createRoom(true)
+  (private), addBotPlayer() x 2-4 (random), hostStartGame(). Normal online path, so the game is
+  recorded; XP needs the usual 3-minute room age and 6 recorded turns (bot-only, no witness).
+  Headless: signed-out path safe; full flow needs a live test.
 - **Next (discussed, not started):** protections 3-6 (repeat-opponent limit, smaller bot-only
   rewards, hermit "reverse win", report button); player stats; automatic replay checks.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**

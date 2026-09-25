@@ -514,3 +514,18 @@
 .auth-extra-note { font-size: 13px; color: var(--pp-ink-soft, #bbb); line-height: 1.3; }
 .auth-check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.3; cursor: pointer; text-align: left; }
 .auth-check input { margin-top: 3px; flex-shrink: 0; }
+
+/* Quick Play (index.html #quick-play-btn) */
+.quick-play-btn {
+  width: 100%;
+  padding: 12px 10px;
+  margin-bottom: 12px;
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.quick-play-btn .quick-play-sub { font-size: 13px; font-weight: normal; opacity: 0.75; }
+.quick-play-btn:disabled { opacity: 0.6; cursor: wait; }
