@@ -73,13 +73,27 @@
     }
 
     // ── Turn fingerprints ────────────────────────────────────────
+    // A snapshot must be taken right when the turn changes. Browsers slow
+    // down timers in background tabs, so a late check can catch the board
+    // after the next player's moves (match 7, turn 5: a 4-minute turn in a
+    // background tab, snapshot 6.6 s late). Skip the report when the tab was
+    // hidden or this timer ran late; the next turn is compared as usual.
+    let lastTick = Date.now();
+    let wasHidden = false;
+    document.addEventListener('visibilitychange', () => { if (document.hidden) wasHidden = true; });
+
     setInterval(() => {
+        const now = Date.now();
+        const late = now - lastTick > 400 || document.hidden || wasHidden;
+        lastTick = now;
+        wasHidden = document.hidden;
         if (!inOnlineGame()) { lastTurn = null; lastRoom = null; return; }
         let turn;
         try { turn = currentTurnNumber; } catch (e) { return; }
         if (lastRoom !== currentGameId) { lastRoom = currentGameId; lastTurn = turn; return; }
         if (turn === lastTurn || !(turn > 0)) { lastTurn = turn; return; }
         lastTurn = turn;
+        if (late) return;
         const fp = fingerprint();
         if (!fp) return;
         supabase.rpc('report_fingerprint', { p_room_id: currentGameId, p_turn: turn, p_fingerprint: fp })

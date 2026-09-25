@@ -148,7 +148,10 @@ Order matters — later scripts depend on earlier ones.
                              (2) at game over (hook in showGameOverToAll) checks the winner vs its own board
                              (5 activated + isPlayerAtOwnShrine) -> report_game_result. claim_game_win needs a
                              confirming report from another fresh human seat, else the claim waits as 'pending'
-                             and is paid when the report lands. sql/match-witness.sql + sql/match-witness-v2.sql.
+                             and is paid when the report lands; retry_pending_wins() pays a pending win once no other human is
+                             left in the room and nobody disputed it (after the game + at sign-in). A snapshot is
+                             skipped when the tab was hidden or the timer ran late; turn 1 never counts as desync.
+                             sql/match-witness.sql + -v2.sql + -v3.sql.
 17d. replay-viewer.js      ← window.Replay: plays a finished match back (Phase 3). get_match_replay -> Supabase
                              switched "offline" (fake channel, empty from()/rpc()) -> startMultiplayerGame()
                              from recorded seats + deck seed -> myPlayerIndex = -1 (spectator; game-core

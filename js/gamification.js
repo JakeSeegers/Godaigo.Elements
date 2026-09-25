@@ -123,6 +123,15 @@ window.gami = (function () {
         async onDailyLogin() {
             if (!_userId || !_profile) return;
 
+            // Wins still waiting for a witness from earlier games: paid now if
+            // nobody is left who could confirm them (sql/match-witness-v3.sql).
+            supabase.rpc('retry_pending_wins').then(({ data }) => {
+                if (data?.xp > 0) {
+                    if (_profile) _profile.total_xp = (_profile.total_xp || 0) + data.xp;
+                    api.notify(`Earlier win confirmed! +${data.xp} XP`, data.xp, 'xp');
+                }
+            }).catch(() => {});
+
             const today     = new Date().toDateString();
             const lastActive = _profile.stats?.last_active;
             if (lastActive === today) return; // Already collected today
@@ -198,8 +207,13 @@ window.gami = (function () {
                     // before showing the win screen, so never block it.
                     const before = _profile?.total_xp || 0;
                     (async () => {
-                        for (const wait of [4000, 8000, 15000]) {
+                        // A witness usually confirms within seconds. If nobody
+                        // can (e.g. last player standing), the server pays it
+                        // once no other player is left (retry_pending_wins,
+                        // sql/match-witness-v3.sql), so ask again later too.
+                        for (const wait of [4000, 8000, 15000, 50000, 90000]) {
                             await new Promise(r => setTimeout(r, wait));
+                            if (wait >= 50000) { try { await supabase.rpc('retry_pending_wins'); } catch (e) {} }
                             const fresh = await api.getProfile();
                             const gained = (fresh?.total_xp || 0) - before;
                             if (gained > 0) { api.notify(`Win confirmed! +${gained} XP`, gained, 'xp'); break; }

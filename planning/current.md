@@ -221,6 +221,14 @@ reach/beat it from here.
   buy_cosmetic). Rims Gold/Silver 100, Rune Ring 150; bases Lotus Leaf/Stone Plinth 125; trails
   Ink/Embers/Water Drops/Leaves/Void Sparks 150. Shop: both cosmetics screens (profile tab now
   "Cosmetics"). Headless-tested on a real board (decorations + trail particles, no errors).
+- **Tests 2026-09-25 (matches 7, 8):** match 8 (TheHermit vs JakeS, scroll win): browsers agree
+  turns 2-7, both witnesses confirmed, 100 XP paid at once. Match 7 (3 seats, last standing):
+  turn 5 differed only because JakeS's tab snapshot came 6.6 s late (4-minute turn, background
+  tab); turn-5 fingerprint == its turn-6 one. The 125 XP last-standing win stuck 'pending' (no
+  witness possible). Fixed by sql/match-witness-v3.sql: retry_pending_wins() (pending >= 60 s, no
+  other fresh human in the room, no non-confirming report -> pay), called after the game and at
+  sign-in; report_fingerprint no longer counts turn 1; match-witness.js skips late/hidden
+  snapshots. Tested retry on room 827 (rolled back).
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the
