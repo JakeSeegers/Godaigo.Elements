@@ -4525,3 +4525,4 @@ label, .hud-ap-label, .hud-ap-value {
 #bot-mind-panel .bm-opt-t { position: relative; flex: 1; min-width: 0; }
 #bot-mind-panel .bm-opt-s { position: relative; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 #bot-mind-panel .bm-foot { padding: 4px 10px 10px; color: var(--text-secondary); font-size: 11px; }
+.bot-mind-layer .bm-cast-target { fill: none; stroke-width: 3; stroke-dasharray: 10 6; opacity: 0.9; }

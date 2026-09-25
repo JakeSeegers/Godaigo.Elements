@@ -118,6 +118,19 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-25: Combo plan Phase 2, first batch: Wandering River + Heavy Stomp.** Their
+  choices are real moves now: `BotSim.castChoices()` lists them (River {tileId, element},
+  Stomp {tileId}), BotState and BotSim legalActions emit one cast per choice, the sim
+  applies the chosen one, and bot-effects.js `setPendingChoice()` makes the drivers carry it
+  out. A revealed River tile draws `'?unknown:<element>?'` in the sim; bot.js values it by
+  scroll need (`evalScrollUnknownEase`). Verified in a live headless game: River set the
+  chosen tile and element, Stomp flipped that tile, the bot drew a scroll of the chosen
+  element (tile was really catacomb), sim matched real except the known catacomb +1 AP.
+  Arena vs Phase 1: 2p 12 -> 11 wins, 8 -> 9 stalls; 3p 9 -> 9 wins, 3 -> 3 stalls
+  (neutral). River used a planned choice in 11 of 24 casts; Heavy Stomp casts fell from 51
+  to 9 in 2p (no more flipping revealed tiles back face down for nothing).
+  Next batch: Scholar's Insight / Inspiring Draught / Quick Reflexes choices as moves,
+  Avalanche + Burning Motivation placements in the sim, Call to Adventure flip choice.
 - **2026-09-25: Combo plan Phase 1 done (bot.js, bot-effects.js).** Scroll need:
   `handValue()` replaces the flat evalScrollHeld in evaluateSnapshot (a held scroll is
   worth `evalScrollCredit` x ease per needed element it is the best cover for; spares and

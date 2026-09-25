@@ -156,6 +156,24 @@
     function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
     // ----------------------------------------------------------------
+    // Chosen options (combo plan Phase 2). bot-state.js applyAction('cast')
+    // hands over the choice the bot picked ({scroll, tileId, element}) right
+    // before casting; the matching driver uses it instead of its default
+    // rule. Set fresh (or cleared) on every cast, so a choice never leaks
+    // into a later, different effect. A choice that is no longer legal
+    // falls back to the default rule.
+    // ----------------------------------------------------------------
+    let pendingChoice = null;
+    let pendingRiverElement = null;
+    function setPendingChoice(c) { pendingChoice = c || null; pendingRiverElement = null; }
+    function takeChoice(scroll) {
+        if (!pendingChoice || pendingChoice.scroll !== scroll) return null;
+        const c = pendingChoice;
+        pendingChoice = null;
+        return c;
+    }
+
+    // ----------------------------------------------------------------
     // tile-flip (Heavy Stomp EARTH_SCROLL_4, Call to Adventure CATACOMB_SCROLL_3)
     // Choice: one eligible tile (no stones/players, not a player tile).
     // Heuristic: strongly prefer flipping a HIDDEN tile (reveals it — a
@@ -166,6 +184,9 @@
     function driveTileFlip(se, sm) {
         const tiles = sm.eligibleTiles || [];
         if (!tiles.length) return false;
+        const chosen = takeChoice('EARTH_SCROLL_4');
+        const chosenTile = chosen && tiles.find(t => Number(t.id) === Number(chosen.tileId));
+        if (chosenTile) { sm.handleTileClick(chosenTile); return true; }
         const me = self(snap());
         const hidden = tiles.filter(t => t.flipped);
         const pick = hidden.length
@@ -272,6 +293,13 @@
         if (document.getElementById('element-select-modal')) return false; // step 2 already open
         const tiles = sm.eligibleTiles || [];
         if (!tiles.length) return false;
+        const chosen = takeChoice('WATER_SCROLL_4');
+        const chosenTile = chosen && tiles.find(t => Number(t.id) === Number(chosen.tileId));
+        if (chosenTile) {
+            pendingRiverElement = chosen.element || null; // used by the element modal next
+            sm.handleTileClick(chosenTile);
+            return true;
+        }
         const me = self(snap());
         const nearest = tiles.reduce((a, b) => (!a || dist(me, b) < dist(me, a)) ? b : a, null);
         sm.handleTileClick(nearest);
@@ -281,6 +309,11 @@
     function driveElementSelectModal() {
         const modal = document.getElementById('element-select-modal');
         if (!modal) return false;
+        if (pendingRiverElement) {
+            const el = pendingRiverElement;
+            pendingRiverElement = null;
+            if (clickBestElement(modal, [el])) return true;
+        }
         return !!clickBestElement(modal, rankedElements());
     }
 
@@ -954,6 +987,6 @@
         return acted;
     }
 
-    window.BotEffects = { driveSelection, rankedElements, driveTransmute, decideResponse };
+    window.BotEffects = { driveSelection, rankedElements, driveTransmute, decideResponse, setPendingChoice };
     log('Loaded - window.BotEffects ready (tile-flip, scorched-earth, tile-swap, Create, Scholar\'s Insight, Quick Reflexes, Sacrificial Pyre, Inspiring Draught, Wandering River, Arson, Plunder, Control the Current, Excavate, Take Flight, Telekinesis, Transmute, response scrolls)');
 })();

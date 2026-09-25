@@ -239,7 +239,7 @@
     // Legal action enumeration for the ACTIVE player.
     // Canonical forms — the only vocabulary bot strategy may use:
     //   {type:'placeTile', x, y, distToCentroid}                    // placement phase only
-    //   {type:'cast', scroll}
+    //   {type:'cast', scroll, choice?}  // choice: {tileId, element} River / {tileId} Stomp (BotSim.castChoices)
     //   {type:'placeStone', x, y, stoneType, scroll, progress}
     //   {type:'move', x, y, cost}
     //   {type:'breakStone', stoneId, x, y, stoneType, cost}
@@ -265,6 +265,8 @@
     // (duplicated there in several closures too — it's a fixed small game
     // constant, not logic worth threading through as a dependency).
     const STONE_BREAK_COST = { void: 1, wind: 2, fire: 3, water: 4, earth: 5 };
+    // Scrolls whose cast carries a choice ({type:'cast', scroll, choice}).
+    const CHOICE_SCROLLS = new Set(['WATER_SCROLL_4', 'EARTH_SCROLL_4']);
 
     // Free hexes adjacent to the existing placed-tile cluster, on the LARGE
     // player-tile hex grid (TILE_SIZE * 4) — distinct from hexGrid()'s small
@@ -361,7 +363,13 @@
                 const def = window.SCROLL_DEFINITIONS?.[name];
                 if (!def || def.level === 1) continue; // level 1 = response-only
                 if (window.spellSystem.checkPattern(name)) {
-                    actions.push({ type: 'cast', scroll: name });
+                    // Scrolls with a choice inside (Wandering River, Heavy
+                    // Stomp) become one cast per sensible choice, from the
+                    // same list the simulator uses (BotSim.castChoices).
+                    const choices = CHOICE_SCROLLS.has(name) && window.BotSim?.castChoices
+                        ? window.BotSim.castChoices(snapshot(), name) : [];
+                    if (choices.length) for (const choice of choices) actions.push({ type: 'cast', scroll: name, choice });
+                    else actions.push({ type: 'cast', scroll: name });
                 }
             }
         }
@@ -639,6 +647,9 @@
                 return { ok: true };
             }
             case 'cast': {
+                // Hand the chosen option to the scroll-effect driver first; it
+                // uses it instead of its own default rule (bot-effects.js).
+                window.BotEffects?.setPendingChoice?.(a.choice ? { scroll: a.scroll, ...a.choice } : null);
                 const scrolls = window.spellSystem.getPlayerScrolls(false);
                 if (scrolls.hand.has(a.scroll)) window.spellSystem.moveToActive(a.scroll);
                 const ok = window.spellSystem.castSpell();

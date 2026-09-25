@@ -301,6 +301,12 @@
         evalScrollNoCredit: 10,   // a held scroll that can't add an element any more (already
                                   // activated, dead source, or a second scroll for the same element)
         evalScrollResponse: 15,   // a level-1 (response-only) scroll
+        evalScrollUnknownEase: 0.6, // assumed ease of a drawn scroll whose identity the sim can't
+                                  // know: an element-known draw (Wandering River tile) is worth
+                                  // evalScrollCredit x this if that element is needed; a fully
+                                  // unknown draw is the average over the five elements
+        castChoiceNeed:     20,   // greedy tie-break between a scroll's choices (River / Stomp):
+                                  // x scroll need of the element the choice would draw
         evalAp:              2,   // per remaining AP (own turn only)
         evalUnsimCast:      90,   // flat value per unsimulated cast in the sim trace —
                                   // the whitelist-gated stand-in for effects the
@@ -712,6 +718,28 @@
         return b;
     }
 
+    // Which scroll element would this cast choice draw? River on a face-down
+    // tile draws its chosen element on reveal; Stomp on a River tile draws
+    // that tile's River element; Stomp on a plain face-down tile is unknown.
+    function choiceDrawElement(a, snap) {
+        const c = a.choice;
+        if (!c) return null;
+        const t = snap.tiles.find(x => Number(x.id) === Number(c.tileId));
+        if (!t || t.revealed) return null;
+        if (a.scroll === 'WATER_SCROLL_4') return c.element || null;
+        const r = (snap.crossTurnBuffs?.wanderingRiver || []).find(e => Number(e.tileId) === Number(c.tileId));
+        return r ? r.newElement : null;
+    }
+
+    // Greedy tie-break between the choices of one scroll (search compares
+    // them properly through the simulator).
+    function castChoiceBonus(a, snap) {
+        const el = choiceDrawElement(a, snap);
+        if (!el) return 0;
+        const need = scrollNeed(snap, snap.turn.activePlayerIndex);
+        return WEIGHTS.castChoiceNeed * (need[el] || 0);
+    }
+
     // ----------------------------------------------------------------
     // scoreAction — the Stage-1 utility function. Tune WEIGHTS, not this.
     // ----------------------------------------------------------------
@@ -741,6 +769,7 @@
                 const el = scrollElement(a.scroll);
                 const def = window.SCROLL_DEFINITIONS?.[a.scroll];
                 let s = WEIGHTS.castBase + WEIGHTS.castLevel * (def?.level || 0);
+                if (a.choice) s += castChoiceBonus(a, snap);
                 if (mem(snap.turn.activePlayerIndex).noCreditScrolls.has(a.scroll)) {
                     s += WEIGHTS.castNoCredit; // effect cancelled before — hard veto, don't recast
                 } else if (el && ELEMENTS.includes(el)) {
@@ -1661,9 +1690,17 @@
         const held = [...p.hand, ...(p.active || [])];
         let value = 0;
         const known = [];
+        const unknownEls = []; // element-known draws ('?unknown:water?')
+        let unknownAny = 0;    // fully unknown draws
         for (const name of held) {
             const def = window.SCROLL_DEFINITIONS?.[name];
-            if (!def) { value += WEIGHTS.evalScrollHeld; continue; } // unknown draw
+            if (!def) {
+                const el = window.BotSim?.unknownScrollElement?.(name);
+                if (el) unknownEls.push(el);
+                else if (window.BotSim?.isUnknownScroll?.(name)) unknownAny++;
+                else value += WEIGHTS.evalScrollHeld;
+                continue;
+            }
             if (def.level === 1) { value += WEIGHTS.evalScrollResponse; continue; }
             const els = scrollCreditElements(snap, p, { ...def, id: name }, idx);
             if (!els.length) { value += WEIGHTS.evalScrollNoCredit; continue; }
@@ -1680,6 +1717,24 @@
                 v += WEIGHTS.evalScrollCredit * k.ease;
             }
             value += Math.max(v, WEIGHTS.evalScrollNoCredit);
+        }
+        // Draws the sim can't name: valued by what the element is worth now.
+        const ue = WEIGHTS.evalScrollUnknownEase;
+        const open = el => !p.activated.includes(el) && (snap.sourcePool[el] || 0) > 0;
+        for (const el of unknownEls) {
+            if (open(el) && cover[el] < ue) {
+                value += WEIGHTS.evalScrollCredit * (ue - cover[el]);
+                cover[el] = ue;
+            } else value += WEIGHTS.evalScrollNoCredit;
+        }
+        if (unknownAny) {
+            let avg = 0;
+            for (const el of ELEMENTS) {
+                avg += (open(el) && cover[el] < ue)
+                    ? Math.max(WEIGHTS.evalScrollCredit * (ue - cover[el]), WEIGHTS.evalScrollNoCredit)
+                    : WEIGHTS.evalScrollNoCredit;
+            }
+            value += unknownAny * avg / ELEMENTS.length;
         }
         return { value, cover };
     }
@@ -2251,6 +2306,16 @@
             case 'cast': {
                 const el = scrollElement(a.scroll);
                 const n = scrollName(a.scroll);
+                if (a.choice) {
+                    const t = snap.tiles.find(x => Number(x.id) === Number(a.choice.tileId));
+                    const hidden = t && !t.revealed;
+                    if (a.scroll === 'WATER_SCROLL_4') {
+                        return hidden ? `Cast ${n}: hidden tile becomes ${a.choice.element} (reveal it for a ${a.choice.element} scroll)`
+                                      : `Cast ${n}: this shrine counts as ${a.choice.element} (collect ${a.choice.element} stones)`;
+                    }
+                    const del = choiceDrawElement(a, snap);
+                    return `Cast ${n}: flip a hidden tile (draw ${del ? `a ${del}` : 'a'} scroll)`;
+                }
                 if (el && ELEMENTS.includes(el)) {
                     if (self?.activated.includes(el)) return `Cast ${n} (already has ${el})`;
                     if ((snap.sourcePool[el] || 0) <= 0) return `Cast ${n} (no ${el} stones left to earn)`;
@@ -2293,6 +2358,13 @@
             }
         }
         return a.type;
+    }
+
+    // The tile a cast choice aims at (for the Bot Mind drawing).
+    function actionTarget(a, snap) {
+        if (!a || !a.choice || a.choice.tileId == null) return null;
+        const t = snap.tiles.find(x => Number(x.id) === Number(a.choice.tileId));
+        return t ? { x: t.x, y: t.y, element: a.choice.element || choiceDrawElement(a, snap) } : null;
     }
 
     // Where is the bot trying to go? Same values the move scoring uses.
@@ -2380,12 +2452,12 @@
             mode: th.mode || (act ? 'quick' : 'none'),
             ap: th.turnAp,
             from: self ? { x: self.x, y: self.y } : null,
-            chosen: act ? { action: act, reason: explainAction(act, th.snap, th.ctx) } : null,
+            chosen: act ? { action: act, reason: explainAction(act, th.snap, th.ctx), target: actionTarget(act, th.snap) } : null,
             options: th.options,
             goal,
             plan: m.plan ? { scroll: m.plan.scroll, name: scrollName(m.plan.scroll),
                 cells: m.plan.cells.map(c => ({ x: c.x, y: c.y, type: c.type })) } : null,
-            line: th.line ? th.line.map(a => ({ action: a, reason: explainAction(a, th.snap, null) })) : null,
+            line: th.line ? th.line.map(a => ({ action: a, reason: explainAction(a, th.snap, null), target: actionTarget(a, th.snap) })) : null,
             stuck: { unproductive: m.unproductiveStreak, repeat: m.turnRepeatStreak },
             searchDepth: th.depth || (WEIGHTS.searchDepth | 0),
         };

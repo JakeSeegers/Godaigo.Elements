@@ -201,6 +201,12 @@
     // Placeholder for a scroll whose identity the simulator cannot know
     // (drawn from a face-down tile's deck during simulation)
     const UNKNOWN_SCROLL = '?unknown?';
+    // A draw whose ELEMENT is known but identity is not (a face-down tile
+    // under Wandering River reveals as the chosen element): '?unknown:water?'.
+    // bot.js values these by scroll need for that element.
+    const unknownScroll = el => el ? `?unknown:${el}?` : UNKNOWN_SCROLL;
+    const isUnknownScroll = n => typeof n === 'string' && n.startsWith('?unknown');
+    const unknownScrollElement = n => (isUnknownScroll(n) && n.length > 10) ? n.slice(9, -1) : null;
 
     // Scrolls whose EFFECT is simulated. Anything absent gets the universal
     // cast bookkeeping only + an entry in snap.sim.unsimulatedCasts. Add a
@@ -499,15 +505,24 @@
     // ----------------------------------------------------------------
     // Action simulators — each takes the CLONED snapshot and mutates it
     // ----------------------------------------------------------------
-    function drawScrollOnReveal(snap, playerIndex) {
+    function drawScrollOnReveal(snap, playerIndex, element) {
         // revealTile → onTileRevealed draws the tile element's top deck
         // scroll into the revealing player's hand — even past MAX_HAND
         // (overflow lingers as a pending cascade the player resolves later,
         // so the snapshot really does show handCount > capacity).
         const p = snap.players[playerIndex];
         if (!p) return;
-        if (p.hand) p.hand.push(UNKNOWN_SCROLL);
+        if (p.hand) p.hand.push(unknownScroll(element));
         p.handCount++;
+    }
+
+    // Wandering River override for a tile (getEffectiveTileElement()): a
+    // revealed River tile draws the CHOSEN element's scroll.
+    function riverElementFor(snap, tileId) {
+        const list = snap.crossTurnBuffs?.wanderingRiver;
+        if (!Array.isArray(list)) return null;
+        const e = list.find(x => Number(x.tileId) === Number(tileId));
+        return e ? e.newElement : null;
     }
 
     function simMove(snap, a) {
@@ -533,7 +548,7 @@
                 if (t && !t.revealed && !t.isPlayerTile) {
                     t.revealed = true;
                     t.shrineType = 'unknown'; // NEVER invent the hidden element
-                    drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+                    drawScrollOnReveal(snap, snap.turn.activePlayerIndex, riverElementFor(snap, t.id));
                     simNotes(snap).notes.push(`revealed tile ${t.id} (element unknown; catacomb +1 AP not modelled)`);
                 }
             }
@@ -989,20 +1004,23 @@
     // (enterTileFlipMode/getEligibleTilesForFlip) and the SAME driver
     // (driveTileFlip: prefer revealing the nearest hidden eligible tile,
     // else hide eligible[0]).
-    function flipNearestEligibleTile(snap, p, label) {
+    function flipNearestEligibleTile(snap, p, label, tileId) {
         const eligible = snap.tiles.filter(t =>
             !t.isPlayerTile && tileStoneCount(snap, t) === 0 && !tileHasPawns(snap, t));
         if (!eligible.length) return; // real flow bails before any selection
         const hidden = eligible.filter(t => !t.revealed);
-        if (hidden.length) {
-            let pick = null, best = Infinity;
-            for (const t of hidden) {
+        // A chosen tile (cast action's choice) wins when it is still a legal
+        // hidden target; otherwise the driver's default, the nearest one.
+        const chosen = tileId != null ? hidden.find(t => Number(t.id) === Number(tileId)) : null;
+        if (chosen || hidden.length) {
+            let pick = chosen, best = Infinity;
+            if (!pick) for (const t of hidden) {
                 const d = dist(t.x, t.y, p.x, p.y);
                 if (d < best) { best = d; pick = t; }
             }
             pick.revealed = true;
             pick.shrineType = 'unknown'; // NEVER invent the hidden element
-            drawScrollOnReveal(snap, snap.turn.activePlayerIndex);
+            drawScrollOnReveal(snap, snap.turn.activePlayerIndex, riverElementFor(snap, pick.id));
             simNotes(snap).notes.push(`${label} revealed tile ${pick.id} (element unknown; catacomb +1 AP not modelled)`);
         } else {
             const t = eligible[0];
@@ -1011,8 +1029,8 @@
         }
     }
 
-    function simEffectHeavyStomp(snap, p) {
-        flipNearestEligibleTile(snap, p, 'Heavy Stomp');
+    function simEffectHeavyStomp(snap, p, choice) {
+        flipNearestEligibleTile(snap, p, 'Heavy Stomp', choice?.tileId);
     }
 
     // Call to Adventure (CATACOMB_SCROLL_3): the flip itself mirrors Heavy
@@ -1252,12 +1270,13 @@
     // dedupes on push (see getEffectiveTileElement's own comment at its
     // simEndTurn call site for why lookup order matters), so this doesn't
     // either — just appends.
-    function simEffectWanderingRiver(snap, p) {
+    function simEffectWanderingRiver(snap, p, choice) {
         const eligible = snap.tiles.filter(t => !t.isPlayerTile);
         if (!eligible.length) return; // real flow bails before any selection
-        const tile = eligible.reduce((a, b) =>
+        const picked = choice ? eligible.find(t => Number(t.id) === Number(choice.tileId)) : null;
+        const tile = picked || eligible.reduce((a, b) =>
             (!a || dist(p.x, p.y, b.x, b.y) < dist(p.x, p.y, a.x, a.y)) ? b : a, null);
-        const el = effectRankedElements(snap, p)[0];
+        const el = (picked && ELEMENTS.includes(choice.element)) ? choice.element : effectRankedElements(snap, p)[0];
         const ct = crossTurn(snap);
         ct.wanderingRiver = ct.wanderingRiver || [];
         ct.wanderingRiver.push({ tileId: tile.id, newElement: el, playerIndex: p.index });
@@ -1432,7 +1451,7 @@
     // (all scroll-cast-specific, not effect-specific; the real chain skips
     // them too — see enterScrollSacrificeMode's own "does NOT count toward
     // win condition" comment).
-    function simCastEffect(snap, p, scrollName) {
+    function simCastEffect(snap, p, scrollName, choice) {
         if (scrollName === 'FIRE_SCROLL_4') {
             // Transmute's execute() activates fire with NO source-pool gate
             // (deliberate belt-and-suspenders in scroll-effects.js) — the
@@ -1448,7 +1467,7 @@
         } else if (scrollName === 'EARTH_SCROLL_3') {
             simEffectMasonsSavvy(snap, p);
         } else if (scrollName === 'EARTH_SCROLL_4') {
-            simEffectHeavyStomp(snap, p);
+            simEffectHeavyStomp(snap, p, choice);
         } else if (scrollName === 'CATACOMB_SCROLL_10') {
             simEffectCombust(snap);
         } else if (scrollName === 'FIRE_SCROLL_2') {
@@ -1490,7 +1509,7 @@
         } else if (scrollName === 'WIND_SCROLL_5') {
             simEffectFreedom(snap, p);
         } else if (scrollName === 'WATER_SCROLL_4') {
-            simEffectWanderingRiver(snap, p);
+            simEffectWanderingRiver(snap, p, choice);
         } else if (scrollName === 'FIRE_SCROLL_3') {
             simEffectSacrificialPyre(snap, p);
         } else if (scrollName === 'CATACOMB_SCROLL_4') {
@@ -1528,7 +1547,7 @@
         // Mason's Savvy taking the last earth stones correctly forfeits
         // the earth activation. (Caught by the harness as a genuine
         // divergence when this block ran before the effect.)
-        simCastEffect(snap, p, a.scroll);
+        simCastEffect(snap, p, a.scroll, a.choice);
 
         // Win-condition activation (applyScrollEffects, AFTER the effect):
         //  - catacomb scrolls credit each component element, no source guard
@@ -1578,7 +1597,7 @@
         // the old scroll would still show up as "present" right alongside
         // the new one.
         if (!snap.commonArea) snap.commonArea = [];
-        if (a.scroll !== UNKNOWN_SCROLL) {
+        if (!isUnknownScroll(a.scroll)) {
             const element = window.SCROLL_DEFINITIONS?.[a.scroll]?.element;
             if (element) {
                 snap.commonArea = snap.commonArea.filter(name =>
@@ -1605,6 +1624,49 @@
         if (cost == null || snap.turn.ap < cost) return;
         snap.turn.ap -= cost;
         destroyStone(snap, stone);
+    }
+
+    // ----------------------------------------------------------------
+    // Cast choices (combo plan Phase 2): for scrolls whose effect asks the
+    // caster to choose, list the sensible choices as separate cast actions
+    // ({type:'cast', scroll, choice}), so the search can compare them and
+    // plan around them. bot-state.js uses the same list for the real game,
+    // and bot-effects.js carries out the chosen one. Kept small on purpose.
+    //   WATER_SCROLL_4 Wandering River: {tileId, element}
+    //     - a face-down tile near the pawn, as an element the bot needs a
+    //       scroll of (revealing it this turn draws that element's scroll);
+    //     - the revealed shrine tile the pawn stands on, as an element it
+    //       needs stones of (ending the turn there collects those).
+    //   EARTH_SCROLL_4 Heavy Stomp: {tileId}, a face-down eligible tile,
+    //     River-changed tiles first, then nearest.
+    // ----------------------------------------------------------------
+    function castChoices(snap, name) {
+        const p = activePlayer(snap);
+        if (!p) return [];
+        const near = (a, b) => dist(a.x, a.y, p.x, p.y) - dist(b.x, b.y, p.x, p.y);
+        if (name === 'WATER_SCROLL_4') {
+            const out = [];
+            const need = window.BotSystem?.scrollNeed?.(snap, snap.turn.activePlayerIndex);
+            const wanted = need ? ELEMENTS.filter(e => need[e] > 0).sort((a, b) => need[b] - need[a]) : [];
+            const hidden = snap.tiles.filter(t => !t.isPlayerTile && !t.revealed).sort(near).slice(0, 3);
+            for (const t of hidden) for (const el of wanted.slice(0, 2)) out.push({ tileId: t.id, element: el });
+            const under = snap.tiles.find(t => !t.isPlayerTile && t.revealed && dist(t.x, t.y, p.x, p.y) < 60);
+            if (under) {
+                for (const el of effectRankedElements(snap, p).slice(0, 2)) {
+                    if (el !== under.shrineType) out.push({ tileId: under.id, element: el });
+                }
+            }
+            return out;
+        }
+        if (name === 'EARTH_SCROLL_4') {
+            const river = new Set((snap.crossTurnBuffs?.wanderingRiver || []).map(e => Number(e.tileId)));
+            return snap.tiles
+                .filter(t => !t.isPlayerTile && !t.revealed && tileStoneCount(snap, t) === 0 && !tileHasPawns(snap, t))
+                .sort((a, b) => (river.has(Number(b.id)) - river.has(Number(a.id))) || near(a, b))
+                .slice(0, 3)
+                .map(t => ({ tileId: t.id }));
+        }
+        return [];
     }
 
     function simulate(snap, action) {
@@ -1682,7 +1744,10 @@
                 // returns success:false on a recast) — keep the search from
                 // "successfully" farming a second AP payout that never happens.
                 if (name === 'CATACOMB_SCROLL_7' && snap.turn.buffs?.reflectingPool) continue;
-                if (checkPattern(snap, name)) actions.push({ type: 'cast', scroll: name });
+                if (!checkPattern(snap, name)) continue;
+                const choices = castChoices(snap, name);
+                if (choices.length) for (const choice of choices) actions.push({ type: 'cast', scroll: name, choice });
+                else actions.push({ type: 'cast', scroll: name });
             }
         }
 
@@ -1825,11 +1890,11 @@
 
         // Voluntary discards (cycle a slot to the common area)
         for (const name of hand) {
-            if (name === UNKNOWN_SCROLL) continue;
+            if (isUnknownScroll(name)) continue;
             actions.push({ type: 'discardScroll', scroll: name, from: 'hand', voluntary: true });
         }
         for (const name of p.active) {
-            if (name === UNKNOWN_SCROLL) continue;
+            if (isUnknownScroll(name)) continue;
             actions.push({ type: 'discardScroll', scroll: name, from: 'active', voluntary: true });
         }
 
@@ -1894,7 +1959,7 @@
             const realActivated = [...rp.activated].sort().join(',');
             if (predActivated !== realActivated) push(`players[${i}].activated`, predActivated, realActivated);
             // Hand identity (self only) — count-only when a draw was unknowable
-            if (pp.hand && rp.hand && !pp.hand.includes(UNKNOWN_SCROLL)) {
+            if (pp.hand && rp.hand && !pp.hand.some(isUnknownScroll)) {
                 const ph = [...pp.hand].sort().join(','), rh = [...rp.hand].sort().join(',');
                 if (ph !== rh) push(`players[${i}].hand`, ph, rh);
             }
@@ -2022,7 +2087,7 @@
         simulate, legalActions, isTerminal, winner,
         checkPattern, canMoveTo, grid, diffSnapshots, validate,
         stoneWouldSurvive,
-        SIMULATED_SCROLLS, UNKNOWN_SCROLL,
+        SIMULATED_SCROLLS, UNKNOWN_SCROLL, castChoices, isUnknownScroll, unknownScrollElement,
     };
     log('Loaded - window.BotSim ready (simulate / legalActions / isTerminal / validate)');
 })();

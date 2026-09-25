@@ -125,10 +125,11 @@
             for (const step of r.line) {
                 const a = step.action;
                 if (a.type === 'move' || a.type === 'teleport') { pos = { x: a.x, y: a.y }; pts.push(pos); continue; }
-                if (a.x == null) continue;
+                const at = a.x != null ? a : step.target; // a cast's chosen tile
+                if (!at || at.x == null) continue;
                 n++;
-                el('circle', { cx: a.x, cy: a.y, r: 5.5, class: 'bm-step-dot' }, g);
-                const t = el('text', { x: a.x, y: a.y + 2.6, class: 'bm-step-num' }, g);
+                el('circle', { cx: at.x, cy: at.y, r: 5.5, class: 'bm-step-dot' }, g);
+                const t = el('text', { x: at.x, y: at.y + 2.6, class: 'bm-step-num' }, g);
                 t.textContent = n;
             }
             if (pts.length > 1) el('polyline', { points: pts.map(p => `${p.x},${p.y}`).join(' '), class: 'bm-line-path' }, g);
@@ -136,6 +137,11 @@
 
         // What it is doing right now.
         const a = r.chosen && r.chosen.action;
+        const tgt = r.chosen && r.chosen.target;
+        if (tgt && tgt.x != null) {
+            // A scroll aimed at a tile (Wandering River, Heavy Stomp): ring the tile.
+            el('circle', { cx: tgt.x, cy: tgt.y, r: 44, class: 'bm-cast-target', stroke: STONE_COLORS[tgt.element] || col }, g);
+        }
         if (a && a.x != null) {
             if (a.type === 'breakStone') {
                 const d = 7;
