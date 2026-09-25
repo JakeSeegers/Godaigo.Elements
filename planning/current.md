@@ -132,7 +132,9 @@ reach/beat it from here.
   placements, and search leaves use real path costs (`leafField`, cached by the set
   of impassable stones) with `evalUnreachableSteps` for an unreachable home/hidden tile.
   Arena test (tools: headless playMatch, default weights, 2 players, seeds 1-20,
-  maxStallRestarts 0): wins 5 -> 8, stalls 14 -> 12, elements per player 3.35 -> 3.73.
+  maxStallRestarts 0): wins 5 -> 9, stalls 14 -> 11 (2 players, seeds 1-20);
+  wins 7 -> 10, stalls 5 -> 2 (3 players, seeds 101-112). Breaks that close the way
+  now score negative, which halved the void flip-flopping (66 -> 38 voids placed).
   Still open: many games still stall (no-cast detector); bots sometimes flip a void
   between two spots as their goal changes (void opens earth but slows wind).
   New weights are untrained (hillclimb can tune them).
