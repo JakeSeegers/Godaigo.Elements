@@ -216,6 +216,11 @@ reach/beat it from here.
   nameShine/nameTide/nameEmber/nameVoidPulse/nameGlitch in css/styles.css, off under
   prefers-reduced-motion). Prices: elements 100, Silver/Bronze 75, Obsidian 100, Shimmer 150,
   Ember/Tide/Void Pulse 175, CRT Glitch 250 (cosmetic_price, migration cosmetics_more_styles).
+- **Pawn decorations (2026-09-25, sql/pawn-cosmetics.sql, js/pawn-cosmetics.js):** slots rim /
+  base / trail (user_profiles.pawn_rim/pawn_base/pawn_trail, equip_pawn, bought with
+  buy_cosmetic). Rims Gold/Silver 100, Rune Ring 150; bases Lotus Leaf/Stone Plinth 125; trails
+  Ink/Embers/Water Drops/Leaves/Void Sparks 150. Shop: both cosmetics screens (profile tab now
+  "Cosmetics"). Headless-tested on a real board (decorations + trail particles, no errors).
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

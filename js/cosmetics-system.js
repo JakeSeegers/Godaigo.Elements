@@ -56,6 +56,23 @@
           style: 'color:#e8f7ff;display:inline-block;animation:nameGlitch 4s steps(1,end) infinite;' },
     ];
 
+    // Pawn decorations (drawn by js/pawn-cosmetics.js). One per slot.
+    const PAWN_ITEMS = [
+        { id: 'pawn_rim_gold',     slot: 'rim',   group: 'Pawn rims',   name: 'Gold Rim',     cost: 100 },
+        { id: 'pawn_rim_silver',   slot: 'rim',   group: 'Pawn rims',   name: 'Silver Rim',   cost: 100 },
+        { id: 'pawn_rim_runes',    slot: 'rim',   group: 'Pawn rims',   name: 'Rune Ring',    cost: 150 },
+        { id: 'pawn_base_lotus',   slot: 'base',  group: 'Pawn bases',  name: 'Lotus Leaf',   cost: 125 },
+        { id: 'pawn_base_plinth',  slot: 'base',  group: 'Pawn bases',  name: 'Stone Plinth', cost: 125 },
+        { id: 'pawn_trail_ink',    slot: 'trail', group: 'Pawn trails', name: 'Ink',          cost: 150 },
+        { id: 'pawn_trail_embers', slot: 'trail', group: 'Pawn trails', name: 'Embers',       cost: 150 },
+        { id: 'pawn_trail_drops',  slot: 'trail', group: 'Pawn trails', name: 'Water Drops',  cost: 150 },
+        { id: 'pawn_trail_leaves', slot: 'trail', group: 'Pawn trails', name: 'Leaves',       cost: 150 },
+        { id: 'pawn_trail_void',   slot: 'trail', group: 'Pawn trails', name: 'Void Sparks',  cost: 150 },
+    ];
+    const ALL_ITEMS = NAME_COLORS.concat(PAWN_ITEMS);
+    const slotOf = (item) => item.slot || 'namecolor';
+    const PROFILE_FIELD = { namecolor: 'name_color', rim: 'pawn_rim', base: 'pawn_base', trail: 'pawn_trail' };
+
     // ── Storage ───────────────────────────────────────────────
     // Owned and equipped colours live on the server (user_profiles
     // .cosmetics_owned / .name_color, sql/cosmetics.sql) so other players
@@ -68,9 +85,11 @@
     function loadData() {
         const prof = window.gami?.profile;
         if (!prof) return { owned: [], equipped: {} };
+        const equipped = {};
+        Object.entries(PROFILE_FIELD).forEach(([slot, field]) => { if (prof[field]) equipped[slot] = prof[field]; });
         return {
             owned: Array.isArray(prof.cosmetics_owned) ? prof.cosmetics_owned : [],
-            equipped: prof.name_color ? { namecolor: prof.name_color } : {},
+            equipped,
         };
     }
 
@@ -80,7 +99,7 @@
     // ── Purchase / equip ──────────────────────────────────────
 
     async function purchaseItem(id) {
-        const item = NAME_COLORS.find(i => i.id === id);
+        const item = ALL_ITEMS.find(i => i.id === id);
         if (!item) return { ok: false, msg: 'Item not found' };
         if (!getUserId() || !window.gami?.profile) return { ok: false, msg: 'Not logged in' };
 
@@ -99,14 +118,24 @@
         return { ok: true };
     }
 
-    // Toggle: equipping the colour that is already on takes it off.
+    // Toggle: equipping the item that is already on takes it off.
     async function equipItem(id) {
         const data = loadData();
-        if (!data.owned.includes(id) || !window.gami?.profile) return;
-        const next = data.equipped.namecolor === id ? null : id;
-        const { error } = await supabase.rpc('equip_cosmetic', { p_id: next });
-        if (error) { window.gami?.notify?.('Could not change colour', 0, 'gold'); return; }
-        window.gami.profile.name_color = next;
+        const item = ALL_ITEMS.find(i => i.id === id);
+        if (!item || !data.owned.includes(id) || !window.gami?.profile) return;
+        const slot = slotOf(item);
+        const next = data.equipped[slot] === id ? null : id;
+        const { error } = slot === 'namecolor'
+            ? await supabase.rpc('equip_cosmetic', { p_id: next })
+            : await supabase.rpc('equip_pawn', { p_slot: slot, p_id: next });
+        if (error) { window.gami?.notify?.('Could not change that', 0, 'gold'); return; }
+        window.gami.profile[PROFILE_FIELD[slot]] = next;
+    }
+
+    // Shop preview: "Aa" in the name style, or a small pawn.
+    function previewHtml(item, fontSize) {
+        if (item.slot) return window.PawnCosmetics?.previewSvg(item.id) || '';
+        return `<span style="${item.style}font-weight:bold;font-size:${fontSize || 15}px;line-height:36px;">Aa</span>`;
     }
 
     // One-time carry-over: before the server stored colours, the equipped
@@ -151,24 +180,43 @@
     // panel, turn display and Game Log colour usernames with it. Bots have
     // no user_id and stay plain. Your own colour always comes from your
     // live profile, so equipping shows at once.
-    const nameColorCache = new Map(); // user_id -> name_color id (or null)
+    const nameColorCache = new Map(); // user_id -> { name_color, pawn_rim, pawn_base, pawn_trail }
 
     async function loadNameColors(userIds) {
         const ids = [...new Set((userIds || []).filter(Boolean))].filter(id => !nameColorCache.has(id));
         if (!ids.length) return false;
         try {
-            const { data, error } = await supabase.from('user_profiles').select('user_id, name_color').in('user_id', ids);
+            const { data, error } = await supabase.from('user_profiles')
+                .select('user_id, name_color, pawn_rim, pawn_base, pawn_trail').in('user_id', ids);
             if (error) return false;
-            ids.forEach(id => nameColorCache.set(id, null));
-            (data || []).forEach(r => nameColorCache.set(r.user_id, r.name_color || null));
-            return (data || []).some(r => r.name_color);
+            ids.forEach(id => nameColorCache.set(id, {}));
+            (data || []).forEach(r => nameColorCache.set(r.user_id, r));
+            return (data || []).some(r => r.name_color || r.pawn_rim || r.pawn_base || r.pawn_trail);
         } catch (e) { return false; }
     }
 
     function styleForUser(userId) {
         if (!userId) return '';
-        const id = userId === getUserId() ? (window.gami?.profile?.name_color || null) : nameColorCache.get(userId);
+        const id = userId === getUserId() ? (window.gami?.profile?.name_color || null) : (nameColorCache.get(userId)?.name_color || null);
         return id ? getNameColorStyle(id) : '';
+    }
+
+    // Equipped pawn items for a seat: { rim, base, trail } (ids or null).
+    // Online: from the seat's account. Local games: your own style on
+    // seat 0 (the human seat).
+    function pawnStyleForSeat(playerIndex) {
+        let uid = null;
+        try {
+            if (typeof isMultiplayer !== 'undefined' && isMultiplayer) {
+                const row = (typeof allPlayersData !== 'undefined' ? allPlayersData : []).find(p => p.player_index === playerIndex);
+                uid = row?.user_id || null;
+            } else if (playerIndex === 0 && !window.isTutorialMode) {
+                uid = getUserId();
+            }
+        } catch (e) {}
+        if (!uid) return {};
+        const src = uid === getUserId() ? (window.gami?.profile || {}) : (nameColorCache.get(uid) || {});
+        return { rim: src.pawn_rim || null, base: src.pawn_base || null, trail: src.pawn_trail || null };
     }
 
     function escHtml(v) {
@@ -198,7 +246,7 @@
         panelEl.id = 'cosmetics-panel';
         panelEl.innerHTML = `
             <div class="cos-header">
-                <span class="cos-title">Name Colours</span>
+                <span class="cos-title">Cosmetics</span>
                 <button class="cos-close" onclick="window.cosmeticsSystem.closePanel()">✕</button>
             </div>
             <div class="cos-gold-bar"><span id="cos-gold-amt">-</span>g</div>
@@ -209,7 +257,6 @@
 
     function renderPanel() {
         const data     = loadData();
-        const equipped = data.equipped.namecolor;
         const gold     = window.gami?.profile?.gold || 0;
 
         const goldEl = document.getElementById('cos-gold-amt');
@@ -218,14 +265,12 @@
         const body = document.getElementById('cos-body');
         if (!body) return;
 
-        body.innerHTML = NAME_COLORS.map((item, n) => {
-            const heading = (n === 0 || NAME_COLORS[n - 1].group !== item.group)
+        body.innerHTML = ALL_ITEMS.map((item, n) => {
+            const heading = (n === 0 || ALL_ITEMS[n - 1].group !== item.group)
                 ? `<div class="cos-group">${item.group}</div>` : '';
             const owned      = data.owned.includes(item.id);
-            const isEquipped = equipped === item.id;
+            const isEquipped = data.equipped[slotOf(item)] === item.id;
             const canAfford  = gold >= item.cost;
-
-            const previewStyle = item.style;
 
             let actionHTML;
             if (owned) {
@@ -242,9 +287,7 @@
 
             return heading + `
                 <div class="cos-item ${isEquipped ? 'cos-item-equipped' : ''}">
-                    <div class="cos-preview">
-                        <span style="${previewStyle}font-weight:bold;font-size:15px;line-height:36px;">Aa</span>
-                    </div>
+                    <div class="cos-preview">${previewHtml(item, 15)}</div>
                     <div class="cos-info">
                         <div class="cos-name">${item.name}</div>
                     </div>
@@ -289,7 +332,10 @@
         loadNameColors,
         styleForUser,
         seatNameHtml,
-        getItems() { return NAME_COLORS; },
+        getItems() { return ALL_ITEMS; },
+        slotOf,
+        previewHtml,
+        pawnStyleForSeat,
         getData:    loadData,
     };
 

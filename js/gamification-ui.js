@@ -25,7 +25,7 @@ function gami_openPanel(tab = 'profile') {
             </div>
             <div class="gami-tabs" role="tablist">
                 <button class="gami-tab" role="tab" onclick="gami_switchTab('profile')">Stats</button>
-                <button class="gami-tab" role="tab" onclick="gami_switchTab('cosmetics')">Colours</button>
+                <button class="gami-tab" role="tab" onclick="gami_switchTab('cosmetics')">Cosmetics</button>
                 <button class="gami-tab" role="tab" onclick="gami_switchTab('emojis')">Emojis</button>
                 <button class="gami-tab" role="tab" onclick="gami_switchTab('badges')">Badges</button>
                 <button class="gami-tab" role="tab" onclick="gami_switchTab('leaderboard')">Board</button>
@@ -168,22 +168,21 @@ function _renderCosmetics(content) {
 
     const items    = cs.getItems();
     const data     = cs.getData();
-    const equipped = data.equipped?.namecolor || null;
+    const equipped = data.equipped || {};
     const owned    = data.owned || [];
     const gold     = window.gami?.profile?.gold || 0;
 
     content.innerHTML = `
         <div class="gami-cos-header">
-            <span style="color:var(--pp-ink);font-size:15px;font-weight:bold;">Name Styles</span>
+            <span style="color:var(--pp-ink);font-size:15px;font-weight:bold;">Name Styles and Pawns</span>
             <span style="color:var(--pp-gold);font-size:14px;">${gold}g</span>
         </div>
         <div class="gami-cos-list">
             ${items.map((item, n) => {
                 const isOwned    = owned.includes(item.id);
-                const isEquipped = equipped === item.id;
+                const isEquipped = equipped[cs.slotOf(item)] === item.id;
                 const canAfford  = gold >= item.cost;
 
-                const previewStyle = item.style + 'font-weight:bold;font-size:18px;';
                 const heading = (n === 0 || items[n - 1].group !== item.group)
                     ? `<div class="gami-cos-group">${item.group}</div>` : '';
 
@@ -202,7 +201,7 @@ function _renderCosmetics(content) {
 
                 return heading + `
                     <div class="gami-cos-item${isEquipped ? ' active' : ''}">
-                        <div class="gami-cos-preview"><span style="${previewStyle}">Aa</span></div>
+                        <div class="gami-cos-preview">${cs.previewHtml(item, 18)}</div>
                         <div class="gami-cos-name">${item.name}</div>
                         <div class="gami-cos-action">${actionHTML}</div>
                     </div>`;
