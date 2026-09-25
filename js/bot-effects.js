@@ -157,7 +157,7 @@
 
     // ----------------------------------------------------------------
     // Chosen options (combo plan Phase 2). bot-state.js applyAction('cast')
-    // hands over the choice the bot picked ({scroll, tileId, element}) right
+    // hands over the choice the bot picked (scroll id + choice) right
     // before casting; the matching driver uses it instead of its default
     // rule. Set fresh (or cleared) on every cast, so a choice never leaks
     // into a later, different effect. A choice that is no longer legal
@@ -165,7 +165,14 @@
     // ----------------------------------------------------------------
     let pendingChoice = null;
     let pendingRiverElement = null;
-    function setPendingChoice(c) { pendingChoice = c || null; pendingRiverElement = null; }
+    let pendingStep2 = null; // second step of a two-step choice (Arson element, Plunder scroll, swap tile b)
+    // (scroll id, choice) are kept apart: a choice can have its own `scroll`
+    // field (Plunder's target scroll).
+    function setPendingChoice(scrollId, choice) {
+        pendingChoice = (scrollId && choice) ? { scrollId, choice } : null;
+        pendingRiverElement = null; pendingStep2 = null;
+    }
+    const seatLabel = idx => (typeof getPlayerColorName === 'function') ? getPlayerColorName(idx) : null;
     // Put the chosen element first in a ranked list (default order after it,
     // so an unavailable deck still falls back sensibly).
     function withChoice(scroll, ranked) {
@@ -173,8 +180,8 @@
         return (c && c.element) ? [c.element, ...ranked.filter(e => e !== c.element)] : ranked;
     }
     function takeChoice(scroll) {
-        if (!pendingChoice || pendingChoice.scroll !== scroll) return null;
-        const c = pendingChoice;
+        if (!pendingChoice || pendingChoice.scrollId !== scroll) return null;
+        const c = pendingChoice.choice;
         pendingChoice = null;
         return c;
     }
@@ -235,6 +242,19 @@
         const tiles = (sm.eligibleTiles || []).filter(t =>
             !(sm.selectedTiles || []).some(s => s.id === t.id));
         if (!tiles.length) return false;
+        const byId = id => tiles.find(t => Number(t.id) === Number(id));
+        if (!(sm.selectedTiles || []).length) {
+            const c = takeChoice('EARTH_SCROLL_2');
+            if (c && byId(c.a) && byId(c.b)) {
+                pendingStep2 = { kind: 'swap', b: c.b };
+                sm.handleTileClick(byId(c.a));
+                return true;
+            }
+        } else if (pendingStep2?.kind === 'swap') {
+            const b = byId(pendingStep2.b);
+            pendingStep2 = null;
+            if (b) { sm.handleTileClick(b); return true; }
+        }
         if (!(sm.selectedTiles || []).length) {
             // First click: pick a tile, prefer one with a partner nearby
             let bestPair = null, bestDist = Infinity;
@@ -337,6 +357,11 @@
         const modal = document.getElementById('opponent-select-modal');
         if (!modal) return false;
         const buttons = [...modal.querySelectorAll('button')];
+        const c = takeChoice('FIRE_SCROLL_5');
+        if (c) {
+            const btn = buttons.find(b => b.textContent === seatLabel(c.target));
+            if (btn) { pendingStep2 = { kind: 'arson', element: c.element }; btn.click(); return true; }
+        }
         for (const idx of rankedOpponents()) {
             const name = (typeof getPlayerColorName === 'function') ? getPlayerColorName(idx) : null;
             const btn = name ? buttons.find(b => b.textContent === name) : null;
@@ -350,6 +375,13 @@
         if (!modal) return false;
         const buttons = [...modal.querySelectorAll('button')];
         if (!buttons.length) return false;
+        if (pendingStep2?.kind === 'arson') {
+            const el = pendingStep2.element;
+            pendingStep2 = null;
+            const label = el.charAt(0).toUpperCase() + el.slice(1);
+            const btn = buttons.find(b => b.textContent.startsWith(label + ' ('));
+            if (btn) { btn.click(); return true; }
+        }
         let best = buttons[0], bestCount = -1;
         for (const b of buttons) {
             const m = b.textContent.match(/\((\d+) in pool\)/);
@@ -379,6 +411,12 @@
         const modal = document.getElementById('plunder-player-modal');
         if (!modal) return false;
         const buttons = [...modal.querySelectorAll('button')];
+        const c = takeChoice('CATACOMB_SCROLL_8');
+        if (c) {
+            const name = seatLabel(c.target);
+            const btn = name && buttons.find(b => b.textContent.startsWith(name + ' -') && typeof b.onclick === 'function');
+            if (btn) { pendingStep2 = { kind: 'plunder', scroll: c.scroll }; btn.click(); return true; }
+        }
         for (const idx of rankedOpponents(p => p.active && p.active.length > 0)) {
             const name = (typeof getPlayerColorName === 'function') ? getPlayerColorName(idx) : null;
             const btn = name ? buttons.find(b => b.textContent.startsWith(name) && b.textContent.includes('active')) : null;
@@ -390,6 +428,12 @@
     function drivePlunderScrollPick(modal) {
         const buttons = [...modal.querySelectorAll('button')].filter(b => b.textContent !== 'Cancel');
         if (!buttons.length) return false;
+        if (pendingStep2?.kind === 'plunder') {
+            const want = window.SCROLL_DEFINITIONS?.[pendingStep2.scroll]?.name;
+            pendingStep2 = null;
+            const btn = want && buttons.find(b => b.textContent === want);
+            if (btn) { btn.click(); return true; }
+        }
         pickStrongestButton(buttons).click();
         return true;
     }
@@ -401,7 +445,7 @@
     function driveCreateModal() {
         const modal = document.getElementById('create-stone-modal');
         if (!modal) return false;
-        return !!clickBestElement(modal, rankedElements());
+        return !!clickBestElement(modal, withChoice('VOID_SCROLL_5', rankedElements()));
     }
 
     // ----------------------------------------------------------------
@@ -827,7 +871,10 @@
         // destination — no snapshot-only simulation could ever honestly
         // claim to match a nondeterministic pick, so this was also blocking
         // bot-sim.js from simulating the cast at all.
-        const dest = _bestTakeFlightDestination(candidates, target);
+        const c = takeChoice('WIND_SCROLL_4');
+        const chosen = (c && c.x != null && tf.targetPlayerIndex === activePlayerIndex)
+            ? candidates.find(h => Math.hypot(h.x - c.x, h.y - c.y) < 5) : null;
+        const dest = chosen || _bestTakeFlightDestination(candidates, target);
 
         if (tf.targetPlayerIndex === activePlayerIndex) {
             placePlayer(dest.x, dest.y);
@@ -878,7 +925,17 @@
         const largeHexSize = TILE_SIZE * 4;
         const offsets = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
         let tile = null, destination = null;
-        for (const t of eligible) {
+        // A chosen move (tile + slot next to the pawn's tile) wins when the
+        // real snap check accepts that exact slot.
+        const c = takeChoice('VOID_SCROLL_2');
+        const ct = c && eligible.find(t => Number(t.id) === Number(c.tileId));
+        if (ct) {
+            const snapResult = findNearestSnapPoint(c.x, c.y, false, ct.id);
+            if (snapResult.snapped && Math.hypot(snapResult.x - c.x, snapResult.y - c.y) < 5) {
+                tile = ct; destination = { x: snapResult.x, y: snapResult.y };
+            }
+        }
+        if (!destination) for (const t of eligible) {
             const hex = pixelToHex(t.x, t.y, largeHexSize);
             for (const [dq, dr] of offsets) {
                 const p = hexToPixel(hex.q + dq, hex.r + dr, largeHexSize);

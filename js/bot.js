@@ -740,6 +740,11 @@
     // Greedy tie-break between the choices of one scroll (search compares
     // them properly through the simulator).
     function castChoiceBonus(a, snap) {
+        // Arson / Plunder: hit whoever is closest to winning (activated elements).
+        if ((a.scroll === 'FIRE_SCROLL_5' || a.scroll === 'CATACOMB_SCROLL_8') && a.choice) {
+            const op = snap.players[a.choice.target];
+            return op ? op.activated.length : 0;
+        }
         const el = choiceDrawElement(a, snap);
         if (!el) return 0;
         const need = scrollNeed(snap, snap.turn.activePlayerIndex);
@@ -1526,7 +1531,9 @@
     let _fieldCtx = null;
     function leafField(snap, kind, forIndex) {
         if (!_fieldCtx) return undefined;
-        const key = `${kind}:${forIndex}:${blockedSig(snap)}`;
+        // Tile layout too: Shifting Sands / Telekinesis move whole tiles.
+        const tiles = snap.tiles.map(t => `${t.id}@${Math.round(t.x)},${Math.round(t.y)}${t.revealed ? 'r' : 'h'}`).join('|');
+        const key = `${kind}:${forIndex}:${blockedSig(snap)}#${tiles}`;
         if (_fieldCtx.cache.has(key)) return _fieldCtx.cache.get(key);
         const f = kind === 'home' ? buildHomeField(snap, forIndex) : buildExploreField(snap);
         _fieldCtx.cache.set(key, f);
@@ -2314,8 +2321,16 @@
             case 'cast': {
                 const el = scrollElement(a.scroll);
                 const n = scrollName(a.scroll);
-                if (a.choice && a.choice.tileId == null) {
-                    const e = a.choice.element;
+                const c = a.choice;
+                const who = i => (typeof getPlayerColorName === 'function') ? getPlayerColorName(i) : `player ${i + 1}`;
+                if (c && a.scroll === 'FIRE_SCROLL_5') return `Cast ${n}: burn one of ${who(c.target)}'s ${c.element} stones`;
+                if (c && a.scroll === 'CATACOMB_SCROLL_8') return `Cast ${n}: send ${who(c.target)}'s ${scrollName(c.scroll)} to the common area`;
+                if (c && a.scroll === 'VOID_SCROLL_5') return `Cast ${n}: draw ${c.element} stones`;
+                if (c && a.scroll === 'WIND_SCROLL_4') return `Cast ${n}: fly to another player's tile`;
+                if (c && a.scroll === 'EARTH_SCROLL_2') return `Cast ${n}: swap a nearby tile with a tile worth having close`;
+                if (c && a.scroll === 'VOID_SCROLL_2') return `Cast ${n}: move a tile next to this one`;
+                if (c && c.tileId == null) {
+                    const e = c.element;
                     if (a.scroll === 'CATACOMB_SCROLL_9') return `Cast ${n}: take the ${e} level-1 scroll and 2 ${e} stones`;
                     return `Cast ${n}: draw from the ${e} deck`;
                 }
@@ -2375,7 +2390,16 @@
 
     // The tile a cast choice aims at (for the Bot Mind drawing).
     function actionTarget(a, snap) {
-        if (!a || !a.choice || a.choice.tileId == null) return null;
+        if (!a || !a.choice) return null;
+        const c = a.choice;
+        if (a.scroll === 'WIND_SCROLL_4' || a.scroll === 'VOID_SCROLL_2') {
+            if (c.x != null) return { x: c.x, y: c.y, element: null };
+        }
+        if (a.scroll === 'EARTH_SCROLL_2') {
+            const t = snap.tiles.find(x => Number(x.id) === Number(c.b));
+            return t ? { x: t.x, y: t.y, element: null } : null;
+        }
+        if (c.tileId == null) return null;
         const t = snap.tiles.find(x => Number(x.id) === Number(a.choice.tileId));
         return t ? { x: t.x, y: t.y, element: a.choice.element || choiceDrawElement(a, snap) } : null;
     }

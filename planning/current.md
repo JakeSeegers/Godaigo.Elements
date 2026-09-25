@@ -118,6 +118,18 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-25: Combo plan Phase 2 done (third batch).** Choices as moves for Create
+  ({element}), Arson ({target, element}), Plunder ({target, scroll}), Take Flight ({x, y}),
+  Shifting Sands ({a, b}) and Telekinesis ({tileId, x, y}); Mason's Savvy's 5-hex earth
+  range is now in the snapshot (`earthRange`) and the sim move list. Drivers carry two-step
+  choices (`pendingStep2`); `setPendingChoice(scrollId, choice)` keeps the scroll id apart
+  from a choice's own fields (Plunder's `scroll` field clobbered it at first, caught by the
+  live test). Search leaf path fields are now also keyed by the tile layout (tile moves).
+  Live headless check on two boards: every choice carried out exactly, sim matched real.
+  Arena vs previous commit: 2p 11 -> 11 wins, 8 -> 9 stalls; 3p 9 -> 10 wins, 3 -> 1
+  stalls; elements per player up in both. Not done (by design): Avalanche patterns
+  anchored away from the pawn (needs multi-turn plans, Phase 4).
+  NEXT: Phase 3, the replay miner.
 - **2026-09-25: Combo plan Phase 2, second batch.** Choices as moves for Scholar's Insight
   and Inspiring Draught ({element} deck, top 3 by scroll need, sim draws
   '?unknown:<element>?'), Quick Reflexes ({element}, top 3 by stone need) and Call to

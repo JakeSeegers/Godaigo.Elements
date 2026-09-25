@@ -43,6 +43,8 @@
         if (mine(raw.burningMotivation)) out.burningMotivationStacks = raw.burningMotivation.stacks || 1;
         if (mine(raw.globalPlacement)) out.globalPlacement = true;
         if (mine(raw.waterWindGlobalPlacement)) out.waterWindGlobalPlacement = true;
+        // Mason's Savvy: earth stones within `range` hexes (bot-sim earthRange).
+        if (mine(raw.earthExtendedPlacement)) out.earthRange = raw.earthExtendedPlacement.range || 5;
         if (mine(raw.respirateWind)) out.respirateWind = true;
         if (mine(raw.simplify)) out.simplify = true;
         if (mine(raw.mine)) out.mineShrineType = raw.mine.shrineType;
@@ -240,7 +242,9 @@
     // Canonical forms — the only vocabulary bot strategy may use:
     //   {type:'placeTile', x, y, distToCentroid}                    // placement phase only
     //   {type:'cast', scroll, choice?}  // choice: {tileId, element} River / {tileId} Stomp, Call to Adventure /
-    //                                   // {element} Scholar's Insight, Inspiring Draught, Quick Reflexes (BotSim.castChoices)
+    //                                   // {element} Scholar's Insight, Inspiring Draught, Quick Reflexes, Create /
+    //                                   // {target, element} Arson / {target, scroll} Plunder / {x, y} Take Flight /
+    //                                   // {a, b} Shifting Sands / {tileId, x, y} Telekinesis (BotSim.castChoices)
     //   {type:'placeStone', x, y, stoneType, scroll, progress}
     //   {type:'move', x, y, cost}
     //   {type:'breakStone', stoneId, x, y, stoneType, cost}
@@ -268,7 +272,8 @@
     const STONE_BREAK_COST = { void: 1, wind: 2, fire: 3, water: 4, earth: 5 };
     // Scrolls whose cast carries a choice ({type:'cast', scroll, choice}).
     const CHOICE_SCROLLS = new Set(['WATER_SCROLL_4', 'EARTH_SCROLL_4', 'CATACOMB_SCROLL_3',
-        'VOID_SCROLL_4', 'WATER_SCROLL_3', 'CATACOMB_SCROLL_9']);
+        'VOID_SCROLL_4', 'WATER_SCROLL_3', 'CATACOMB_SCROLL_9',
+        'VOID_SCROLL_5', 'FIRE_SCROLL_5', 'CATACOMB_SCROLL_8', 'WIND_SCROLL_4', 'EARTH_SCROLL_2', 'VOID_SCROLL_2']);
 
     // Free hexes adjacent to the existing placed-tile cluster, on the LARGE
     // player-tile hex grid (TILE_SIZE * 4) — distinct from hexGrid()'s small
@@ -655,7 +660,7 @@
             case 'cast': {
                 // Hand the chosen option to the scroll-effect driver first; it
                 // uses it instead of its own default rule (bot-effects.js).
-                window.BotEffects?.setPendingChoice?.(a.choice ? { scroll: a.scroll, ...a.choice } : null);
+                window.BotEffects?.setPendingChoice?.(a.scroll, a.choice || null);
                 const scrolls = window.spellSystem.getPlayerScrolls(false);
                 if (scrolls.hand.has(a.scroll)) window.spellSystem.moveToActive(a.scroll);
                 const ok = window.spellSystem.castSpell();

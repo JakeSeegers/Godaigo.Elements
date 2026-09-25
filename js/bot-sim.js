@@ -706,8 +706,10 @@
     // Create (VOID_SCROLL_5): the driver clicks the best-need element whose
     // pool still has room (full-pool buttons aren't clickable);
     // drawStonesToPool then grants min(rank, source available, pool room).
-    function simEffectCreate(snap, p) {
-        const el = effectRankedElements(snap, p).find(e => (p.pool[e] || 0) < POOL_CAP);
+    function simEffectCreate(snap, p, choice) {
+        const picked = choiceElement(choice);
+        const el = (picked && (p.pool[picked] || 0) < POOL_CAP) ? picked
+            : effectRankedElements(snap, p).find(e => (p.pool[e] || 0) < POOL_CAP);
         if (!el) return; // every pool full — nothing clickable, cast fizzles
         const drawn = Math.min(
             CREATE_RANKS[el],
@@ -781,19 +783,24 @@
     // real flow aborts before any of that — scroll stays in active.
     // Excavate immunity is a buff the snapshot doesn't carry — accepted
     // (rare) divergence in target choice.
-    function simEffectArson(snap, p, scrollName) {
+    function simEffectArson(snap, p, scrollName, choice) {
         const meIdx = snap.turn.activePlayerIndex;
         let target = null, bestScore = -1;
-        for (const op of snap.players) {
-            if (!op || op.index === meIdx) continue;
-            const score = op.activated.length * 1000 +
-                ELEMENTS.reduce((s, el) => s + (op.pool[el] || 0), 0);
-            if (score > bestScore) { bestScore = score; target = op; }
-        }
-        if (!target) return;
         let el = null, count = 0;
-        for (const e of ELEMENTS) {
-            if ((target.pool[e] || 0) > count) { count = target.pool[e]; el = e; }
+        const chosen = choice ? snap.players[choice.target] : null;
+        if (chosen && chosen.index !== meIdx && (chosen.pool[choice.element] || 0) > 0) {
+            target = chosen; el = choice.element;
+        } else {
+            for (const op of snap.players) {
+                if (!op || op.index === meIdx) continue;
+                const score = op.activated.length * 1000 +
+                    ELEMENTS.reduce((s, el) => s + (op.pool[el] || 0), 0);
+                if (score > bestScore) { bestScore = score; target = op; }
+            }
+            if (!target) return;
+            for (const e of ELEMENTS) {
+                if ((target.pool[e] || 0) > count) { count = target.pool[e]; el = e; }
+            }
         }
         if (!el) return; // target has no stones — real flow aborts, scroll stays put
         target.pool[el]--;
@@ -816,20 +823,25 @@
     // replacement, same as discardToCommonArea/Arson above — note this
     // replaces by the PLUNDERED scroll's element, not always fire).
     // Excavate immunity: same accepted divergence as Arson.
-    function simEffectPlunder(snap, p, scrollName) {
+    function simEffectPlunder(snap, p, scrollName, choice) {
         const meIdx = snap.turn.activePlayerIndex;
         let target = null, bestScore = -1;
-        for (const op of snap.players) {
-            if (!op || op.index === meIdx || !op.active || !op.active.length) continue;
-            const score = op.activated.length * 1000 +
-                ELEMENTS.reduce((s, el) => s + (op.pool[el] || 0), 0);
-            if (score > bestScore) { bestScore = score; target = op; }
-        }
-        if (!target) return; // nobody has a plunderable active scroll
         let best = null, bestLevel = -1;
-        for (const name of target.active) {
-            const level = window.SCROLL_DEFINITIONS?.[name]?.level ?? 0;
-            if (level > bestLevel) { bestLevel = level; best = name; }
+        const chosen = choice ? snap.players[choice.target] : null;
+        if (chosen && chosen.index !== meIdx && (chosen.active || []).includes(choice.scroll)) {
+            target = chosen; best = choice.scroll;
+        } else {
+            for (const op of snap.players) {
+                if (!op || op.index === meIdx || !op.active || !op.active.length) continue;
+                const score = op.activated.length * 1000 +
+                    ELEMENTS.reduce((s, el) => s + (op.pool[el] || 0), 0);
+                if (score > bestScore) { bestScore = score; target = op; }
+            }
+            if (!target) return; // nobody has a plunderable active scroll
+            for (const name of target.active) {
+                const level = window.SCROLL_DEFINITIONS?.[name]?.level ?? 0;
+                if (level > bestLevel) { bestLevel = level; best = name; }
+            }
         }
         if (!best) return;
         const ti = target.active.indexOf(best);
@@ -871,10 +883,15 @@
     // occupant is recentred onto their tile's NEW position (mirrors
     // recenterPlayerOnTile) — never both tiles at once, since eligibility
     // caps each at one player.
-    function simEffectShiftingSands(snap) {
+    function simEffectShiftingSands(snap, choice) {
         const eligible = snap.tiles.filter(t =>
             !t.isPlayerTile && tileStoneCount(snap, t) === 0 && tilePlayerIndices(snap, t).length <= 1);
         if (eligible.length < 2) return; // real flow bails before any selection
+        if (choice && choice.a != null) {
+            const ca = eligible.find(t => Number(t.id) === Number(choice.a));
+            const cb = eligible.find(t => Number(t.id) === Number(choice.b));
+            if (ca && cb && ca !== cb) return swapTiles(snap, ca, cb);
+        }
         let a = null, bestDist = Infinity;
         for (const x of eligible) {
             for (const y of eligible) {
@@ -891,6 +908,10 @@
             if (d < bestB) { bestB = d; b = t; }
         }
         if (!b) return;
+        swapTiles(snap, a, b);
+    }
+
+    function swapTiles(snap, a, b) {
         const aOccupant = tilePlayerIndices(snap, a)[0];
         const bOccupant = tilePlayerIndices(snap, b)[0];
         const ax = a.x, ay = a.y;
@@ -915,7 +936,35 @@
     // bot-effects.js's driver now uses (this used to roll a random valid
     // destination, which no snapshot-only simulation could ever honestly
     // claim to match).
-    function simEffectTakeFlight(snap, p) {
+    // Hexes Take Flight may land on: unoccupied, stone-free hexes of a
+    // revealed, non-player tile that another pawn is standing on
+    // (getValidTakeFlightDestinations).
+    function takeFlightCandidates(snap, p) {
+        const g = grid(snap);
+        const occupiedTileIds = new Set();
+        for (const pl of snap.players) {
+            if (!pl || pl.index === p.index) continue;
+            const hex = g.find(h => dist(h.x, h.y, pl.x, pl.y) < HEX_NEAR);
+            if (hex) for (const id of hex.tileIds) occupiedTileIds.add(id);
+        }
+        if (!occupiedTileIds.size) return [];
+        return g.filter(h => {
+            if (!h.tileIds.some(id => occupiedTileIds.has(id))) return false;
+            if (h.tileIds.some(id => {
+                const t = snap.tiles.find(tt => tt.id === id);
+                return t && (t.isPlayerTile || !t.revealed);
+            })) return false;
+            if (stoneAt(snap, h.x, h.y)) return false;
+            if (snap.players.some(pl => pl && dist(pl.x, pl.y, h.x, h.y) < HEX_NEAR)) return false;
+            return true;
+        });
+    }
+
+    function simEffectTakeFlight(snap, p, choice) {
+        if (choice && choice.x != null) {
+            const hit = takeFlightCandidates(snap, p).find(h => dist(h.x, h.y, choice.x, choice.y) < HEX_NEAR);
+            if (hit) { p.x = hit.x; p.y = hit.y; return; }
+        }
         const g = grid(snap);
         const occupiedTileIds = new Set();
         for (const pl of snap.players) {
@@ -991,6 +1040,7 @@
     // capped). The 5-hex placement buff isn't in the snapshot — accepted
     // gap, same class as every activeBuffs omission.
     function simEffectMasonsSavvy(snap, p) {
+        buffs(snap).earthRange = 5; // earth stones within 5 hexes this turn
         const drawn = Math.min(5, snap.sourcePool.earth || 0, POOL_CAP - (p.pool.earth || 0));
         if (drawn > 0) {
             snap.sourcePool.earth -= drawn;
@@ -1361,11 +1411,35 @@
         }
         return count;
     }
-    function simEffectTelekinesis(snap, p) {
-        const eligible = snap.tiles.filter(t =>
-            !t.isPlayerTile && tileStoneCount(snap, t) === 0 && tilePlayerIndices(snap, t).length <= 1);
+    // Where can tile t go by Telekinesis? Empty slots next to where it is
+    // now (the driver's default) or next to `near` (a choice list), that
+    // touch at least 2 other tiles.
+    function telekinesisSlots(snap, t, near) {
+        const out = [];
+        const base = pixelToHex((near || t).x, (near || t).y, LARGE_HEX);
+        for (const [dq, dr] of TILE_ADJACENT_OFFSETS) {
+            const cand = hexToPixel(base.q + dq, base.r + dr, LARGE_HEX);
+            if (snap.tiles.some(tt => tt.id !== t.id && dist(tt.x, tt.y, cand.x, cand.y) < TILE)) continue;
+            if (dist(t.x, t.y, cand.x, cand.y) < TILE) continue; // not a move
+            if (countTouchingTilesSim(snap, cand.x, cand.y, t.id) < 2) continue;
+            out.push(cand);
+        }
+        return out;
+    }
+    const telekinesisEligible = snap => snap.tiles.filter(t =>
+        !t.isPlayerTile && tileStoneCount(snap, t) === 0 && tilePlayerIndices(snap, t).length <= 1);
+
+    function simEffectTelekinesis(snap, p, choice) {
+        const eligible = telekinesisEligible(snap);
         let tile = null, dest = null;
-        for (const t of eligible) {
+        if (choice && choice.tileId != null) {
+            const t = eligible.find(x => Number(x.id) === Number(choice.tileId));
+            if (t && !snap.tiles.some(tt => tt.id !== t.id && dist(tt.x, tt.y, choice.x, choice.y) < TILE) &&
+                countTouchingTilesSim(snap, choice.x, choice.y, t.id) >= 2) {
+                tile = t; dest = { x: choice.x, y: choice.y };
+            }
+        }
+        if (!dest) for (const t of eligible) {
             const hex = pixelToHex(t.x, t.y, LARGE_HEX);
             for (const [dq, dr] of TILE_ADJACENT_OFFSETS) {
                 const cand = hexToPixel(hex.q + dq, hex.r + dr, LARGE_HEX);
@@ -1464,9 +1538,9 @@
             if (!p.activated.includes('fire')) p.activated.push('fire');
             simEffectTransmute(snap, p);
         } else if (scrollName === 'VOID_SCROLL_5') {
-            simEffectCreate(snap, p);
+            simEffectCreate(snap, p, choice);
         } else if (scrollName === 'FIRE_SCROLL_5') {
-            simEffectArson(snap, p, scrollName);
+            simEffectArson(snap, p, scrollName, choice);
         } else if (scrollName === 'WATER_SCROLL_2') {
             simEffectRefreshingThought(snap);
         } else if (scrollName === 'EARTH_SCROLL_3') {
@@ -1494,7 +1568,7 @@
         } else if (scrollName === 'CATACOMB_SCROLL_7') {
             simEffectReflectingPool(snap, p);
         } else if (scrollName === 'EARTH_SCROLL_2') {
-            simEffectShiftingSands(snap);
+            simEffectShiftingSands(snap, choice);
         } else if (scrollName === 'VOID_SCROLL_4') {
             simEffectScholarsInsight(snap, choice);
         } else if (scrollName === 'WATER_SCROLL_3') {
@@ -1502,9 +1576,9 @@
         } else if (scrollName === 'CATACOMB_SCROLL_3') {
             simEffectCallToAdventure(snap, p, choice);
         } else if (scrollName === 'CATACOMB_SCROLL_8') {
-            simEffectPlunder(snap, p, scrollName);
+            simEffectPlunder(snap, p, scrollName, choice);
         } else if (scrollName === 'WIND_SCROLL_4') {
-            simEffectTakeFlight(snap, p);
+            simEffectTakeFlight(snap, p, choice);
         } else if (scrollName === 'CATACOMB_SCROLL_9') {
             simEffectQuickReflexes(snap, p, choice);
         } else if (scrollName === 'WATER_SCROLL_5') {
@@ -1520,7 +1594,7 @@
         } else if (scrollName === 'CATACOMB_SCROLL_4') {
             simEffectExcavate(snap, p);
         } else if (scrollName === 'VOID_SCROLL_2') {
-            simEffectTelekinesis(snap, p);
+            simEffectTelekinesis(snap, p, choice);
         }
     }
 
@@ -1648,11 +1722,21 @@
     //     {element}, the deck to draw from (top 3 by scroll need).
     //   CATACOMB_SCROLL_9 Quick Reflexes: {element}, whose level-1 scroll
     //     (and 2 stones) to take (top 3 by stone need, still in the deck).
+    //   VOID_SCROLL_5 Create: {element} (top 3 by stone need, room in pool).
+    //   FIRE_SCROLL_5 Arson: {target, element} (3 biggest threats x their
+    //     2 largest piles). CATACOMB_SCROLL_8 Plunder: {target, scroll}.
+    //   WIND_SCROLL_4 Take Flight: {x, y} landing hex (shrine centres of
+    //     occupied tiles, nearest to a face-down tile / home).
+    //   EARTH_SCROLL_2 Shifting Sands: {a, b} tile ids (a plain tile near
+    //     the pawn swapped with a face-down or needed-shrine tile further
+    //     away). VOID_SCROLL_2 Telekinesis: {tileId, x, y} (such a tile moved
+    //     into a free slot next to the pawn's tile).
     // ----------------------------------------------------------------
     function castChoices(snap, name) {
         const p = activePlayer(snap);
         if (!p) return [];
         const near = (a, b) => dist(a.x, a.y, p.x, p.y) - dist(b.x, b.y, p.x, p.y);
+        const nearPawn = near;
         if (name === 'WATER_SCROLL_4') {
             const out = [];
             const need = window.BotSystem?.scrollNeed?.(snap, snap.turn.activePlayerIndex);
@@ -1673,6 +1757,85 @@
             if (!need) return [];
             return ELEMENTS.filter(e => need[e] > 0).sort((a, b) => need[b] - need[a])
                 .slice(0, 3).map(element => ({ element }));
+        }
+        const meIdx = snap.turn.activePlayerIndex;
+        // Opponents, biggest threat first (the drivers' default ordering).
+        const threat = op => op.activated.length * 1000 + ELEMENTS.reduce((a, e) => a + (op.pool[e] || 0), 0);
+        const opponents = snap.players.filter(op => op && op.index !== meIdx).sort((a, b) => threat(b) - threat(a));
+        if (name === 'VOID_SCROLL_5') {
+            // Create: which element's stones to draw (rank-many).
+            return effectRankedElements(snap, p).filter(e => (p.pool[e] || 0) < POOL_CAP && (snap.sourcePool[e] || 0) > 0)
+                .slice(0, 3).map(element => ({ element }));
+        }
+        if (name === 'FIRE_SCROLL_5') {
+            // Arson: whose stone, and which type (their largest piles).
+            const out = [];
+            for (const op of opponents.slice(0, 3)) {
+                ELEMENTS.filter(e => (op.pool[e] || 0) > 0)
+                    .sort((a, b) => (op.pool[b] || 0) - (op.pool[a] || 0)).slice(0, 2)
+                    .forEach(element => out.push({ target: op.index, element }));
+            }
+            return out;
+        }
+        if (name === 'CATACOMB_SCROLL_8') {
+            // Plunder: whose active scroll goes to the common area.
+            const out = [];
+            for (const op of opponents) {
+                for (const scroll of op.active || []) {
+                    if (isUnknownScroll(scroll) || !window.SCROLL_DEFINITIONS?.[scroll]) continue;
+                    out.push({ target: op.index, scroll });
+                }
+            }
+            return out.slice(0, 6);
+        }
+        if (name === 'WIND_SCROLL_4') {
+            // Take Flight: where to land. Per tile with another pawn on it,
+            // the hex nearest its centre (a shrine to collect from), plus
+            // the hex nearest a face-down tile (explore) or home.
+            const cands = takeFlightCandidates(snap, p);
+            if (!cands.length) return [];
+            const picks = [];
+            const add = h => { if (h && !picks.some(x => dist(x.x, x.y, h.x, h.y) < HEX_NEAR)) picks.push(h); };
+            const nearestTo = pt => cands.reduce((a, b) => (!a || dist(pt.x, pt.y, b.x, b.y) < dist(pt.x, pt.y, a.x, a.y)) ? b : a, null);
+            const tileIds = new Set(cands.flatMap(h => h.tileIds));
+            for (const t of snap.tiles.filter(t => tileIds.has(t.id))) add(nearestTo(t));
+            const home = snap.tiles.find(t => t.isPlayerTile && t.playerIndex === p.index);
+            if (ELEMENTS.every(el => p.activated.includes(el)) && home) add(nearestTo(home));
+            const hidden = snap.tiles.filter(t => !t.revealed && !t.isPlayerTile);
+            if (hidden.length) {
+                const h = hidden.reduce((a, b) => (!a || dist(p.x, p.y, b.x, b.y) < dist(p.x, p.y, a.x, a.y)) ? b : a, null);
+                add(nearestTo(h));
+            }
+            return picks.slice(0, 4).map(h => ({ x: h.x, y: h.y }));
+        }
+        // Tiles worth bringing closer: face-down tiles (a scroll on reveal)
+        // and revealed shrines of an element the bot needs stones of.
+        const stoneNeed = effectRankedElements(snap, p).slice(0, 2);
+        const pawnHex = grid(snap).find(h => dist(h.x, h.y, p.x, p.y) < HEX_NEAR);
+        const pawnTile = pawnHex ? snap.tiles.find(t => pawnHex.tileIds.includes(t.id)) : null;
+        const worth = t => !t.isPlayerTile && (!t.revealed || stoneNeed.includes(t.shrineType));
+        if (name === 'EARTH_SCROLL_2') {
+            // Shifting Sands: swap a tile next to the pawn with a far tile worth having close.
+            const elig = snap.tiles.filter(t =>
+                !t.isPlayerTile && tileStoneCount(snap, t) === 0 && tilePlayerIndices(snap, t).length <= 1);
+            const near = elig.filter(t => t !== pawnTile && !worth(t)).sort(nearPawn).slice(0, 2);
+            const far = elig.filter(t => worth(t) && t !== pawnTile && !near.includes(t))
+                .sort((a, b) => nearPawn(b, a)).slice(0, 3);
+            const out = [];
+            for (const a of near) for (const b of far) out.push({ a: a.id, b: b.id });
+            return out.slice(0, 6);
+        }
+        if (name === 'VOID_SCROLL_2') {
+            // Telekinesis: move a far tile worth having into a free slot next to the pawn's tile.
+            if (!pawnTile) return [];
+            const out = [];
+            const far = telekinesisEligible(snap).filter(t => worth(t) && t !== pawnTile)
+                .sort((a, b) => nearPawn(b, a)).slice(0, 3);
+            for (const t of far) {
+                const slot = telekinesisSlots(snap, t, pawnTile).sort(nearPawn)[0];
+                if (slot) out.push({ tileId: t.id, x: +slot.x.toFixed(1), y: +slot.y.toFixed(1) });
+            }
+            return out;
         }
         if (name === 'CATACOMB_SCROLL_9') {
             // Quick Reflexes: which element's level-1 scroll (+2 of its stones).
@@ -1801,7 +1964,9 @@
                     // Avalanche (any type) / Seed the Skies (water & wind
                     // only) lift the adjacency requirement this turn.
                     const globalOk = snap.turn.buffs?.globalPlacement ||
-                        (snap.turn.buffs?.waterWindGlobalPlacement && (c.type === 'water' || c.type === 'wind'));
+                        (snap.turn.buffs?.waterWindGlobalPlacement && (c.type === 'water' || c.type === 'wind')) ||
+                        (c.type === 'earth' && snap.turn.buffs?.earthRange &&
+                            hexDistance(p.x, p.y, c.x, c.y, TILE) <= snap.turn.buffs.earthRange);
                     if (!globalOk && d >= HEX_STEP) continue; // base placement range: adjacent to pawn
                     // Not on any face-down tile, no pawn standing there
                     // (mirrors findValidStonePosition)
