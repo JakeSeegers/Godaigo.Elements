@@ -91,6 +91,32 @@
         return v;
     }
 
+    // Elements ranked by SCROLL need (bot.js scrollNeed: elements the bot
+    // still has to activate and holds no easy scroll for), stone need as the
+    // tie-break. For effects that hand the bot a scroll (Scholar's Insight,
+    // Inspiring Draught). Falls back to stone need when bot.js is missing.
+    function rankedScrollElements() {
+        const s = snap();
+        const me = self(s);
+        const need = window.BotSystem?.scrollNeed?.(s, s.turn.activePlayerIndex);
+        if (!me || !need) return rankedElements();
+        return [...ELEMENTS].sort((a, b) =>
+            (need[b] - need[a]) || (elementNeed(s, me, b) - elementNeed(s, me, a)));
+    }
+
+    // Scroll id for a card / button label (display name), preferring the
+    // given element's deck when two decks share a name.
+    function scrollIdByDisplayName(label, element) {
+        const defs = window.SCROLL_DEFINITIONS || {};
+        const ids = Object.keys(defs).filter(id => defs[id].name === label);
+        return ids.find(id => defs[id].element === element) || ids[0] || null;
+    }
+    function pickScore(id) {
+        if (!id) return 0;
+        const f = window.BotSystem?.scrollPickScore;
+        return f ? f(snap(), id) : (window.SCROLL_DEFINITIONS?.[id]?.level || 0);
+    }
+
     // Elements ranked best-need-first for the active player right now.
     function rankedElements() {
         const s = snap();
@@ -349,17 +375,20 @@
         if (!modal) return false;
         const heading = modal.querySelector('h3')?.textContent || '';
         if (heading.includes('Choose a Deck')) {
-            return !!clickBestElement(modal, rankedElements());
+            return !!clickBestElement(modal, rankedScrollElements());
         }
-        // Deck browser: cards are <div>s with name/description/"Level N" text.
-        // Prefer the highest-level scroll (bigger effect — mirrors bot.js's
-        // mild castLevel preference for greedy cast scoring).
-        const cards = clickableDescendants(modal);
-        let best = null, bestLevel = -1;
+        // Deck browser: cards are <div>s whose first child is the scroll name.
+        // Take the scroll that best covers an element the bot still needs,
+        // easiest to build with its stones (bot.js scrollPickScore; level is
+        // only the tie-break). Before 2026-09-25 it always took the highest
+        // level, even for an element it had already activated.
+        const deckEl = (heading.split(' ')[0] || '').toLowerCase();
+        const cards = clickableDescendants(modal).filter(c => c.tagName === 'DIV');
+        let best = null, bestScore = -Infinity;
         for (const card of cards) {
-            const m = /Level (\d+)/.exec(card.textContent || '');
-            const level = m ? parseInt(m[1], 10) : 0;
-            if (level > bestLevel) { bestLevel = level; best = card; }
+            const name = card.firstElementChild?.textContent || '';
+            const score = pickScore(scrollIdByDisplayName(name, deckEl));
+            if (score > bestScore) { bestScore = score; best = card; }
         }
         if (!best) return false;
         best.click();
@@ -449,7 +478,7 @@
     //      modal and moves on, same as any other multi-step flow here.
     // ----------------------------------------------------------------
     function driveInspiringDraughtDeck(modal) {
-        const ranked = rankedElements();
+        const ranked = rankedScrollElements();
         for (const el of ranked) {
             const label = el.charAt(0).toUpperCase() + el.slice(1);
             const btn = [...modal.querySelectorAll('button')].find(b => !b.disabled && b.textContent.startsWith(label));
@@ -463,10 +492,17 @@
         return false; // every deck empty — genuinely nothing to pick
     }
 
+    // Put back the drawn scroll that helps least (bot.js scrollPickScore).
     function driveInspiringDraughtPutBack(modal) {
         const buttons = [...modal.querySelectorAll('button')].filter(b => b.textContent !== 'Cancel');
         if (!buttons.length) return false;
-        pickWeakestButton(buttons).click();
+        if (!window.BotSystem?.scrollPickScore) { pickWeakestButton(buttons).click(); return true; }
+        let worst = buttons[0], worstScore = Infinity;
+        for (const b of buttons) {
+            const score = pickScore(scrollIdByDisplayName(b.textContent, null));
+            if (score < worstScore) { worstScore = score; worst = b; }
+        }
+        worst.click();
         return true;
     }
 

@@ -239,6 +239,10 @@
         // the plan/path logic. Cheat-panel "Bot Brain" still overrides.
         searchDepth:         3,
         searchBreadth:       5,   // children expanded per node (beam width)
+        searchKeepCasts:     2,   // extra cast children kept per node even when outside the
+                                  // beam: a combo's first cast usually looks bad on its own
+                                  // (2 AP, no gain yet), so a plain beam drops it early
+        searchCastExtraDepth: 1,  // extra plies when a cast is legal at the root
         searchHybrid:        1,   // 1 = only search when a tactical choice exists
                                   // (cast/placeStone among the legal actions);
                                   // plain movement stays greedy.
@@ -289,7 +293,14 @@
         evalActivated:     400,   // per element in the activated set
         evalStoneNeeded:    12,   // per pool stone of an unactivated, live-source element
         evalStone:           3,   // per other pool stone
-        evalScrollHeld:     30,   // per scroll in hand/active
+        evalScrollHeld:     30,   // per held scroll whose identity is unknown (a fresh
+                                  // reveal draw in the sim); known scrolls use the three below
+        evalScrollCredit:   60,   // per element a held scroll is the BEST cover for (not yet
+                                  // activated, stones still in the source), × how easy its
+                                  // pattern is with the current pool (scrollEase, 0.2..1)
+        evalScrollNoCredit: 10,   // a held scroll that can't add an element any more (already
+                                  // activated, dead source, or a second scroll for the same element)
+        evalScrollResponse: 15,   // a level-1 (response-only) scroll
         evalAp:              2,   // per remaining AP (own turn only)
         evalUnsimCast:      90,   // flat value per unsimulated cast in the sim trace —
                                   // the whitelist-gated stand-in for effects the
@@ -1602,6 +1613,108 @@
 
     // State value of a snapshot from player `forIndex`'s perspective.
     // This is the search leaf evaluator — tune via WEIGHTS.eval*, not here.
+
+    // ----------------------------------------------------------------
+    // Scroll need (Phase 1 of the combo plan, planning/current.md).
+    // To win, a player casts one scroll of each element, so a held scroll
+    // is worth a lot only when it is the best way to an element the player
+    // still needs. handValue() replaces the old flat "30 per scroll" in
+    // evaluateSnapshot(), and scrollNeed() tells scroll-effect choices
+    // (bot-effects.js) which elements the bot is missing a scroll for.
+    // ----------------------------------------------------------------
+
+    // Elements this scroll would activate for player p if cast now.
+    function scrollCreditElements(snap, p, def, idx) {
+        if (!def || def.level === 1 || !Array.isArray(def.patterns)) return [];
+        if (mem(idx).noCreditScrolls.has(def.id)) return [];
+        if (def.element === 'catacomb') {
+            return [...new Set((def.patterns[0] || []).map(c => c.type))]
+                .filter(el => !p.activated.includes(el));
+        }
+        if (!ELEMENTS.includes(def.element)) return [];
+        if (p.activated.includes(def.element) || (snap.sourcePool[def.element] || 0) <= 0) return [];
+        return [def.element];
+    }
+
+    // How easy is this scroll to build with the stones in the pool?
+    // 1 = the pool already covers some variant; lower per missing stone.
+    function scrollEase(p, def) {
+        let best = Infinity;
+        for (const variant of def.patterns || []) {
+            const need = {};
+            for (const c of variant) need[c.type] = (need[c.type] || 0) + 1;
+            let short = 0;
+            for (const t in need) short += Math.max(0, need[t] - (p.pool[t] || 0));
+            if (short < best) best = short;
+        }
+        if (best === Infinity) return 0.2;
+        return Math.max(0.2, 1 / (1 + best / 2));
+    }
+
+    // Value of player idx's held scrolls, plus per-element cover (0..1).
+    function handValue(snap, idx) {
+        const p = snap.players[idx];
+        const cover = {};
+        for (const el of ELEMENTS) cover[el] = 0;
+        if (!p) return { value: 0, cover };
+        if (!p.hand) return { value: (p.handCount + p.activeCount) * WEIGHTS.evalScrollHeld, cover };
+        const held = [...p.hand, ...(p.active || [])];
+        let value = 0;
+        const known = [];
+        for (const name of held) {
+            const def = window.SCROLL_DEFINITIONS?.[name];
+            if (!def) { value += WEIGHTS.evalScrollHeld; continue; } // unknown draw
+            if (def.level === 1) { value += WEIGHTS.evalScrollResponse; continue; }
+            const els = scrollCreditElements(snap, p, { ...def, id: name }, idx);
+            if (!els.length) { value += WEIGHTS.evalScrollNoCredit; continue; }
+            known.push({ els, ease: scrollEase(p, def) });
+        }
+        // Easiest scrolls claim their elements first; a later scroll for an
+        // element that is already covered only counts as a spare.
+        known.sort((a, b) => b.ease - a.ease);
+        for (const k of known) {
+            let v = 0;
+            for (const el of k.els) {
+                if (cover[el] > 0) continue;
+                cover[el] = k.ease;
+                v += WEIGHTS.evalScrollCredit * k.ease;
+            }
+            value += Math.max(v, WEIGHTS.evalScrollNoCredit);
+        }
+        return { value, cover };
+    }
+
+    // How much does player idx still need a scroll of each element?
+    // 0 = not needed (activated, or no stones left to earn it) or already
+    // covered by an easy held scroll; 1 = needed and nothing held for it.
+    function scrollNeed(snap, idx) {
+        const p = snap.players[idx ?? snap.turn.activePlayerIndex];
+        const out = {};
+        if (!p) return out;
+        const { cover } = handValue(snap, idx ?? snap.turn.activePlayerIndex);
+        for (const el of ELEMENTS) {
+            const open = !p.activated.includes(el) && (snap.sourcePool[el] || 0) > 0;
+            out[el] = open ? Math.max(0, 1 - cover[el]) : 0;
+        }
+        return out;
+    }
+
+    // How good would it be to GAIN this scroll right now? Used by scroll
+    // effects that let the bot pick a scroll (Scholar's Insight card,
+    // Inspiring Draught keep / put back). Needed elements it would activate,
+    // weighted by how easy it is to build, then level as a tie-break.
+    function scrollPickScore(snap, name, idx) {
+        idx = idx ?? snap.turn.activePlayerIndex;
+        const p = snap.players[idx];
+        const def = window.SCROLL_DEFINITIONS?.[name];
+        if (!p || !def) return 0;
+        if (def.level === 1) return 1;
+        const need = scrollNeed(snap, idx);
+        const els = scrollCreditElements(snap, p, { ...def, id: name }, idx);
+        const ease = scrollEase(p, def);
+        return els.reduce((a, el) => a + 100 * need[el] * ease, 0) + (def.level || 0);
+    }
+
     function evaluateSnapshot(snap, forIndex) {
         const p = snap.players[forIndex];
         if (!p) return -Infinity;
@@ -1617,7 +1730,7 @@
             v += n * (useful ? WEIGHTS.evalStoneNeeded : WEIGHTS.evalStone);
         }
         v += (p.pool.void || 0) * WEIGHTS.evalVoidHeld;
-        v += (p.handCount + p.activeCount) * WEIGHTS.evalScrollHeld;
+        v += handValue(snap, forIndex).value;
         // AP only counts while still inside the original turn — after a
         // simulated endTurn the reset would otherwise make passing the turn
         // look like free value (single-player keeps the same activePlayerIndex)
@@ -1711,8 +1824,19 @@
         const legal = window.BotState.legalActions();
         if (!legal.length || legal[0].type === 'placeTile') return null;
 
-        const depth = Math.max(1, WEIGHTS.searchDepth | 0);
+        const castable = legal.some(a => a.type === 'cast');
+        const depth = Math.max(1, WEIGHTS.searchDepth | 0) + (castable ? Math.max(0, WEIGHTS.searchCastExtraDepth | 0) : 0);
         const breadth = Math.max(2, WEIGHTS.searchBreadth | 0);
+        const keepN = Math.max(0, WEIGHTS.searchKeepCasts | 0);
+        // Top `n` by one-ply value, plus up to keepN casts that fell outside.
+        function keepCasts(sorted, n) {
+            const top = sorted.slice(0, n);
+            let extra = 0;
+            for (let i = n; i < sorted.length && extra < keepN; i++) {
+                if (sorted[i].a.type === 'cast') { top.push(sorted[i]); extra++; }
+            }
+            return top;
+        }
         _fieldCtx = { cache: new Map() }; // path-aware leaf evaluation (leafField)
         const uctx = makeUnblockCtx(snap0);
         // Stage 4 terrain-control sets — root-only by design (see
@@ -1730,10 +1854,9 @@
             }
             const acts = creditFilter(snap, sim.legalActions(snap));
             if (!acts.length) return evaluateSnapshot(snap, meIdx);
-            const children = acts
+            const children = keepCasts(acts
                 .map(a => { const s1 = sim.simulate(snap, a); return { a, s1, v1: evaluateSnapshot(s1, meIdx) }; })
-                .sort((x, y) => y.v1 - x.v1)
-                .slice(0, breadth);
+                .sort((x, y) => y.v1 - x.v1), breadth);
             let best = -Infinity;
             for (const c of children) {
                 const line = pv ? [] : null;
@@ -1749,10 +1872,9 @@
         // Root: beam over the real legal actions, but move the bot's
         // anti-oscillation penalty into the root scores so search ties
         // break the same way greedy's do.
-        const rootChildren = creditFilter(snap0, legal)
+        const rootChildren = keepCasts(creditFilter(snap0, legal)
             .map(a => { const s1 = sim.simulate(snap0, a); return { a, s1, v1: evaluateSnapshot(s1, meIdx) }; })
-            .sort((x, y) => y.v1 - x.v1)
-            .slice(0, Math.max(breadth, 8)); // keep the root a little wider
+            .sort((x, y) => y.v1 - x.v1), Math.max(breadth, 8)); // keep the root a little wider
         let best = null;
         for (const c of rootChildren) {
             const line = [];
@@ -1766,7 +1888,7 @@
                 // see — keep the same idle-drop bias greedy scoring has.
                 if (!c.a.scroll) v += WEIGHTS.placeTacticalBase;
             }
-            if (!best || v > best.score) best = { action: c.a, score: v, line: [c.a, ...line] };
+            if (!best || v > best.score) best = { action: c.a, score: v, line: [c.a, ...line], depth };
         }
         _fieldCtx = null; // valid only for this decision
         return best;
@@ -2265,7 +2387,7 @@
                 cells: m.plan.cells.map(c => ({ x: c.x, y: c.y, type: c.type })) } : null,
             line: th.line ? th.line.map(a => ({ action: a, reason: explainAction(a, th.snap, null) })) : null,
             stuck: { unproductive: m.unproductiveStreak, repeat: m.turnRepeatStreak },
-            searchDepth: WEIGHTS.searchDepth | 0,
+            searchDepth: th.depth || (WEIGHTS.searchDepth | 0),
         };
     }
 
@@ -2469,7 +2591,7 @@
             if (useSearch) {
                 choice = searchPick();
                 if (choice) {
-                    if (_th) { _th.mode = 'lookahead'; _th.line = choice.line || null; }
+                    if (_th) { _th.mode = 'lookahead'; _th.line = choice.line || null; _th.depth = choice.depth; }
                     log(`Search (depth ${WEIGHTS.searchDepth | 0}${WEIGHTS.searchHybrid ? ', hybrid' : ''}) picked ${choice.action.type}`);
                     signalBrainMode(snap.turn.activePlayerIndex, 'search');
                 }
@@ -2814,6 +2936,9 @@
         determinize,          // exposed for testing — samples one hidden-info completion
         rolloutStep,          // exposed for testing — mctsPick()'s per-step rollout policy
         evaluateSnapshot,     // Stage 2 state evaluator (search leaves)
+        scrollNeed,           // per-element 0..1: needs a scroll of this element (bot-effects.js choices)
+        handValue,            // value of a player's held scrolls + per-element cover
+        scrollPickScore,      // value of gaining one scroll now (bot-effects.js picks)
         resetMemory,          // wipe plan/history/blacklists (arena: call per game)
         castsApplied: () => _castsApplied, // monotonic cast counter — arena's no-cast stall cap reads deltas
         speedScale: 1,        // scales all between-action delays (arena sets ~0.1)

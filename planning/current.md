@@ -118,6 +118,19 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-25: Combo plan Phase 1 done (bot.js, bot-effects.js).** Scroll need:
+  `handValue()` replaces the flat evalScrollHeld in evaluateSnapshot (a held scroll is
+  worth `evalScrollCredit` x ease per needed element it is the best cover for; spares and
+  already-won scrolls `evalScrollNoCredit`; level 1 `evalScrollResponse`). Exported
+  `scrollNeed()` / `scrollPickScore()`; Scholar's Insight and Inspiring Draught now pick
+  deck, card and put-back by them. Search keeps `searchKeepCasts` (2) casts outside the
+  beam and goes `searchCastExtraDepth` (1) deeper when a cast is legal.
+  Arena, default weights, maxStallRestarts 0: 2 players seeds 1-20: wins 9 -> 12, stalls
+  11 -> 8, elements 3.65 -> 3.80; 3 players seeds 101-112: wins 10 -> 9, stalls 2 -> 3,
+  elements 3.58 -> 3.92. Split test (2p): scroll values alone 12 wins / 8 stalls, search
+  changes alone 10 / 9, so the gain is mostly the scroll values; the search changes
+  cost ~25% more think time and are for combos (need Phase 2 to pay off). Turn counts per
+  seed swing both ways (chaotic games), no steady slowdown.
 - **2026-09-25: Bot Mind viewer (js/bot-mind.js, hermit only).** Owner asked to see the
   bots' plans and choices. Hermit menu "Bot Mind" or Shift+M. Per decision: how it decided
   (quick / look-ahead / play-out / following plan / getting unstuck), what it is doing and

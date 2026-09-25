@@ -727,7 +727,7 @@
         const out = { ...table };
         for (const k of Object.keys(out)) {
             if (typeof out[k] !== 'number') continue;
-            if (k === 'searchDepth' || k === 'searchBreadth' || k === 'searchHybrid') continue; // brain shape, not tuning
+            if (k === 'searchDepth' || k === 'searchBreadth' || k === 'searchHybrid' || k === 'searchKeepCasts' || k === 'searchCastExtraDepth') continue; // brain shape, not tuning
             if (k === 'mctsSamples' || k === 'mctsIterations' || k === 'mctsHorizon' || k === 'mctsExploration' || k === 'mctsRootBreadth' || k === 'mctsRolloutDepth' || k === 'mctsRolloutBreadth') continue; // brain shape, not tuning
             // Box-Muller gaussian × 20% of the weight's magnitude (min 1 so
             // zero-weights can still move off zero)
@@ -748,7 +748,7 @@
         const out = { ...a };
         for (const k of Object.keys(out)) {
             if (typeof out[k] !== 'number') continue;
-            if (k === 'searchDepth' || k === 'searchBreadth' || k === 'searchHybrid') continue; // brain shape, not tuning
+            if (k === 'searchDepth' || k === 'searchBreadth' || k === 'searchHybrid' || k === 'searchKeepCasts' || k === 'searchCastExtraDepth') continue; // brain shape, not tuning
             if (k === 'mctsSamples' || k === 'mctsIterations' || k === 'mctsHorizon' || k === 'mctsExploration' || k === 'mctsRootBreadth' || k === 'mctsRolloutDepth' || k === 'mctsRolloutBreadth') continue; // brain shape, not tuning
             out[k] = rng() < 0.5 ? a[k] : b[k];
         }

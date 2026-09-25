@@ -5490,8 +5490,8 @@ document.getElementById('undo-move').onclick = function() {
                 { name: 'Transmute', keys: ['transmuteTargetAP'] },
                 { name: 'Placement phase', keys: ['placeTileBase', 'placeTileCentroidPenalty'] },
                 { name: 'Shrine valuation', keys: ['shrineNeed', 'shrineUnactivated', 'shrineDeadSource'] },
-                { name: 'Lookahead search (set by Bot Brain, not trained)', keys: ['searchDepth', 'searchBreadth', 'searchHybrid'] },
-                { name: 'State evaluation (used only when search is active)', keys: ['evalWin', 'evalActivated', 'evalStoneNeeded', 'evalStone', 'evalScrollHeld', 'evalAp', 'evalUnsimCast', 'evalHiddenDist', 'evalHomeDist', 'evalUnreachableSteps'] },
+                { name: 'Lookahead search (set by Bot Brain, not trained)', keys: ['searchDepth', 'searchBreadth', 'searchHybrid', 'searchKeepCasts', 'searchCastExtraDepth'] },
+                { name: 'State evaluation (used only when search is active)', keys: ['evalWin', 'evalActivated', 'evalStoneNeeded', 'evalStone', 'evalScrollHeld', 'evalScrollCredit', 'evalScrollNoCredit', 'evalScrollResponse', 'evalAp', 'evalUnsimCast', 'evalHiddenDist', 'evalHomeDist', 'evalUnreachableSteps'] },
                 { name: 'Opponent awareness', keys: ['evalOpponentThreat', 'evalCommonThreat'] },
             ];
 
