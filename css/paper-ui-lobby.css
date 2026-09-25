@@ -545,3 +545,18 @@
   color: var(--pp-ink-soft);
 }
 #multiplayer-lobby #quick-play-btn.quick-play-btn:disabled { opacity: 0.6; cursor: wait; }
+.replay-tag {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: normal;
+  line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.75;
+  vertical-align: middle;
+}
+.replay-tag-win { opacity: 1; color: var(--pp-gold, #d4a017); }

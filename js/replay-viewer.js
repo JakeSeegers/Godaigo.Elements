@@ -104,7 +104,7 @@
     function updateControls() {
         const bar = document.getElementById('replay-controls');
         if (!bar || !state) return;
-        const names = (state.match.players || []).map(p => p.username).join(' vs ');
+        const names = (state.match.players || []).map(p => seatName(p)).join(' vs ');
         bar.querySelector('.replay-title').textContent = `Replay #${state.match.id}: ${names}`;
         bar.querySelector('.replay-progress').textContent =
             state.index >= state.moves.length ? 'End of game' : `Move ${state.index} / ${state.moves.length}`;
@@ -377,10 +377,20 @@
         } catch (e) { return ''; }
     }
 
+    // Player names without emojis: the stored bot name starts with the bot
+    // marker (displayUsername strips it); "bot" and "winner" are small text tags.
+    function seatName(p) {
+        return typeof displayUsername === 'function' ? displayUsername(p.username) : p.username;
+    }
+    function seatTags(p, won) {
+        const isBot = p.is_bot || (typeof window.isBotUsername === 'function' && window.isBotUsername(p.username));
+        return (isBot ? '<span class="replay-tag">bot</span>' : '') + (won ? '<span class="replay-tag replay-tag-win">winner</span>' : '');
+    }
+
     function rowHtml(m, mine) {
         const players = (m.players || []).slice().sort((a, b) => a.index - b.index).map(p => {
             const won = m.winner_index === p.index;
-            return `<span class="replay-player${won ? ' won' : ''}" style="--pc:${esc(p.color)}">${won ? '👑 ' : ''}${esc(p.username)}</span>`;
+            return `<span class="replay-player${won ? ' won' : ''}" style="--pc:${esc(p.color)}">${esc(seatName(p))}${seatTags(p, won)}</span>`;
         }).join('<span class="replay-vs">vs</span>');
         const info = [fmtWhen(m.started_at), fmtDuration(m.duration_s),
                       m.status === 'abandoned' ? 'not finished' : ''].filter(Boolean).join(' · ');
@@ -414,7 +424,7 @@
 
     function checkRowHtml(m) {
         const players = (m.players || []).slice().sort((a, b) => a.index - b.index)
-            .map(p => `${m.winner_index === p.index ? '👑 ' : ''}${esc(p.username)}`).join(' vs ');
+            .map(p => `${esc(seatName(p))}${seatTags(p, m.winner_index === p.index)}`).join(' vs ');
         const flags = [m.desync_count ? `${m.desync_count} desync reports` : '', m.disputed ? 'disputed' : ''].filter(Boolean).join(' · ');
         return `
             <div class="replay-row">
