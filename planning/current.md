@@ -205,6 +205,9 @@ reach/beat it from here.
   Leaderboard (gamification-ui _gami_fetchLadder/_gami_ladderRowsHTML) colours names. Only one
   purchase (a Rainbow) was on record server-side and was carried over; colours bought before
   that exist only in old localStorage and are not migrated (can be re-granted by hand).
+  2026-09-25: leaderboard showed no colours because nobody had name_color set on the server
+  (equip was local). cosmetics-system.js now carries the old local equipped colour over once
+  per account (equip_cosmetic still checks ownership) and refreshes the leaderboard on equip.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the

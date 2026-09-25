@@ -70,6 +70,33 @@
         window.gami.profile.name_color = next;
     }
 
+    // One-time carry-over: before the server stored colours, the equipped
+    // colour lived in localStorage (godaigo_cosmetics_<uid>). If this browser
+    // still has one and the server has none, equip it on the server (which
+    // checks ownership). Runs once per account per browser.
+    function carryOverLocalEquip() {
+        const uid = getUserId();
+        const prof = window.gami?.profile;
+        if (!uid || !prof) return false;
+        const doneKey = `godaigo_cosmetics_migrated_${uid}`;
+        try {
+            if (localStorage.getItem(doneKey)) return true;
+            localStorage.setItem(doneKey, '1');
+            const old = JSON.parse(localStorage.getItem(`godaigo_cosmetics_${uid}`) || 'null');
+            const id = old?.equipped?.namecolor;
+            const owned = Array.isArray(prof.cosmetics_owned) ? prof.cosmetics_owned : [];
+            if (id && !prof.name_color && owned.includes(id)) {
+                supabase.rpc('equip_cosmetic', { p_id: id }).then(({ error }) => {
+                    if (error) return;
+                    prof.name_color = id;
+                    window.loadMainLeaderboard?.();
+                });
+            }
+        } catch (e) {}
+        return true;
+    }
+    const carryTimer = setInterval(() => { if (carryOverLocalEquip()) clearInterval(carryTimer); }, 2000);
+
     // ── Name color helper ─────────────────────────────────────
 
     function getNameColorStyle(equippedId) {
@@ -182,6 +209,7 @@
         async handleEquip(id) {
             await equipItem(id);
             renderPanel();
+            window.loadMainLeaderboard?.();
         },
 
         getEquippedAll,
