@@ -917,7 +917,12 @@
     // floats.
     const BRAIN_SIGNAL_EMOJI = { mcts: '🎲', search: '🧠' };
     const BRAIN_SIGNAL_COOLDOWN_MS = 2000;
+    // Off for now (owner, 2026-09-25): the brain-mode emoji is a work in
+    // progress and looks unfinished. The bots' search / MCTS still run; set
+    // BRAIN_SIGNAL_ENABLED = true to show the emoji again.
+    const BRAIN_SIGNAL_ENABLED = false;
     function signalBrainMode(playerIndex, mode) {
+        if (!BRAIN_SIGNAL_ENABLED) return;
         const es = window.emojiSystem;
         if (!es || typeof es.showEmojiOverPawn !== 'function') return;
         const display = BRAIN_SIGNAL_EMOJI[mode];

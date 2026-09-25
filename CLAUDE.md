@@ -196,8 +196,9 @@ Order matters — later scripts depend on earlier ones.
                              Shift+R = one step, Shift+B = full turn; waitForQuiescence() tries BotEffects
                              before cancelling a selection it can't drive. Also owns mctsPick() (Stage 2 step
                              5 — determinized root-level UCT, WEIGHTS.mctsEnabled) and signalBrainMode()
-                             (emoji over the acting pawn — 🧠 search / 🎲 MCTS — when a bot's brain mode
-                             switches, broadcast in multiplayer via broadcastGameAction('emoji', ...))
+                             (emoji over the acting pawn, 🧠 search / 🎲 MCTS, when a bot's brain mode
+                             switches, broadcast in multiplayer via broadcastGameAction('emoji', ...); OFF for now:
+                             BRAIN_SIGNAL_ENABLED = false in bot.js, owner 2026-09-25)
 24b. bot-memory.js         ← window.BotMemory — episodic "what happened after decisions like this" memory.
                              Captures a fingerprint+action+outcome row whenever a bot decision's immediate
                              evaluateSnapshot() swing is extreme; retrieveSimilar() feeds mctsPick()'s root
