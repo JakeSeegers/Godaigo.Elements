@@ -221,7 +221,13 @@ window.gami = (function () {
                     })().catch(() => {});
                     return;
                 }
-                if (!xpData?.success) { _log('no XP awarded:', xpData?.reason); return; }
+                if (!xpData?.success) {
+                    _log('no XP awarded:', xpData?.reason);
+                    if (xpData?.reason === 'too_short') {
+                        api.notify('This game was too short to count for XP or the ladder.', 0, 'xp');
+                    }
+                    return;
+                }
                 _log('claim_game_win success, result:', xpData);
                 const xp = xpData.xp;
 

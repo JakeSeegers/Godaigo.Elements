@@ -237,7 +237,21 @@ reach/beat it from here.
   + fast*2 + pending + other mismatches + 3 if >= 60% of >= 5 wins vs one player + 1 if any
   desync. hermit_player_matches(user) feeds the per-player game list (Watch / Check).
   Tested on live data as hermit (rolled-back DO block) and headless UI with sample data.
-- **Next:** player stats in Profile (Phase 4 part 2), then automatic replay checks.
+- **Anti-cheat "simplest protections" 1 + 2 (2026-09-25, sql/ladder-secure.sql):** found that
+  ladder_game_result() took winner + losers from the browser (one console call = rank 1, no game).
+  Now the server moves the ladder: _pay_game_win applies the recorded game (matches.players via
+  game_rewards.match_id) when a human win is paid; report_game_result applies a bot win on a
+  human's confirmation (not only matches.created_by when other humans played); once per match
+  (ladder_applied; all older matches pre-marked). ladder_game_result is a no-op; lobby.js no
+  longer calls it. Wins paid with no other human present need >= 6 recorded turns
+  (_match_turns; 10 min if unrecorded) in claim_game_win and retry_pending_wins; client shows
+  "too short" notice. Tested rolled back: fake claim -> null; turns m8=7 m7=9 m6=4; bot win of
+  match 6 moved The Void Knight above TheHermit once, second apply ignored.
+- **Known gap noted:** game_rewards is keyed (room_id, user_id) and rooms are reused, so a
+  second win by the same player in the same room gets "already_claimed". Consider keying on
+  match_id.
+- **Next (discussed, not started):** protections 3-6 (repeat-opponent limit, smaller bot-only
+  rewards, hermit "reverse win", report button); player stats; automatic replay checks.
 - **2026-09-24 (branch fixes/all-consolidated): house rules + change log.**
   Removed the separate "Hand Full / All Slots Full" cascade popup
   (`showCascadePrompt`); Unbidden Lamplight and Quick Reflexes now use the
