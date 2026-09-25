@@ -515,17 +515,28 @@
 .auth-check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.3; cursor: pointer; text-align: left; }
 .auth-check input { margin-top: 3px; flex-shrink: 0; }
 
-/* Quick Play (index.html #quick-play-btn) */
-.quick-play-btn {
-  width: 100%;
-  padding: 12px 10px;
-  margin-bottom: 12px;
-  font-size: 20px;
-  font-weight: bold;
+/* Quick Play (index.html #quick-play-btn): a compact green button, not the
+   paper frame the other lobby buttons use, so it stands out as "play now". */
+#multiplayer-lobby #quick-play-btn.quick-play-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
+  width: auto;
+  min-width: 190px;
+  margin: 0 auto 12px;
+  padding: 6px 22px;
+  border: 2px solid #1e6b2e;
+  border-image: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #4fbf5f 0%, #2f9a41 100%);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1.1;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 0 #1e6b2e, 0 0 10px rgba(79, 191, 95, 0.35);
 }
-.quick-play-btn .quick-play-sub { font-size: 13px; font-weight: normal; opacity: 0.75; }
-.quick-play-btn:disabled { opacity: 0.6; cursor: wait; }
+#multiplayer-lobby #quick-play-btn.quick-play-btn:hover { filter: brightness(1.08); }
+#multiplayer-lobby #quick-play-btn.quick-play-btn:active { transform: translateY(2px); box-shadow: 0 0 0 #1e6b2e; }
+.quick-play-btn .quick-play-sub { font-size: 12px; opacity: 0.9; }
+#multiplayer-lobby #quick-play-btn.quick-play-btn:disabled { opacity: 0.6; cursor: wait; }
