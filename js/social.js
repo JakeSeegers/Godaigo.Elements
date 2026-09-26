@@ -13,6 +13,12 @@
 // Invites go through the database (never broadcast), polled every 10 s
 // while signed in; a pop-up shows only when you are free in the lobby.
 //
+// Recent players (my_recent_players) in the panel; Play Again Together
+// (game-over button, lobby.js) -> playAgain() saves who/bots, the page
+// reloads, resumeIntents() makes a private room (window.playAgainRoom) and
+// invites them. Invites also pop up on the game-over screen; Join there
+// returns to the lobby and joins after the reload.
+//
 // Player cards: click any element with data-player-card="<user id>"
 // (leaderboard, waiting room, in-game names, friends list).
 (function () {
@@ -28,6 +34,9 @@
     let online = new Map();   // user id -> status
     let myStatus = null;
     let friends = [];         // rows from my_friends()
+    let recent = [];          // rows from my_recent_players()
+    const AGAIN_KEY = 'godaigo_play_again';       // sessionStorage: {users, bots, at}
+    const JOIN_KEY = 'godaigo_join_after_reload'; // sessionStorage: {game, at}
     let shownInvites = new Set();
     let started = false;
 
@@ -51,7 +60,8 @@
         if (s < 90) return 'just now';
         if (s < 3600) return `${Math.round(s / 60)} min ago`;
         if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-        return `${Math.round(s / 86400)} days ago`;
+        const d = Math.round(s / 86400);
+        return d === 1 ? '1 day ago' : `${d} days ago`;
     }
 
     // ── Presence ─────────────────────────────────────────────────
@@ -106,6 +116,13 @@
             const { data, error } = await supabase.rpc('my_friends');
             if (!error) friends = data || [];
         } catch (e) {}
+        // Recent players only matter while the panel is open.
+        if (document.getElementById('social-list')) {
+            try {
+                const { data, error } = await supabase.rpc('my_recent_players');
+                if (!error) recent = data || [];
+            } catch (e) {}
+        }
         updateBadge();
         renderPanel();
     }
@@ -203,6 +220,18 @@
             </span></div>`;
     }
 
+    // Someone you played with lately (not a friend yet).
+    function recentRow(r) {
+        const name = `<span class="social-name" data-player-card="${esc(r.user_id)}" style="${nameStyle(r.name_color)}">${esc(r.name)}</span>`;
+        const on = online.has(r.user_id) && online.get(r.user_id) !== 'game';
+        const sub = `played ${timeAgo(r.last_played)}${r.games > 1 ? ` · ${r.games} games` : ''}`;
+        const btn = r.friend_state === 'outgoing' ? '<button class="acct-btn" disabled>Requested</button>'
+            : r.friend_state === 'incoming' ? `<button class="acct-btn" data-act="accept" data-id="${esc(r.user_id)}">Accept</button>`
+            : `<button class="acct-btn" data-act="add" data-id="${esc(r.user_id)}">Add friend</button>`;
+        return `<div class="social-row"><span class="social-dot ${on ? 'on' : 'off'}"></span>${name}<span class="social-sub">${esc(sub)}</span>
+            <span class="social-actions">${whereAmI() === 'room' && on ? `<button class="acct-btn" data-act="invite" data-id="${esc(r.user_id)}">Invite</button>` : ''}${btn}</span></div>`;
+    }
+
     function renderPanel() {
         const list = document.getElementById('social-list');
         if (!list) return;
@@ -216,6 +245,8 @@
         html += `<div class="social-head">Friends${mine.length ? ` (${mine.length})` : ''}</div>`;
         html += mine.length ? mine.map(friendRow).join('')
             : '<div class="social-empty">No friends yet. Add someone by their username, or click a name on the leaderboard.</div>';
+        const others = recent.filter(r => r.friend_state !== 'friend');
+        if (others.length) html += `<div class="social-head">Recent players</div>` + others.map(recentRow).join('');
         if (outgoing.length) html += `<div class="social-head">Sent requests</div>` + outgoing.map(friendRow).join('');
         if (whereAmI() !== 'room' && mine.length) html += '<div class="social-note">Tip: create a room first, then invite friends who are online.</div>';
         list.innerHTML = html;
@@ -229,6 +260,8 @@
         if (b.dataset.act === 'accept' || b.dataset.act === 'decline') {
             await supabase.rpc('respond_friend_request', { p_user: id, p_accept: b.dataset.act === 'accept' });
             msg(b.dataset.act === 'accept' ? 'You are now friends!' : '');
+        } else if (b.dataset.act === 'add') {
+            await sendRequest(id, null);
         } else if (b.dataset.act === 'cancel') {
             await supabase.rpc('remove_friend', { p_user: id });
         } else if (b.dataset.act === 'remove') {
@@ -238,7 +271,7 @@
             const { data, error } = await supabase.rpc('send_game_invite', { p_user: id });
             msg(error ? 'Could not invite: ' + error.message
                 : ({ sent: 'Invite sent!', no_room: 'Create or join a room first.', too_many: 'Wait a moment before inviting again.',
-                     not_friends: 'You can only invite friends.' }[data] || ''));
+                     not_friends: 'You can invite friends, or players from a game you just finished.' }[data] || ''));
             b.disabled = false;
             return;
         }
@@ -255,8 +288,10 @@
     }
 
     // ── Game invites ─────────────────────────────────────────────
+    const onGameOver = () => !!document.getElementById('game-over-notification') && !window.Replay?.state;
+
     async function pollInvites() {
-        if (!myId || whereAmI() !== 'lobby') return;
+        if (!myId || !(whereAmI() === 'lobby' || onGameOver())) return;
         let rows = [];
         try {
             const { data, error } = await supabase.rpc('my_game_invites');
@@ -284,6 +319,13 @@
         el.querySelector('[data-act=no]').onclick = done;
         el.querySelector('[data-act=join]').onclick = async () => {
             done();
+            // From the game-over screen: go back to the lobby (the normal
+            // cleanup + reload), then join right after the reload.
+            if (onGameOver()) {
+                try { sessionStorage.setItem(JOIN_KEY, JSON.stringify({ game: inv.game_id, at: Date.now() })); } catch (e) {}
+                const back = [...document.querySelectorAll('#game-over-notification button')].find(x => /Return to Lobby/i.test(x.textContent));
+                if (back) { back.click(); return; }
+            }
             if (whereAmI() !== 'lobby') { alert('Leave your current room or game first, then accept the invite.'); return; }
             document.getElementById('social-friends')?.remove();
             if (typeof window.joinPublicGame === 'function') await window.joinPublicGame(inv.game_id);
@@ -361,6 +403,62 @@
         openCard(el.dataset.playerCard);
     }, true);
 
+    // ── Play Again Together ──────────────────────────────────────
+    // Called from the game-over screen (lobby.js) just before "Return to
+    // Lobby" reloads the page: remember who to invite and how many bots.
+    function playAgain(seats) {
+        const users = [], seen = new Set();
+        let bots = 0;
+        for (const p of seats || []) {
+            if (window.isBotUsername?.(p.username)) { bots++; continue; }
+            if (p.user_id && p.user_id !== myId && !seen.has(p.user_id)) { seen.add(p.user_id); users.push(p.user_id); }
+        }
+        try { sessionStorage.setItem(AGAIN_KEY, JSON.stringify({ users, bots, at: Date.now() })); } catch (e) {}
+    }
+
+    function takeIntent(key) {
+        try {
+            const raw = sessionStorage.getItem(key);
+            sessionStorage.removeItem(key);
+            const v = raw ? JSON.parse(raw) : null;
+            return v && Date.now() - v.at < 5 * 60 * 1000 ? v : null;
+        } catch (e) { return null; }
+    }
+
+    // Resolves once the lobby is on screen and signed in (max 30 s).
+    function lobbyReady() {
+        return new Promise((resolve) => {
+            const t0 = Date.now();
+            const tick = () => {
+                const lobby = document.getElementById('multiplayer-lobby');
+                const ok = window.currentUsername && lobby && lobby.style.display !== 'none' && whereAmI() === 'lobby';
+                if (ok) return resolve(true);
+                if (Date.now() - t0 > 30000) return resolve(false);
+                setTimeout(tick, 500);
+            };
+            tick();
+        });
+    }
+
+    async function resumeIntents() {
+        const again = takeIntent(AGAIN_KEY);
+        const join = takeIntent(JOIN_KEY);
+        if (!again && !join) return;
+        if (!(await lobbyReady())) return;
+        if (join && typeof window.joinPublicGame === 'function') { await window.joinPublicGame(join.game); return; }
+        if (again && typeof window.playAgainRoom === 'function') {
+            const ok = await window.playAgainRoom(again.bots, again.users.length === 0);
+            if (!ok) return;
+            let sent = 0;
+            for (const uid of again.users) {
+                try { const { data } = await supabase.rpc('send_game_invite', { p_user: uid }); if (data === 'sent') sent++; } catch (e) {}
+            }
+            if (again.users.length && typeof setBrowserStatus === 'function') {
+                try { setBrowserStatus(sent ? `Invited ${sent} player${sent === 1 ? '' : 's'} from your last game.` : 'Could not invite the other players.'); } catch (e) {}
+            }
+        }
+    }
+
     // ── Start once signed in ─────────────────────────────────────
     function start() {
         if (started) return;
@@ -375,8 +473,9 @@
         setInterval(pollInvites, INVITE_POLL_MS);
         setInterval(loadFriends, FRIENDS_POLL_MS);
         setInterval(() => { if (!hidden()) supabase.rpc('touch_last_seen').then(() => {}, () => {}); }, SEEN_EVERY_MS);
+        resumeIntents();
     }
     const waitStart = setInterval(() => { start(); if (started) clearInterval(waitStart); }, 1000);
 
-    window.Social = { openFriends, openCard, whereAmI, isOnline: (id) => online.has(id) };
+    window.Social = { openFriends, openCard, playAgain, whereAmI, isOnline: (id) => online.has(id) };
 })();

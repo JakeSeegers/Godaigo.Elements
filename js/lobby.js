@@ -365,6 +365,19 @@
         }
         window.quickPlay = quickPlay;
 
+        // "Play Again Together" (js/social.js, after the game-over reload):
+        // a private room with the same number of bots. With no humans to wait
+        // for it starts at once, like Quick Play. Returns true when the room
+        // is up.
+        async function playAgainRoom(botCount, startNow) {
+            await createRoom(true);
+            if (!isHost || !currentGameId) return false;
+            for (let i = 0; i < Math.min(4, botCount || 0); i++) await addBotPlayer();
+            if (startNow) await hostStartGame();
+            return true;
+        }
+        window.playAgainRoom = playAgainRoom;
+
         async function createRoom(isPrivate) {
             const username = lobbyUsername;
             if (!username) { alert('Not signed in - please sign in first'); return; }
@@ -1235,6 +1248,19 @@
                 }
                 window.location.reload();
             };
+            // Play Again Together (js/social.js): same people and bots in a new
+            // private room. Online games only; not for replays or the tutorial.
+            if (isMultiplayer && !window.Replay?.state && !window.isTutorialMode && window.Social?.playAgain) {
+                const againBtn = document.createElement('button');
+                againBtn.textContent = 'Play Again Together';
+                againBtn.className = 'retro-dlg-btn ok game-over-again';
+                againBtn.onclick = () => {
+                    againBtn.disabled = true;
+                    window.Social.playAgain(typeof allPlayersData !== 'undefined' ? allPlayersData : []);
+                    lobbyBtn.onclick();
+                };
+                box.appendChild(againBtn);
+            }
             box.appendChild(lobbyBtn);
 
             overlay.appendChild(box);

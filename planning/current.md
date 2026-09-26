@@ -118,6 +118,11 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (7): Recent players + Play Again Together.** sql/recent-players.sql (applied, tested):
+  my_recent_players, _played_recently (3 h), send_game_invite also allows recent co-players. lobby.js:
+  window.playAgainRoom(bots, startNow) next to Quick Play; game-over "Play Again Together" button (online games,
+  not replays/tutorial). social.js: Recent players section, playAgain() + resumeIntents() across the reload,
+  invites on the game-over screen (Join -> Return to Lobby reload -> joinPublicGame).
 - **2026-09-26 (6): Friends, online status, invites, player cards.** sql/friends.sql (applied, tested in
   rolled-back transactions: requests by name/id, accept, remove, invites from a waiting room, limits).
   js/social.js (new, after pawn-cosmetics.js), Friends button in the auth bar, styles in
