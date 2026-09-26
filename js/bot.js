@@ -956,9 +956,10 @@
         // of returning the normal weighted contribution. This can never
         // change the returned score — contrib(k, f) === WEIGHTS[k] * f
         // exactly, tracing or not — so every existing caller (greedy pick,
-        // search, arena) is unaffected. Only wired into the two branches
-        // bot-imitation.js currently compares (endTurn, discardScroll); see
-        // that file's header for why the rest are deliberately left untraced.
+        // search, arena) is unaffected. Wired into the branches
+        // bot-imitation.js compares: endTurn, discardScroll, and (Phase 5,
+        // 2026-09-26) cast and move. The cast/move bonuses that are not
+        // plain weight x feature (castChoiceBonus, comboBonus) stay untraced.
         const trace = ctx && ctx.trace;
         function contrib(key, feature) {
             if (trace) trace[key] = (trace[key] || 0) + feature;
@@ -973,16 +974,17 @@
             case 'cast': {
                 const el = scrollElement(a.scroll);
                 const def = window.SCROLL_DEFINITIONS?.[a.scroll];
-                let s = WEIGHTS.castBase + WEIGHTS.castLevel * (def?.level || 0);
+                // Traced (contrib) for learn-from-player (bot-imitation.js).
+                let s = contrib('castBase', 1) + contrib('castLevel', def?.level || 0);
                 if (a.choice) s += castChoiceBonus(a, snap);
                 s += comboBonus(a, snap);
                 if (mem(snap.turn.activePlayerIndex).noCreditScrolls.has(a.scroll)) {
-                    s += WEIGHTS.castNoCredit; // effect cancelled before — hard veto, don't recast
+                    s += contrib('castNoCredit', 1); // effect cancelled before - hard veto, don't recast
                 } else if (el && ELEMENTS.includes(el)) {
                     const dead = (snap.sourcePool[el] || 0) <= 0;
-                    if (self.activated.includes(el)) s += WEIGHTS.castAlreadyWon; // no more win credit here
-                    else if (dead) s += WEIGHTS.castDeadElement;                  // no win credit
-                    else s += WEIGHTS.castUnactivated;
+                    if (self.activated.includes(el)) s += contrib('castAlreadyWon', 1); // no more win credit here
+                    else if (dead) s += contrib('castDeadElement', 1);                  // no win credit
+                    else s += contrib('castUnactivated', 1);
                 }
                 return s;
             }
@@ -1029,16 +1031,16 @@
                 let explore = 0;
                 if (ctx.hiddenTiles.length) {
                     const onHidden = ctx.hiddenTiles.some(t => Math.hypot(t.x - a.x, t.y - a.y) < 70);
-                    if (onHidden) explore += WEIGHTS.moveExplore;
+                    if (onHidden) explore += contrib('moveExplore', 1);
                     if (ctx.explorePath && ctx.explorePath.length) {
                         const first = ctx.explorePath[0];
                         if (Math.hypot(first.x - a.x, first.y - a.y) < 5) {
                             const remaining = ctx.explorePath.reduce((c, p) => c + p.cost, 0);
-                            explore += WEIGHTS.moveExplorePath / (1 + remaining);
+                            explore += contrib('moveExplorePath', 1 / (1 + remaining));
                         }
                     } else if (!onHidden) {
                         const distFrom = p => Math.min(...ctx.hiddenTiles.map(t => Math.hypot(t.x - p.x, t.y - p.y)));
-                        explore += WEIGHTS.moveExploreGradient * (distFrom(self) - distFrom(a));
+                        explore += contrib('moveExploreGradient', distFrom(self) - distFrom(a));
                     }
                 }
                 // Going home: all 5 elements activated → the only thing that
@@ -1048,7 +1050,7 @@
                     const first = ctx.homePath[0];
                     if (Math.hypot(first.x - a.x, first.y - a.y) < 5) {
                         const remaining = ctx.homePath.reduce((c, p) => c + p.cost, 0);
-                        home = WEIGHTS.moveReturnHome / (1 + remaining);
+                        home = contrib('moveReturnHome', 1 / (1 + remaining));
                     }
                 }
                 // Fixation: only set (see findFixationTarget()) when the
@@ -1061,12 +1063,12 @@
                     const first = ctx.fixationPath[0];
                     if (Math.hypot(first.x - a.x, first.y - a.y) < 5) {
                         const remaining = ctx.fixationPath.reduce((c, p) => c + p.cost, 0);
-                        fixation = WEIGHTS.moveFixation / (1 + remaining);
+                        fixation = contrib('moveFixation', 1 / (1 + remaining));
                     }
                 }
-                const revisit = revisitPenalty(ctx.recentPositions || [], a, WEIGHTS.moveRevisitPenalty);
-                return WEIGHTS.moveBase + WEIGHTS.moveShrineValue * best
-                     + WEIGHTS.moveApPenalty * a.cost + explore + revisit + home + fixation;
+                const revisit = contrib('moveRevisitPenalty', revisitPenalty(ctx.recentPositions || [], a, 1));
+                return contrib('moveBase', 1) + contrib('moveShrineValue', best)
+                     + contrib('moveApPenalty', a.cost) + explore + revisit + home + fixation;
             }
 
             case 'teleport': {

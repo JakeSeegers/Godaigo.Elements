@@ -31,9 +31,15 @@
 // of that position (scoreAction()'s contrib()) — only the "was the human's
 // choice actually the best type of move" verdict is plan-aware.
 //
-// v1 SCOPE — deliberately two decision types, not all of them:
+// SCOPE - decision types compared:
 //   - endTurn (should I have stopped here, or kept playing?)
 //   - discardScroll (which scroll was actually worth keeping?)
+//   - cast (Phase 5, 2026-09-26): which ready scroll you cast vs the bot's
+//     best cast (ActionLog 'cast_execute')
+//   - move (Phase 5): the first step toward where you moved vs the bot's
+//     best step (ActionLog 'move'), at a lower learning rate
+//   Every delta is capped at half its weight's default (deltaCap).
+// Original v1 notes (two types only) follow.
 // These are the two branches of bot.js's scoreAction() that were given an
 // optional trace channel (see scoreAction()'s contrib() helper) — a cast/
 // move/placeStone comparison would need the same treatment, deliberately
@@ -70,6 +76,15 @@
     const ENABLED_KEY = 'godaigo_imitation_learning_enabled';
     const DELTAS_KEY = 'godaigo_bot_weight_deltas';
     const LEARNING_RATE = 0.05;
+    // Moves happen many times a turn, so each one nudges less (Phase 5).
+    const MOVE_LEARNING_RATE = 0.02;
+    // A learned delta never moves a weight by more than half its default
+    // (at least 0.05): enough to shift a habit, never enough to break the bot.
+    function deltaCap(key) {
+        const dv = window.BotSystem?.DEFAULT_WEIGHTS?.[key];
+        return Math.max(0.05, 0.5 * Math.abs(typeof dv === 'number' ? dv : 0));
+    }
+    const clampDelta = (key, v) => Math.max(-deltaCap(key), Math.min(deltaCap(key), v));
     const POLL_MS = 300;
 
     function isHermitUser() {
@@ -215,11 +230,23 @@
                 }
             }
 
+            // Casts: best-scored candidate per scroll (a scroll with choices
+            // has several). Moves: every adjacent step with its trace.
+            const castEntries = ranked.filter(r => r.action.type === 'cast');
+            const castTraceByScroll = {};
+            for (const r of castEntries) if (!castTraceByScroll[r.action.scroll]) castTraceByScroll[r.action.scroll] = r.trace;
+            const moveEntries = ranked.filter(r => r.action.type === 'move')
+                .map(r => ({ x: r.action.x, y: r.action.y, trace: r.trace }));
+
             pending = {
                 bestType,
                 endTurnTrace: endTurnEntry ? endTurnEntry.trace : null,
                 topDiscardScroll: discardEntries.length ? discardEntries[0].action.scroll : null,
                 discardTraceByScroll: Object.fromEntries(discardEntries.map(r => [r.action.scroll, r.trace])),
+                topCastScroll: castEntries.length ? castEntries[0].action.scroll : null,
+                castTraceByScroll,
+                moveEntries, // ranked best first
+                from: (() => { try { const p = playerPositions[activePlayerIndex]; return p ? { x: p.x, y: p.y } : null; } catch (e) { return null; } })(),
             };
         } catch (e) {
             console.warn('⚠️ [Imitation] refreshPending failed (non-fatal):', e);
@@ -242,7 +269,7 @@
         let touched = false;
         for (const key of Object.keys(trace)) {
             if (!isRealWeightKey(key)) continue;
-            d[key] = +((d[key] || 0) + direction * LEARNING_RATE * trace[key]).toFixed(4);
+            d[key] = +clampDelta(key, (d[key] || 0) + direction * LEARNING_RATE * trace[key]).toFixed(4);
             touched = true;
         }
         if (touched) { saveDeltas(d); stats.nudged++; renderBadge(); }
@@ -250,7 +277,7 @@
     }
     // Perceptron difference update between two traced candidates: nudge
     // every key present in EITHER trace's delta by lr*(human[k]-bot[k]).
-    function nudgeDiff(humanTrace, botTrace) {
+    function nudgeDiff(humanTrace, botTrace, rate = LEARNING_RATE) {
         const d = loadDeltas();
         const keys = new Set([...Object.keys(humanTrace || {}), ...Object.keys(botTrace || {})]);
         let touched = false;
@@ -259,7 +286,7 @@
             const h = (humanTrace && humanTrace[key]) || 0;
             const b = (botTrace && botTrace[key]) || 0;
             if (h === b) continue;
-            d[key] = +((d[key] || 0) + LEARNING_RATE * (h - b)).toFixed(4);
+            d[key] = +clampDelta(key, (d[key] || 0) + rate * (h - b)).toFixed(4);
             touched = true;
         }
         if (touched) { saveDeltas(d); stats.nudged++; renderBadge(); }
@@ -297,6 +324,29 @@
             if (!matched) {
                 nudgeDiff(snapshot.discardTraceByScroll[entry.scroll], snapshot.discardTraceByScroll[snapshot.topDiscardScroll]);
             }
+        }
+
+        // Signal C - "which ready scroll was worth casting?" Only when the
+        // bot also had your scroll as a candidate and preferred another one.
+        if (entry.type === 'cast_execute' && entry.scrollName && snapshot.topCastScroll) {
+            const mine = snapshot.castTraceByScroll[entry.scrollName];
+            if (mine) {
+                stats.watched++;
+                if (entry.scrollName === snapshot.topCastScroll) { stats.agreed++; renderBadge(); }
+                else nudgeDiff(mine, snapshot.castTraceByScroll[snapshot.topCastScroll]);
+            }
+        }
+
+        // Signal D - "which way was worth walking?" Your move may cover
+        // several hexes; compare its FIRST step (the bot's adjacent candidate
+        // closest to where you went) with the bot's best step.
+        if (entry.type === 'move' && snapshot.moveEntries?.length && Number.isFinite(entry.x)) {
+            const moves = snapshot.moveEntries;
+            const mine = moves.reduce((a, b) =>
+                Math.hypot(b.x - entry.x, b.y - entry.y) < Math.hypot(a.x - entry.x, a.y - entry.y) ? b : a);
+            stats.watched++;
+            if (Math.hypot(mine.x - moves[0].x, mine.y - moves[0].y) < 5) { stats.agreed++; renderBadge(); }
+            else nudgeDiff(mine.trace, moves[0].trace, MOVE_LEARNING_RATE);
         }
     }
 

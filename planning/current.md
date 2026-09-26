@@ -118,6 +118,15 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26: Combo plan Phase 5: learn-from-player widened to casts and moves.**
+  bot.js: cast and move scoring now go through `contrib()` (traced; same scores: 4 same-seed
+  arena games identical, action counts included). bot-imitation.js: Signal C (cast_execute:
+  your scroll vs the bot's best cast; nudgeDiff) and Signal D (move: the bot's adjacent step
+  closest to where you went vs its best step; MOVE_LEARNING_RATE 0.02); every delta clamped
+  to half its default (min 0.05). Tested with a faked online seat: casting the scroll the
+  bot did not prefer nudged castLevel, a disagreeing move nudged move weights, an agreeing
+  move changed nothing, 200 repeats stopped at the cap. Still hermit-only; not yet done:
+  stone placements / breaks / scroll choices, and rank-weighted nudges if opened to others.
 - **2026-09-26: Combo plan Phase 4: bots follow mined combos.** sql/combo-teach.sql
   (applied, migration combo_teach): `combo_flags` (hermit on/off per signature; no row =
   auto), `hermit_set_combo_state`, `hermit_combo_summary` now returns state + taught, public

@@ -241,8 +241,11 @@ Order matters — later scripts depend on earlier ones.
 27b. bot-imitation.js      ← window.BotImitation — HERMIT-ONLY, opt-in "learn from my play" imitation
                              learning (docs/void-knight.md). Watches ActionLog.onRecord() during the
                              hermit's own turns in a real online game that has a bot in it; compares
-                             endTurn/discardScroll decisions to bot.js's own ranking (rankActions()'s
-                             opts.withTrace) and nudges a small additive DELTA table (localStorage
+                             endTurn/discardScroll decisions, and (Phase 5, 2026-09-26) casts (cast_execute:
+                             your scroll vs the bot's best cast) and moves (first step toward where you went vs
+                             the bot's best step, lower rate), to bot.js's own ranking (rankActions()'s
+                             opts.withTrace; cast + move scoring now traced) and nudges a small additive DELTA
+                             table, each key capped at half its default (localStorage
                              godaigo_bot_weight_deltas), never a weight snapshot. lobby.js's
                              hostStartGame() layers that delta onto every bot's normal (elemental-lean)
                              base whenever the HOST is the hermit with the toggle on — same bots
