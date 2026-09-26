@@ -118,6 +118,11 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (11): Training gold only for finished runs** (owner). game-ui.js runHillClimbTraining: Stop pressed
+  during the confirmation was not caught (paid the run bonus and could apply/submit a half-checked champion); now
+  reverts, returns 'stopped', no gold. Same stop check added to runWeightTraining (evolve, no gold there).
+  End Early (result.rounds.length < rounds) pays no run bonus; a real confirmed win still pays the tier gold.
+  End Early button tooltip + result message say so. Not run end-to-end (a full run takes too long headless).
 - **2026-09-26 (10): Bot Training popup shows what happened.** bot-arena.js: result.endReason, stallReasons,
   onGame side info. game-ui.js: makeTrainingStats() (hill climb + evolve), popup rows #bt-popup-stats
   (challenger W-L-D, last game, run totals, stalls by reason) + #bt-popup-events (round outcomes incl.

@@ -4210,6 +4210,17 @@ document.getElementById('undo-move').onclick = function() {
                 confirmWins = confirm.aWins; confirmLosses = confirm.bWins; confirmDraws = confirm.draws;
             }
 
+            // Stop pressed DURING the confirmation: the check is incomplete, so
+            // never apply or share the result. Revert like a stop mid-training.
+            if (window.BotArena.stopRequested()) {
+                window.BotArena.applyWeights(baselineWeights);
+                try {
+                    if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                    else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                } catch (e) {}
+                return { improved: false, record: 'stopped' };
+            }
+
             if (improved) {
                 window.BotArena.applyWeights(champion);
                 // Best-effort share to the community champion table — only
@@ -4393,6 +4404,20 @@ document.getElementById('undo-move').onclick = function() {
                 result.champion, baseline,
                 { sizes: confirmSizes, gamesPerSize, visual, seed: Date.now() % 100000,
                   onGame: (gameNum, gameTotal, g) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; stats.addGame(g); report('confirming'); } });
+            // Stop pressed DURING the confirmation: incomplete check, so no
+            // apply, no submit and no gold. Revert like a stop mid-climb.
+            if (window.BotArena.stopRequested()) {
+                window.BotArena.applyWeights(baselineWeights);
+                try {
+                    if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                    else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                } catch (e) {}
+                return { improved: false, record: 'stopped', promotions: result.promotions };
+            }
+            // End Early: fewer climbing rounds than planned. The run bonus
+            // pays for training work, so an ended-early run gets none; a real
+            // win in the full confirmation still earns the win gold below.
+            const endedEarly = (result.rounds?.length || 0) < rounds;
             const improved = !!confirm.improved && result.promotions > 0;
             const record = confirm.record || `${confirm.champWins}-${confirm.baseWins}`;
 
@@ -4448,7 +4473,7 @@ document.getElementById('undo-move').onclick = function() {
             // inflate it, and Deep runs (hundreds of games) pay far more than
             // Quick (~36). ~1g per 4 games, floor 8, cap 40 (kept under the
             // max champion-beating tier).
-            if (uid) {
+            if (uid && !endedEarly) {
                 try {
                     const runGold = Math.max(8, Math.min(40, Math.round(gamesDone / 4)));
                     // Server-capped (60 per claim, 300 per day); returns what it granted.
@@ -4468,7 +4493,7 @@ document.getElementById('undo-move').onclick = function() {
             }
 
             const totalGold = attemptGold + (rewarded ? tierGold : 0);
-            return { improved, record, tier, tierGold, promotions: result.promotions, rewarded, submitFailed, attemptGold, totalGold };
+            return { improved, record, tier, tierGold, promotions: result.promotions, rewarded, submitFailed, attemptGold, totalGold, endedEarly };
         }
 
         // ─── Training run stats (shown in the popup) ───────────────────────
@@ -4582,7 +4607,7 @@ document.getElementById('undo-move').onclick = function() {
                     <div id="bt-popup-summary" style="font-size:11px;color:#aaa;margin-bottom:10px;"></div>
 
                     <div style="display:flex;gap:6px;">
-                        <button id="bt-popup-end-early" style="flex:1;padding:4px 6px;background:#2d3a4a;color:#eee;border:1px solid #578;border-radius:4px;cursor:pointer;font-size:11px;">End Early → Test Now</button>
+                        <button id="bt-popup-end-early" title="Skip to the final test with the best bot so far. Ending early earns no gold for the games run; a real win against the champion still earns the win gold." style="flex:1;padding:4px 6px;background:#2d3a4a;color:#eee;border:1px solid #578;border-radius:4px;cursor:pointer;font-size:11px;">End Early → Test Now</button>
                         <button id="bt-popup-stop" style="padding:4px 8px;background:#442d2d;color:#eee;border:1px solid #755;border-radius:4px;cursor:pointer;font-size:11px;">Stop</button>
                     </div>
                 </div>
@@ -6092,7 +6117,7 @@ document.getElementById('undo-move').onclick = function() {
                                 ? (PUBLIC[state.generations] || PUBLIC[5])
                                 : { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, gamesPerSize: 5 };
                             const preset = { ...p, confirmSizes: [2, 3, 4, 5] };
-                            const { improved, record, tier, tierGold, promotions, rewarded, submitFailed, attemptGold, totalGold } = await runHillClimbTraining(preset, renderProgress, {
+                            const { improved, record, tier, tierGold, promotions, rewarded, submitFailed, attemptGold, totalGold, endedEarly } = await runHillClimbTraining(preset, renderProgress, {
                                 visual: state.watchable, noisyAnchor: state.noisyAnchor,
                             });
                             progressText.style.display = 'none';
@@ -6107,7 +6132,9 @@ document.getElementById('undo-move').onclick = function() {
                             } else if (improved) {
                                 msg = `Your bot beat the champion ${record} - new weights applied locally. Log in to submit it for everyone and earn gold.`;
                             } else {
-                                msg = `Training done - didn't beat the champion by enough (${record}), so nothing changed.${attemptGold ? ` +${attemptGold} gold for the games run - thanks for helping. Try again or go deeper.` : ' Try again or go deeper.'}`;
+                                msg = endedEarly
+                                    ? `Training ended early - didn't beat the champion (${record}), so nothing changed. Runs that end early earn no gold; let a run finish to earn the bonus.`
+                                    : `Training done - didn't beat the champion by enough (${record}), so nothing changed.${attemptGold ? ` +${attemptGold} gold for the games run - thanks for helping. Try again or go deeper.` : ' Try again or go deeper.'}`;
                             }
                             updateStatus(msg);
                             // Main page has no #status HUD — the toast is the
