@@ -118,6 +118,12 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (5): Featured replay + no brain emojis in replays.** sql/featured-replay.sql (applied:
+  featured_replay one-row table, hermit_set_featured_match, get_featured_match, get_match_replay also
+  allows the featured match). Lobby "Watch Featured Replay" button next to Quick Play (index.html
+  .quick-play-row, css/paper-ui-lobby.css) -> Replay.openFeatured() at 4x. Hermit "Feature"/"Featured"
+  button on My games / Public / Check rows. replay-viewer.js dispatch() skips recorded 🧠/🎲 bot emojis
+  (10 recorded in old games; the live signal is already off).
 - **2026-09-26 (4): Cloudflare Pages prep.** tools/build-site.js copies only game files to
   dist/ (git-ignored); tested: dist loads intro, lobby, bot game, fire effect with the same 404s as
   the full repo (only the old /midi-manifest.json). Owner still has to: create the Pages project

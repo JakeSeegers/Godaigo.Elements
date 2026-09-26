@@ -166,7 +166,12 @@ Order matters — later scripts depend on earlier ones.
                              startMultiplayerGame again); Exit reloads with sessionStorage godaigo_skip_intro_once,
                              which boot-splash.js honours once (no logo / lore intro). Players: lobby "Replays"
                              button -> Replay.openBrowser(): "My games" (Watch, Post publicly / Remove from
-                             public) and "Public" (Watch). Hermit-only "Check" tab = replay verification:
+                             public) and "Public" (Watch). Featured replay: lobby "Watch Featured Replay" button
+                             (next to Quick Play) -> Replay.openFeatured() -> get_featured_match -> open(id, {speed: 4});
+                             the hermit sets it with a Feature button on replay rows (hermit_set_featured_match,
+                             sql/featured-replay.sql; also sets keep; get_match_replay lets anyone signed in watch it).
+                             Playback skips recorded bot brain-mode emojis (🧠 / 🎲, BOT_SIGNAL_EMOJIS).
+                             Hermit-only "Check" tab = replay verification:
                              Replay.checkMatch(id) runs index.html?replaycheck=ID in a hidden iframe
                              (runCheck: full-speed replay, fingerprint per turn change, winner's final
                              board), compares with get_match_fingerprints (32-char, turn > 1), stores
@@ -316,6 +321,7 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `matches` (check) | replay-viewer.js | `check_status` / `check_detail` / `checked_at`: replay verification result. Hermit-only RPCs `list_matches_for_check`, `get_match_fingerprints`, `save_match_check` (sql/match-check.sql). |
 | `combo_candidates` | replay-viewer.js (miner) | Combo candidates mined from finished matches (seat, user, rank, games, trust, gain, turns, signature, steps). RLS on, no client policies; hermit-only RPCs `list_matches_for_mining`, `save_combo_candidates`, `hermit_combo_summary`, `hermit_reset_mining` (sql/combo-miner.sql). `matches.mined_at` marks mined games; `start_match` now saves each human's ladder `rank` in `matches.players`. |
 | `combo_flags` | replay-viewer.js (Combos tab) | Hermit override per combo signature: `on` / `off` (no row = auto). RLS on, no client policies; `hermit_set_combo_state`, public `get_bot_combos()` (taught combos: signature, times, score) (sql/combo-teach.sql). |
+| `featured_replay` | replay-viewer.js | One row: the hermit's featured match for the lobby button. RLS on, no client policies: `hermit_set_featured_match(id or null)`, `get_featured_match()` (sql/featured-replay.sql). |
 | `match_moves` | match-recorder.js | Every broadcast message of a match in order (`seq` assigned by the server), with event name, sender seat, payload. Written ONLY via `append_match_moves` (room host or hermit, batches of 200 max, 32 KB per payload). |
 | `user_profiles` | gamification.js | XP, gold, level, stats. Clients may only UPDATE `stats`, `updated_at`, `skip_intro`; gold/XP/level/badges change ONLY through server functions: `claim_daily_login()`, `claim_game_win(room)`, `claim_training_reward(amount)` (60/claim, 300/day), `spend_gold(amount)`. Name colours: `cosmetics_owned` / `name_color` (public read, changed only by `buy_cosmetic(id)` / `equip_cosmetic(id or null)`, prices in `cosmetic_price()`, sql/cosmetics.sql; the leaderboard colours names from `name_color`). Pawn items: `pawn_rim` / `pawn_base` / `pawn_trail` (public read, `equip_pawn(slot, id)`, sql/pawn-cosmetics.sql). `award_gold` / `update_user_xp` / `award_badge` are server-internal (not client-callable). See `sql/secure-rewards.sql`. |
 | `user_activities` | gamification.js | Activity log for rewards. Clients may only insert `scroll_cast` / `element_activated` with no rewards; everything else is written by the server functions above. Inserts fire `check_badges_trigger` (badges). |
