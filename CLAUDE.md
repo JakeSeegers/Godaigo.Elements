@@ -209,6 +209,13 @@ Order matters — later scripts depend on earlier ones.
                              pawn position changes into fading trail particles (layer .pawn-trail-layer). Never
                              covers the pawn fill; fits between the pawn (r 8) and element symbols (r 15).
                              Seat -> account: allPlayersData user_id (online), own profile on seat 0 (local).
+20c. social.js            ← window.Social: friends list (lobby "Friends" button, request badge), online status
+                             (Realtime presence channel godaigo-online, key = user id, {status: lobby|room|game};
+                             "appear offline" = user_profiles.hide_online, never joins), last seen (touch_last_seen
+                             every 3 min), game invites (send_game_invite, polled my_game_invites every 10 s, pop-up
+                             only in the lobby, Join -> joinPublicGame) and player cards (any [data-player-card=uid]
+                             opens get_player_card: leaderboard, waiting room, seatNameHtml in-game names).
+                             sql/friends.sql.
 21. bot-state.js           ← window.BotState — game-state snapshot / legal actions / apply (no strategy)
 22. bot-sim.js             ← window.BotSim — pure forward model (simulate / legalActions / isTerminal) + validate() harness
 23. bot-effects.js         ← window.BotEffects — Stage 2.5 scroll-effect usage: driveSelection() (tile-flip,
@@ -322,6 +329,7 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `combo_candidates` | replay-viewer.js (miner) | Combo candidates mined from finished matches (seat, user, rank, games, trust, gain, turns, signature, steps). RLS on, no client policies; hermit-only RPCs `list_matches_for_mining`, `save_combo_candidates`, `hermit_combo_summary`, `hermit_reset_mining` (sql/combo-miner.sql). `matches.mined_at` marks mined games; `start_match` now saves each human's ladder `rank` in `matches.players`. |
 | `combo_flags` | replay-viewer.js (Combos tab) | Hermit override per combo signature: `on` / `off` (no row = auto). RLS on, no client policies; `hermit_set_combo_state`, public `get_bot_combos()` (taught combos: signature, times, score) (sql/combo-teach.sql). |
 | `featured_replay` | replay-viewer.js | One row: the hermit's featured match for the lobby button. RLS on, no client policies: `hermit_set_featured_match(id or null)`, `get_featured_match()` (sql/featured-replay.sql). |
+| `friend_links` / `friend_invites` | social.js | Friends (requester, addressee, pending/accepted) and room invites. RLS on, no client policies; RPCs `send_friend_request(p_user or p_name)`, `respond_friend_request`, `remove_friend`, `my_friends`, `send_game_invite` (friends only, from your waiting room, 1 per friend per 20 s, 5/min), `my_game_invites`, `dismiss_game_invite`, `get_player_card(uid)`; `user_profiles.last_seen_at` / `hide_online` via `touch_last_seen` / `set_hide_online` (sql/friends.sql). |
 | `match_moves` | match-recorder.js | Every broadcast message of a match in order (`seq` assigned by the server), with event name, sender seat, payload. Written ONLY via `append_match_moves` (room host or hermit, batches of 200 max, 32 KB per payload). |
 | `user_profiles` | gamification.js | XP, gold, level, stats. Clients may only UPDATE `stats`, `updated_at`, `skip_intro`; gold/XP/level/badges change ONLY through server functions: `claim_daily_login()`, `claim_game_win(room)`, `claim_training_reward(amount)` (60/claim, 300/day), `spend_gold(amount)`. Name colours: `cosmetics_owned` / `name_color` (public read, changed only by `buy_cosmetic(id)` / `equip_cosmetic(id or null)`, prices in `cosmetic_price()`, sql/cosmetics.sql; the leaderboard colours names from `name_color`). Pawn items: `pawn_rim` / `pawn_base` / `pawn_trail` (public read, `equip_pawn(slot, id)`, sql/pawn-cosmetics.sql). `award_gold` / `update_user_xp` / `award_badge` are server-internal (not client-callable). See `sql/secure-rewards.sql`. |
 | `user_activities` | gamification.js | Activity log for rewards. Clients may only insert `scroll_cast` / `element_activated` with no rewards; everything else is written by the server functions above. Inserts fire `check_badges_trigger` (badges). |

@@ -118,6 +118,12 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (6): Friends, online status, invites, player cards.** sql/friends.sql (applied, tested in
+  rolled-back transactions: requests by name/id, accept, remove, invites from a waiting room, limits).
+  js/social.js (new, after pawn-cosmetics.js), Friends button in the auth bar, styles in
+  css/paper-ui-lobby.css (.social-*, #social-invite). Clickable names: gamification-ui.js leaderboard rows
+  (userId added), lobby.js waiting room rows, cosmetics-system.js seatNameHtml. Ideas not done yet:
+  recent players / play again together, quick chat, watch a friend's live game, Discord.
 - **2026-09-26 (5): Featured replay + no brain emojis in replays.** sql/featured-replay.sql (applied:
   featured_replay one-row table, hermit_set_featured_match, get_featured_match, get_match_replay also
   allows the featured match). Lobby "Watch Featured Replay" button next to Quick Play (index.html

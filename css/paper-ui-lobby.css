@@ -593,3 +593,79 @@
 .replay-combo-state { display: flex; gap: 2px; }
 .replay-combo-state button { padding: 2px 6px; font-size: 12px; }
 .replay-combo-state button.active { outline: 2px solid var(--pp-maroon); }
+
+/* ── Friends, invites, player cards (js/social.js) ───────────────────────── */
+.social-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.social-modal {
+  background: var(--pp-parch, #1a1a2e);
+  color: var(--pp-ink, #eee);
+  border: 2px solid var(--pp-maroon, #9b59b6);
+  border-radius: 8px;
+  padding: 16px 20px;
+  width: 100%;
+  max-width: 460px;
+  max-height: 85vh;
+  overflow-y: auto;
+  font-size: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+.social-title { font-size: 22px; font-weight: bold; color: var(--pp-maroon, #9b59b6); text-align: center; margin-bottom: 10px; }
+.social-add { display: flex; gap: 8px; align-items: center; }
+.social-add .acct-input { margin: 0; }
+.social-msg { min-height: 20px; font-size: 14px; color: var(--pp-gold, #f0c040); margin: 6px 0; }
+.social-head { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-ink-soft, #aaa); margin: 12px 0 4px; }
+.social-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.social-name { font-weight: bold; cursor: pointer; }
+.social-name:hover, .player-card-link:hover { text-decoration: underline; }
+.player-card-link { cursor: pointer; }
+.social-sub { font-size: 13px; color: var(--pp-ink-soft, #aaa); flex: 1; min-width: 0; }
+.social-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.social-actions .acct-btn { padding: 3px 10px; font-size: 14px; }
+.social-remove { font-size: 18px !important; line-height: 1; padding: 2px 8px !important; }
+.social-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #666; }
+.social-dot.on { background: #3fcf6a; box-shadow: 0 0 6px rgba(63, 207, 106, 0.7); }
+.social-dot.game { background: var(--pp-gold, #f0c040); box-shadow: 0 0 6px rgba(240, 192, 64, 0.7); }
+.social-empty, .social-note { font-size: 14px; color: var(--pp-ink-soft, #aaa); padding: 8px 0; }
+.social-hide { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin-top: 12px; cursor: pointer; }
+.social-hide input { margin-top: 3px; }
+#friends-btn.has-requests { border: 1px solid var(--pp-gold, #f0c040); box-shadow: 0 0 6px rgba(240, 192, 64, 0.6); }
+
+.social-card-name { font-size: 26px; font-weight: bold; text-align: center; }
+.social-card-status { text-align: center; font-size: 14px; color: var(--pp-ink-soft, #aaa); margin-top: 2px; }
+.social-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+.social-stats div { display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 6px; background: var(--pp-parch-lt, #222); }
+.social-stats span { font-size: 12px; color: var(--pp-ink-soft, #aaa); }
+.social-stats b { font-size: 17px; color: var(--pp-gold, #f0c040); }
+.social-replay { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 14px; }
+.social-replay .acct-btn { padding: 2px 10px; font-size: 13px; }
+
+#social-invite {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10060;
+  max-width: 320px;
+  background: var(--pp-parch, #1a1a2e);
+  color: var(--pp-ink, #eee);
+  border: 2px solid var(--pp-gold, #f0c040);
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+  animation: social-pop 0.25s ease-out;
+}
+.social-invite-text { margin-bottom: 8px; }
+.social-invite-actions { display: flex; gap: 8px; justify-content: flex-end; }
+@keyframes social-pop { from { transform: translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (max-width: 480px) {
+  .social-stats { grid-template-columns: repeat(2, 1fr); }
+  #social-invite { left: 16px; right: 16px; max-width: none; }
+}

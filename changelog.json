@@ -4,13 +4,13 @@
     {
       "id": "2026-09-26",
       "date": "2026-09-26",
-      "title": "New home, smoother bot games",
+      "title": "New home, friends and featured replays",
       "changes": [
         "The game has a new home: playgodaigo.com. Sign in there with your usual username and password.",
+        "New: Friends! Add friends, see who is online or in a game, and invite them to your room. Click any player's name to see their player card.",
         "New in the lobby: Watch Featured Replay, a hand-picked great game played at 4x speed.",
-        "Bots now think much faster, especially late in a game, and no longer give up on a scroll just because another player could respond to it. Games and bot training no longer slow down as they go on.",
-        "Forgot your password? You can now type your recovery email instead of your username.",
-        "Small fixes and polish: smoother fire animation, no stray bot emojis in replays, fixed a slowdown in long games."
+        "Bots think much faster, especially late in a game, and keep using scrolls other players could respond to. Games no longer slow down as they go on.",
+        "Small fixes and polish: Forgot password now also accepts your email, smoother fire animation, no stray bot emojis in replays."
       ]
     },
     {

@@ -1570,7 +1570,7 @@
 
                     return `
                         <div class="pp-player-row${isMe ? ' is-me' : ''}">
-                            <span><span style="${nameStyle}">${typeof displayUsername === 'function' ? displayUsername(p.username) : p.username}</span>${hostLabel}${meLabel}</span>
+                            <span><span${p.user_id ? ` class="player-card-link" data-player-card="${p.user_id}" title="View player"` : ''} style="${nameStyle}">${typeof displayUsername === 'function' ? displayUsername(p.username) : p.username}</span>${hostLabel}${meLabel}</span>
                             <span class="${readyClass}" style="font-size: 20px;">${readyIcon}</span>
                         </div>
                     `;

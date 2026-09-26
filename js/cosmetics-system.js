@@ -231,8 +231,11 @@
         try { row = (typeof allPlayersData !== 'undefined' ? allPlayersData : []).find(p => p.player_index === playerIndex); } catch (e) {}
         const style = styleForUser(row?.user_id);
         const m = String(text).match(/^(.*) (\([^()]*\))$/);
-        if (!style || !m) return escHtml(text);
-        return `<span style="${style}">${escHtml(m[1])}</span> ${escHtml(m[2])}`;
+        // Real accounts open their player card when clicked (js/social.js).
+        const card = row?.user_id ? ` class="player-card-link" data-player-card="${escHtml(row.user_id)}"` : '';
+        if (!m) return card ? `<span${card}>${escHtml(text)}</span>` : escHtml(text);
+        if (!style && !card) return escHtml(text);
+        return `<span${card} style="${style}">${escHtml(m[1])}</span> ${escHtml(m[2])}`;
     }
 
     // ── Panel UI ──────────────────────────────────────────────

@@ -375,7 +375,7 @@ async function _gami_fetchLadder(limit) {
             };
         }
         const prof = profs.get(r.user_id);
-        return { rank: r.rank, isBot: false, isMe: r.user_id === me, name: prof?.display_name || 'Unknown',
+        return { rank: r.rank, isBot: false, isMe: r.user_id === me, userId: r.user_id, name: prof?.display_name || 'Unknown',
                  nameColor: prof?.name_color || null, active: true };
     }).filter(Boolean);
 }
@@ -396,7 +396,7 @@ function _gami_ladderRowsHTML(rows, hideBots) {
         return `
         <div class="gami-lb-row ${r.isMe ? 'gami-lb-me' : ''}"${r.isBot ? ` style="cursor:pointer;" title="View this bot's elemental attributes" onclick="_gami_showBotPetals(${r.botId})"` : ''}>
             <span class="gami-lb-rank">#${r.rank}</span>
-            <span class="gami-lb-name"><span style="${r.nameColor ? (window.cosmeticsSystem?.getNameColorStyle(r.nameColor) || '') : ''}">${_esc(r.name)}</span>${tag}</span>
+            <span class="gami-lb-name"><span${!r.isBot && r.userId ? ` class="player-card-link" data-player-card="${_esc(r.userId)}" title="View player"` : ''} style="${r.nameColor ? (window.cosmeticsSystem?.getNameColorStyle(r.nameColor) || '') : ''}">${_esc(r.name)}</span>${tag}</span>
         </div>`;
     }).join('');
 }
