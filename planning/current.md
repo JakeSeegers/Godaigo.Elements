@@ -118,6 +118,22 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (2): Late-game slowdown fixed ("games get slower as they go on").** Profiled a
+  3-bot arena game early vs late: a bot turn went from ~85 ms (20 stones) to ~8 s (60 stones),
+  almost all in search leaves -> leafField -> blockedSig -> BotSim.canMoveTo -> stoneAt /
+  neighborStones (linear stone scans, water-chain floods). Fixes: bot-sim.js stone index per
+  stones array (`stoneCells` / `nearStoneIdx`, cells of STONE_NEIGHBOR_MAX px, same order as
+  find/filter; `touchStones(snap)` after an in-place type/position change: Control the Current,
+  Breath of Power); bot.js `blockedSig` memoized per snapshot and per board key. Late windows
+  now show no heavy bot work. Also: bot.js trackCastCredit ran right after a cast, before a
+  response window resolved, so any cast that opened a window read as "no credit" and was
+  blacklisted for the game; now deferred (`_pendingCredit`, `flushCastCredit()` after
+  waitForQuiescence in botTurn). game-log-ui.js keeps the newest 500 lines and scrolls/refits once per frame
+  (`_scrollSoon`), not per line. game-core.js getAllHexagonPositions() is cached while
+  placedTiles holds the same tile objects at the same x/y/flipped (callers get an array copy).
+  Whole seed-3 game, speed-ups only: bot CPU 22.3 s -> 16.7 s; seeds 1, 2, 4 identical results. Note: BotArena.playMatch called directly (test scripts) leaves
+  isRunning() false, so arena bots never answer response windows and every such cast waits the
+  full 15 s timer; run/evolve/hillClimb/spectate set the flag, Quick Play uses bot-driver.js.
 - **2026-09-26: Lag fixes (bots think about 2x faster, a timer leak).** Measured a 4-bot game
   headless (CPU profile + timer counts). (1) js/game-core.js createPatternVisual(): every scroll
   card's pattern preview started a 2.5 s setInterval that was never cleared, one per panel

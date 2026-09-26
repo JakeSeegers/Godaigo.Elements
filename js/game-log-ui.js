@@ -193,7 +193,29 @@
     // Re-fits the panel to its (now taller) content when autofit is on —
     // js/scroll-panels.js's fitPanel() itself is a no-op when it's off, or
     // when the panel is currently collapsed, so this is always safe to call.
+    // Keep only the newest lines: every append re-measures the panel, so an
+    // uncapped log made each action a little slower as the game went on.
+    const MAX_LOG_LINES = 500;
+    function _trim(content) {
+        while (content.childElementCount > MAX_LOG_LINES) content.firstElementChild.remove();
+    }
+    // Scroll to the newest line and refit the panel once per frame, not
+    // once per line: both force a layout, and bots add many lines quickly.
+    let _scrollQueued = false;
+    function _scrollSoon() {
+        if (_scrollQueued) return;
+        _scrollQueued = true;
+        requestAnimationFrame(() => {
+            _scrollQueued = false;
+            const content = document.getElementById(CONTENT_ID);
+            if (!content) return;
+            _fit();
+            content.scrollTop = content.scrollHeight;
+        });
+    }
     function _fit() {
+        const content = document.getElementById(CONTENT_ID);
+        if (content) _trim(content);
         window.ScrollPanelSystem?.fitPanel?.('gamelog');
     }
 
@@ -208,8 +230,7 @@
         div.className = 'gl-turn-header';
         div.innerHTML = `Turn ${entry.turn} - ${playerSpan(entry.player)}${botTag}`;
         content.appendChild(div);
-        content.scrollTop = content.scrollHeight;
-        _fit();
+        _scrollSoon();
     }
 
     function appendLine(html, className) {
@@ -220,8 +241,7 @@
         if (lastLine && lastLine.signature === signature && lastLine.el.isConnected) {
             lastLine.count++;
             lastLine.el.innerHTML = lastLine.baseHtml + _multiplierSuffix(lastLine.count);
-            content.scrollTop = content.scrollHeight;
-            _fit();
+            _scrollSoon();
             return;
         }
 
@@ -229,9 +249,8 @@
         div.className = 'gl-line ' + className;
         div.innerHTML = html;
         content.appendChild(div);
-        content.scrollTop = content.scrollHeight;
         lastLine = { el: div, signature, baseHtml: html, count: 1 };
-        _fit();
+        _scrollSoon();
     }
 
     // ---- Entry -> line. Returns null to omit. ----

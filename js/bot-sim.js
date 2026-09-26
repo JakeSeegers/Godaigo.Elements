@@ -319,14 +319,57 @@
         return snap.turn.buffs?.simplify ? 1 : CAST_COST;
     }
 
+    // Stones by area (cells of STONE_NEIGHBOR_MAX px, so every stone within
+    // that distance is in the 3x3 cells around a point). stoneAt() and
+    // neighborStones() used to scan every stone on every call; search asks
+    // them thousands of times per decision, so late in a game (50+ stones)
+    // a bot turn took seconds and games got slower as they went on.
+    // Cached per stones array; rebuilt when its length changes, and
+    // touchStones() must be called after changing a stone in place (type or
+    // position). Results keep array order, exactly like find() / filter().
+    const _stoneIdx = new WeakMap();
+    function touchStones(snap) { _stoneIdx.delete(snap.stones); }
+    const cellKey = (cx, cy) => (cx + 5000) * 10000 + (cy + 5000);
+    function stoneCells(snap) {
+        const arr = snap.stones;
+        let idx = _stoneIdx.get(arr);
+        if (idx && idx.n === arr.length) return idx.cells;
+        const cells = new Map();
+        arr.forEach((st, i) => {
+            const k = cellKey(Math.floor(st.x / STONE_NEIGHBOR_MAX), Math.floor(st.y / STONE_NEIGHBOR_MAX));
+            let list = cells.get(k);
+            if (!list) cells.set(k, list = []);
+            list.push(i);
+        });
+        _stoneIdx.set(arr, { n: arr.length, cells });
+        return cells;
+    }
+    // Array indexes of stones that may be within STONE_NEIGHBOR_MAX of (x, y), sorted.
+    function nearStoneIdx(snap, x, y) {
+        const cells = stoneCells(snap);
+        const cx = Math.floor(x / STONE_NEIGHBOR_MAX), cy = Math.floor(y / STONE_NEIGHBOR_MAX);
+        const out = [];
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+            const list = cells.get(cellKey(cx + dx, cy + dy));
+            if (list) for (const i of list) out.push(i);
+        }
+        return out.length > 1 ? out.sort((a, b) => a - b) : out;
+    }
     function stoneAt(snap, x, y) {
-        return snap.stones.find(s => dist(s.x, s.y, x, y) < HEX_NEAR) || null;
+        for (const i of nearStoneIdx(snap, x, y)) {
+            const s = snap.stones[i];
+            if (dist(s.x, s.y, x, y) < HEX_NEAR) return s;
+        }
+        return null;
     }
     function neighborStones(snap, x, y) {
-        return snap.stones.filter(s => {
+        const out = [];
+        for (const i of nearStoneIdx(snap, x, y)) {
+            const s = snap.stones[i];
             const d = dist(s.x, s.y, x, y);
-            return d > HEX_NEAR && d < STONE_NEIGHBOR_MAX;
-        });
+            if (d > HEX_NEAR && d < STONE_NEIGHBOR_MAX) out.push(s);
+        }
+        return out;
     }
     function hasAdjacentVoid(snap, x, y) {
         return neighborStones(snap, x, y).some(s => s.type === 'void');
@@ -1281,6 +1324,7 @@
         snap.sourcePool.water = Math.min(SOURCE_CAP, (snap.sourcePool.water || 0) + 1);
         snap.sourcePool[el]--;
         stone.type = el;
+        touchStones(snap);
         applyFireInteractions(snap, stone);
     }
 
@@ -1308,6 +1352,7 @@
         if (!stone) return;
         stone.x = +a.toX.toFixed(1);
         stone.y = +a.toY.toFixed(1);
+        touchStones(snap);
         applyFireInteractions(snap, stone);
     }
 

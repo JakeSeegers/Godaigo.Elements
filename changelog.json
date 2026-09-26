@@ -6,8 +6,9 @@
       "date": "2026-09-26",
       "title": "Smoother bot games",
       "changes": [
-        "Bots now think about twice as fast, so the game freezes less while they take their turns.",
-        "Fixed a slowdown that built up over long games when scroll cards were opened again and again."
+        "Bots now think much faster, especially late in a game when the board is full of stones. Games and bot training no longer slow down as they go on.",
+        "Bots no longer give up on a scroll just because another player had a chance to respond to it.",
+        "Fixed a slowdown that built up over long games (scroll pattern previews and a very long Game Log)."
       ]
     },
     {

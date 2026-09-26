@@ -506,7 +506,29 @@
     // recasting FIRE_SCROLL_3 (Sacrificial Pyre) with an empty hand.
     // preSnap must be taken BEFORE the cast so "expected" reflects what the
     // scroll could still credit; called right after a successful cast apply.
+    // A cast that opens a response window only resolves (and grants its
+    // credit) when the window closes, so checking right away always saw "no
+    // credit" and blacklisted good scrolls for the rest of the game. Such
+    // checks wait here until the window is closed (flushCastCredit(), called
+    // from botTurn after waitForQuiescence). A countered cast can still read
+    // as no credit; bots only counter a cast that would grant an element, so
+    // that stays rare.
+    let _pendingCredit = null;
+    function flushCastCredit() {
+        if (!_pendingCredit || window.spellSystem?.responseWindow?.isResponseWindowOpen) return;
+        const p = _pendingCredit;
+        _pendingCredit = null;
+        checkCastCredit(p.idx, p.preSnap, p.scrollName);
+    }
     function trackCastCredit(idx, preSnap, scrollName) {
+        flushCastCredit();
+        if (window.spellSystem?.responseWindow?.isResponseWindowOpen) {
+            _pendingCredit = { idx, preSnap, scrollName };
+            return;
+        }
+        checkCastCredit(idx, preSnap, scrollName);
+    }
+    function checkCastCredit(idx, preSnap, scrollName) {
         const preSelf = me(preSnap);
         if (!preSelf) return;
         const def = window.SCROLL_DEFINITIONS?.[scrollName];
@@ -1724,12 +1746,35 @@
     // Which stone hexes can nobody walk through right now? Fields only change
     // shape when this set changes (a break, a void next to earth, a burn, a
     // new earth wall), so it is the cache key for search-leaf fields.
+    // Memoized: search asks this for every leaf (several times per leaf) and
+    // each answer walks every stone through canMoveTo (water chains too), so
+    // late in a game it was most of a bot's think time. Per snapshot object,
+    // then per board key (everything canMoveTo reads for a stone hex: stones,
+    // the other pawns, whose turn, Mudslide).
+    const _blockedBySnap = new WeakMap();
+    const _blockedByKey = new Map();
     function blockedSig(snap) {
-        const out = [];
-        for (const s of snap.stones) {
-            if (!window.BotSim.canMoveTo(snap, s.x, s.y).canMove) out.push(gridKey(s.x, s.y));
+        let sig = _blockedBySnap.get(snap);
+        if (sig !== undefined) return sig;
+        const ai = snap.turn.activePlayerIndex;
+        let key = ai + '|' + (snap.turn.buffs?.mudslide ? 1 : 0) + '|';
+        for (const s of snap.stones) key += s.x + ',' + s.y + s.type[0] + ';';
+        key += '|';
+        snap.players.forEach((p, i) => { if (p && i !== ai) key += p.x + ',' + p.y + ';'; });
+        key += '|';
+        for (const t of snap.tiles) if (t.isPlayerTile) key += t.playerIndex + '@' + t.x + ',' + t.y + ';';
+        sig = _blockedByKey.get(key);
+        if (sig === undefined) {
+            const out = [];
+            for (const s of snap.stones) {
+                if (!window.BotSim.canMoveTo(snap, s.x, s.y).canMove) out.push(gridKey(s.x, s.y));
+            }
+            sig = out.sort().join(';');
+            if (_blockedByKey.size > 2000) _blockedByKey.clear();
+            _blockedByKey.set(key, sig);
         }
-        return out.sort().join(';');
+        _blockedBySnap.set(snap, sig);
+        return sig;
     }
 
     // Search-time field cache: set by searchPick() for one decision.
@@ -3139,6 +3184,7 @@
                     }
                 } catch (e) { /* snapshot/winner is never fatal to the turn loop */ }
                 await waitForQuiescence();
+                flushCastCredit();
                 if (activePlayerIndex !== startingPlayer) break;
                 const applied = botAct();
                 if (!applied) break;

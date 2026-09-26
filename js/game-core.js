@@ -3266,7 +3266,32 @@
             showLegalPlacementHighlights('player-tile', null, previewUpcomingPlayerTileColor());
         }
 
+        // Cached: this is called from many places (movement checks, highlights,
+        // bot pathing, escape checks) and rebuilt the whole hex list each
+        // time. Reused while placedTiles holds the same tile objects at the
+        // same places with the same flipped state. Callers get their own copy
+        // of the array; the entries inside are shared (none are changed).
+        let _hexCache = null;
         function getAllHexagonPositions() {
+            const c = _hexCache;
+            if (c && c.tiles.length === placedTiles.length) {
+                let same = true;
+                for (let i = 0; i < placedTiles.length; i++) {
+                    const t = placedTiles[i], o = c.state[i];
+                    if (c.tiles[i] !== t || o.x !== t.x || o.y !== t.y || o.f !== t.flipped || o.p !== t.isPlayerTile) { same = false; break; }
+                }
+                if (same) return c.list.slice();
+            }
+            const list = _buildAllHexagonPositions();
+            _hexCache = {
+                tiles: placedTiles.slice(),
+                state: placedTiles.map(t => ({ x: t.x, y: t.y, f: t.flipped, p: t.isPlayerTile })),
+                list,
+            };
+            return list.slice();
+        }
+
+        function _buildAllHexagonPositions() {
             const positions = new Map();
             const trapezoidMap = new Map();
 
