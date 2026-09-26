@@ -148,10 +148,16 @@
                 <!-- Left column: inputs & room browser -->
                 <div style="flex: 1; min-width: 0;">
 
-                    <!-- Quick Play: private room + 2-4 bots, starts at once (js/lobby.js quickPlay) -->
-                    <button id="quick-play-btn" class="quick-play-btn" onclick="quickPlay()">
-                        Quick Play <span class="quick-play-sub">vs 2-4 bots, starts now</span>
-                    </button>
+                    <!-- Quick Play: private room + 2-4 bots, starts at once (js/lobby.js quickPlay).
+                         Featured replay: the hermit's pick, played at 4x (js/replay-viewer.js openFeatured). -->
+                    <div class="quick-play-row">
+                        <button id="quick-play-btn" class="quick-play-btn" onclick="quickPlay()">
+                            Quick Play <span class="quick-play-sub">vs 2-4 bots, starts now</span>
+                        </button>
+                        <button id="featured-replay-btn" class="quick-play-btn featured-replay-btn" onclick="window.Replay && Replay.openFeatured()">
+                            Watch Featured Replay <span class="quick-play-sub">a great game, at 4x speed</span>
+                        </button>
+                    </div>
 
                     <!-- Host / create buttons -->
                     <div id="room-action-buttons" style="display: flex; gap: 10px; margin-bottom: 12px;">

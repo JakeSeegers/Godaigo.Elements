@@ -109,8 +109,13 @@
     }
 
     // ── Playback ─────────────────────────────────────────────────
+    // Bot "brain mode" emojis (bot.js signalBrainMode, now off) were recorded
+    // in older games; never replay them. Players' own emoji reactions stay.
+    const BOT_SIGNAL_EMOJIS = new Set(['🧠', '🎲']);
+
     function dispatch(move) {
         if (SKIP_EVENTS.has(move.event)) return;
+        if (move.event === 'emoji' && BOT_SIGNAL_EMOJIS.has(move.payload?.display)) return;
         const msg = { type: 'broadcast', event: move.event, payload: move.payload || {} };
         for (const h of state.handlers) {
             if (h.event !== move.event && h.event !== '*') continue;
@@ -172,9 +177,11 @@
         window.promptLogConsentIfNeeded = () => {};
 
         startBoard(match, seats, handlers);
-        state = { match, seats, moves: match.moves || [], index: 0, playing: false, speed: 1, timer: null, handlers, errors: [] };
+        state = { match, seats, moves: match.moves || [], index: 0, playing: false, speed: opts.speed || 1, timer: null, handlers, errors: [] };
         if (opts.check) return;
         buildControls();
+        const sel = document.querySelector('#replay-controls [data-act=speed]');
+        if (sel && opts.speed) sel.value = String(opts.speed);
         state.startTimer = setTimeout(play, 1500); // let the board finish its intro animation
     }
 
@@ -661,6 +668,14 @@
         return (isBot ? '<span class="replay-tag">bot</span>' : '') + (won ? '<span class="replay-tag replay-tag-win">winner</span>' : '');
     }
 
+    // Hermit: the featured replay (lobby "Watch featured replay" button).
+    let featuredId = null;
+    function featureBtn(id) {
+        if (!window.isHermit?.()) return '';
+        const on = featuredId === id;
+        return `<button class="replay-feature${on ? ' on' : ''}" data-id="${id}" title="${on ? 'Featured in the lobby. Click to stop featuring it.' : 'Show this replay on the lobby button'}">${on ? 'Featured' : 'Feature'}</button>`;
+    }
+
     function rowHtml(m, mine) {
         const players = (m.players || []).slice().sort((a, b) => a.index - b.index).map(p => {
             const won = m.winner_index === p.index;
@@ -679,6 +694,7 @@
                 </div>
                 <div class="replay-row-actions">
                     <button class="replay-watch" data-id="${m.id}">Watch</button>
+                    ${featureBtn(m.id)}
                     ${post}
                 </div>
             </div>`;
@@ -710,6 +726,7 @@
                 <div class="replay-row-actions">
                     <button class="replay-watch" data-id="${m.id}">Watch</button>
                     <button class="replay-run-check" data-id="${m.id}">Check</button>
+                    ${featureBtn(m.id)}
                 </div>
             </div>`;
     }
@@ -824,6 +841,9 @@
         overlay.querySelectorAll('.replay-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === browserTab));
         const list = overlay.querySelector('.replay-list');
         list.innerHTML = '<div class="replay-empty">Loading...</div>';
+        if (window.isHermit?.()) {
+            try { const { data } = await supabase.rpc('get_featured_match'); featuredId = data || null; } catch (e) {}
+        }
         if (browserTab === 'players') {
             const { data, error } = await supabase.rpc('hermit_player_overview', { p_days: playerDays });
             if (browserTab !== 'players') return;
@@ -933,6 +953,14 @@
                 return;
             }
             if (t.classList.contains('replay-run-check')) { runChecks([+t.dataset.id]); return; }
+            if (t.classList.contains('replay-feature')) {
+                const id = +t.dataset.id;
+                t.disabled = true;
+                const { error } = await supabase.rpc('hermit_set_featured_match', { p_match_id: featuredId === id ? null : id });
+                if (error) { alert('Could not feature this replay: ' + error.message); t.disabled = false; return; }
+                renderList();
+                return;
+            }
             if (t.classList.contains('replay-puzzle-run')) {
                 if (solving || !puzzleRows.length) return;
                 const status = overlay.querySelector('.replay-check-progress');
@@ -989,6 +1017,13 @@
         renderList();
     }
 
-    window.Replay = { open, openBrowser, checkMatch, runCheck, runMine, mineMatches, findCombos,
+    // Lobby "Watch featured replay": the hermit's pick, at 4x.
+    async function openFeatured() {
+        const { data: id, error } = await supabase.rpc('get_featured_match');
+        if (error || !id) { alert('There is no featured replay right now. Check back later!'); return; }
+        await open(id, { speed: 4 });
+    }
+
+    window.Replay = { open, openFeatured, openBrowser, checkMatch, runCheck, runMine, mineMatches, findCombos,
         runPuzzle, solvePuzzles, puzzleSummary, puzzleScore, play, pause, step, get state() { return state; } };
 })();
