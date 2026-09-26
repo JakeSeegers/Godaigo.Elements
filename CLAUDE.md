@@ -62,7 +62,7 @@ Start every session here. It contains the live task, branch, and files in flight
 | Entry point | `index.html` — loads all scripts in order (see Script Load Order below) |
 | Dev server | `npx serve -p 3333` (see `.claude/launch.json`) |
 | Repo branch | `fixes/all-consolidated` is the live branch (GitHub Pages serves it; confirmed by the owner 2026-09-24). Push finished work there. `claude/missing-video-filename-sc1ajm` was the live branch before and is now old. Pages deploys it with GitHub's built-in "pages build and deployment" (branch source set in repo Settings). There is no deploy workflow file; the old one (for branch `4.10.progresscheck`) was deleted 2026-09-24. |
-| Live URL | https://playgodaigo.com/ (Cloudflare Workers static assets, project `godaigo`, test address https://godaigo.aikijake.workers.dev/). Builds on every push to `fixes/all-consolidated`: build command `node tools/build-site.js` (copies only game files to `dist/`), deploy `npx wrangler deploy` (`wrangler.jsonc`). The old GitHub Pages address https://jakeseegers.github.io/Godaigo.Elements/ still serves the whole repo until the move is finished. |
+| Live URL | https://playgodaigo.com/ (Cloudflare Workers static assets, project `godaigo`, test address https://godaigo.aikijake.workers.dev/). Builds on every push to `fixes/all-consolidated`: build command `node tools/build-site.js` (copies only game files to `dist/`), deploy `npx wrangler deploy` (`wrangler.jsonc`). The old GitHub Pages address https://jakeseegers.github.io/Godaigo.Elements/ still serves the whole repo but redirects players to playgodaigo.com (js/moved-notice.js, 2026-09-26); next step: make the repo private. |
 
 ---
 
@@ -94,6 +94,8 @@ Order matters — later scripts depend on earlier ones.
 > index.html is the source of truth — verify with it before trusting this.
 
 ```
+-1. moved-notice.js        ← first, in <head>: on the old github.io address, redirects to the same path on
+                             playgodaigo.com (query + hash kept). No-op elsewhere. Remove once the old address is off.
 0. version.js             ← window.GAME_VERSION + update check: asks the server for the newest js/version.js
                              (no-store) on load, every 2 min and on tab focus. Newer and not in a room/game
                              (and not typing): re-fetch every own file with cache:'reload', then reload

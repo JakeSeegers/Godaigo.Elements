@@ -4,8 +4,9 @@
     {
       "id": "2026-09-26",
       "date": "2026-09-26",
-      "title": "Smoother bot games",
+      "title": "New home, smoother bot games",
       "changes": [
+        "The game has a new home: playgodaigo.com. Sign in there with your usual username and password.",
         "Bots now think much faster, especially late in a game when the board is full of stones. Games and bot training no longer slow down as they go on.",
         "Bots no longer give up on a scroll just because another player had a chance to respond to it.",
         "Smoother fire animation, and fixed a slowdown that built up over long games (scroll pattern previews and a very long Game Log).",
