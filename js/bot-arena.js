@@ -54,12 +54,12 @@
 //   1. CAMPING: two (or more) bots each end STALL_TURNS (7) consecutive own
 //      turns parked on one revealed elemental tile (each on its own tile —
 //      they don't have to share one).
-//   2. NO-CAST: opts.stallNoCastRounds (default 15) full rounds pass with
+//   2. NO-CAST: opts.stallNoCastRounds (default 10, owner 2026-09-26) full rounds pass with
 //      NO bot casting a single scroll. Catches the loops camping can't —
 //      e.g. free catacomb-teleport ping-pong, where the tile alternates
 //      every turn (resetting any per-tile streak) and catacombs aren't
 //      elemental tiles anyway. A game where nobody has cast anything for
-//      15 straight rounds is going nowhere regardless of the movement
+//      10 straight rounds is going nowhere regardless of the movement
 //      shape. Reads deltas of BotSystem.castsApplied().
 // Either way the round is RESTARTED from scratch with a derived seed (same
 // weights), instead of grinding on to the 200-turn cap just to record a
@@ -410,7 +410,7 @@
         // the game as stalled. Expressed in rounds so it means the same
         // thing at every player count. Skipped gracefully on an older
         // bot.js without the castsApplied() counter.
-        const noCastTurnCap = Math.max(1, opts.stallNoCastRounds ?? 15) * nPlayers;
+        const noCastTurnCap = Math.max(1, opts.stallNoCastRounds ?? 10) * nPlayers;
         const castCounter = window.BotSystem.castsApplied;
         let castsSeen = castCounter ? castCounter() : null;
         let lastCastTurn = -1; // -1 = no cast yet this game

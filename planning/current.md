@@ -118,6 +118,9 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (8): Arena no-cast stall detector 15 -> 10 rounds** (owner). js/bot-arena.js
+  `opts.stallNoCastRounds ?? 10`. Training only; checked live earlier the same day: camping and no-cast
+  detectors both fire and restart rounds.
 - **2026-09-26 (7): Recent players + Play Again Together.** sql/recent-players.sql (applied, tested):
   my_recent_players, _played_recently (3 h), send_game_invite also allows recent co-players. lobby.js:
   window.playAgainRoom(bots, startNow) next to Quick Play; game-over "Play Again Together" button (online games,
