@@ -118,6 +118,11 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (9): Arena detector 3, no progress** (owner). js/bot-arena.js: no new element activated by
+  anyone for `opts.stallNoProgressRounds` (default NO_PROGRESS_ROUNDS = 20) rounds -> stalled + restart,
+  all seats share it; result.maxQuietRounds. Measured with it off (seeds 1-4 2p/3p, 1-2 4p): healthy games
+  2.3-9.5 rounds, one won 2p game 16.5, stalled games 9-12.3 (those were caught by camping/no-cast first).
+  So 20 is a safety net for long hopeless stretches, not a faster catch. Forced 3 -> fires on turn 12.
 - **2026-09-26 (8): Arena no-cast stall detector 15 -> 10 rounds** (owner). js/bot-arena.js
   `opts.stallNoCastRounds ?? 10`. Training only; checked live earlier the same day: camping and no-cast
   detectors both fire and restart rounds.

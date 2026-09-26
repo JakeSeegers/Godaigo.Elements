@@ -61,6 +61,12 @@
 //      elemental tiles anyway. A game where nobody has cast anything for
 //      10 straight rounds is going nowhere regardless of the movement
 //      shape. Reads deltas of BotSystem.castsApplied().
+//   3. NO-PROGRESS: opts.stallNoProgressRounds (default below) full rounds
+//      pass with NO bot activating a new element. Catches games where bots
+//      keep casting or moving but get nowhere (a trap loop that shuffles
+//      between tiles, so camping never fires, while casts that grant no
+//      element keep the no-cast detector quiet). Every seat shares it.
+//      result.maxQuietRounds = the longest such gap seen (for tuning).
 // Either way the round is RESTARTED from scratch with a derived seed (same
 // weights), instead of grinding on to the 200-turn cap just to record a
 // meaningless draw. opts.maxStallRestarts (default 3) caps the retries; a
@@ -350,6 +356,10 @@
     // ----------------------------------------------------------------
     const STALL_TURNS = 7;
     const STALL_MIN_BOTS = 2;
+    // Detector 3 default (see STALL RESTART header). Measured 2026-09-26: a
+    // healthy 2-bot game (seed 4, won on turn 83) went 16.5 rounds without a
+    // new element, so the limit sits above that.
+    const NO_PROGRESS_ROUNDS = 20;
     const ELEMENTAL_SHRINES = ['earth', 'water', 'fire', 'wind', 'void'];
 
     // The revealed elemental tile the position stands on, else null.
@@ -411,6 +421,10 @@
         // thing at every player count. Skipped gracefully on an older
         // bot.js without the castsApplied() counter.
         const noCastTurnCap = Math.max(1, opts.stallNoCastRounds ?? 10) * nPlayers;
+        // No-progress stall cap (detector 3): rounds with no new element
+        // activated by anyone. Owner request 2026-09-26.
+        const noProgressTurnCap = Math.max(1, opts.stallNoProgressRounds ?? NO_PROGRESS_ROUNDS) * nPlayers;
+        let lastProgressTurn = -1, activatedSeen = 0, maxQuietTurns = 0;
         const castCounter = window.BotSystem.castsApplied;
         let castsSeen = castCounter ? castCounter() : null;
         let lastCastTurn = -1; // -1 = no cast yet this game
@@ -504,8 +518,21 @@
                     }
                 }
 
+                // No-progress stall: no new element activated by anyone for
+                // too many rounds (detector 3).
+                const activatedNow = result.activated.reduce((a, b) => a + b, 0);
+                if (activatedNow !== activatedSeen) { activatedSeen = activatedNow; lastProgressTurn = turn; }
+                maxQuietTurns = Math.max(maxQuietTurns, turn - lastProgressTurn);
+                result.maxQuietRounds = +(maxQuietTurns / nPlayers).toFixed(1);
+                if (turn - lastProgressTurn >= noProgressTurnCap) {
+                    result.stalled = true;
+                    result.stallers = Array.from({ length: nPlayers }, (_, i) => i);
+                    log(`match seed ${seed}: no new element activated by anyone for ${Math.round(noProgressTurnCap / nPlayers)} straight rounds (${noProgressTurnCap} turns) - stalled, aborting round on turn ${turn + 1}`);
+                    break;
+                }
+
                 if (activePlayerIndex === idx) {
-                    // Bot didn't end its own turn (stuck/no actions) — force it.
+                    // Bot didn't end its own turn (stuck/no actions), force it.
                     // applyAction({type:'endTurn'}) reports ok:true just from
                     // clicking the button, NOT from activePlayerIndex actually
                     // advancing — a click that gets swallowed (e.g. an unresolved
