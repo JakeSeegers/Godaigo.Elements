@@ -7,8 +7,10 @@ repomix-output.txt stay out of the public site.
 
     node tools/build-site.js     # -> dist/ (git-ignored)
 
-Cloudflare Pages settings: build command `node tools/build-site.js`, output
-directory `dist`. If the game starts loading a file from a new top-level
+Cloudflare settings: build command `node tools/build-site.js`. On Workers
+(the default for new projects) the deploy command stays `npx wrangler deploy`,
+which reads `wrangler.jsonc` (publishes `dist/`; project name must be `godaigo`).
+On Pages: output directory `dist`. If the game starts loading a file from a new top-level
 folder, add it to `INCLUDE` in the script.
 
 ---
