@@ -124,6 +124,10 @@ reach/beat it from here.
   (Connect to Git, branch fixes/all-consolidated, build `node tools/build-site.js`, output
   `dist`), add the custom domain, add the new URL to Supabase Auth (Site URL + Redirect URLs)
   and the account-recovery SITE_URLS secret, then decide on the old github.io address / private repo.
+  Update: the owner used the Workers flow (Cloudflare's default for new projects), not Pages:
+  wrangler.jsonc (name `godaigo`, assets ./dist) + deploy command `npx wrangler deploy`. The repo's
+  default branch is `main` (old), so Workers Builds must use Settings > Build > Branch control =
+  fixes/all-consolidated; a Retry of a failed build reuses its old commit, a new push is needed.
 - **2026-09-26 (3): Fire animation smoother.** js/effects-system.js: frames pre-decoded
   (createImageBitmap), loop draws only when a frame index or position changes (anims run at
   13-18 fps, rAF at 60-144 Hz), clears only last frame's rects instead of the whole screen,
