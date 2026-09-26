@@ -267,7 +267,7 @@
     }
 
     // Parent side: run one match in a hidden iframe and wait for its result.
-    function runInFrame(matchId, timeoutMs = 180000) {
+    function runInFrame(matchId, timeoutMs = 180000, mode = 'check') {
         return new Promise((resolve) => {
             const frame = document.createElement('iframe');
             frame.style.cssText = 'position:fixed;left:-4000px;top:0;width:1400px;height:900px;border:0;';
@@ -286,7 +286,7 @@
             window.addEventListener('message', onMsg);
             // The folder URL, not index.html: some servers redirect index.html
             // to the folder and drop the query string.
-            frame.src = new URL('.', location.href).pathname + '?replaycheck=' + encodeURIComponent(matchId);
+            frame.src = new URL('.', location.href).pathname + (mode === 'mine' ? '?replaymine=' : '?replaycheck=') + encodeURIComponent(matchId);
             document.body.appendChild(frame);
         });
     }
@@ -337,9 +337,176 @@
         return { status, detail };
     }
 
-    // Inside the iframe: index.html?replaycheck=ID runs the check and reports.
+
+    // ── Combo miner (hermit, bot combo plan Phase 3) ────────────
+    // Replays a finished match at full speed (hidden frame, ?replaymine=ID),
+    // scores every seat with the bot's evaluator at each turn change, and
+    // records what each player cast (with the choices inside the scroll)
+    // and revealed. A window of 1 to 3 of a player's own turns with at least
+    // two casts and a big rise in value is a combo candidate. The server
+    // weights candidates by the player's rank and experience and never
+    // counts bots (save_combo_candidates, sql/combo-miner.sql).
+    const MINE_MIN_GAIN = 300;
+    function mineSeat(move) {
+        const p = move.payload || {};
+        const v = [p.playerIndex, p.casterIndex, move.sender].find(x => Number.isInteger(x));
+        return v === undefined ? null : v;
+    }
+    // One recorded message -> a step, or a choice detail for the last cast.
+    function mineStep(move, pre, lastCast) {
+        const p = move.payload || {};
+        const seat = mineSeat(move);
+        switch (move.event) {
+            case 'scroll-used':
+                return p.scrollName ? { kind: 'cast', seat, scroll: p.scrollName } : null;
+            case 'tile-flip':
+                return { kind: 'reveal', seat: move.sender ?? seat, shrine: p.shrineType || null };
+            case 'stone-break':
+                return { kind: 'break', seat: move.sender ?? seat };
+        }
+        if (!lastCast) return null;
+        const set = c => { Object.assign(lastCast.choice || (lastCast.choice = {}), c); return null; };
+        switch (move.event) {
+            case 'wandering-river-apply': return set({ tile: pre?.hidden ? 'hidden' : 'revealed', element: p.newElement });
+            case 'create-stones':
+            case 'scholars-insight':
+            case 'quick-reflexes-search': return set({ element: p.element });
+            case 'opponent-stone-destroyed': return set({ element: p.stoneType, target: p.opponentIndex });
+            case 'scroll-plundered': return set({ scroll: p.scrollName, target: p.targetIndex });
+            case 'take-flight': return set({ flew: true });
+            case 'tile-swap': return set({ swapped: true });
+            case 'telekinesis-move': return set({ movedTile: true });
+        }
+        return null;
+    }
+
+    async function runMine(matchId) {
+        await open(matchId, { check: true });
+        if (!state) throw new Error('replay did not start');
+        await sleep(300);
+        const seats = state.seats.map(x => x.index);
+        const value = () => seats.map(i => {
+            try { return Math.round(window.BotSystem.evaluateSnapshot(window.BotState.snapshot(), i)); } catch (e) { return null; }
+        });
+        const segs = [];
+        let lastTurn = currentTurnNumber, lastActive = activePlayerIndex;
+        let seg = { turn: lastTurn, seat: lastActive, v0: value(), steps: [] };
+        const lastCastBySeat = {};
+        while (state.index < state.moves.length) {
+            const move = state.moves[state.index];
+            let pre = null;
+            if (move.event === 'wandering-river-apply') {
+                const t = (typeof placedTiles !== 'undefined' ? placedTiles : []).find(t => Number(t.id) === Number(move.payload?.tileId));
+                pre = { hidden: !!t?.flipped };
+            }
+            step();
+            await sleep(20);
+            const seat = mineSeat(move);
+            const st = mineStep(move, pre, lastCastBySeat[seat]);
+            if (st) {
+                st.turn = seg.turn;
+                seg.steps.push(st);
+                if (st.kind === 'cast') lastCastBySeat[st.seat] = st;
+            }
+            if (currentTurnNumber !== lastTurn || activePlayerIndex !== lastActive) {
+                const v = value();
+                seg.v1 = v; segs.push(seg);
+                lastTurn = currentTurnNumber; lastActive = activePlayerIndex;
+                seg = { turn: lastTurn, seat: lastActive, v0: v, steps: [] };
+            }
+        }
+        await sleep(500);
+        seg.v1 = value(); segs.push(seg);
+        return { candidates: findCombos(segs, seats), segments: segs.length, errorCount: state.errors.length };
+    }
+
+    // Readable token for one step: scroll id plus the kind of choice.
+    function stepToken(st) {
+        if (st.kind === 'reveal') return 'reveal';
+        if (st.kind === 'break') return 'break';
+        const c = st.choice || {};
+        const tag = c.tile ? `[${c.tile} tile]` : c.flew ? '[flight]' : c.swapped ? '[swap]' : c.movedTile ? '[move tile]' : '';
+        return st.scroll + tag;
+    }
+
+    function findCombos(segs, seats) {
+        const all = [];
+        for (const seat of seats) {
+            const own = segs.filter(s => s.seat === seat);
+            const pos = seats.indexOf(seat);
+            for (let e = 0; e < own.length; e++) {
+                for (let L = 1; L <= 3 && e - L + 1 >= 0; L++) {
+                    const first = own[e - L + 1], last = own[e];
+                    const a = first.v0?.[pos], b = last.v1?.[pos];
+                    if (a == null || b == null) continue;
+                    const steps = own.slice(e - L + 1, e + 1)
+                        .flatMap((s, j) => s.steps.filter(x => x.seat === seat).map(x => ({ ...x, t: j })));
+                    if (steps.filter(x => x.kind === 'cast').length < 2) continue;
+                    all.push({ seat, gain: b - a, turns: L, start_turn: first.turn, end_turn: last.turn, steps });
+                }
+            }
+        }
+        if (!all.length) return [];
+        const gains = all.map(c => c.gain).sort((x, y) => x - y);
+        const p75 = gains[Math.floor(gains.length * 0.75)] ?? 0;
+        const bar = Math.max(MINE_MIN_GAIN, p75);
+        // Best windows first; a window overlapping an already chosen one
+        // (same seat, shared turn) is dropped.
+        const chosen = [];
+        for (const c of all.filter(c => c.gain >= bar).sort((x, y) => y.gain - x.gain)) {
+            const overlaps = chosen.some(o => o.seat === c.seat && !(c.end_turn < o.start_turn || c.start_turn > o.end_turn));
+            if (!overlaps) chosen.push(c);
+        }
+        return chosen.map(c => {
+            // Signature: steps in order, turns separated by " / ", repeated reveals collapsed.
+            const parts = [];
+            let t = 0, cur = [];
+            for (const st of c.steps) {
+                if (st.t !== t) { parts.push(cur); cur = []; t = st.t; }
+                const tok = stepToken(st);
+                if (tok === 'reveal' && cur[cur.length - 1] === 'reveal') continue;
+                cur.push(tok);
+            }
+            parts.push(cur);
+            return {
+                seat: c.seat, gain: c.gain, turns: c.turns, start_turn: c.start_turn, end_turn: c.end_turn,
+                signature: parts.filter(p => p.length).map(p => p.join(' > ')).join(' / '),
+                steps: c.steps.map(({ kind, scroll, choice, shrine, t }) => ({ kind, scroll, choice, shrine, t })),
+            };
+        });
+    }
+
+    // Parent side: mine every finished match not mined yet.
+    let mining = false;
+    async function mineMatches(onProgress) {
+        if (mining) return;
+        mining = true;
+        let done = 0, found = 0;
+        try {
+            const { data, error } = await supabase.rpc('list_matches_for_mining', { p_limit: 50 });
+            if (error) throw error;
+            const ids = (data || []).map(r => r.id);
+            for (const id of ids) {
+                onProgress?.(`Mining #${id} (${done + 1} of ${ids.length})...`);
+                const run = await runInFrame(id, 300000, 'mine');
+                const rows = run.result?.candidates || [];
+                if (run.error) log(`mine ${id}: ${run.error}`);
+                const { error: e2 } = await supabase.rpc('save_combo_candidates', { p_match_id: id, p_rows: rows });
+                if (e2) log(`mine ${id}: save failed`, e2.message);
+                done++; found += rows.length;
+            }
+        } finally {
+            mining = false;
+        }
+        return { done, found };
+    }
+
+    // Inside the iframe: index.html?replaycheck=ID runs the check (or
+    // ?replaymine=ID the combo miner) and reports.
     async function frameEntry() {
-        const id = +new URLSearchParams(location.search).get('replaycheck');
+        const params = new URLSearchParams(location.search);
+        const mineMode = params.has('replaymine');
+        const id = +(mineMode ? params.get('replaymine') : params.get('replaycheck'));
         if (!id || window.parent === window) return;
         const post = (payload) => window.parent.postMessage({ type: 'godaigo-replay-check', matchId: id, ...payload }, location.origin);
         try {
@@ -353,12 +520,12 @@
                 await sleep(500);
             }
             await sleep(1500);
-            post({ result: await runCheck(id) });
+            post({ result: mineMode ? await runMine(id) : await runCheck(id) });
         } catch (e) {
             post({ error: String(e?.message || e) });
         }
     }
-    if (new URLSearchParams(location.search).has('replaycheck')) {
+    if (new URLSearchParams(location.search).has('replaycheck') || new URLSearchParams(location.search).has('replaymine')) {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', frameEntry);
         else frameEntry();
     }
@@ -455,6 +622,26 @@
     // "Games" opens that player's games with Watch / Check.
     let playerDays = 30;
 
+    // "WATER_SCROLL_4[hidden tile] > reveal / EARTH_SCROLL_4" -> scroll names.
+    function prettySignature(sig) {
+        return String(sig || '').split(' / ').map(turn => turn.split(' > ').map(tok => {
+            const m = /^([A-Z]+_SCROLL_\d+)(\[.*\])?$/.exec(tok);
+            if (!m) return esc(tok);
+            const name = window.SCROLL_DEFINITIONS?.[m[1]]?.name || m[1];
+            return `<b>${esc(name)}</b>${m[2] ? ' ' + esc(m[2].slice(1, -1)) : ''}`;
+        }).join(' &gt; ')).map((t, i) => `<div>Turn ${i + 1}: ${t}</div>`).join('');
+    }
+
+    function comboRowHtml(c) {
+        return `<div class="replay-row replay-combo-row">
+            <div class="replay-row-main">
+                <div class="replay-combo-sig">${prettySignature(c.signature)}</div>
+                <div class="replay-info">Seen ${c.times} time${c.times === 1 ? '' : 's'} in ${c.matches} game${c.matches === 1 ? '' : 's'} by ${c.players} player${c.players === 1 ? '' : 's'} · avg gain ${Math.round(c.avg_gain)} · trust ${(+c.avg_trust).toFixed(2)} · score ${Math.round(c.score)}</div>
+            </div>
+            <div class="replay-row-actions"><button class="replay-watch" data-id="${c.best_match}">Watch</button></div>
+        </div>`;
+    }
+
     function playerRowHtml(pl) {
         const nameStyle = pl.name_color ? (window.cosmeticsSystem?.getNameColorStyle(pl.name_color) || '') : '';
         const rate = pl.games ? Math.round(100 * pl.wins / pl.games) : 0;
@@ -538,6 +725,21 @@
             if (sel) sel.onchange = () => { playerDays = +sel.value || 30; renderList(); };
             return;
         }
+        if (browserTab === 'combos') {
+            const { data, error } = await supabase.rpc('hermit_combo_summary', { p_min_count: 1 });
+            if (browserTab !== 'combos') return;
+            if (error) { list.innerHTML = `<div class="replay-empty">Could not load: ${esc(error.message)}</div>`; return; }
+            const rows = Array.isArray(data) ? data : [];
+            list.innerHTML = `
+                <div class="replay-check-bar">
+                    <button class="replay-mine">Mine new games</button>
+                    <button class="replay-mine-all">Mine everything again</button>
+                    <span class="replay-check-progress">${mining ? 'Mining...' : ''}</span>
+                </div>
+                <div class="replay-note">Each finished game is replayed in a hidden frame. When a player's position jumps within 1 to 3 of their turns and they cast 2 or more scrolls, those casts (with their choices) are saved as a combo. Score = gain x trust, where trust comes from the player's ladder rank and games played. Bots never count. A combo is only worth teaching once it shows up more than once.</div>
+                ${rows.map(comboRowHtml).join('') || '<div class="replay-empty">No combos found yet. Press "Mine new games".</div>'}`;
+            return;
+        }
         if (browserTab === 'check') {
             const { data, error } = await supabase.rpc('list_matches_for_check', { p_limit: 50 });
             if (browserTab !== 'check') return;
@@ -575,7 +777,7 @@
                 <div class="replay-tabs">
                     <button class="replay-tab" data-tab="mine">My games</button>
                     <button class="replay-tab" data-tab="public">Public</button>
-                    ${window.isHermit?.() ? '<button class="replay-tab" data-tab="check">Check</button><button class="replay-tab" data-tab="players">Players</button>' : ''}
+                    ${window.isHermit?.() ? '<button class="replay-tab" data-tab="check">Check</button><button class="replay-tab" data-tab="players">Players</button><button class="replay-tab" data-tab="combos">Combos</button>' : ''}
                 </div>
                 <div class="replay-list"></div>
                 <div class="replay-note">Games are kept for 30 days. Posted games are kept until you remove them. Posting shows the whole game, with every player's name, to everyone.</div>
@@ -584,7 +786,7 @@
         overlay.addEventListener('click', async (ev) => {
             const t = ev.target;
             if (t === overlay || t.classList.contains('replay-close')) {
-                if (checking) return; // closing would drop the running check's frame results
+                if (checking || mining) return; // closing would drop the running frame's results
                 overlay.remove(); return;
             }
             if (t.classList.contains('replay-tab')) { browserTab = t.dataset.tab; renderList(); return; }
@@ -595,6 +797,23 @@
                 return;
             }
             if (t.classList.contains('replay-run-check')) { runChecks([+t.dataset.id]); return; }
+            if (t.classList.contains('replay-mine') || t.classList.contains('replay-mine-all')) {
+                if (mining) return;
+                if (t.classList.contains('replay-mine-all')) {
+                    if (!confirm('Delete all found combos and mine every finished game again?')) return;
+                    const { error } = await supabase.rpc('hermit_reset_mining');
+                    if (error) { alert('Could not reset: ' + error.message); return; }
+                }
+                const status = overlay.querySelector('.replay-check-progress');
+                try {
+                    const r = await mineMatches(msg => { if (status) status.textContent = msg; });
+                    if (status) status.textContent = r ? `Mined ${r.done} game${r.done === 1 ? '' : 's'}, ${r.found} combo${r.found === 1 ? '' : 's'} found.` : '';
+                } catch (e) {
+                    if (status) status.textContent = 'Mining failed: ' + (e.message || e);
+                }
+                setTimeout(() => { if (browserTab === 'combos') renderList(); }, 1500);
+                return;
+            }
             if (t.classList.contains('replay-player-games')) { togglePlayerGames(t.dataset.user, t); return; }
             if (t.classList.contains('replay-check-all')) {
                 runChecks(checkRows.filter(m => !m.check_status).map(m => m.id));
@@ -613,5 +832,5 @@
         renderList();
     }
 
-    window.Replay = { open, openBrowser, checkMatch, runCheck, play, pause, step, get state() { return state; } };
+    window.Replay = { open, openBrowser, checkMatch, runCheck, runMine, mineMatches, findCombos, play, pause, step, get state() { return state; } };
 })();

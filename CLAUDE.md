@@ -174,6 +174,13 @@ Order matters — later scripts depend on earlier ones.
                              human with games/wins/fast wins/last-standing/disputed/replay-unconfirmed wins/
                              pending/desync games/top-opponent share + a warning score and flag texts;
                              "Games" -> hermit_player_matches(user) rows with Watch/Check (sql/hermit-players.sql).
+                             Hermit-only "Combos" tab (bot combo plan Phase 3): Replay.mineMatches() replays every
+                             unmined finished match in a hidden frame (index.html?replaymine=ID, runMine): scores
+                             each seat with BotSystem.evaluateSnapshot at every turn change, records casts
+                             (scroll-used) with their choices (wandering-river-apply, create-stones, ...) and
+                             reveals; findCombos() keeps windows of 1-3 own turns with >= 2 casts and a gain
+                             >= max(300, 75th percentile) -> save_combo_candidates (server sets trust from ladder
+                             rank + games played, bots 0) -> hermit_combo_summary (sql/combo-miner.sql).
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js). Server-backed (sql/cosmetics.sql).
@@ -287,6 +294,7 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `players` | lobby.js | Player slots in a session |
 | `matches` | match-recorder.js | One row per online game: players snapshot, deck seed, settings, winner, status (playing/finished/abandoned), move_count, `keep`. Written ONLY via RPCs `start_match` / `finish_match` (room host or hermit). Read ONLY via RPCs (sql/replay-access.sql): `list_my_matches`, `list_public_matches`, `get_match_replay` (finished + (player of it OR `is_public` OR hermit)), `set_match_public` (players of it). Posting sets `keep`. Finished matches older than 30 days are deleted unless `keep`. `game_room.match_id` points at the live one. |
 | `matches` (check) | replay-viewer.js | `check_status` / `check_detail` / `checked_at`: replay verification result. Hermit-only RPCs `list_matches_for_check`, `get_match_fingerprints`, `save_match_check` (sql/match-check.sql). |
+| `combo_candidates` | replay-viewer.js (miner) | Combo candidates mined from finished matches (seat, user, rank, games, trust, gain, turns, signature, steps). RLS on, no client policies; hermit-only RPCs `list_matches_for_mining`, `save_combo_candidates`, `hermit_combo_summary`, `hermit_reset_mining` (sql/combo-miner.sql). `matches.mined_at` marks mined games; `start_match` now saves each human's ladder `rank` in `matches.players`. |
 | `match_moves` | match-recorder.js | Every broadcast message of a match in order (`seq` assigned by the server), with event name, sender seat, payload. Written ONLY via `append_match_moves` (room host or hermit, batches of 200 max, 32 KB per payload). |
 | `user_profiles` | gamification.js | XP, gold, level, stats. Clients may only UPDATE `stats`, `updated_at`, `skip_intro`; gold/XP/level/badges change ONLY through server functions: `claim_daily_login()`, `claim_game_win(room)`, `claim_training_reward(amount)` (60/claim, 300/day), `spend_gold(amount)`. Name colours: `cosmetics_owned` / `name_color` (public read, changed only by `buy_cosmetic(id)` / `equip_cosmetic(id or null)`, prices in `cosmetic_price()`, sql/cosmetics.sql; the leaderboard colours names from `name_color`). Pawn items: `pawn_rim` / `pawn_base` / `pawn_trail` (public read, `equip_pawn(slot, id)`, sql/pawn-cosmetics.sql). `award_gold` / `update_user_xp` / `award_badge` are server-internal (not client-callable). See `sql/secure-rewards.sql`. |
 | `user_activities` | gamification.js | Activity log for rewards. Clients may only insert `scroll_cast` / `element_activated` with no rewards; everything else is written by the server functions above. Inserts fire `check_badges_trigger` (badges). |

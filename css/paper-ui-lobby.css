@@ -560,3 +560,5 @@
   vertical-align: middle;
 }
 .replay-tag-win { opacity: 1; color: var(--pp-gold, #d4a017); }
+.replay-combo-sig { font-size: 14px; line-height: 1.4; }
+.replay-combo-sig b { color: var(--pp-maroon); }

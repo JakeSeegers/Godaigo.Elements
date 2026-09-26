@@ -118,6 +118,21 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26: Combo plan Phase 3: replay miner (hermit "Combos" tab in Replays).**
+  sql/combo-miner.sql (applied, migration combo_miner): `combo_candidates` table,
+  `matches.mined_at`, `start_match` saves each human's ladder rank in `matches.players`,
+  hermit RPCs `list_matches_for_mining`, `save_combo_candidates` (server sets trust:
+  rank factor max(0.2, 1 - (rank-1)/ladder size), 0.3 without rank, x experience
+  min(1, 0.2 + games/10); bots 0), `hermit_combo_summary`, `hermit_reset_mining`.
+  js/replay-viewer.js: `runMine()` replays a match at full speed in a hidden frame
+  (?replaymine=ID), evaluates every seat at each turn change, records casts (`scroll-used`)
+  with their choices (river tile hidden/revealed + element, create / scholar / quick
+  reflexes element, arson, plunder, flight, swap, telekinesis) plus reveals and breaks;
+  `findCombos()` keeps windows of 1-3 own turns with >= 2 casts and gain >= max(300, 75th
+  percentile of that match), non-overlapping; signature = scroll ids with choice tags, turns
+  separated by " / ". Tested on recorded match 5 (8 s, 2 candidates) and the save/summary
+  RPCs in a rolled-back transaction. Only 7 finished games exist so far; press "Mine new
+  games" after playing more. NEXT: Phase 4 (bots follow mined combos) once combos repeat.
 - **2026-09-25: Range buffs reach the whole board (owner: "Avalanche has many purposes, not
   just casting").** bot.js `rangedTargets()` lists tactical targets across the board while
   Avalanche / Seed the Skies / Mason's Savvy is live (opponent paths: earth/water; own
