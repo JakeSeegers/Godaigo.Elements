@@ -118,6 +118,20 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26: Combo plan Phase 4: bots follow mined combos.** sql/combo-teach.sql
+  (applied, migration combo_teach): `combo_flags` (hermit on/off per signature; no row =
+  auto), `hermit_set_combo_state`, `hermit_combo_summary` now returns state + taught, public
+  `get_bot_combos()` (auto = seen >= 2 times in >= 2 games, or forced on). bot.js: loads the
+  list at start, `updateCombo()` starts a combo when the bot holds its first two cast
+  scrolls, next cast gets `comboStep` (60) + `comboChoiceMatch` (20) in greedy and at the
+  search root, makePlan builds the next combo scroll's pattern even without win credit,
+  dropped when too slow (`comboExtraTurns`) or the scroll is gone, 3-turn rest after.
+  Combos tab: Auto / On / Off per combo and "Bots use it". Bot Mind: combo + step. Live
+  test: with "Create > Burning Motivation" taught (both elements already activated) the bot
+  cast Create then Burning Motivation in order and completed it; without it, it cast Create
+  twice and never Burning Motivation. No combos loaded = unchanged play (same seeds, same
+  games). There are no real combos yet: mine more games (Replays > Combos) or switch one On.
+  NEXT (plan): Phase 5, widen learn-from-player (casts and moves first).
 - **2026-09-26: Combo plan Phase 3: replay miner (hermit "Combos" tab in Replays).**
   sql/combo-miner.sql (applied, migration combo_miner): `combo_candidates` table,
   `matches.mined_at`, `start_match` saves each human's ladder rank in `matches.players`,

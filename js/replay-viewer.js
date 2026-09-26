@@ -638,7 +638,13 @@
                 <div class="replay-combo-sig">${prettySignature(c.signature)}</div>
                 <div class="replay-info">Seen ${c.times} time${c.times === 1 ? '' : 's'} in ${c.matches} game${c.matches === 1 ? '' : 's'} by ${c.players} player${c.players === 1 ? '' : 's'} · avg gain ${Math.round(c.avg_gain)} · trust ${(+c.avg_trust).toFixed(2)} · score ${Math.round(c.score)}</div>
             </div>
-            <div class="replay-row-actions"><button class="replay-watch" data-id="${c.best_match}">Watch</button></div>
+            <div class="replay-row-actions">
+                <button class="replay-watch" data-id="${c.best_match}">Watch</button>
+                <div class="replay-combo-state" title="Auto: bots use it once it shows up in 2 games">
+                    ${['auto', 'on', 'off'].map(st => `<button class="replay-combo-set${(c.state || 'auto') === st ? ' active' : ''}" data-sig="${esc(c.signature)}" data-state="${st}">${st === 'auto' ? 'Auto' : st === 'on' ? 'On' : 'Off'}</button>`).join('')}
+                </div>
+                <div class="replay-info">${c.taught ? 'Bots use it' : 'Bots do not use it'}</div>
+            </div>
         </div>`;
     }
 
@@ -736,7 +742,7 @@
                     <button class="replay-mine-all">Mine everything again</button>
                     <span class="replay-check-progress">${mining ? 'Mining...' : ''}</span>
                 </div>
-                <div class="replay-note">Each finished game is replayed in a hidden frame. When a player's position jumps within 1 to 3 of their turns and they cast 2 or more scrolls, those casts (with their choices) are saved as a combo. Score = gain x trust, where trust comes from the player's ladder rank and games played. Bots never count. A combo is only worth teaching once it shows up more than once.</div>
+                <div class="replay-note">Each finished game is replayed in a hidden frame. When a player's position jumps within 1 to 3 of their turns and they cast 2 or more scrolls, those casts (with their choices) are saved as a combo. Score = gain x trust, where trust comes from the player's ladder rank and games played. Bots never count. Bots learn a combo once it shows up in 2 different games (Auto). On teaches it now, Off never.</div>
                 ${rows.map(comboRowHtml).join('') || '<div class="replay-empty">No combos found yet. Press "Mine new games".</div>'}`;
             return;
         }
@@ -797,6 +803,13 @@
                 return;
             }
             if (t.classList.contains('replay-run-check')) { runChecks([+t.dataset.id]); return; }
+            if (t.classList.contains('replay-combo-set')) {
+                t.disabled = true;
+                const { error } = await supabase.rpc('hermit_set_combo_state', { p_signature: t.dataset.sig, p_state: t.dataset.state });
+                if (error) { alert('Could not change this combo: ' + error.message); t.disabled = false; return; }
+                renderList();
+                return;
+            }
             if (t.classList.contains('replay-mine') || t.classList.contains('replay-mine-all')) {
                 if (mining) return;
                 if (t.classList.contains('replay-mine-all')) {

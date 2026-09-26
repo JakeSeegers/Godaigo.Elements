@@ -562,3 +562,6 @@
 .replay-tag-win { opacity: 1; color: var(--pp-gold, #d4a017); }
 .replay-combo-sig { font-size: 14px; line-height: 1.4; }
 .replay-combo-sig b { color: var(--pp-maroon); }
+.replay-combo-state { display: flex; gap: 2px; }
+.replay-combo-state button { padding: 2px 6px; font-size: 12px; }
+.replay-combo-state button.active { outline: 2px solid var(--pp-maroon); }

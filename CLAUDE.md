@@ -181,6 +181,9 @@ Order matters — later scripts depend on earlier ones.
                              reveals; findCombos() keeps windows of 1-3 own turns with >= 2 casts and a gain
                              >= max(300, 75th percentile) -> save_combo_candidates (server sets trust from ladder
                              rank + games played, bots 0) -> hermit_combo_summary (sql/combo-miner.sql).
+                             Per combo Auto / On / Off (hermit_set_combo_state, sql/combo-teach.sql): Auto = bots
+                             use it once seen in 2 different games; bots load get_bot_combos() (public, no player
+                             data) in bot.js (Phase 4, see bot.js row).
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js). Server-backed (sql/cosmetics.sql).
@@ -205,7 +208,12 @@ Order matters — later scripts depend on earlier ones.
                              5 — determinized root-level UCT, WEIGHTS.mctsEnabled) and signalBrainMode()
                              (emoji over the acting pawn, 🧠 search / 🎲 MCTS, when a bot's brain mode
                              switches, broadcast in multiplayer via broadcastGameAction('emoji', ...); OFF for now:
-                             BRAIN_SIGNAL_ENABLED = false in bot.js, owner 2026-09-25)
+                             BRAIN_SIGNAL_ENABLED = false in bot.js, owner 2026-09-25). Combos (Phase 4): loads
+                             get_bot_combos() at start (cache localStorage godaigo_bot_combos, setCombos()); a bot
+                             holding a combo's first two cast scrolls follows it (mem.combo, step kept across
+                             turns; comboStep / comboChoiceMatch bonus on the next cast in greedy + search root;
+                             makePlan builds the next combo scroll's pattern; dropped when too slow or the next
+                             scroll is gone; 3 own turns rest before the same combo again).
 24b. bot-memory.js         ← window.BotMemory — episodic "what happened after decisions like this" memory.
                              Captures a fingerprint+action+outcome row whenever a bot decision's immediate
                              evaluateSnapshot() swing is extreme; retrieveSimilar() feeds mctsPick()'s root
@@ -295,6 +303,7 @@ Full list: see `js/INDEX.md § Window Globals`.
 | `matches` | match-recorder.js | One row per online game: players snapshot, deck seed, settings, winner, status (playing/finished/abandoned), move_count, `keep`. Written ONLY via RPCs `start_match` / `finish_match` (room host or hermit). Read ONLY via RPCs (sql/replay-access.sql): `list_my_matches`, `list_public_matches`, `get_match_replay` (finished + (player of it OR `is_public` OR hermit)), `set_match_public` (players of it). Posting sets `keep`. Finished matches older than 30 days are deleted unless `keep`. `game_room.match_id` points at the live one. |
 | `matches` (check) | replay-viewer.js | `check_status` / `check_detail` / `checked_at`: replay verification result. Hermit-only RPCs `list_matches_for_check`, `get_match_fingerprints`, `save_match_check` (sql/match-check.sql). |
 | `combo_candidates` | replay-viewer.js (miner) | Combo candidates mined from finished matches (seat, user, rank, games, trust, gain, turns, signature, steps). RLS on, no client policies; hermit-only RPCs `list_matches_for_mining`, `save_combo_candidates`, `hermit_combo_summary`, `hermit_reset_mining` (sql/combo-miner.sql). `matches.mined_at` marks mined games; `start_match` now saves each human's ladder `rank` in `matches.players`. |
+| `combo_flags` | replay-viewer.js (Combos tab) | Hermit override per combo signature: `on` / `off` (no row = auto). RLS on, no client policies; `hermit_set_combo_state`, public `get_bot_combos()` (taught combos: signature, times, score) (sql/combo-teach.sql). |
 | `match_moves` | match-recorder.js | Every broadcast message of a match in order (`seq` assigned by the server), with event name, sender seat, payload. Written ONLY via `append_match_moves` (room host or hermit, batches of 200 max, 32 KB per payload). |
 | `user_profiles` | gamification.js | XP, gold, level, stats. Clients may only UPDATE `stats`, `updated_at`, `skip_intro`; gold/XP/level/badges change ONLY through server functions: `claim_daily_login()`, `claim_game_win(room)`, `claim_training_reward(amount)` (60/claim, 300/day), `spend_gold(amount)`. Name colours: `cosmetics_owned` / `name_color` (public read, changed only by `buy_cosmetic(id)` / `equip_cosmetic(id or null)`, prices in `cosmetic_price()`, sql/cosmetics.sql; the leaderboard colours names from `name_color`). Pawn items: `pawn_rim` / `pawn_base` / `pawn_trail` (public read, `equip_pawn(slot, id)`, sql/pawn-cosmetics.sql). `award_gold` / `update_user_xp` / `award_badge` are server-internal (not client-callable). See `sql/secure-rewards.sql`. |
 | `user_activities` | gamification.js | Activity log for rewards. Clients may only insert `scroll_cast` / `element_activated` with no rewards; everything else is written by the server functions above. Inserts fire `check_badges_trigger` (badges). |

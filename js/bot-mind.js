@@ -208,6 +208,15 @@
             const text = parts.map(x => x.walk ? (x.n === 1 ? 'Walk 1 step' : `Walk ${x.n} steps`) : x.text);
             html += `<div class="bm-row"><span class="bm-k">Sees ahead</span><span class="bm-v bm-line">${text.map(esc).join(' <span class="bm-arrow">&gt;</span> ')}</span></div>`;
         }
+        if (r.combo) {
+            // A combo learned from players' games (bot.js, Phase 4): which step is next.
+            const name = id => window.SCROLL_DEFINITIONS?.[id]?.name || id;
+            const steps = r.combo.signature.split(' / ').map(t => t.split(' > ').map(tok => {
+                const m = /^([A-Z]+_SCROLL_\d+)(?:\[(.*)\])?$/.exec(tok.trim());
+                return m ? name(m[1]) + (m[2] ? ` (${m[2]})` : '') : tok;
+            }).join(' &gt; ')).join(' / ');
+            html += `<div class="bm-row"><span class="bm-k">Combo</span><span class="bm-v">${steps}<br><span class="bm-help">Step ${r.combo.step + 1} of ${r.combo.total}: ${esc(name(r.combo.next))}</span></span></div>`;
+        }
         if (r.stuck && (r.stuck.unproductive >= 2 || r.stuck.repeat)) {
             html += `<div class="bm-row"><span class="bm-k">Stuck</span><span class="bm-v">${r.stuck.unproductive} turns without progress${r.stuck.repeat ? ', repeating moves' : ''}</span></div>`;
         }

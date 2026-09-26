@@ -310,6 +310,10 @@
         evalHandOverflow:   40,   // per scroll over the hand limit (2): it will have to be
                                   // discarded, so drawing into a full hand is not free value
                                   // (without this, bots re-cast Scholar's Insight every turn)
+        comboStep:          60,   // cast that is the next step of the combo the bot is following
+                                  // (Phase 4: combos mined from players' games, sql/combo-teach.sql)
+        comboChoiceMatch:   20,   // + when that cast's choice matches the combo (e.g. River on a hidden tile)
+        comboExtraTurns:     1,   // own turns allowed beyond the combo's length before it is dropped
         castChoiceNeed:     20,   // greedy tie-break between a scroll's choices (River / Stomp):
                                   // x scroll need of the element the choice would draw
         evalAp:              2,   // per remaining AP (own turn only)
@@ -829,6 +833,118 @@
         return WEIGHTS.castChoiceNeed * (need[el] || 0);
     }
 
+
+    // ----------------------------------------------------------------
+    // Combos learned from players (bot combo plan, Phase 4).
+    // The replay miner (js/replay-viewer.js) finds cast sequences that paid
+    // off in players' recorded games; get_bot_combos() (sql/combo-teach.sql)
+    // returns the ones seen at least twice in different games, or switched
+    // on by the hermit. A bot that holds the scrolls for a combo's first two
+    // casts takes it on as a plan (mem.combo) and remembers the step across
+    // turns. The next cast gets comboStep (+ comboChoiceMatch when its choice
+    // matches), in greedy scoring and at the search root. It is a nudge, not
+    // a script: the look-ahead can still prefer something better. The combo
+    // is dropped when it runs long or the next scroll is gone.
+    // Signature format: "WATER_SCROLL_4[hidden tile] > reveal / EARTH_SCROLL_4"
+    // (turns separated by " / ", steps by " > ").
+    // ----------------------------------------------------------------
+    let COMBOS = [];
+    function parseCombo(signature, score) {
+        const turns = String(signature).split(' / ');
+        const casts = [];
+        turns.forEach((turn, t) => {
+            for (const tok of turn.split(' > ')) {
+                const m = /^([A-Z]+_SCROLL_\d+)(?:\[(.*)\])?$/.exec(tok.trim());
+                if (m) casts.push({ scroll: m[1], tag: m[2] || null, turn: t });
+            }
+        });
+        return { signature, score: score || 0, turns: turns.length, casts };
+    }
+    function setCombos(rows) {
+        COMBOS = (rows || []).map(r => parseCombo(r.signature, r.score)).filter(c => c.casts.length >= 2);
+        log(`Combos loaded: ${COMBOS.length}`);
+    }
+    try { setCombos(JSON.parse(localStorage.getItem('godaigo_bot_combos') || '[]')); } catch (e) {}
+    (async function loadCombos() {
+        try {
+            if (typeof supabase === 'undefined' || !supabase?.rpc) return;
+            const { data, error } = await supabase.rpc('get_bot_combos');
+            if (error || !Array.isArray(data)) return;
+            setCombos(data);
+            try { localStorage.setItem('godaigo_bot_combos', JSON.stringify(data)); } catch (e) {}
+        } catch (e) { /* offline: keep the cached list */ }
+    })();
+
+    function heldScrolls(snap, self) {
+        return new Set([...(self.hand || []), ...(self.active || []), ...(snap.commonArea || [])]);
+    }
+
+    // Start, keep or drop the combo for this bot.
+    function updateCombo(snap, idx) {
+        const m = mem(idx);
+        const self = snap.players[idx];
+        if (!self || !self.hand) return;
+        const held = heldScrolls(snap, self);
+        if (m.combo) {
+            const c = m.combo;
+            const next = c.casts[c.next];
+            const late = (m.ownTurns || 0) - c.startTurn > c.turns + (WEIGHTS.comboExtraTurns | 0);
+            if (!next || late || !held.has(next.scroll)) {
+                log(`Combo dropped (${!next ? 'done' : late ? 'too slow' : 'next scroll gone'}): ${c.signature}`);
+                restCombo(m, c.signature);
+                m.combo = null;
+            }
+            return;
+        }
+        for (const combo of COMBOS) {
+            if ((m.comboRest?.[combo.signature] || 0) > (m.ownTurns || 0)) continue; // just finished or dropped
+            if (held.has(combo.casts[0].scroll) && held.has(combo.casts[1].scroll)) {
+                m.combo = { ...combo, next: 0, startTurn: m.ownTurns || 0 };
+                log(`Combo started: ${combo.signature}`);
+                return;
+            }
+        }
+    }
+
+    function comboTagMatches(a, tag, snap) {
+        if (!tag) return true;
+        if (!a.choice) return false;
+        if (tag === 'hidden tile' || tag === 'revealed tile') {
+            const t = snap.tiles.find(x => Number(x.id) === Number(a.choice.tileId));
+            return !!t && (tag === 'hidden tile' ? !t.revealed : t.revealed);
+        }
+        return true; // flight / swap / move tile: any choice of that scroll
+    }
+
+    function comboBonus(a, snap) {
+        if (a.type !== 'cast') return 0;
+        const c = mem(snap.turn.activePlayerIndex).combo;
+        const next = c?.casts[c.next];
+        if (!next || next.scroll !== a.scroll) return 0;
+        return WEIGHTS.comboStep + (comboTagMatches(a, next.tag, snap) ? WEIGHTS.comboChoiceMatch : 0);
+    }
+
+    function advanceCombo(idx, action) {
+        const m = mem(idx);
+        const c = m.combo;
+        if (!c || c.casts[c.next]?.scroll !== action.scroll) return;
+        c.next++;
+        if (c.next >= c.casts.length) {
+            _combosCompleted++;
+            log(`Combo completed: ${c.signature}`);
+            restCombo(m, c.signature);
+            m.combo = null;
+        }
+    }
+    let _combosCompleted = 0;
+    // A finished or dropped combo waits a few own turns before it can start
+    // again (otherwise a bot still holding both scrolls restarts it at once).
+    const COMBO_REST_TURNS = 3;
+    function restCombo(m, signature) {
+        m.comboRest = m.comboRest || {};
+        m.comboRest[signature] = (m.ownTurns || 0) + COMBO_REST_TURNS;
+    }
+
     // ----------------------------------------------------------------
     // scoreAction — the Stage-1 utility function. Tune WEIGHTS, not this.
     // ----------------------------------------------------------------
@@ -859,6 +975,7 @@
                 const def = window.SCROLL_DEFINITIONS?.[a.scroll];
                 let s = WEIGHTS.castBase + WEIGHTS.castLevel * (def?.level || 0);
                 if (a.choice) s += castChoiceBonus(a, snap);
+                s += comboBonus(a, snap);
                 if (mem(snap.turn.activePlayerIndex).noCreditScrolls.has(a.scroll)) {
                     s += WEIGHTS.castNoCredit; // effect cancelled before — hard veto, don't recast
                 } else if (el && ELEMENTS.includes(el)) {
@@ -1155,7 +1272,16 @@
     function creditableSources(snap, self, noCreditScrolls) {
         const sources = new Set([...self.hand, ...self.active, ...(snap.commonArea || [])]);
         const out = [];
+        // The combo being followed: its next scroll is worth building even
+        // without win credit (that is the point of a combo).
+        const combo = mem(snap.turn.activePlayerIndex).combo;
+        const comboNext = combo?.casts[combo.next]?.scroll;
+        if (comboNext && sources.has(comboNext)) {
+            const def = window.SCROLL_DEFINITIONS?.[comboNext];
+            if (def && def.level !== 1 && Array.isArray(def.patterns)) out.push({ name: comboNext, def, credit: 1 });
+        }
         for (const name of sources) {
+            if (name === comboNext && out.length) continue;
             if (noCreditScrolls.has(name)) continue; // cast before, effect cancelled — don't replan it
             const def = window.SCROLL_DEFINITIONS?.[name];
             if (!def || def.level === 1 || !Array.isArray(def.patterns)) continue;
@@ -2030,6 +2156,7 @@
             if (c.a.type === 'move') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.moveRevisitPenalty);
             if (c.a.type === 'teleport') v += revisitPenalty(mem(meIdx).recentPositions, c.a, WEIGHTS.teleportRevisitPenalty);
             if (c.a.type === 'breakStone' || c.a.type === 'placeStone') v += unblockBonus(c.a, snap0, uctx);
+            if (c.a.type === 'cast') v += comboBonus(c.a, snap0);
             if (c.a.type === 'placeStone') {
                 v += tacticalPlaceBonus(c.a, snap0, tac);
                 // Tactical placements have no pattern value the eval could
@@ -2582,6 +2709,8 @@
                 cells: m.plan.cells.map(c => ({ x: c.x, y: c.y, type: c.type })) } : null,
             line: th.line ? th.line.map(a => ({ action: a, reason: explainAction(a, th.snap, null), target: actionTarget(a, th.snap) })) : null,
             stuck: { unproductive: m.unproductiveStreak, repeat: m.turnRepeatStreak },
+            combo: m.combo ? { signature: m.combo.signature, step: m.combo.next, total: m.combo.casts.length,
+                next: m.combo.casts[m.combo.next]?.scroll || null } : null,
             searchDepth: th.depth || (WEIGHTS.searchDepth | 0),
         };
     }
@@ -2638,6 +2767,7 @@
         // is keyed by player index — see mem() above.
         const idx = snap.turn.activePlayerIndex;
         const m = mem(idx);
+        updateCombo(snap, idx);
 
         // The pattern plan takes priority: it's the only way multi-hex
         // patterns ever complete under the adjacent-only placement rule
@@ -2658,6 +2788,7 @@
                 if (planAction.type === 'cast') {
                     trackCastCredit(idx, snap, planAction.scroll);
                     _castsApplied++;
+                    advanceCombo(idx, planAction);
                     m.plan = null; // plan fulfilled
                 }
                 if (planAction.type === 'move') recordVisited(idx, planAction.x, planAction.y);
@@ -2856,7 +2987,7 @@
             if (self) recordVisited(idx, self.x, self.y);
             recordVisited(idx, action.x, action.y);
         }
-        if (action.type === 'cast') { trackCastCredit(idx, snap, action.scroll); _castsApplied++; }
+        if (action.type === 'cast') { trackCastCredit(idx, snap, action.scroll); _castsApplied++; advanceCombo(idx, action); }
         return action;
     }
 
@@ -2970,6 +3101,7 @@
         _turnRunning = true;
         const startingPlayer = activePlayerIndex;
         const m = mem(startingPlayer);
+        m.ownTurns = (m.ownTurns || 0) + 1; // combo timing (Phase 4)
         const wasForced = m.turnRepeatStreak >= 1; // circuit breaker armed for this turn
         const turnMoves = [];
         // A cast is unambiguous progress. A placeStone is only progress if the
@@ -3141,6 +3273,9 @@
         handValue,            // value of a player's held scrolls + per-element cover
         scrollPickScore,      // value of gaining one scroll now (bot-effects.js picks)
         rangedTargets,        // board-wide placement targets while a range buff is live
+        setCombos,            // [{signature, score}] combos to follow (normally from get_bot_combos)
+        combos: () => COMBOS,
+        combosCompleted: () => _combosCompleted,
         resetMemory,          // wipe plan/history/blacklists (arena: call per game)
         castsApplied: () => _castsApplied, // monotonic cast counter — arena's no-cast stall cap reads deltas
         speedScale: 1,        // scales all between-action delays (arena sets ~0.1)
