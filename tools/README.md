@@ -1,3 +1,18 @@
+## Site build (Cloudflare Pages)
+
+`build-site.js` copies only the files the game loads into `dist/` (index.html,
+changelog.json, the logo SVG, js, css, images, assets, sounds, video,
+LoreIntroClips, joytone; no .md files). Docs, planning, SQL and
+repomix-output.txt stay out of the public site.
+
+    node tools/build-site.js     # -> dist/ (git-ignored)
+
+Cloudflare Pages settings: build command `node tools/build-site.js`, output
+directory `dist`. If the game starts loading a file from a new top-level
+folder, add it to `INCLUDE` in the script.
+
+---
+
 ## Splash video: re-bake the transparent version
 
 `key-splash-video.py` bakes the boot splash's chroma key into

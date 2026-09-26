@@ -118,6 +118,12 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (4): Cloudflare Pages prep.** tools/build-site.js copies only game files to
+  dist/ (git-ignored); tested: dist loads intro, lobby, bot game, fire effect with the same 404s as
+  the full repo (only the old /midi-manifest.json). Owner still has to: create the Pages project
+  (Connect to Git, branch fixes/all-consolidated, build `node tools/build-site.js`, output
+  `dist`), add the custom domain, add the new URL to Supabase Auth (Site URL + Redirect URLs)
+  and the account-recovery SITE_URLS secret, then decide on the old github.io address / private repo.
 - **2026-09-26 (3): Fire animation smoother.** js/effects-system.js: frames pre-decoded
   (createImageBitmap), loop draws only when a frame index or position changes (anims run at
   13-18 fps, rAF at 60-144 Hz), clears only last frame's rects instead of the whole screen,
