@@ -188,20 +188,61 @@
         return bd < HEX_NEAR ? best : null;
     }
 
-    // Dijkstra from (sx,sy) to (tx,ty). Step cost = canPlayerMoveToHex(dest).cost.
-    // Returns [{x, y, cost}] (excluding start) or null when unreachable.
-    function findPath(sx, sy, tx, ty) {
+    // Neighbour lists for the current grid (rebuilt when hexGrid() changes).
+    let _adj = null, _adjKey = null;
+    function adjacency() {
         const grid = hexGrid();
-        const start = nearestHex(sx, sy), end = nearestHex(tx, ty);
-        if (!start || !end) return null;
-        if (start.key === end.key) return [];
+        if (_adj && _adjKey === _gridKey) return _adj;
+        _adj = new Map();
+        for (const h of grid) {
+            const list = [];
+            for (const nb of grid) {
+                const d = Math.hypot(nb.x - h.x, nb.y - h.y);
+                if (d > HEX_NEAR && d < HEX_STEP) list.push(nb); // grid order kept
+            }
+            _adj.set(h.key, list);
+        }
+        _adjKey = _gridKey;
+        return _adj;
+    }
 
+    // Everything canPlayerMoveToHex() reads: grid, whose turn, Mudslide,
+    // stones (place + type) and pawns. While this is unchanged, step costs
+    // and the path trees below stay valid.
+    function moveStateKey() {
+        const mud = spellSystem?.scrollEffects?.activeBuffs?.mudslide;
+        let k = _gridKey + '|' + activePlayerIndex + '|' + (mud ? mud.playerIndex : '-') + '|';
+        for (const st of placedStones) k += Math.round(st.x) + ',' + Math.round(st.y) + st.type[0] + ';';
+        k += '|';
+        if (Array.isArray(playerPositions))
+            for (const p of playerPositions) k += p ? Math.round(p.x) + ',' + Math.round(p.y) + ';' : '_;';
+        return k;
+    }
+
+    // Caches for findPath: step cost per hex, and one full Dijkstra tree per
+    // start hex. Bots ask for many paths from the same spot per decision
+    // (every tile, shrine and goal), and each used to rescan the whole grid
+    // for neighbours and re-run canPlayerMoveToHex on every step. That was
+    // the biggest part of a bot's think time (host lag in bot games).
+    let _pathKey = null, _costs = new Map(), _trees = new Map();
+    function stepCost(h) {
+        let c = _costs.get(h.key);
+        if (!c) {
+            const mv = canPlayerMoveToHex(h.x, h.y, false);
+            c = { canMove: mv.canMove, cost: mv.cost ?? 1 };
+            _costs.set(h.key, c);
+        }
+        return c;
+    }
+    function pathTree(start) {
+        let tree = _trees.get(start.key);
+        if (tree) return tree;
+        const adj = adjacency();
         const dist = { [start.key]: 0 };
         const prev = {};
         const done = new Set();
-        // board is small (≤ a few hundred hexes) — array scan beats a heap here
+        // board is small (a few hundred hexes at most): array scan beats a heap here
         const frontier = [start];
-
         while (frontier.length) {
             let bi = 0;
             for (let i = 1; i < frontier.length; i++)
@@ -209,15 +250,11 @@
             const cur = frontier.splice(bi, 1)[0];
             if (done.has(cur.key)) continue;
             done.add(cur.key);
-            if (cur.key === end.key) break;
-
-            for (const nb of grid) {
+            for (const nb of adj.get(cur.key) || []) {
                 if (done.has(nb.key)) continue;
-                const d = Math.hypot(nb.x - cur.x, nb.y - cur.y);
-                if (d <= HEX_NEAR || d >= HEX_STEP) continue; // not adjacent
-                const mv = canPlayerMoveToHex(nb.x, nb.y, false);
+                const mv = stepCost(nb);
                 if (!mv.canMove) continue;
-                const nd = dist[cur.key] + (mv.cost ?? 1);
+                const nd = dist[cur.key] + mv.cost;
                 if (nd < (dist[nb.key] ?? Infinity)) {
                     dist[nb.key] = nd;
                     prev[nb.key] = cur;
@@ -225,13 +262,29 @@
                 }
             }
         }
+        tree = { dist, prev };
+        if (_trees.size > 64) _trees.clear();
+        _trees.set(start.key, tree);
+        return tree;
+    }
+
+    // Dijkstra from (sx,sy) to (tx,ty). Step cost = canPlayerMoveToHex(dest).cost.
+    // Returns [{x, y, cost}] (excluding start) or null when unreachable.
+    // Same paths as the old per-call search (same visit order), just cached.
+    function findPath(sx, sy, tx, ty) {
+        const start = nearestHex(sx, sy), end = nearestHex(tx, ty);
+        if (!start || !end) return null;
+        if (start.key === end.key) return [];
+
+        const key = moveStateKey();
+        if (key !== _pathKey) { _pathKey = key; _costs = new Map(); _trees = new Map(); }
+        const { dist, prev } = pathTree(start);
 
         if (!(end.key in dist)) return null;
         const path = [];
         let cur = end;
         while (cur.key !== start.key) {
-            const mv = canPlayerMoveToHex(cur.x, cur.y, false);
-            path.unshift({ x: cur.x, y: cur.y, cost: mv.cost ?? 1 });
+            path.unshift({ x: cur.x, y: cur.y, cost: stepCost(cur).cost });
             cur = prev[cur.key];
         }
         return path;

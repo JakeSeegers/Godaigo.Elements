@@ -2,6 +2,15 @@
   "_readme": "Player-facing release notes, newest first, shown by the Change Log button in the lobby. Rules (full text: HOUSE RULES #2 in CLAUDE.md): at most ONE entry per day, id = date. If today's entry exists, rewrite it as one summary of the whole day; do not add a second entry. At most 5 lines per entry. Only list changes players will notice; group small fixes into one 'Small fixes and polish' line. Simple English, no file names, no em dashes.",
   "entries": [
     {
+      "id": "2026-09-26",
+      "date": "2026-09-26",
+      "title": "Smoother bot games",
+      "changes": [
+        "Bots now think about twice as fast, so the game freezes less while they take their turns.",
+        "Fixed a slowdown that built up over long games when scroll cards were opened again and again."
+      ]
+    },
+    {
       "id": "2026-09-25",
       "date": "2026-09-25",
       "title": "Quick Play, pawn decorations, new name styles",

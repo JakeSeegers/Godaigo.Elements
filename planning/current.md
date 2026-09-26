@@ -118,6 +118,18 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26: Lag fixes (bots think about 2x faster, a timer leak).** Measured a 4-bot game
+  headless (CPU profile + timer counts). (1) js/game-core.js createPatternVisual(): every scroll
+  card's pattern preview started a 2.5 s setInterval that was never cleared, one per panel
+  re-render (53 after ~30 s), keeping old cards alive; it now clears itself once the card is off
+  the page for 2 ticks. (2) js/bot-state.js findPath(): neighbour lists cached per grid
+  (adjacency()), step costs + one full Dijkstra tree per start hex cached while moveStateKey()
+  (grid, active player, Mudslide, stones, pawns) is unchanged; same visit order, so identical
+  paths (524 random old-vs-new checks, 0 differences). (3) js/bot-sim.js grid(): second cache by
+  tile layout (search clones the snapshot every step, so the WeakMap missed). 3-player seeded
+  arena games 1-3: identical results, 304 s -> 138 s. Timers were cheap (all under ~3 ms/s).
+  Left: searchPick look-ahead still blocks ~0.5 s per decision on the host (idea: time budget or
+  yield between beam levels); JSON clone in simulate.
 - **2026-09-26: Combo plan Phase 4b: puzzle training.** sql/combo-puzzles.sql (applied):
   `hermit_list_puzzles` = human combo candidates with a positive gain. replay-viewer.js:
   `runPuzzle()` replays the match in a hidden frame up to the combo's start turn for that

@@ -337,9 +337,19 @@
     // snapshot object). Entries: {x, y, key, tileIds:[…]}.
     // ----------------------------------------------------------------
     const _gridCache = new WeakMap();
+    // Second level, by tile layout: simulate() clones the snapshot on every
+    // step, so the per-object cache alone missed on nearly every search
+    // node and rebuilt the same grid again and again (a big part of a bot's
+    // think time). Entries are never mutated by callers, so sharing is safe.
+    const _gridByLayout = new Map();
     function grid(snap) {
         let g = _gridCache.get(snap);
         if (g) return g;
+        let sig = '';
+        for (const t of snap.tiles)
+            sig += t.id + '@' + Math.round(t.x) + ',' + Math.round(t.y) + (t.revealed ? 'r' : 'h') + (t.isPlayerTile ? 'p' : '') + '|';
+        g = _gridByLayout.get(sig);
+        if (g) { _gridCache.set(snap, g); return g; }
         const byKey = new Map();
         const addHex = (t, q, r, map) => {
             const p = hexToPixel(q, r, TILE);
@@ -364,6 +374,8 @@
         }
         g = [...byKey.values()];
         _gridCache.set(snap, g);
+        if (_gridByLayout.size > 64) _gridByLayout.clear();
+        _gridByLayout.set(sig, g);
         return g;
     }
 

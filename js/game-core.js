@@ -1949,7 +1949,16 @@
 
                 // Cycle through patterns
                 let currentPatternIdx = 0;
+                let detachedTicks = 0;
                 const cycleInterval = setInterval(() => {
+                    // Panels re-render often and drop old cards. Stop once this
+                    // card has been off the page for two ticks, or the timers
+                    // pile up (one per render) and keep old cards in memory.
+                    if (!container.isConnected) {
+                        if (++detachedTicks >= 2) clearInterval(cycleInterval);
+                        return;
+                    }
+                    detachedTicks = 0;
                     // Fade out current
                     patternGroups[currentPatternIdx].style.opacity = '0';
                     
