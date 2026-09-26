@@ -3056,6 +3056,14 @@
     async function waitForQuiescence() {
         const deadline = Date.now() + 25000;
         while (Date.now() < deadline) {
+            // Let a playing effect (fire burning stones, ~1.7 s) finish first:
+            // the bot's next decision runs on the main thread and can block
+            // for a moment, which froze the animation mid-way. Normal-speed
+            // play only; fast arena training does not wait.
+            if ((window.BotSystem?.speedScale ?? 1) >= 0.5 && window.effectsSystem?.isPlaying?.()) {
+                await sleep(100);
+                continue;
+            }
             // Cascade prompt (scroll drawn onto a full hand): choose like a
             // player would — keep the new scroll usable if possible
             const cascade = document.getElementById('cascade-popup');
