@@ -71,8 +71,8 @@
     function openForgot() {
         const prefill = document.getElementById('auth-username')?.value.trim() || '';
         const o = modal('Forgot password', `
-            <p class="acct-text">Enter your username. If your account has a confirmed recovery email, we will send it a link to choose a new password.</p>
-            <input type="text" class="acct-input" id="acct-forgot-user" placeholder="Username" value="${esc(prefill)}" maxlength="40">
+            <p class="acct-text">Enter your username or your recovery email. If the account has a confirmed recovery email, we will send it a link to choose a new password.</p>
+            <input type="text" class="acct-input" id="acct-forgot-user" placeholder="Username or email" value="${esc(prefill)}" maxlength="254">
             <div class="acct-status" id="acct-forgot-status"></div>
             <div class="acct-actions">
                 <button class="acct-btn acct-btn-secondary" data-close>Cancel</button>
@@ -83,7 +83,7 @@
         btn.onclick = async () => {
             const username = o.querySelector('#acct-forgot-user').value.trim();
             const status = o.querySelector('#acct-forgot-status');
-            if (!username) { status.textContent = 'Please enter your username.'; return; }
+            if (!username) { status.textContent = 'Please enter your username or email.'; return; }
             btn.disabled = true;
             status.textContent = 'Sending...';
             await call('request_reset', { username, redirect: gameUrl() });

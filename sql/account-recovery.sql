@@ -78,3 +78,23 @@ as $$
 $$;
 revoke all on function public.remove_my_recovery_email() from public, anon;
 grant execute on function public.remove_my_recovery_email() to authenticated;
+
+-- Edge function only: accounts whose CONFIRMED recovery email is p_email
+-- ("Forgot password?" also accepts the email instead of the username; one
+-- reset link is sent per account, at most 3). Added 2026-09-26.
+create or replace function public.recovery_lookup_by_email(p_email text)
+returns table (user_id uuid, login_email text, email text)
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  select u.id, u.email::text, r.email
+  from public.account_recovery r
+  join auth.users u on u.id = r.user_id
+  where r.verified and lower(r.email) = lower(p_email)
+  order by u.created_at
+  limit 3;
+$$;
+revoke all on function public.recovery_lookup_by_email(text) from public, anon, authenticated;
+grant execute on function public.recovery_lookup_by_email(text) to service_role;

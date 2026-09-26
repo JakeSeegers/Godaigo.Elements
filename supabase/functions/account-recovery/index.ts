@@ -7,7 +7,8 @@
 //   set_email      { email, redirect }  signed-in: save an email, send a confirm link
 //   verify         { token }            confirm link clicked: mark the email verified
 //   request_reset  { username, redirect } send a password reset link to the
-//                                        account's VERIFIED recovery email
+//                                        account's VERIFIED recovery email; `username`
+//                                        may also be that email (one link per account, max 3)
 //
 // Rate limits (all emails count, confirm + reset):
 //   2 per account per hour, 3 per address per day, 90 for the whole game per
@@ -180,38 +181,50 @@ async function requestReset(body: any) {
   // Same answer whether or not the account or email exists, so this can't
   // be used to find out who has a recovery email.
   const generic = json({ ok: true });
-  const username = String(body.username || "").trim();
-  if (!/^[a-zA-Z0-9_\-.]{1,40}$/.test(username)) return generic;
+  const input = String(body.username || "").trim();
 
-  const { data: rows, error } = await admin.rpc("recovery_lookup", {
-    p_login_email: username.toLowerCase() + LOGIN_EMAIL_DOMAIN,
-  });
-  if (error) throw error;
-  const row = rows?.[0];
-  if (!row?.user_id || !row.email || !row.verified) return generic;
-  if (!(await withinLimits(row.user_id, row.email))) return generic;
+  // Players type either their username or their recovery email.
+  // [{ user_id, login_email, email }] with a CONFIRMED recovery email only.
+  let targets: { user_id: string; login_email: string; email: string }[] = [];
+  if (input.includes("@")) {
+    if (input.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) return generic;
+    const { data, error } = await admin.rpc("recovery_lookup_by_email", { p_email: input.toLowerCase() });
+    if (error) throw error;
+    targets = data || [];
+  } else {
+    if (!/^[a-zA-Z0-9_\-.]{1,40}$/.test(input)) return generic;
+    const loginEmail = input.toLowerCase() + LOGIN_EMAIL_DOMAIN;
+    const { data: rows, error } = await admin.rpc("recovery_lookup", { p_login_email: loginEmail });
+    if (error) throw error;
+    const row = rows?.[0];
+    if (row?.user_id && row.email && row.verified) targets = [{ user_id: row.user_id, login_email: loginEmail, email: row.email }];
+  }
 
-  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
-    type: "recovery",
-    email: username.toLowerCase() + LOGIN_EMAIL_DOMAIN,
-    options: { redirectTo: safeRedirect(body.redirect) },
-  });
-  if (linkErr) throw linkErr;
-  const link = linkData.properties.action_link;
+  for (const t of targets.slice(0, 3)) {
+    if (!(await withinLimits(t.user_id, t.email))) continue;
+    const username = t.login_email.replace(LOGIN_EMAIL_DOMAIN, "");
+    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email: t.login_email,
+      options: { redirectTo: safeRedirect(body.redirect) },
+    });
+    if (linkErr) throw linkErr;
+    const link = linkData.properties.action_link;
 
-  await sendEmail(
-    row.email,
-    "Reset your Godaigo password",
-    `Someone asked to reset the password for the Godaigo account "${username}".\n\nChoose a new password here:\n${link}\n\nIf this was not you, ignore this email. Your password stays the same.`,
-    emailHtml(
-      "Reset your password",
-      `Someone asked to reset the password for the Godaigo account <b>${username}</b>. Click below to choose a new one.`,
-      "Choose a new password",
-      link,
-      "If this was not you, ignore this email. Your password stays the same.",
-    ),
-  );
-  await admin.from("recovery_email_log").insert({ user_id: row.user_id, email: row.email, kind: "reset" });
+    await sendEmail(
+      t.email,
+      "Reset your Godaigo password",
+      `Someone asked to reset the password for the Godaigo account "${username}".\n\nChoose a new password here:\n${link}\n\nIf this was not you, ignore this email. Your password stays the same.`,
+      emailHtml(
+        "Reset your password",
+        `Someone asked to reset the password for the Godaigo account <b>${username}</b>. Click below to choose a new one.`,
+        "Choose a new password",
+        link,
+        "If this was not you, ignore this email. Your password stays the same.",
+      ),
+    );
+    await admin.from("recovery_email_log").insert({ user_id: t.user_id, email: t.email, kind: "reset" });
+  }
   return generic;
 }
 

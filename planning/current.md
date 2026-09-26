@@ -133,6 +133,10 @@ reach/beat it from here.
   so the SITE_URLS secret is not needed. Owner still to do: Supabase Auth URL Configuration
   (Site URL + Redirect URLs), test sign-in + reset email on the new domain, then the old-address
   "moved" notice and (later) private repo.
+  Reset fix: "Forgot password?" silently sent nothing when the recovery EMAIL was typed (the
+  username check rejects '@'). request_reset now accepts username or email (new service-only RPC
+  recovery_lookup_by_email in sql/account-recovery.sql, applied; one link per account, max 3),
+  edge function v4. "Link not valid" = a confirm link opened a second time (single use).
 - **2026-09-26 (3): Fire animation smoother.** js/effects-system.js: frames pre-decoded
   (createImageBitmap), loop draws only when a frame index or position changes (anims run at
   13-18 fps, rAF at 60-144 Hz), clears only last frame's rects instead of the whole screen,
