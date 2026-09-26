@@ -4837,6 +4837,37 @@ document.getElementById('undo-move').onclick = function() {
             if (trainingPopupEl) trainingPopupEl.style.display = 'none';
         }
 
+        // After a Train Bot run the training board stays on screen (so the
+        // player can read the result), but nothing on it leads back to the
+        // lobby. This button does: same exit as the replay viewer (reload,
+        // skipping the logo / lore intro once).
+        function showLeaveTrainingButton() {
+            if (!document.getElementById('game-layout')?.classList.contains('active')) return;
+            let btn = document.getElementById('leave-training-btn');
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.id = 'leave-training-btn';
+                btn.textContent = 'Leave training area';
+                btn.title = 'Go back to the lobby';
+                btn.style.cssText = 'position:fixed;top:100px;left:50%;transform:translateX(-50%);z-index:10050;'
+                    + 'padding:9px 18px;background:#2d3a4a;color:#eee;border:1px solid #6a8ab5;border-radius:6px;'
+                    + 'cursor:pointer;font-size:14px;font-weight:bold;box-shadow:0 2px 10px rgba(0,0,0,0.6);';
+                btn.onclick = () => {
+                    if (window.BotArena?.isRunning?.()) window.BotArena.stop();
+                    btn.disabled = true;
+                    btn.textContent = 'Leaving...';
+                    try { sessionStorage.setItem('godaigo_skip_intro_once', '1'); } catch (e) {}
+                    location.reload();
+                };
+                document.body.appendChild(btn);
+            }
+            btn.style.display = 'block';
+        }
+        function hideLeaveTrainingButton() {
+            const btn = document.getElementById('leave-training-btn');
+            if (btn) btn.style.display = 'none';
+        }
+
         // ─── Hidden cheat panel ──────────────────────────────────────────────
         // Activate: click the "AP" label in the HUD 5 times within 3 seconds
         (function initCheatPanel() {
@@ -6160,6 +6191,7 @@ document.getElementById('undo-move').onclick = function() {
                 startBtn.onclick = async () => {
                     if (window.BotArena.isRunning()) { updateStatus('A bot job is already running - use Stop first'); return; }
                     if (!await stopAnyRunningBotJob()) return;
+                    hideLeaveTrainingButton();
                     startBtnRef.disabled = true;
                     startBtn.disabled = true;
                     startBtn.textContent = 'Training…';
@@ -6237,6 +6269,7 @@ document.getElementById('undo-move').onclick = function() {
                         startBtn.disabled = false;
                         startBtn.textContent = 'Start Training';
                         hideTrainingPopup();
+                        showLeaveTrainingButton();
                         window._botTrainingPublic = null; // run over — a fresh open goes through _gami_openTrainBot
                     }
                 };
