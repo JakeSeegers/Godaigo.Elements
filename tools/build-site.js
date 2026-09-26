@@ -59,4 +59,6 @@ for (const item of INCLUDE) {
 }
 // Cache rules for Cloudflare (see tools/site-headers).
 fs.copyFileSync(path.join(__dirname, 'site-headers'), path.join(OUT, '_headers'));
+// Browsers ask for /favicon.ico on any page (for example an image opened directly).
+fs.copyFileSync(path.join(ROOT, 'images/favicons/favicon.ico'), path.join(OUT, 'favicon.ico'));
 console.log(`build-site: ${files} files, ${(bytes / 1e6).toFixed(1)} MB -> dist/`);

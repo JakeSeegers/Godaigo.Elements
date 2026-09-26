@@ -14,6 +14,8 @@
   Cache-Control: public, max-age=86400
 /GodaigoLogoText.svg
   Cache-Control: public, max-age=86400
+/favicon.ico
+  Cache-Control: public, max-age=86400
 # Code and the page: always check with the server (updates arrive at once).
 /
   Cache-Control: no-cache
