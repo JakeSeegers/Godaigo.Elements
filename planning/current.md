@@ -128,6 +128,11 @@ reach/beat it from here.
   wrangler.jsonc (name `godaigo`, assets ./dist) + deploy command `npx wrangler deploy`. The repo's
   default branch is `main` (old), so Workers Builds must use Settings > Build > Branch control =
   fixes/all-consolidated; a Retry of a failed build reuses its old commit, a new push is needed.
+  Live 2026-09-26: https://playgodaigo.com/ and https://godaigo.aikijake.workers.dev/. Both added
+  to account-recovery DEFAULT_SITES (playgodaigo.com first = fallback), edge function v3 deployed,
+  so the SITE_URLS secret is not needed. Owner still to do: Supabase Auth URL Configuration
+  (Site URL + Redirect URLs), test sign-in + reset email on the new domain, then the old-address
+  "moved" notice and (later) private repo.
 - **2026-09-26 (3): Fire animation smoother.** js/effects-system.js: frames pre-decoded
   (createImageBitmap), loop draws only when a frame index or position changes (anims run at
   13-18 fps, rAF at 60-144 Hz), clears only last frame's rects instead of the whole screen,

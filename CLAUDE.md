@@ -62,7 +62,7 @@ Start every session here. It contains the live task, branch, and files in flight
 | Entry point | `index.html` — loads all scripts in order (see Script Load Order below) |
 | Dev server | `npx serve -p 3333` (see `.claude/launch.json`) |
 | Repo branch | `fixes/all-consolidated` is the live branch (GitHub Pages serves it; confirmed by the owner 2026-09-24). Push finished work there. `claude/missing-video-filename-sc1ajm` was the live branch before and is now old. Pages deploys it with GitHub's built-in "pages build and deployment" (branch source set in repo Settings). There is no deploy workflow file; the old one (for branch `4.10.progresscheck`) was deleted 2026-09-24. |
-| Live URL | https://jakeseegers.github.io/Godaigo.Elements/ |
+| Live URL | https://playgodaigo.com/ (Cloudflare Workers static assets, project `godaigo`, test address https://godaigo.aikijake.workers.dev/). Builds on every push to `fixes/all-consolidated`: build command `node tools/build-site.js` (copies only game files to `dist/`), deploy `npx wrangler deploy` (`wrangler.jsonc`). The old GitHub Pages address https://jakeseegers.github.io/Godaigo.Elements/ still serves the whole repo until the move is finished. |
 
 ---
 

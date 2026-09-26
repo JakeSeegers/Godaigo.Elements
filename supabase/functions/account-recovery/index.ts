@@ -25,8 +25,11 @@ const GLOBAL_PER_DAY = 90;
 const VERIFY_TTL_HOURS = 24;
 const LOGIN_EMAIL_DOMAIN = "@godaigo.game"; // must match js/lobby.js authLogin()
 
+// First entry = fallback link target when a request names no allowed site.
 const DEFAULT_SITES = [
-  "https://jakeseegers.github.io/Godaigo.Elements/",
+  "https://playgodaigo.com/",
+  "https://godaigo.aikijake.workers.dev/",
+  "https://jakeseegers.github.io/Godaigo.Elements/", // old address, until players have moved
   "http://localhost:3333/",
 ];
 
