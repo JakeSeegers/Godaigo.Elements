@@ -122,7 +122,7 @@ reach/beat it from here.
   (createImageBitmap), loop draws only when a frame index or position changes (anims run at
   13-18 fps, rAF at 60-144 Hz), clears only last frame's rects instead of the whole screen,
   skips ctx.filter when 'none'; `isPlaying()` export. js/bot.js waitForQuiescence waits while
-  an effect plays (speedScale >= 0.5 only): the fire usually plays on a bot turn and the bot's
+  an effect plays (real games only: speedScale >= 0.5 and not BotArena.isRunning()): the fire usually plays on a bot turn and the bot's
   next decision (up to ~0.5 s on the host) froze it mid-way.
 - **2026-09-26 (2): Late-game slowdown fixed ("games get slower as they go on").** Profiled a
   3-bot arena game early vs late: a bot turn went from ~85 ms (20 stones) to ~8 s (60 stones),
