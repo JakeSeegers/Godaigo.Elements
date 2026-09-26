@@ -498,6 +498,7 @@
                 const campers = Object.keys(camp).filter(i => camp[i].count >= STALL_TURNS).map(Number);
                 if (campers.length >= STALL_MIN_BOTS) {
                     result.stalled = true;
+                    result.stallReason = 'camping';
                     result.stallers = campers;
                     log(`match seed ${seed}: ${campers.length} bots each parked on an elemental tile for ${STALL_TURNS} straight turns - trap loop, aborting round on turn ${turn + 1}`);
                     break;
@@ -510,6 +511,7 @@
                     if (c !== castsSeen) { castsSeen = c; lastCastTurn = turn; }
                     else if (turn - lastCastTurn >= noCastTurnCap) {
                         result.stalled = true;
+                        result.stallReason = 'no_cast';
                         // Nobody cast — a joint failure, not one player's doing (unlike
                         // camping's per-tile streak), so every seat shares attribution.
                         result.stallers = Array.from({ length: nPlayers }, (_, i) => i);
@@ -526,6 +528,7 @@
                 result.maxQuietRounds = +(maxQuietTurns / nPlayers).toFixed(1);
                 if (turn - lastProgressTurn >= noProgressTurnCap) {
                     result.stalled = true;
+                    result.stallReason = 'no_progress';
                     result.stallers = Array.from({ length: nPlayers }, (_, i) => i);
                     log(`match seed ${seed}: no new element activated by anyone for ${Math.round(noProgressTurnCap / nPlayers)} straight rounds (${noProgressTurnCap} turns) - stalled, aborting round on turn ${turn + 1}`);
                     break;
@@ -543,6 +546,7 @@
                     const r = window.BotState.applyAction({ type: 'endTurn' });
                     await sleep(200);
                     if (!r.ok || activePlayerIndex === idx) {
+                        result.endReason = 'stuck';
                         log(`match seed ${seed}: stuck on turn ${turn} (${r.reason || 'endTurn did not advance activePlayerIndex'})`);
                         break;
                     }
@@ -551,6 +555,15 @@
             }
         } finally {
             window.showEndTurnPrompt = savedShowEndTurnPrompt;
+        }
+        // Why this attempt ended, for training UIs: 'win', a stall reason
+        // ('camping' / 'no_cast' / 'no_progress'), 'stuck', 'turn_cap' or
+        // 'stopped'.
+        if (!result.endReason) {
+            result.endReason = result.winner !== null ? 'win'
+                : result.stalled ? result.stallReason
+                : (_stopRequested || _endEarlyRequested) ? 'stopped'
+                : result.turns >= turnCap ? 'turn_cap' : 'stopped';
         }
         return result;
     }
@@ -579,17 +592,20 @@
         // table that keeps stalling doesn't get a free pass just because the
         // FINAL attempt happened to resolve normally.
         const stallCounts = {};
+        const stallReasons = {}; // e.g. {camping: 1, no_cast: 2}: every stalled attempt, restarts included
         let result;
         for (let attempt = 0; ; attempt++) {
             const seed = (baseSeed + attempt * 1000003) >>> 0; // deterministic per-restart reshuffle
             result = await _playMatchOnce(weightsPerPlayer, { ...opts, seed });
             result.restarts = attempt;
             if (result.stalled) for (const idx of result.stallers) stallCounts[idx] = (stallCounts[idx] || 0) + 1;
+            if (result.stalled) stallReasons[result.stallReason] = (stallReasons[result.stallReason] || 0) + 1;
             if (!result.stalled || _stopRequested || _endEarlyRequested || attempt >= maxStallRestarts) break;
             log(`restarting stalled round (restart ${attempt + 1}/${maxStallRestarts}, next seed ${(baseSeed + (attempt + 1) * 1000003) >>> 0})`);
         }
         if (result.stalled) log(`round still stalled after ${result.restarts} restart(s) - returning it as a draw`);
         result.stallCounts = stallCounts;
+        result.stallReasons = stallReasons;
         return result;
     }
 
@@ -676,7 +692,7 @@
             result.avgTurns += g.turns / nGames;
             log(`game ${i + 1}/${nGames}: ${g.winner === null ? 'draw' : (aWon ? 'A' : 'B') + ' wins'} in ${g.turns} turns  (A=${result.aWins} B=${result.bWins} D=${result.draws})`);
             if (typeof opts.onGame === 'function') {
-                try { opts.onGame(i + 1, nGames, g); } catch (e) { /* UI callback errors never abort a run */ }
+                try { opts.onGame(i + 1, nGames, g, { aIsPlayer0, aWon }); } catch (e) { /* UI callback errors never abort a run */ }
             }
             await sleep(0); // yield between games — keep the tab responsive
         }

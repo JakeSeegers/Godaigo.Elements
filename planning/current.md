@@ -118,6 +118,11 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (10): Bot Training popup shows what happened.** bot-arena.js: result.endReason, stallReasons,
+  onGame side info. game-ui.js: makeTrainingStats() (hill climb + evolve), popup rows #bt-popup-stats
+  (challenger W-L-D, last game, run totals, stalls by reason) + #bt-popup-events (round outcomes incl.
+  puzzle-blocked, stalls, generations), time left, 3 s redraw ticker. Tested with a real Depth-1 public
+  run in headless Chromium (first game: no-cast stall, restart, challenger won in 59 turns).
 - **2026-09-26 (9): Arena detector 3, no progress** (owner). js/bot-arena.js: no new element activated by
   anyone for `opts.stallNoProgressRounds` (default NO_PROGRESS_ROUNDS = 20) rounds -> stalled + restart,
   all seats share it; result.maxQuietRounds. Measured with it off (seeds 1-4 2p/3p, 1-2 4p): healthy games

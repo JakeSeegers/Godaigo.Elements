@@ -4153,17 +4153,23 @@ document.getElementById('undo-move').onclick = function() {
             const totalGames = ((allSizes || nPlayers > 2) ? sampledPerGen * generations : pairs * gamesPerPair * generations) + confirmTotal;
             const startedAt = Date.now();
             let gamesDone = 0, lastGen = 0, lastFitness = null;
+            const stats = makeTrainingStats();
             const report = (phase) => onProgress({
                 phase, gamesDone, totalGames, startedAt,
                 gen: lastGen, generations, fitness: lastFitness,
-                nPlayers, popSize, mode: 'training',
+                nPlayers, popSize, mode: 'training', stats,
             });
 
             const champion = await window.BotArena.evolve(generations, {
                 gamesPerPair, popSize, nPlayers, visual, seedWeights,
                 gamesPerGen: (allSizes || nPlayers > 2) ? sampledPerGen : undefined,
-                onGeneration: (gen, total, fitness) => { lastGen = gen; lastFitness = fitness; report('training'); },
-                onGame: () => { gamesDone++; report('training'); },
+                onGeneration: (gen, total, fitness) => {
+                    lastGen = gen; lastFitness = fitness;
+                    const best = Array.isArray(fitness) && fitness.length ? Math.max(...fitness) : null;
+                    stats.event(`Generation ${gen}/${total} done${best !== null ? `, best fitness ${best.toFixed(1)}` : ''}`);
+                    report('training');
+                },
+                onGame: (n, t, g) => { gamesDone++; stats.addGame(g); report('training'); },
             });
 
             // stop() during the evolve phase only cuts THAT phase short —
@@ -4191,14 +4197,14 @@ document.getElementById('undo-move').onclick = function() {
                 const confirm = await window.BotArena.confirmAcrossSizes(
                     champion, baselineWeights,
                     { sizes: confirmSizes, gamesPerSize, visual, seed: Date.now() % 100000,
-                      onGame: () => { gamesDone++; report('confirming'); } });
+                      onGame: (n, t, g) => { gamesDone++; stats.addGame(g); report('confirming'); } });
                 improved = confirm.improved;
                 record = confirm.record;
                 confirmWins = confirm.champWins; confirmLosses = confirm.baseWins; confirmDraws = confirm.draws;
             } else {
                 const confirm = await window.BotArena.run(
                     champion, baselineWeights, confirmGames, Date.now() % 100000,
-                    { visual, onGame: () => { gamesDone++; report('confirming'); } });
+                    { visual, onGame: (n, t, g) => { gamesDone++; stats.addGame(g); report('confirming'); } });
                 improved = confirm.aFitness > confirm.bFitness;
                 record = `${confirm.aWins}-${confirm.bWins}` + (confirm.draws ? ` (${confirm.draws} draws)` : '');
                 confirmWins = confirm.aWins; confirmLosses = confirm.bWins; confirmDraws = confirm.draws;
@@ -4306,6 +4312,8 @@ document.getElementById('undo-move').onclick = function() {
             // "How rounds have gone" summary the popup renders as a compact
             // chip strip — one entry per completed round, oldest first.
             const roundHistory = [];
+            const stats = makeTrainingStats();
+            const needPct = Math.round((window.BotArena.HILLCLIMB_PROMOTE_RATE ?? 0.58) * 100);
             // Local-game color assignment (game-core.js's colorRankOrder):
             // player index 0 = Purple, 1 = Yellow (only the first two matter —
             // every trial here is 2-player). _playSeries alternates who's
@@ -4327,6 +4335,7 @@ document.getElementById('undo-move').onclick = function() {
                     challenger: lastChallenger, totalChallengers,
                     gameNum: lastGameNum, gameTotal: lastGameTotal,
                     sideAColor: aName, sideBColor: bName, sideAHex: aHex, sideBHex: bHex,
+                    stats,
                 });
             };
 
@@ -4344,11 +4353,21 @@ document.getElementById('undo-move').onclick = function() {
                 // slow, AND never say which of the lambda challengers is
                 // currently up (onGame's own game count resets to 1/N for
                 // every challenger, so it alone can't distinguish them).
-                onChallenger: (c, totalC, r, totalR) => { lastChallenger = c; totalChallengers = totalC; lastRound = r; lastGameNum = 0; report('training'); },
-                onGame: (gameNum, gameTotal) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; report('training'); },
+                onChallenger: (c, totalC, r, totalR) => { lastChallenger = c; totalChallengers = totalC; lastRound = r; lastGameNum = 0; stats.cur = { w: 0, l: 0, d: 0 }; report('training'); },
+                onGame: (gameNum, gameTotal, g, side) => {
+                    gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal;
+                    stats.addGame(g, side, { a: `Challenger ${lastChallenger}`, b: 'Champion' });
+                    report('training');
+                },
                 onRound: (round, total, info) => {
                     lastRound = round; lastInfo = info; gamesDone = info.gamesPlayed;
                     roundHistory.push({ round, promoted: info.promoted, winRate: info.bestWinRate, decided: info.bestDecided });
+                    const pctBest = Math.round((info.bestWinRate || 0) * 100);
+                    stats.event(info.promoted
+                        ? `Round ${round}: new champion! Best challenger won ${pctBest}% of ${info.bestDecided} decided games`
+                        : info.puzzle?.blocked
+                            ? `Round ${round}: challenger won ${pctBest}% but did worse on the puzzles (${info.puzzle.challenger} vs ${info.puzzle.champion}), champion stays`
+                            : `Round ${round}: champion stays. Best challenger won ${pctBest}% of ${info.bestDecided} (needs ${needPct}%)`);
                     report('training');
                 },
             });
@@ -4373,7 +4392,7 @@ document.getElementById('undo-move').onclick = function() {
             const confirm = await window.BotArena.confirmAcrossSizes(
                 result.champion, baseline,
                 { sizes: confirmSizes, gamesPerSize, visual, seed: Date.now() % 100000,
-                  onGame: (gameNum, gameTotal) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; report('confirming'); } });
+                  onGame: (gameNum, gameTotal, g) => { gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal; stats.addGame(g); report('confirming'); } });
             const improved = !!confirm.improved && result.promotions > 0;
             const record = confirm.record || `${confirm.champWins}-${confirm.baseWins}`;
 
@@ -4452,6 +4471,52 @@ document.getElementById('undo-move').onclick = function() {
             return { improved, record, tier, tierGold, promotions: result.promotions, rewarded, submitFailed, attemptGold, totalGold };
         }
 
+        // ─── Training run stats (shown in the popup) ───────────────────────
+        // One collector per run: every finished game (with how it ended),
+        // challenger-vs-champion tallies for Hill Climb, and a short event
+        // log (promotions, puzzle-blocked promotions, stalls).
+        const STALL_NAMES = { camping: 'bots camping', no_cast: 'no casts', no_progress: 'no progress' };
+        function makeTrainingStats() {
+            return {
+                games: 0, turnsSum: 0, chWins: 0, champWins: 0, draws: 0,
+                stalls: { camping: 0, no_cast: 0, no_progress: 0 }, restarts: 0, stuck: 0, turnCap: 0,
+                cur: null,           // current challenger {w, l, d}
+                last: '',            // last game, one line
+                events: [],          // newest first, max 6
+                event(text) { this.events.unshift(text); if (this.events.length > 6) this.events.pop(); },
+                // g = playMatch result; side = {aIsPlayer0, aWon} for A-vs-B series
+                // (A = challenger in Hill Climb); label names the sides.
+                addGame(g, side, label) {
+                    if (!g) return;
+                    this.games++;
+                    this.turnsSum += g.turns || 0;
+                    for (const [k, n] of Object.entries(g.stallReasons || {})) this.stalls[k] = (this.stalls[k] || 0) + n;
+                    this.restarts += g.restarts || 0;
+                    if (g.endReason === 'stuck') this.stuck++;
+                    if (g.endReason === 'turn_cap') this.turnCap++;
+                    const why = g.winner === null
+                        ? (STALL_NAMES[g.endReason] ? `stalled, ${STALL_NAMES[g.endReason]}` : g.endReason === 'turn_cap' ? 'turn limit' : g.endReason === 'stuck' ? 'a bot got stuck' : 'no winner')
+                        : '';
+                    const restartNote = g.restarts ? ` (after ${g.restarts} restart${g.restarts === 1 ? '' : 's'})` : '';
+                    if (side && label) {
+                        if (g.winner === null) { this.draws++; if (this.cur) this.cur.d++; }
+                        else if (side.aWon) { this.chWins++; if (this.cur) this.cur.w++; }
+                        else { this.champWins++; if (this.cur) this.cur.l++; }
+                        this.last = g.winner === null
+                            ? `Draw after ${g.turns} turns - ${why}${restartNote}`
+                            : `${side.aWon ? label.a : label.b} won in ${g.turns} turns${restartNote}`;
+                    } else {
+                        if (g.winner === null) this.draws++;
+                        this.last = g.winner === null ? `Draw after ${g.turns} turns - ${why}${restartNote}` : `Seat ${g.winner + 1} won in ${g.turns} turns${restartNote}`;
+                    }
+                    if (g.stallReasons && Object.keys(g.stallReasons).length) {
+                        const kinds = Object.entries(g.stallReasons).map(([k, n]) => `${STALL_NAMES[k] || k}${n > 1 ? ' x' + n : ''}`).join(', ');
+                        this.event(`Stall (${kinds})${g.winner === null ? ', game ended as a draw' : ', restarted and finished'}`);
+                    }
+                },
+            };
+        }
+
         // ─── Persistent training-status popup ───────────────────────────────
         // Small fixed-corner popup showing live progress for whichever
         // Start Training run is active — visible the moment
@@ -4502,6 +4567,15 @@ document.getElementById('undo-move').onclick = function() {
                     </div>
                     <div id="bt-popup-progress-text" style="font-size:10px;color:#888;margin-bottom:10px;"></div>
 
+                    <div id="bt-popup-stats" style="display:none;font-size:11px;color:#bbb;line-height:1.5;margin-bottom:10px;padding:6px 8px;background:#12121f;border:1px solid #2a2a40;border-radius:5px;">
+                        <div id="bt-popup-current"></div>
+                        <div id="bt-popup-last" style="color:#ddd;"></div>
+                        <div id="bt-popup-totals"></div>
+                        <div id="bt-popup-stalls" style="color:#c9a36a;"></div>
+                    </div>
+                    <div id="bt-popup-events-label" style="font-size:10px;color:#888;margin-bottom:3px;display:none;">What happened</div>
+                    <div id="bt-popup-events" style="font-size:10px;color:#aaa;line-height:1.45;margin-bottom:10px;"></div>
+
                     <div id="bt-popup-history-label" style="font-size:10px;color:#888;margin-bottom:4px;display:none;">Round history - filled = promoted</div>
                     <div id="bt-popup-history" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:10px;"></div>
 
@@ -4541,7 +4615,24 @@ document.getElementById('undo-move').onclick = function() {
         //     fitness, nPlayers, popSize, mode:'training'|'breeding'|'hillclimb',
         //     round, rounds, challenger, totalChallengers, gameNum, gameTotal,
         //     sideAColor/sideBColor/sideAHex/sideBHex, roundHistory, info}
+        // The popup only hears from the run when a game ends (a game can take
+        // minutes), so redraw the last state every 3 s to keep the clock and
+        // time-left estimate moving.
+        let trainingPopupLast = null, trainingPopupTicker = null;
         function showTrainingPopup(p) {
+            trainingPopupLast = p;
+            if (!trainingPopupTicker) {
+                trainingPopupTicker = setInterval(() => {
+                    const running = window.BotArena?.isRunning?.();
+                    if (!running || !trainingPopupEl || trainingPopupEl.style.display === 'none') {
+                        clearInterval(trainingPopupTicker); trainingPopupTicker = null; return;
+                    }
+                    if (trainingPopupLast) renderTrainingPopup(trainingPopupLast);
+                }, 3000);
+            }
+            renderTrainingPopup(p);
+        }
+        function renderTrainingPopup(p) {
             const el = ensureTrainingPopup();
             el.style.display = 'block';
             const pct = p.totalGames ? Math.min(100, (p.gamesDone / p.totalGames) * 100) : 0;
@@ -4611,8 +4702,11 @@ document.getElementById('undo-move').onclick = function() {
             el.querySelector('#bt-popup-matchup').innerHTML = matchupHtml;
             el.querySelector('#bt-popup-bar').style.width = `${pct}%`;
             el.querySelector('#bt-popup-progress-text').textContent =
-                `Games: ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtPopupTime(elapsedS)} elapsed`;
+                `Games: ${p.gamesDone}/${p.totalGames} (${pct.toFixed(0)}%) · ${fmtPopupTime(elapsedS)} elapsed`
+                + (p.gamesDone >= 3 && p.gamesDone < p.totalGames
+                    ? ` · about ${fmtPopupTime(elapsedS / p.gamesDone * (p.totalGames - p.gamesDone))} left` : '');
             el.querySelector('#bt-popup-summary').textContent = summaryLine || '';
+            renderTrainingStats(el, p);
             // Nothing left to "skip ahead to" once already confirming —
             // and breeding has no confirmation phase to jump to at all, so
             // End Early there just means "stop generating more generations
@@ -4620,6 +4714,34 @@ document.getElementById('undo-move').onclick = function() {
             // the button, only the confirming-phase case hides it).
             const endEarlyBtn = el.querySelector('#bt-popup-end-early');
             if (endEarlyBtn) endEarlyBtn.style.display = p.phase === 'confirming' ? 'none' : 'block';
+        }
+
+        function renderTrainingStats(el, p) {
+            const st = p.stats;
+            const box = el.querySelector('#bt-popup-stats');
+            if (!st || !st.games) { box.style.display = 'none'; }
+            else {
+                box.style.display = 'block';
+                const cur = st.cur && p.mode === 'hillclimb' && p.phase !== 'confirming'
+                    ? `This challenger vs champion: ${st.cur.w} won · ${st.cur.l} lost · ${st.cur.d} drawn` : '';
+                el.querySelector('#bt-popup-current').textContent = cur;
+                el.querySelector('#bt-popup-last').textContent = st.last ? `Last game: ${st.last}` : '';
+                const avg = Math.round(st.turnsSum / st.games);
+                const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+                el.querySelector('#bt-popup-totals').textContent = p.mode === 'hillclimb'
+                    ? `Run so far: ${pl(st.games, 'game')} · challengers won ${st.chWins} · champion won ${st.champWins} · ${pl(st.draws, 'draw')} · avg ${avg} turns`
+                    : `Run so far: ${pl(st.games, 'game')} · ${pl(st.draws, 'draw')} · avg ${avg} turns`;
+                const parts = Object.entries(st.stalls).filter(([, n]) => n).map(([k, n]) => `${n} ${STALL_NAMES[k] || k}`);
+                if (st.stuck) parts.push(`${st.stuck} stuck`);
+                if (st.turnCap) parts.push(`${st.turnCap} hit the turn limit`);
+                el.querySelector('#bt-popup-stalls').textContent = parts.length
+                    ? `Stalls: ${parts.join(' · ')}${st.restarts ? ` · ${st.restarts} restarted with new cards` : ''}` : '';
+            }
+            const evEl = el.querySelector('#bt-popup-events');
+            const evLabel = el.querySelector('#bt-popup-events-label');
+            const events = st?.events || [];
+            evLabel.style.display = events.length ? 'block' : 'none';
+            evEl.innerHTML = events.map(e => `<div>${String(e).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</div>`).join('');
         }
 
         function hideTrainingPopup() {
