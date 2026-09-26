@@ -267,7 +267,7 @@
     }
 
     // Parent side: run one match in a hidden iframe and wait for its result.
-    function runInFrame(matchId, timeoutMs = 180000, mode = 'check') {
+    function runInFrame(matchId, timeoutMs = 180000, mode = 'check', extraQuery = '') {
         return new Promise((resolve) => {
             const frame = document.createElement('iframe');
             frame.style.cssText = 'position:fixed;left:-4000px;top:0;width:1400px;height:900px;border:0;';
@@ -286,7 +286,8 @@
             window.addEventListener('message', onMsg);
             // The folder URL, not index.html: some servers redirect index.html
             // to the folder and drop the query string.
-            frame.src = new URL('.', location.href).pathname + (mode === 'mine' ? '?replaymine=' : '?replaycheck=') + encodeURIComponent(matchId);
+            const key = mode === 'mine' ? 'replaymine' : mode === 'puzzle' ? 'replaypuzzle' : 'replaycheck';
+            frame.src = new URL('.', location.href).pathname + `?${key}=` + encodeURIComponent(matchId) + extraQuery;
             document.body.appendChild(frame);
         });
     }
@@ -501,12 +502,101 @@
         return { done, found };
     }
 
+
+    // ── Puzzle training (hermit, bot combo plan Phase 4b) ────────
+    // A puzzle = a mined combo moment (hermit_list_puzzles). In a hidden
+    // frame (?replaypuzzle=MATCH&seat=&turn=&turns=&wkey=) the match is
+    // replayed up to the start of that seat's turn, then bots take over
+    // every seat (the recorded moves stop) until the puzzle seat has played
+    // the same number of turns. Score = bot gain / player gain, both from
+    // the bot's evaluator; solved when the bot gets 90% of the player's gain.
+    // wkey: localStorage key holding the weights to test (default: current).
+    const PUZZLE_SOLVED = 0.9;
+
+    async function runPuzzle(p, weights) {
+        await open(p.match_id, { check: true });
+        if (!state) throw new Error('replay did not start');
+        await sleep(300);
+        const seat = +p.seat;
+        while (state.index < state.moves.length &&
+               !(currentTurnNumber === +p.start_turn && activePlayerIndex === seat)) {
+            step();
+            await sleep(15);
+        }
+        if (!(currentTurnNumber === +p.start_turn && activePlayerIndex === seat)) throw new Error('start turn not found');
+        const value = () => window.BotSystem.evaluateSnapshot(window.BotState.snapshot(), seat);
+        const v0 = value();
+        if (window.LazyScripts) await window.LazyScripts.load('bot-arena');
+        if (weights && window.BotArena?.applyWeights) window.BotArena.applyWeights(weights);
+        window.BotSystem.resetMemory?.();
+        window.BotSystem.speedScale = 0.02;
+        const endBtn = document.getElementById('end-turn');
+        let own = 0, guard = 0;
+        while (own < (+p.turns || 1) && guard++ < 6 * ((+p.turns || 1) + 1)) {
+            const who = activePlayerIndex;
+            myPlayerIndex = who;              // the bot plays whoever's turn it is
+            if (endBtn) { endBtn.style.display = ''; endBtn.disabled = false; }
+            if (typeof updateEndTurnButtonVisibility === 'function') updateEndTurnButtonVisibility();
+            await window.BotSystem.turn();
+            await window.BotSystem.waitForQuiescence();
+            await sleep(150);
+            if (who === seat) own++;
+            if (activePlayerIndex === who) break; // the turn did not pass; stop rather than loop
+        }
+        const botGain = Math.round(value() - v0);
+        const humanGain = +p.gain || 0;
+        const ratio = humanGain > 0 ? botGain / humanGain : 0;
+        return { id: p.id, botGain, humanGain, ratio: +ratio.toFixed(3), solved: ratio >= PUZZLE_SOLVED, ownTurns: own };
+    }
+
+    // A fixed quarter of the puzzles is kept for testing only (never used to
+    // decide training), so a solve rate there shows real skill.
+    const isTestPuzzle = p => Number(p.id) % 4 === 0;
+
+    // Parent side: solve each puzzle in a fresh hidden frame.
+    let solving = false;
+    async function solvePuzzles(puzzles, weights, onProgress) {
+        if (solving) throw new Error('already solving');
+        solving = true;
+        const wkey = 'godaigo_puzzle_weights_' + Date.now();
+        try {
+            if (weights) localStorage.setItem(wkey, JSON.stringify(weights));
+            const results = [];
+            for (let i = 0; i < puzzles.length; i++) {
+                const p = puzzles[i];
+                onProgress?.(`Puzzle ${i + 1} of ${puzzles.length} (game #${p.match_id})...`);
+                const q = `&seat=${p.seat}&turn=${p.start_turn}&turns=${p.turns}&gain=${p.gain}&pid=${p.id}` + (weights ? `&wkey=${wkey}` : '');
+                const run = await runInFrame(p.match_id, 240000, 'puzzle', q);
+                results.push(run.result || { id: p.id, error: run.error || 'no result', ratio: 0, solved: false });
+            }
+            return results;
+        } finally {
+            solving = false;
+            try { localStorage.removeItem(wkey); } catch (e) {}
+        }
+    }
+    function puzzleSummary(results) {
+        const ok = results.filter(r => !r.error);
+        const avg = ok.length ? ok.reduce((a, r) => a + Math.max(0, Math.min(1.5, r.ratio)), 0) / ok.length : 0;
+        return { n: results.length, errors: results.length - ok.length, solved: ok.filter(r => r.solved).length, avgRatio: +avg.toFixed(3) };
+    }
+    // For training (BotArena.hillClimb opts.puzzleCheck): average score of
+    // these weights on the TRAINING puzzles (at most `max` of them).
+    async function puzzleScore(weights, max = 6) {
+        const { data, error } = await supabase.rpc('hermit_list_puzzles', { p_limit: 60 });
+        if (error) throw error;
+        const train = (data || []).filter(p => !isTestPuzzle(p)).slice(0, max);
+        if (!train.length) return null;
+        return puzzleSummary(await solvePuzzles(train, weights)).avgRatio;
+    }
+
     // Inside the iframe: index.html?replaycheck=ID runs the check (or
-    // ?replaymine=ID the combo miner) and reports.
+    // ?replaymine=ID the combo miner, ?replaypuzzle=ID a puzzle) and reports.
     async function frameEntry() {
         const params = new URLSearchParams(location.search);
         const mineMode = params.has('replaymine');
-        const id = +(mineMode ? params.get('replaymine') : params.get('replaycheck'));
+        const puzzleMode = params.has('replaypuzzle');
+        const id = +(mineMode ? params.get('replaymine') : puzzleMode ? params.get('replaypuzzle') : params.get('replaycheck'));
         if (!id || window.parent === window) return;
         const post = (payload) => window.parent.postMessage({ type: 'godaigo-replay-check', matchId: id, ...payload }, location.origin);
         try {
@@ -520,12 +610,19 @@
                 await sleep(500);
             }
             await sleep(1500);
-            post({ result: mineMode ? await runMine(id) : await runCheck(id) });
+            let result;
+            if (puzzleMode) {
+                let weights = null;
+                try { const k = params.get('wkey'); if (k) weights = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) {}
+                result = await runPuzzle({ id: +params.get('pid'), match_id: id, seat: +params.get('seat'),
+                    start_turn: +params.get('turn'), turns: +params.get('turns'), gain: +params.get('gain') }, weights);
+            } else result = mineMode ? await runMine(id) : await runCheck(id);
+            post({ result });
         } catch (e) {
             post({ error: String(e?.message || e) });
         }
     }
-    if (new URLSearchParams(location.search).has('replaycheck') || new URLSearchParams(location.search).has('replaymine')) {
+    if (['replaycheck', 'replaymine', 'replaypuzzle'].some(k => new URLSearchParams(location.search).has(k))) {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', frameEntry);
         else frameEntry();
     }
@@ -632,6 +729,19 @@
         }).join(' &gt; ')).map((t, i) => `<div>Turn ${i + 1}: ${t}</div>`).join('');
     }
 
+    let puzzleRows = [];
+    function puzzleRowHtml(pz, r) {
+        const result = r ? (r.error ? `error: ${esc(r.error)}` : `bot ${r.botGain} vs player ${r.humanGain} = ${r.ratio}${r.solved ? ' (solved)' : ''}`) : 'not tested yet';
+        return `<div class="replay-row">
+            <div class="replay-row-main">
+                <div class="replay-combo-sig">${prettySignature(pz.signature)}</div>
+                <div class="replay-info">Game #${pz.match_id} · seat ${pz.seat + 1} · from turn ${pz.start_turn} · ${pz.turns} turn${pz.turns === 1 ? '' : 's'} · player gain ${Math.round(pz.gain)}${isTestPuzzle(pz) ? ' · test puzzle' : ''}</div>
+                <div class="replay-check ${r?.solved ? 'replay-check-ok' : ''}">${result}</div>
+            </div>
+            <div class="replay-row-actions"><button class="replay-watch" data-id="${pz.match_id}">Watch</button></div>
+        </div>`;
+    }
+
     function comboRowHtml(c) {
         return `<div class="replay-row replay-combo-row">
             <div class="replay-row-main">
@@ -731,6 +841,26 @@
             if (sel) sel.onchange = () => { playerDays = +sel.value || 30; renderList(); };
             return;
         }
+        if (browserTab === 'puzzles') {
+            const { data, error } = await supabase.rpc('hermit_list_puzzles', { p_limit: 60 });
+            if (browserTab !== 'puzzles') return;
+            if (error) { list.innerHTML = `<div class="replay-empty">Could not load: ${esc(error.message)}</div>`; return; }
+            puzzleRows = Array.isArray(data) ? data : [];
+            let last = {};
+            try { last = JSON.parse(localStorage.getItem('godaigo_puzzle_results') || '{}'); } catch (e) {}
+            const res = Object.values(last.byId || {});
+            const sumOf = set => puzzleSummary(res.filter(r => set === 'test' ? isTestPuzzle(r) : !isTestPuzzle(r)));
+            const tr = sumOf('train'), te = sumOf('test');
+            list.innerHTML = `
+                <div class="replay-check-bar">
+                    <button class="replay-puzzle-run">Test current bot</button>
+                    <span class="replay-check-progress">${solving ? 'Solving...' : ''}</span>
+                </div>
+                ${last.at ? `<div class="replay-note">Last test (${esc(fmtWhen(last.at))}): training puzzles ${tr.solved} of ${tr.n} solved, avg score ${tr.avgRatio}; test puzzles ${te.solved} of ${te.n} solved, avg score ${te.avgRatio}.</div>` : ''}
+                <div class="replay-note">Each puzzle is a combo a player made in a real game. The bot is put in the same spot and plays the same number of turns. Score = the bot's gain / the player's gain; solved at 0.9 or more. Every 4th puzzle is a test puzzle: training never looks at it.</div>
+                ${puzzleRows.map(pz => puzzleRowHtml(pz, (last.byId || {})[pz.id])).join('') || '<div class="replay-empty">No puzzles yet. Mine games in the Combos tab first.</div>'}`;
+            return;
+        }
         if (browserTab === 'combos') {
             const { data, error } = await supabase.rpc('hermit_combo_summary', { p_min_count: 1 });
             if (browserTab !== 'combos') return;
@@ -783,7 +913,7 @@
                 <div class="replay-tabs">
                     <button class="replay-tab" data-tab="mine">My games</button>
                     <button class="replay-tab" data-tab="public">Public</button>
-                    ${window.isHermit?.() ? '<button class="replay-tab" data-tab="check">Check</button><button class="replay-tab" data-tab="players">Players</button><button class="replay-tab" data-tab="combos">Combos</button>' : ''}
+                    ${window.isHermit?.() ? '<button class="replay-tab" data-tab="check">Check</button><button class="replay-tab" data-tab="players">Players</button><button class="replay-tab" data-tab="combos">Combos</button><button class="replay-tab" data-tab="puzzles">Puzzles</button>' : ''}
                 </div>
                 <div class="replay-list"></div>
                 <div class="replay-note">Games are kept for 30 days. Posted games are kept until you remove them. Posting shows the whole game, with every player's name, to everyone.</div>
@@ -792,7 +922,7 @@
         overlay.addEventListener('click', async (ev) => {
             const t = ev.target;
             if (t === overlay || t.classList.contains('replay-close')) {
-                if (checking || mining) return; // closing would drop the running frame's results
+                if (checking || mining || solving) return; // closing would drop the running frame's results
                 overlay.remove(); return;
             }
             if (t.classList.contains('replay-tab')) { browserTab = t.dataset.tab; renderList(); return; }
@@ -803,6 +933,20 @@
                 return;
             }
             if (t.classList.contains('replay-run-check')) { runChecks([+t.dataset.id]); return; }
+            if (t.classList.contains('replay-puzzle-run')) {
+                if (solving || !puzzleRows.length) return;
+                const status = overlay.querySelector('.replay-check-progress');
+                try {
+                    const results = await solvePuzzles(puzzleRows, null, msg => { if (status) status.textContent = msg; });
+                    const byId = {};
+                    results.forEach(r => { byId[r.id] = r; });
+                    localStorage.setItem('godaigo_puzzle_results', JSON.stringify({ at: new Date().toISOString(), byId }));
+                } catch (e) {
+                    if (status) status.textContent = 'Failed: ' + (e.message || e);
+                }
+                if (browserTab === 'puzzles') renderList();
+                return;
+            }
             if (t.classList.contains('replay-combo-set')) {
                 t.disabled = true;
                 const { error } = await supabase.rpc('hermit_set_combo_state', { p_signature: t.dataset.sig, p_state: t.dataset.state });
@@ -845,5 +989,6 @@
         renderList();
     }
 
-    window.Replay = { open, openBrowser, checkMatch, runCheck, runMine, mineMatches, findCombos, play, pause, step, get state() { return state; } };
+    window.Replay = { open, openBrowser, checkMatch, runCheck, runMine, mineMatches, findCombos,
+        runPuzzle, solvePuzzles, puzzleSummary, puzzleScore, play, pause, step, get state() { return state; } };
 })();

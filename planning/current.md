@@ -118,6 +118,17 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26: Combo plan Phase 4b: puzzle training.** sql/combo-puzzles.sql (applied):
+  `hermit_list_puzzles` = human combo candidates with a positive gain. replay-viewer.js:
+  `runPuzzle()` replays the match in a hidden frame up to the combo's start turn for that
+  seat, then bots play every seat (myPlayerIndex = active seat; the replay hides/disables
+  End Turn, so it is re-enabled) until the seat has played the same number of turns; score
+  = bot gain / player gain (evaluator), solved >= 0.9. Every 4th puzzle is test-only.
+  Hermit "Puzzles" tab: "Test current bot", per-puzzle result, training vs test solve rate
+  (last run in localStorage godaigo_puzzle_results). `puzzleScore(w)` (up to 6 training
+  puzzles) gates promotions in `BotArena.hillClimb` via `opts.puzzleCheck` (tolerance
+  0.05); the hermit's Train Bot passes it. Tested on match 5: bot 766 vs player 1024
+  (0.748) in 7 s. Needs more mined human games to be meaningful.
 - **2026-09-26: Combo plan Phase 5: learn-from-player widened to casts and moves.**
   bot.js: cast and move scoring now go through `contrib()` (traced; same scores: 4 same-seed
   arena games identical, action counts included). bot-imitation.js: Signal C (cast_execute:

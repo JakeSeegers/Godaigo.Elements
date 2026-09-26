@@ -184,6 +184,13 @@ Order matters — later scripts depend on earlier ones.
                              Per combo Auto / On / Off (hermit_set_combo_state, sql/combo-teach.sql): Auto = bots
                              use it once seen in 2 different games; bots load get_bot_combos() (public, no player
                              data) in bot.js (Phase 4, see bot.js row).
+                             Hermit-only "Puzzles" tab (Phase 4b): hermit_list_puzzles (sql/combo-puzzles.sql) =
+                             mined combo moments; Replay.solvePuzzles() runs each in a hidden frame
+                             (?replaypuzzle=MATCH&seat&turn&turns&gain&pid[&wkey]; runPuzzle: replay to that turn,
+                             then bots play every seat, the End Turn button re-enabled) -> bot gain / player gain,
+                             solved >= 0.9; every 4th puzzle (id % 4 == 0) is test-only. Replay.puzzleScore(w) =
+                             avg score on up to 6 training puzzles; BotArena.hillClimb opts.puzzleCheck gates a
+                             would-be promotion on it (hermit Train Bot passes it).
 18. tutorial-mode.js       ← LAZY-LOADED (no <script> tag — see #30 asset-preloader.js / window.LazyScripts). Interactive tutorial (depends on lobby.js + game-core.js). The old 7-step modal tutorial this superseded (formerly js/tutorial.js) has since been fully removed — no dead script tag remains.
 19. emoji-system.js        ← Emoji reactions (depends on gamification.js)
 20. cosmetics-system.js    ← Name colour cosmetics (depends on gamification.js). Server-backed (sql/cosmetics.sql).

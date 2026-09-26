@@ -4332,6 +4332,10 @@ document.getElementById('undo-move').onclick = function() {
 
             const result = await window.BotArena.hillClimb({
                 champion: climbAnchor, rounds, lambda, gamesPerChallenge, visual,
+                // Hermit only (puzzles are hermit-only data): a would-be new
+                // champion must also do at least as well on the puzzles
+                // (combos from players' games, Replays > Puzzles).
+                puzzleCheck: (window.isHermit?.() && window.Replay?.puzzleScore) ? (w => window.Replay.puzzleScore(w)) : undefined,
                 // onRound alone only updates once per ROUND — a round is
                 // lambda*gamesPerChallenge games (180 by default) played
                 // sequentially in this one tab (no --shards parallelism like

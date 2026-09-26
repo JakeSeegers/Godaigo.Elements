@@ -962,6 +962,12 @@
     //                            from onGame's per-series game count, which
     //                            resets to 1/N for every challenger)
     //   opts.onGame? forwarded to every trial series (per-game progress)
+    //   opts.puzzleCheck? async (weights) => score | null (Phase 4b, e.g.
+    //                            Replay.puzzleScore): a challenger that wins
+    //                            enough games is promoted only if its puzzle
+    //                            score is not worse than the champion's by more
+    //                            than opts.puzzleTolerance (0.05). Only run for
+    //                            would-be promotions, so it costs little.
     // Returns { champion, promotions, rounds:[…], gamesPlayed }. stop() hard-
     // aborts; endEarly() finishes the current round then returns the champion
     // reached so far (always usable — it only advances on a real promotion).
@@ -994,6 +1000,7 @@
         window.BotSystem.speedScale = opts.speed ?? (visual ? 1 : 0.1);
 
         let champion = opts.champion ? { ...opts.champion } : { ...window.BotSystem.WEIGHTS };
+        let championPuzzle; // puzzle score of the current champion (opts.puzzleCheck), computed on first use
         let sigma = sigma0;
         let promotions = 0, gamesPlayed = 0;
         const roundLog = [];
@@ -1091,7 +1098,27 @@
                 } : null;
 
                 // Promote ONLY on a real margin over enough decisive games.
-                const promoted = !!best && best.decided >= minDecided && best.winRate >= promoteWinRate;
+                let promoted = !!best && best.decided >= minDecided && best.winRate >= promoteWinRate;
+                let puzzleNote = null;
+                if (promoted && typeof opts.puzzleCheck === 'function') {
+                    try {
+                        if (championPuzzle === undefined) championPuzzle = await opts.puzzleCheck(champion);
+                        const challengerPuzzle = await opts.puzzleCheck(best.w);
+                        if (championPuzzle != null && challengerPuzzle != null) {
+                            puzzleNote = { champion: championPuzzle, challenger: challengerPuzzle };
+                            if (challengerPuzzle < championPuzzle - (opts.puzzleTolerance ?? 0.05)) {
+                                promoted = false;
+                                puzzleNote.blocked = true;
+                                log(`round ${round + 1}: challenger won ${best.aWins}-${best.bWins} but failed the puzzle check ` +
+                                    `(${challengerPuzzle} vs champion ${championPuzzle}) - champion holds`);
+                            } else if (promoted) {
+                                championPuzzle = challengerPuzzle; // the new champion's score
+                            }
+                        }
+                    } catch (e) {
+                        log('puzzle check failed (ignored):', e?.message || e);
+                    }
+                }
                 if (promoted) {
                     champion = best.w;
                     promotions++;
@@ -1103,11 +1130,11 @@
                 } else {
                     const prevSigma = sigma;
                     sigma = Math.min(sigmaCap, sigma * sigmaGrowth); // barren round — widen the search
-                    log(`round ${round + 1}: no challenger cleared ${(promoteWinRate * 100).toFixed(0)}% ` +
+                    if (!puzzleNote?.blocked) log(`round ${round + 1}: no challenger cleared ${(promoteWinRate * 100).toFixed(0)}% ` +
                         `(best ${best ? best.aWins + '-' + best.bWins : 'n/a'}) - champion holds; sigma ${prevSigma.toFixed(2)} → ${sigma.toFixed(2)}`);
                 }
 
-                const info = { round: round + 1, promoted,
+                const info = { round: round + 1, promoted, puzzle: puzzleNote,
                     bestWinRate: best ? +best.winRate.toFixed(3) : 0,
                     bestNetWins: best ? best.netWins : 0,
                     bestDecided: best ? best.decided : 0,
