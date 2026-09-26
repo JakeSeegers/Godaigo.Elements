@@ -346,6 +346,47 @@
     function endEarlyRequested() { return _endEarlyRequested; }
 
     // ----------------------------------------------------------------
+    // Challenger marker: in Hill Climb series the challenger's pawn, and in
+    // confirmAcrossSizes the bot being tested, gets a red X so it is always
+    // easy to tell apart from the champion (owner request 2026-09-26). The
+    // seat changes game to game (sides alternate), so a light ticker keeps
+    // the X on the right pawn while a job runs.
+    let _markedSeat = null, _markTicker = null;
+    function syncChallengerMark() {
+        const seat = isRunning() ? _markedSeat : null;
+        const positions = (typeof playerPositions !== 'undefined' && Array.isArray(playerPositions)) ? playerPositions : [];
+        positions.forEach((pp, i) => {
+            const g = pp && pp.element;
+            if (!g || typeof g.querySelector !== 'function') return;
+            const mark = g.querySelector(':scope > .challenger-x');
+            if (i === seat && !mark) {
+                const ns = 'http://www.w3.org/2000/svg';
+                const x = document.createElementNS(ns, 'g');
+                x.setAttribute('class', 'challenger-x');
+                x.setAttribute('pointer-events', 'none');
+                for (const [w, c] of [[4.6, '#111'], [2.6, '#ff3b30']]) {
+                    for (const [x1, y1, x2, y2] of [[-6, -6, 6, 6], [6, -6, -6, 6]]) {
+                        const l = document.createElementNS(ns, 'line');
+                        l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+                        l.setAttribute('stroke', c); l.setAttribute('stroke-width', w); l.setAttribute('stroke-linecap', 'round');
+                        x.appendChild(l);
+                    }
+                }
+                g.appendChild(x);
+            } else if (i !== seat && mark) {
+                mark.remove();
+            }
+        });
+        if (seat === null && _markTicker && !isRunning()) { clearInterval(_markTicker); _markTicker = null; }
+    }
+    function setMarkedSeat(seat) {
+        _markedSeat = seat;
+        if (seat !== null && !_markTicker) _markTicker = setInterval(syncChallengerMark, 250);
+        syncChallengerMark();
+    }
+    function markedSeat() { return _markedSeat; }
+
+    // ----------------------------------------------------------------
     // Trap-loop stall detection: bots sometimes wedge each other into a
     // stable non-position (e.g. both camped on a shrine with full pools,
     // neither willing to move first) that takes the full 200-turn cap to
@@ -676,12 +717,14 @@
         for (let i = 0; i < nGames && !_stopRequested && !_endEarlyRequested; i++) {
             const gi = offset + i;
             const aIsPlayer0 = gi % 2 === 0;
+            if (opts.markChallenger) setMarkedSeat(aIsPlayer0 ? 0 : 1);
             const g = await playGame(
                 aIsPlayer0 ? weightsA : weightsB,
                 aIsPlayer0 ? weightsB : weightsA,
                 seed * 1000 + (gi >> 1),
                 opts
             );
+            if (opts.markChallenger) setMarkedSeat(null);
             const aWon = g.winner !== null && ((g.winner === 0) === aIsPlayer0);
             if (g.winner === null) result.draws++;
             else if (aWon) result.aWins++;
@@ -999,12 +1042,14 @@
     //   opts.sigma0/sigmaGrowth/sigmaCap (0.2 / 1.5 / 0.8) adaptive mutation step
     //   opts.seed (1), opts.visual (false), opts.speed
     //   opts.onRound?(roundNumber, totalRounds, info) progress callback
-    //   opts.onChallenger?(challengerNumber, lambda, roundNumber, totalRounds)
+    //   opts.onChallenger?(challengerNumber, lambda, roundNumber, totalRounds, originalChallengerNumber)
     //                            fired once per challenger, before its trial
     //                            series starts (distinguishes "which challenger"
     //                            from onGame's per-series game count, which
     //                            resets to 1/N for every challenger)
     //   opts.onGame? forwarded to every trial series (per-game progress)
+    //   opts.seedChallengers? [weights] - fill the first round-1 challenger
+    //                            slots (e.g. an Evolve explore phase's champion)
     //   opts.puzzleCheck? async (weights) => score | null (Phase 4b, e.g.
     //                            Replay.puzzleScore): a challenger that wins
     //                            enough games is promoted only if its puzzle
@@ -1053,6 +1098,12 @@
                 // Spawn λ mutant challengers of the (fixed) champion.
                 const challengers = [];
                 for (let c = 0; c < lambda; c++) challengers.push(mutate(champion, rng, sigma));
+                // opts.seedChallengers: bots found elsewhere (e.g. an Evolve
+                // "explore" phase) take the first round-1 slots instead of
+                // mutants. Same rules: they must beat the champion to count.
+                if (round === 0 && Array.isArray(opts.seedChallengers)) {
+                    opts.seedChallengers.slice(0, lambda).forEach((w, i) => { if (w) challengers[i] = { ...w }; });
+                }
 
                 // COMMON RANDOM NUMBERS: every challenger in this round faces
                 // the champion on the SAME seed sequence (no per-challenger
@@ -1107,13 +1158,13 @@
                         // survivors) is playing; onGame's own count resets per
                         // series so it can't distinguish them alone.
                         if (typeof opts.onChallenger === 'function') {
-                            try { opts.onChallenger(k + 1, survivors.length, round + 1, rounds); } catch (e) { /* UI callback errors never abort a run */ }
+                            try { opts.onChallenger(k + 1, survivors.length, round + 1, rounds, cand.c + 1); } catch (e) { /* UI callback errors never abort a run */ }
                         }
                         // gameIndexOffset continues this challenger's seed
                         // sequence — later stages play NEW decks (identical
                         // across survivors), never replays of stage 1.
                         const r = await _playSeries(cand.w, champion, st.games, trialSeed,
-                            { ...opts, visual, gameIndexOffset: cand.played });
+                            { ...opts, visual, gameIndexOffset: cand.played, markChallenger: true });
                         cand.played += st.games;
                         cand.aWins += r.aWins; cand.bWins += r.bWins; cand.draws += r.draws;
                         cand.aFitness += r.aFitness; cand.bFitness += r.bFitness;
@@ -1133,7 +1184,7 @@
                 const finalist = survivors[0] || null;
                 const decidedF = finalist ? finalist.aWins + finalist.bWins : 0;
                 const best = finalist ? {
-                    w: finalist.w, decided: decidedF,
+                    w: finalist.w, c: finalist.c, decided: decidedF,
                     winRate: decidedF > 0 ? finalist.aWins / decidedF : 0,
                     netWins: finalist.aWins - finalist.bWins,
                     fitMargin: finalist.aFitness - finalist.bFitness,
@@ -1181,6 +1232,7 @@
                     bestWinRate: best ? +best.winRate.toFixed(3) : 0,
                     bestNetWins: best ? best.netWins : 0,
                     bestDecided: best ? best.decided : 0,
+                    bestChallenger: best ? best.c + 1 : null, // 1-based, matches onChallenger's numbering
                     sigma: +sigma.toFixed(3), promotions, gamesPlayed };
                 roundLog.push(info);
                 if (typeof opts.onRound === 'function') {
@@ -1319,7 +1371,9 @@
                     const weightsPerPlayer = new Array(n).fill(baseline);
                     weightsPerPlayer[champSeat] = champion;
                     const seed = (baseSeed * 100003 + n * 1009 + g) >>> 0;
+                    setMarkedSeat(champSeat); // X on the bot being tested
                     const r = await playMatch(weightsPerPlayer, { ...opts, seed, visual });
+                    setMarkedSeat(null);
                     const cf = seatFitness(r, champSeat, opts);
                     // Mean baseline-seat fitness this game (the n-1 non-champion
                     // seats) — the champion must beat the AVERAGE baseline, so
@@ -1370,7 +1424,7 @@
         confirmAcrossSizes, // N-player champion-vs-field confirmation gate
         endEarly, // soft-stop: cuts evolve()'s / hillClimb()'s loop short but keeps its result usable
         perturbWeights, // gaussian-perturbed copy of a weight table (Noisy anchor toggle)
-        isSpectating, isEvolving, isClimbing, isRunning,
+        isSpectating, isEvolving, isClimbing, isRunning, markedSeat,
         stopRequested: () => _stopRequested, // was stop() called for the run in progress (or the one that just ended)?
         endEarlyRequested,
         applyWeights: setWeights, // apply an {…} weight table to the LIVE WEIGHTS object in place

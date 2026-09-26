@@ -118,6 +118,13 @@ the champion-as-a-whole is not in question, only whether OUR SEARCH can
 reach/beat it from here.
 
 ## Last Committed Work
+- **2026-09-26 (12): Train Bot Explore step, Evolve no longer shares, challenger X** (owner). game-ui.js:
+  runHillClimbTraining opts.explore = short BotArena.evolve (2 gens, pop 6, 12 games/gen, 2-5 players, seeded from the
+  anchor) whose champion is hillClimb opts.seedChallengers[0]; +EXPLORE_BONUS_GOLD (10) only for a finished run; End
+  Early during explore returns 'ended early' (no gold). Panel row "Explore: Off / First (+10 gold)". runWeightTraining
+  (Evolve) applies locally only, no bot_champion_weights insert. Popup: explore phase line, explored-bot labels,
+  X swatch. bot-arena.js: challenger X marker (see js/INDEX.md). Tested headless: explore phase + End Early (no gold
+  claim), X on exactly the challenger seat, removed after Stop. A full explore+climb run was not completed headless.
 - **2026-09-26 (11): Training gold only for finished runs** (owner). game-ui.js runHillClimbTraining: Stop pressed
   during the confirmation was not caught (paid the run bonus and could apply/submit a half-checked champion); now
   reverts, returns 'stopped', no gold. Same stop check added to runWeightTraining (evolve, no gold there).

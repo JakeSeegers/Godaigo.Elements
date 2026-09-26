@@ -4222,23 +4222,11 @@ document.getElementById('undo-move').onclick = function() {
             }
 
             if (improved) {
+                // Local only (owner 2026-09-26): Evolve's gate compares against
+                // this browser's current weights over a few games, too weak to
+                // replace the shared champion. To share an Evolve result, use
+                // Hill Climb with Explore, which must beat the online champion.
                 window.BotArena.applyWeights(champion);
-                // Best-effort share to the community champion table — only
-                // when logged in (bot_champion_weights requires
-                // auth.uid() = created_by). Never blocks or fails the local
-                // training result on account of this.
-                try {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.user?.id) {
-                        await supabase.from('bot_champion_weights').insert({
-                            weights: champion,
-                            confirm_wins: confirmWins,
-                            confirm_losses: confirmLosses,
-                            confirm_draws: confirmDraws,
-                            created_by: session.user.id,
-                        });
-                    }
-                } catch (e) { console.warn('Could not share champion to Supabase (continuing):', e); }
             } else {
                 window.BotArena.applyWeights(baselineWeights);
                 try {
@@ -4315,15 +4303,16 @@ document.getElementById('undo-move').onclick = function() {
             try { baselineStored = localStorage.getItem('godaigo_bot_weights'); } catch (e) {}
             await leaveOnlineGameIfAny();
 
-            const totalGames = rounds * lambda * gamesPerChallenge + confirmSizes.length * gamesPerSize;
+            let totalGames = rounds * lambda * gamesPerChallenge + confirmSizes.length * gamesPerSize;
             const startedAt = Date.now();
-            let gamesDone = 0, lastRound = 0, lastInfo = null;
+            let gamesDone = 0, lastRound = 0, lastInfo = null, lastGen = 0, lastFitness = null;
             let lastChallenger = 0, totalChallengers = lambda;
             let lastGameNum = 0, lastGameTotal = gamesPerChallenge;
             // "How rounds have gone" summary the popup renders as a compact
             // chip strip — one entry per completed round, oldest first.
             const roundHistory = [];
             const stats = makeTrainingStats();
+            let lastExploredChallenger = false; // current challenger = the explored bot
             const needPct = Math.round((window.BotArena.HILLCLIMB_PROMOTE_RATE ?? 0.58) * 100);
             // Local-game color assignment (game-core.js's colorRankOrder):
             // player index 0 = Purple, 1 = Yellow (only the first two matter —
@@ -4346,11 +4335,56 @@ document.getElementById('undo-move').onclick = function() {
                     challenger: lastChallenger, totalChallengers,
                     gameNum: lastGameNum, gameTotal: lastGameTotal,
                     sideAColor: aName, sideBColor: bName, sideAHex: aHex, sideBHex: bHex,
-                    stats,
+                    stats, explore: !!opts.explore, explored: lastExploredChallenger,
+                    gen: lastGen, generations: EXPLORE_GENERATIONS, fitness: lastFitness,
                 });
             };
 
+            // Explore phase (opts.explore): short Evolve search across 2-5
+            // player games seeded from the anchor; its champion becomes the
+            // first round-1 challenger (must still beat the real champion).
+            let seedChallengers, explored = false, exploreEndedEarly = false;
+            if (opts.explore) {
+                totalGames += EXPLORE_GAMES;
+                stats.event('Explore: searching across 2-5 player games first');
+                lastGen = 0;
+                const found = await window.BotArena.evolve(EXPLORE_GENERATIONS, {
+                    popSize: EXPLORE_POP, nPlayers: 'all', gamesPerGen: EXPLORE_GAMES_PER_GEN,
+                    visual, seedWeights: [climbAnchor], seed: Date.now() % 100000,
+                    onGeneration: (gen, total, fitness) => {
+                        lastGen = gen; lastFitness = fitness;
+                        const best = Array.isArray(fitness) && fitness.length ? Math.max(...fitness) : null;
+                        stats.event(`Explore generation ${gen}/${total} done${best !== null ? `, best fitness ${best.toFixed(1)}` : ''}`);
+                        report('exploring');
+                    },
+                    onGame: (n, t, g) => {
+                        gamesDone++; stats.addGame(g);
+                        if (window.BotArena.endEarlyRequested()) exploreEndedEarly = true;
+                        report('exploring');
+                    },
+                });
+                if (window.BotArena.stopRequested()) {
+                    window.BotArena.applyWeights(baselineWeights);
+                    try {
+                        if (baselineStored === null) localStorage.removeItem('godaigo_bot_weights');
+                        else localStorage.setItem('godaigo_bot_weights', baselineStored);
+                    } catch (e) {}
+                    return { improved: false, record: 'stopped', promotions: 0 };
+                }
+                if (exploreEndedEarly) {
+                    // End Early while exploring: nothing has been tested against
+                    // the champion yet, so there is nothing to confirm.
+                    window.BotArena.applyWeights(baselineWeights);
+                    return { improved: false, record: 'ended early', promotions: 0, endedEarly: true, attemptGold: 0, totalGold: 0 };
+                }
+                if (found) {
+                    seedChallengers = [found]; explored = true;
+                    stats.event('Explore done: its best bot joins round 1 as Challenger 1');
+                }
+            }
+
             const result = await window.BotArena.hillClimb({
+                seedChallengers,
                 champion: climbAnchor, rounds, lambda, gamesPerChallenge, visual,
                 // Hermit only (puzzles are hermit-only data): a would-be new
                 // champion must also do at least as well on the puzzles
@@ -4364,18 +4398,23 @@ document.getElementById('undo-move').onclick = function() {
                 // slow, AND never say which of the lambda challengers is
                 // currently up (onGame's own game count resets to 1/N for
                 // every challenger, so it alone can't distinguish them).
-                onChallenger: (c, totalC, r, totalR) => { lastChallenger = c; totalChallengers = totalC; lastRound = r; lastGameNum = 0; stats.cur = { w: 0, l: 0, d: 0 }; report('training'); },
+                onChallenger: (c, totalC, r, totalR, orig) => {
+                    lastChallenger = orig || c; totalChallengers = totalC; lastRound = r; lastGameNum = 0;
+                    lastExploredChallenger = explored && r === 1 && (orig || c) === 1;
+                    stats.cur = { w: 0, l: 0, d: 0 }; report('training');
+                },
                 onGame: (gameNum, gameTotal, g, side) => {
                     gamesDone++; lastGameNum = gameNum; lastGameTotal = gameTotal;
-                    stats.addGame(g, side, { a: `Challenger ${lastChallenger}`, b: 'Champion' });
+                    stats.addGame(g, side, { a: lastExploredChallenger ? 'The explored bot' : `Challenger ${lastChallenger}`, b: 'Champion' });
                     report('training');
                 },
                 onRound: (round, total, info) => {
                     lastRound = round; lastInfo = info; gamesDone = info.gamesPlayed;
                     roundHistory.push({ round, promoted: info.promoted, winRate: info.bestWinRate, decided: info.bestDecided });
                     const pctBest = Math.round((info.bestWinRate || 0) * 100);
+                    const fromExplore = explored && round === 1 && info.bestChallenger === 1;
                     stats.event(info.promoted
-                        ? `Round ${round}: new champion! Best challenger won ${pctBest}% of ${info.bestDecided} decided games`
+                        ? `Round ${round}: new champion${fromExplore ? ' (the explored bot)' : ''}! It won ${pctBest}% of ${info.bestDecided} decided games`
                         : info.puzzle?.blocked
                             ? `Round ${round}: challenger won ${pctBest}% but did worse on the puzzles (${info.puzzle.challenger} vs ${info.puzzle.champion}), champion stays`
                             : `Round ${round}: champion stays. Best challenger won ${pctBest}% of ${info.bestDecided} (needs ${needPct}%)`);
@@ -4492,6 +4531,16 @@ document.getElementById('undo-move').onclick = function() {
                 } catch (e) { console.warn('tier gold failed (continuing):', e); rewarded = false; }
             }
 
+            // Explore bonus: the extra search phase, paid only for a run that
+            // finished (not stopped or ended early). Server-capped like the rest.
+            if (uid && explored && !endedEarly) {
+                try {
+                    const { data: granted, error } = await supabase.rpc('claim_training_reward', { p_amount: EXPLORE_BONUS_GOLD, p_description: 'Bot training - explore phase bonus' });
+                    if (error) throw error;
+                    attemptGold += granted || 0;
+                } catch (e) { console.warn('explore bonus failed (continuing):', e); }
+            }
+
             const totalGold = attemptGold + (rewarded ? tierGold : 0);
             return { improved, record, tier, tierGold, promotions: result.promotions, rewarded, submitFailed, attemptGold, totalGold, endedEarly };
         }
@@ -4501,6 +4550,10 @@ document.getElementById('undo-move').onclick = function() {
         // challenger-vs-champion tallies for Hill Climb, and a short event
         // log (promotions, puzzle-blocked promotions, stalls).
         const STALL_NAMES = { camping: 'bots camping', no_cast: 'no casts', no_progress: 'no progress' };
+        // Explore phase (Hill Climb opts.explore): a short Evolve search.
+        const EXPLORE_GENERATIONS = 2, EXPLORE_POP = 6, EXPLORE_GAMES_PER_GEN = 12;
+        const EXPLORE_GAMES = EXPLORE_GENERATIONS * EXPLORE_GAMES_PER_GEN;
+        const EXPLORE_BONUS_GOLD = 10;
         function makeTrainingStats() {
             return {
                 games: 0, turnsSum: 0, chWins: 0, champWins: 0, draws: 0,
@@ -4632,8 +4685,11 @@ document.getElementById('undo-move').onclick = function() {
             return el;
         }
 
-        function swatch(hex) {
-            return `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${hex};flex-shrink:0;"></span>`;
+        // marked = the challenger / the bot being tested: same red X as its
+        // pawn on the board (bot-arena.js syncChallengerMark).
+        function swatch(hex, marked) {
+            const x = marked ? `<svg viewBox="-6 -6 12 12" width="11" height="11" style="position:absolute;left:-1px;top:-1px;"><path d="M-4-4L4 4M4-4L-4 4" stroke="#111" stroke-width="3.2" stroke-linecap="round"/><path d="M-4-4L4 4M4-4L-4 4" stroke="#ff3b30" stroke-width="1.8" stroke-linecap="round"/></svg>` : '';
+            return `<span style="position:relative;display:inline-block;width:9px;height:9px;border-radius:2px;background:${hex};flex-shrink:0;">${x}</span>`;
         }
 
         // p: {phase, gamesDone, totalGames, startedAt, gen, generations,
@@ -4669,28 +4725,36 @@ document.getElementById('undo-move').onclick = function() {
             historyLabelEl.style.display = 'none';
 
             if (p.mode === 'hillclimb') {
-                scenarioLine = 'Hill Climb - champion-anchored';
+                scenarioLine = p.explore ? 'Hill Climb with Explore - champion-anchored' : 'Hill Climb - champion-anchored';
                 phaseLine = p.phase === 'confirming'
                     ? 'Confirming across 2–5 player tables'
-                    : `Round ${p.round}/${p.rounds}`;
+                    : p.phase === 'starting' ? 'Starting…'
+                    : p.phase === 'exploring'
+                        ? `Explore: generation ${Math.min(p.gen + 1, p.generations)}/${p.generations} (Evolve search, 2-5 player games)`
+                        : `Round ${p.round}/${p.rounds}`;
                 // The explicit "what is literally happening right now" line —
                 // which challenger (or, once confirming, the climbed champion),
                 // which game in its series, and a real color swatch for each
                 // side THIS game. Colors come pre-computed from the current
                 // game's parity (runHillClimbTraining's sideColors()) — sides
                 // alternate every game, never a fixed assignment.
-                if (p.gameNum && p.phase === 'confirming') {
-                    matchupHtml = `Climbed champion vs. a field of the current champion`
+                if (p.phase === 'exploring') {
+                    matchupHtml = 'A group of bots based on the champion play each other; the best one joins the climb';
+                } else if (p.gameNum && p.phase === 'confirming') {
+                    matchupHtml = `${swatch('#888', true)} Climbed champion (marked X) vs. a field of the current champion`
                         + `<span style="color:#777;margin-left:auto;">game ${p.gameNum}/${p.gameTotal}</span>`;
                 } else if (p.gameNum) {
-                    matchupHtml = `${swatch(p.sideAHex)} Challenger ${p.challenger}/${p.totalChallengers} <span style="color:#666;">vs</span> ${swatch(p.sideBHex)} Champion`
+                    matchupHtml = `${swatch(p.sideAHex, true)} ${p.explored ? 'The explored bot' : `Challenger ${p.challenger}/${p.totalChallengers}`} <span style="color:#666;">vs</span> ${swatch(p.sideBHex)} Champion`
                         + `<span style="color:#777;margin-left:auto;">game ${p.gameNum}/${p.gameTotal}</span>`;
                 } else if (p.challenger) {
                     matchupHtml = `Challenger ${p.challenger}/${p.totalChallengers} vs. Champion <span style="color:#777;">- starting…</span>`;
                 }
-                summaryLine = p.info
-                    ? `${p.info.promotions} promotion${p.info.promotions === 1 ? '' : 's'} so far · this round's best challenger: ${Math.round(p.info.bestWinRate * 100)}%`
-                    : 'Climbing…';
+                const bestFit = Array.isArray(p.fitness) && p.fitness.length ? Math.max(...p.fitness) : null;
+                summaryLine = p.phase === 'exploring'
+                    ? (bestFit !== null ? `Explore best fitness so far: ${bestFit.toFixed(1)}` : 'Exploring…')
+                    : p.info
+                        ? `${p.info.promotions} promotion${p.info.promotions === 1 ? '' : 's'} so far · this round's best challenger: ${Math.round(p.info.bestWinRate * 100)}%`
+                        : 'Climbing…';
                 // The "how have rounds gone" summary: one chip per completed
                 // round (filled gold = promoted, hollow = held), plus a dashed
                 // chip for whichever round is still in progress.
@@ -4748,12 +4812,12 @@ document.getElementById('undo-move').onclick = function() {
             else {
                 box.style.display = 'block';
                 const cur = st.cur && p.mode === 'hillclimb' && p.phase !== 'confirming'
-                    ? `This challenger vs champion: ${st.cur.w} won · ${st.cur.l} lost · ${st.cur.d} drawn` : '';
+                    ? `${p.explored ? 'Explored bot' : 'This challenger'} vs champion: ${st.cur.w} won · ${st.cur.l} lost · ${st.cur.d} drawn` : '';
                 el.querySelector('#bt-popup-current').textContent = cur;
                 el.querySelector('#bt-popup-last').textContent = st.last ? `Last game: ${st.last}` : '';
                 const avg = Math.round(st.turnsSum / st.games);
                 const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-                el.querySelector('#bt-popup-totals').textContent = p.mode === 'hillclimb'
+                el.querySelector('#bt-popup-totals').textContent = p.mode === 'hillclimb' && p.phase !== 'exploring' && (st.chWins || st.champWins || p.phase === 'training')
                     ? `Run so far: ${pl(st.games, 'game')} · challengers won ${st.chWins} · champion won ${st.champWins} · ${pl(st.draws, 'draw')} · avg ${avg} turns`
                     : `Run so far: ${pl(st.games, 'game')} · ${pl(st.draws, 'draw')} · avg ${avg} turns`;
                 const parts = Object.entries(st.stalls).filter(([, n]) => n).map(([k, n]) => `${n} ${STALL_NAMES[k] || k}`);
@@ -5623,7 +5687,7 @@ document.getElementById('undo-move').onclick = function() {
         (function initBotTrainingPanel() {
             let clickCount = 0;
             let clickTimer = null;
-            const state = { n: 2, watchable: true, generations: 5, method: 'evolve', noisyAnchor: false, _public: false };
+            const state = { n: 2, watchable: true, generations: 5, method: 'evolve', noisyAnchor: false, explore: false, _public: false };
 
             // Weight groupings mirror the section comments in bot.js's
             // DEFAULT_WEIGHTS — used purely for the drill-down diagram, so
@@ -5840,6 +5904,16 @@ document.getElementById('undo-move').onclick = function() {
                     { value: true, text: 'Noisy', title: 'Train against a slightly perturbed copy of the anchor each session (more robust, less overfit); the final confirmation match is still played against the TRUE anchor, so a win still means a real improvement.' },
                 ], () => state.noisyAnchor, (v) => { state.noisyAnchor = v; },
                     'Noisy trains against a randomly perturbed version of the opponent so the result generalizes to a range of opponents instead of overfitting one exact champion. The confirmation match at the end always uses the true, unperturbed anchor - so "improved" still means genuinely better.');
+
+                // Explore first (Hill Climb only): a short Evolve search across
+                // 2-5 player games whose best bot joins round 1 as a challenger
+                // (runHillClimbTraining opts.explore). Pays EXPLORE_BONUS_GOLD
+                // when the whole run finishes.
+                makeChoiceRow('Explore:', [
+                    { value: false, text: 'Off', title: 'Climb straight from the champion.' },
+                    { value: true, text: `First (+${EXPLORE_BONUS_GOLD} gold)`, title: `First run a short Evolve search across 2-5 player games (about ${EXPLORE_GAMES} extra games). Its best bot joins the climb as a challenger and must still beat the champion. +${EXPLORE_BONUS_GOLD} bonus gold when the whole run finishes.` },
+                ], () => state.explore, (v) => { state.explore = v; },
+                    'Explore searches more widely (and across 2-5 player games) before the climb. It never lowers the bar: the explored bot has to beat the real champion like every other challenger. Hill Climb only.');
 
                 const progressText = document.createElement('div');
                 progressText.style.cssText = 'font-size:11px;color:#aaa;white-space:pre-line;display:none;';
@@ -6098,7 +6172,7 @@ document.getElementById('undo-move').onclick = function() {
                     // mode (cleared again in finally).
                     if (state._public) {
                         window._botTrainingPublic = true;
-                        showTrainingPopup({ mode: 'hillclimb', phase: 'training', round: 1, rounds: state.generations, gamesDone: 0, totalGames: 1, startedAt: Date.now(), roundHistory: [] });
+                        showTrainingPopup({ mode: 'hillclimb', phase: 'starting', explore: state.explore, gamesDone: 0, totalGames: 1, startedAt: Date.now(), roundHistory: [] });
                         overlay.remove();
                     }
                     try {
@@ -6118,13 +6192,15 @@ document.getElementById('undo-move').onclick = function() {
                                 : { rounds: state.generations, lambda: 6, gamesPerChallenge: 30, gamesPerSize: 5 };
                             const preset = { ...p, confirmSizes: [2, 3, 4, 5] };
                             const { improved, record, tier, tierGold, promotions, rewarded, submitFailed, attemptGold, totalGold, endedEarly } = await runHillClimbTraining(preset, renderProgress, {
-                                visual: state.watchable, noisyAnchor: state.noisyAnchor,
+                                visual: state.watchable, noisyAnchor: state.noisyAnchor, explore: state.explore,
                             });
                             progressText.style.display = 'none';
                             const bonusTail = attemptGold ? ` (+${attemptGold} for the games run)` : '';
                             let msg;
                             if (record === 'stopped') {
                                 msg = 'Training stopped - the result was discarded, the champion is unchanged.';
+                            } else if (record === 'ended early') {
+                                msg = 'Training ended during Explore, before anything was tested against the champion - nothing changed, no gold.';
                             } else if (improved && rewarded) {
                                 msg = `Your bot beat the champion - ${tier} win, ${record} across 2–5 player tables. Submitted for everyone. +${totalGold} gold${attemptGold ? ` (${tierGold} win + ${attemptGold} for the games run)` : ''}.`;
                             } else if (improved && submitFailed) {
