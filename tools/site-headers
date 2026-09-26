@@ -1,0 +1,29 @@
+# Copied to dist/_headers by tools/build-site.js (Cloudflare reads it).
+# Media: browsers keep it for a day without asking the server again.
+# The update check (js/version.js) only refreshes code, so a CHANGED image or
+# sound reaches players within a day; rename the file to make it instant.
+/images/*
+  Cache-Control: public, max-age=86400
+/assets/*
+  Cache-Control: public, max-age=86400
+/sounds/*
+  Cache-Control: public, max-age=86400
+/video/*
+  Cache-Control: public, max-age=86400
+/LoreIntroClips/*
+  Cache-Control: public, max-age=86400
+/GodaigoLogoText.svg
+  Cache-Control: public, max-age=86400
+# Code and the page: always check with the server (updates arrive at once).
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/changelog.json
+  Cache-Control: no-cache
+/js/*
+  Cache-Control: no-cache
+/css/*
+  Cache-Control: no-cache
+/joytone/*
+  Cache-Control: no-cache

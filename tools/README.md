@@ -12,6 +12,9 @@ Cloudflare settings: build command `node tools/build-site.js`. On Workers
 which reads `wrangler.jsonc` (publishes `dist/`; project name must be `godaigo`).
 On Pages: output directory `dist`. If the game starts loading a file from a new top-level
 folder, add it to `INCLUDE` in the script.
+Cache rules (`tools/site-headers`, copied to `dist/_headers`): media is kept by
+browsers for 1 day, code and the page are always checked. A changed image or
+sound reaches players within a day; rename the file to make it instant.
 
 ---
 

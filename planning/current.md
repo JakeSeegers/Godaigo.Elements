@@ -137,6 +137,9 @@ reach/beat it from here.
   username check rejects '@'). request_reset now accepts username or email (new service-only RPC
   recovery_lookup_by_email in sql/account-recovery.sql, applied; one link per account, max 3),
   edge function v4. "Link not valid" = a confirm link opened a second time (single use).
+  Cache rules: tools/site-headers -> dist/_headers (build-site.js). Media (images, assets, sounds,
+  video, LoreIntroClips, logo SVG) max-age 1 day; page, js, css, changelog.json, joytone no-cache
+  (version.js only refreshes code, so changed media reaches players within a day; rename for instant).
 - **2026-09-26 (3): Fire animation smoother.** js/effects-system.js: frames pre-decoded
   (createImageBitmap), loop draws only when a frame index or position changes (anims run at
   13-18 fps, rAF at 60-144 Hz), clears only last frame's rects instead of the whole screen,

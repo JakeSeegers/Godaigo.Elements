@@ -57,4 +57,6 @@ for (const item of INCLUDE) {
     if (!fs.existsSync(src)) { console.warn(`build-site: missing ${item}, skipped`); continue; }
     copy(src, path.join(OUT, item));
 }
+// Cache rules for Cloudflare (see tools/site-headers).
+fs.copyFileSync(path.join(__dirname, 'site-headers'), path.join(OUT, '_headers'));
 console.log(`build-site: ${files} files, ${(bytes / 1e6).toFixed(1)} MB -> dist/`);
